@@ -1,0 +1,11 @@
+.next
+.next-dev
+node_modules
+.npm-cache
+.env
+.env*.local
+dist
+coverage
+*.log
+vercel.json
+.DS_Store
