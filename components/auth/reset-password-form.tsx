@@ -1,13 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { updatePassword } from "@/lib/auth/actions";
 
 export function ResetPasswordForm() {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(updatePassword, {});
+
+  useEffect(() => {
+    if (!state?.success) return;
+
+    const timeout = window.setTimeout(() => {
+      router.replace("/login");
+    }, 1500);
+
+    return () => window.clearTimeout(timeout);
+  }, [router, state?.success]);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -50,6 +62,7 @@ export function ResetPasswordForm() {
       {state?.success ? (
         <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-board-green">
           <p>{state.success}</p>
+          <p className="mt-1 text-xs text-green-700">Redirecting you to login...</p>
           <Link href="/login" className="mt-2 inline-block font-semibold hover:underline">
             Go to login
           </Link>
