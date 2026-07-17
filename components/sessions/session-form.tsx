@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ArrowDown, ArrowUp, Loader2, Plus, Save, Search, Trash2 } from "lucide-react";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { SessionDrillPreview } from "@/components/sessions/session-drill-preview";
 import { MaterialSummaryList } from "@/components/sessions/material-summary-list";
 import { useUnsavedChangesProtection } from "@/components/shared/use-unsaved-changes-protection";
+import { useLocalDraft } from "@/components/shared/local-draft";
 import { cn } from "@/lib/utils";
 import {
   calculateSessionMaterials,
@@ -58,7 +59,8 @@ const initialActionState: SessionActionState = {};
 
 export function SessionForm({ action, mode, drills, session }: SessionFormProps) {
   const [actionState, formAction, isPending] = useActionState(action, initialActionState);
-  const [values, setValues] = useState<SessionFormValues>(() => actionState.values ?? initialValues(session));
+  const initialFormValues = useMemo(() => initialValues(session), [session]);
+  const [values, setValues] = useState<SessionFormValues>(() => actionState.values ?? initialFormValues);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [returnTo, setReturnTo] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
@@ -73,8 +75,25 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const dragStateTimerRef = useRef<number | null>(null);
   const initialSnapshotRef = useRef<string | null>(null);
-  if (initialSnapshotRef.current === null) initialSnapshotRef.current = sessionValuesSnapshot(values);
+  if (initialSnapshotRef.current === null) initialSnapshotRef.current = sessionValuesSnapshot(initialFormValues);
   const isDirty = sessionValuesSnapshot(values) !== initialSnapshotRef.current;
+  const draftKey = `coachboard:draft:session:${session?.id ?? "new"}`;
+  const readDraftData = useCallback(() => values, [values]);
+  const {
+    clearDraft,
+    indicator: autosaveIndicator,
+    recoveryDialog
+  } = useLocalDraft<SessionFormValues>({
+    draftKey,
+    entityType: "session",
+    entityId: session?.id,
+    baseUpdatedAt: session?.updatedAt,
+    isDirty,
+    initialData: initialFormValues,
+    getData: readDraftData,
+    onRecover: (draftValues) => setValues(draftValues)
+  });
+
   const { dialog: unsavedChangesDialog, dismissDialog: dismissUnsavedChangesDialog } = useUnsavedChangesProtection({
     isDirty,
     isSaving: isSubmitting || isPending,
@@ -104,6 +123,17 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
     },
     []
   );
+
+  useEffect(() => {
+    if (!isSubmitting) return;
+
+    const handlePageHide = () => {
+      clearDraft();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [clearDraft, isSubmitting]);
 
   const drillMap = useMemo(() => new Map(drills.map((drill) => [drill.id, drill])), [drills]);
   const total = calculateSessionDuration(values.drills);
@@ -365,6 +395,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
       <input type="hidden" name="returnTo" value={returnTo} readOnly />
       <input type="hidden" name="sessionPayload" value={JSON.stringify(values)} />
       {unsavedChangesDialog}
+      {recoveryDialog}
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <p className="text-sm text-slate-600">
@@ -707,7 +738,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
       </section>
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
-        {isDirty ? <span className="self-center text-sm font-semibold text-amber-700">Unsaved changes</span> : null}
+        {autosaveIndicator}
         <ButtonLink href={session ? `/sessions/${session.id}` : "/sessions"} variant="secondary" className="justify-center">Cancel</ButtonLink>
         <Button type="submit" disabled={isPending} className="justify-center">
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

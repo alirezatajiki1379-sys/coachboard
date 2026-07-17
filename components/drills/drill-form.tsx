@@ -1,16 +1,17 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { DrillEditor } from "@/components/drills/drill-editor";
 import { useUnsavedChangesProtection } from "@/components/shared/use-unsaved-changes-protection";
+import { useLocalDraft } from "@/components/shared/local-draft";
 import { parseEditorJsonString } from "@/lib/drills/editor";
 import { detectMaterialsFromGraphic, materialCategoryLabel, materialDisplayGroups, materialLineLabel, materialsToJson, parseMaterials, serializeMaterials } from "@/lib/drills/materials";
 import type { createDrill, updateDrill } from "@/lib/drills/actions";
 import type { DrillActionState } from "@/lib/drills/actions";
-import type { DrillFormField, DrillFormValues } from "@/lib/drills/form";
+import { snapshotDrillFormValues, type DrillFormField, type DrillFormValues } from "@/lib/drills/form";
 import type { Drill, MaterialColor, MaterialItem, MaterialType } from "@/types/domain";
 
 type DrillFormProps = {
@@ -32,12 +33,40 @@ const materialVariantOptions: Partial<Record<MaterialType, string[]>> = {
 
 export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialActionState);
+  const initialValues = useMemo(() => getInitialValues(drill, graphicJson), [drill, graphicJson]);
+  const [values, setValues] = useState<DrillFormValues>(() => state.values ?? initialValues);
+  const [formRevision, setFormRevision] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [returnTo, setReturnTo] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
-  const values = state.values ?? getInitialValues(drill, graphicJson);
   const fieldErrors = state.fieldErrors ?? {};
+  const draftKey = `coachboard:draft:drill:${drill?.id ?? "new"}`;
+
+  const readDraftData = useCallback(
+    () => getCurrentDrillFormValues(formRef.current, values),
+    [values]
+  );
+
+  const {
+    clearDraft,
+    indicator: autosaveIndicator,
+    recoveryDialog
+  } = useLocalDraft<DrillFormValues>({
+    draftKey,
+    entityType: "drill",
+    entityId: drill?.id,
+    baseUpdatedAt: drill?.updatedAt,
+    isDirty,
+    initialData: initialValues,
+    getData: readDraftData,
+    onRecover: (draftValues) => {
+      setValues(draftValues);
+      setFormRevision((current) => current + 1);
+      setIsDirty(true);
+    }
+  });
+
   const { dialog: unsavedChangesDialog, dismissDialog: dismissUnsavedChangesDialog } = useUnsavedChangesProtection({
     isDirty,
     isSaving: isSubmitting || isPending,
@@ -49,6 +78,11 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
   });
 
   useEffect(() => {
+    setValues(state.values ?? initialValues);
+    setFormRevision((current) => current + 1);
+  }, [initialValues, state.values]);
+
+  useEffect(() => {
     if (state.error) {
       setIsSubmitting(false);
       setIsDirty(true);
@@ -57,13 +91,24 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
     }
   }, [state.error, state.submissionId, dismissUnsavedChangesDialog]);
 
+  useEffect(() => {
+    if (!isSubmitting) return;
+
+    const handlePageHide = () => {
+      clearDraft();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [clearDraft, isSubmitting]);
+
   function markDirty() {
     setIsDirty(true);
   }
 
   return (
     <form
-      key={state.submissionId ?? drill?.id ?? "new-drill"}
+      key={`${state.submissionId ?? 0}-${formRevision}-${drill?.id ?? "new-drill"}`}
       ref={formRef}
       action={formAction}
       className="space-y-6"
@@ -74,6 +119,7 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
       {drill ? <input type="hidden" name="drillId" value={drill.id} /> : null}
       <input type="hidden" name="returnTo" value={returnTo} readOnly />
       {unsavedChangesDialog}
+      {recoveryDialog}
 
       <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <p className="text-sm text-slate-600">
@@ -204,7 +250,7 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
       </section>
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
-        {isDirty ? <span className="self-center text-sm font-semibold text-amber-700">Unsaved changes</span> : null}
+        {autosaveIndicator}
         <ButtonLink href={drill ? `/drills/${drill.id}` : "/drills"} variant="secondary" className="justify-center">
           Cancel
         </ButtonLink>
@@ -218,6 +264,11 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
 }
 
 type MaterialRow = MaterialItem & { id: string };
+
+function getCurrentDrillFormValues(form: HTMLFormElement | null, fallback: DrillFormValues) {
+  if (!form) return fallback;
+  return snapshotDrillFormValues(new FormData(form));
+}
 
 function MaterialListEditor({
   initialMaterialsText,
