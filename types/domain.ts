@@ -182,7 +182,7 @@ export type SquadPlayer = {
   id: string;
   userId: string;
   firstName: string;
-  lastName: string;
+  lastName?: string;
   dateOfBirth?: string;
   position?: string;
   strongFoot?: string;

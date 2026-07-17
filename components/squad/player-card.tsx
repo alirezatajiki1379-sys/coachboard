@@ -1,21 +1,26 @@
 import { CalendarDays, Footprints, Mail, Phone, UserRound } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
+import { formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
 import type { SquadPlayer } from "@/types/domain";
-
-function fullName(player: SquadPlayer) {
-  return `${player.firstName} ${player.lastName}`.trim();
-}
 
 export function PlayerCard({ player, view }: { player: SquadPlayer; view: "active" | "archived" }) {
   return (
     <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-board-green">{player.position || "Squad player"}</p>
-          <h2 className="mt-1 text-xl font-bold tracking-normal text-board-navy">{fullName(player)}</h2>
+          <h2 className="text-xl font-bold tracking-normal text-board-navy">{playerFullName(player)}</h2>
+          <div className="mt-2">
+            {player.position ? (
+              <span className="inline-flex rounded-full bg-green-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-board-green ring-1 ring-green-100">
+                {player.position}
+              </span>
+            ) : (
+              <span className="text-xs font-semibold text-slate-500">No position set</span>
+            )}
+          </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-            {player.dateOfBirth ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><CalendarDays className="h-3.5 w-3.5" />{player.dateOfBirth}</span> : null}
+            {player.dateOfBirth ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><CalendarDays className="h-3.5 w-3.5" />{formatPlayerBirthDate(player.dateOfBirth)}</span> : null}
             {player.strongFoot ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><Footprints className="h-3.5 w-3.5" />{player.strongFoot}</span> : null}
             {player.club ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UserRound className="h-3.5 w-3.5" />{player.club}</span> : null}
           </div>

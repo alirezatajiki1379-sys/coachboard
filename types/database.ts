@@ -235,7 +235,7 @@ export type Database = {
           id: string;
           user_id: string;
           first_name: string;
-          last_name: string;
+          last_name: string | null;
           date_of_birth: string | null;
           position: string | null;
           strong_foot: string | null;
@@ -255,7 +255,7 @@ export type Database = {
           id?: string;
           user_id: string;
           first_name: string;
-          last_name: string;
+          last_name?: string | null;
           date_of_birth?: string | null;
           position?: string | null;
           strong_foot?: string | null;

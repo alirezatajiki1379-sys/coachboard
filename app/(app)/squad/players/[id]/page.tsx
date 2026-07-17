@@ -6,6 +6,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { createClient } from "@/lib/supabase/server";
 import { getSquadPlayer } from "@/lib/squad/queries";
+import { formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
 
 type PlayerDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -23,7 +24,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
   const player = await getSquadPlayer(supabase, user.id, id);
   if (!player) notFound();
 
-  const fullName = `${player.firstName} ${player.lastName}`.trim();
+  const fullName = playerFullName(player);
 
   return (
     <div className="space-y-6">
@@ -35,10 +36,18 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase text-board-green">{player.position || "Player profile"}</p>
             <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{fullName}</h1>
+            <div className="mt-3">
+              {player.position ? (
+                <span className="inline-flex rounded-full bg-green-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-board-green ring-1 ring-green-100">
+                  Position: {player.position}
+                </span>
+              ) : (
+                <span className="text-sm font-semibold text-slate-500">No position set</span>
+              )}
+            </div>
             <div className="mt-3 flex flex-wrap gap-2 text-sm text-slate-600">
-              {player.dateOfBirth ? <span className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-2 py-1"><CalendarDays className="h-4 w-4" />{player.dateOfBirth}</span> : null}
+              {player.dateOfBirth ? <span className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-2 py-1"><CalendarDays className="h-4 w-4" />{formatPlayerBirthDate(player.dateOfBirth)}</span> : null}
               {player.strongFoot ? <span className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-2 py-1"><Footprints className="h-4 w-4" />{player.strongFoot}</span> : null}
               {player.club ? <span className="rounded-md bg-slate-100 px-2 py-1">{player.club}</span> : null}
               {player.archivedAt ? <span className="rounded-md bg-amber-50 px-2 py-1 font-bold text-amber-700">Archived</span> : null}

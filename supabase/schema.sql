@@ -112,7 +112,7 @@ create table if not exists public.squad_players (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   first_name text not null,
-  last_name text not null,
+  last_name text,
   date_of_birth date,
   position text,
   strong_foot text,
@@ -299,3 +299,6 @@ add column if not exists deleted_at timestamptz;
 alter table public.training_sessions
 add column if not exists archived_at timestamptz,
 add column if not exists deleted_at timestamptz;
+
+alter table public.squad_players
+alter column last_name drop not null;

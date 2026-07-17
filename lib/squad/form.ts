@@ -62,7 +62,6 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
   const fieldErrors: Partial<Record<SquadPlayerFormField, string>> = {};
 
   if (!values.firstName) fieldErrors.firstName = "Enter the player's first name.";
-  if (!values.lastName) fieldErrors.lastName = "Enter the player's last name.";
   if (!isEmail(values.parentEmail)) fieldErrors.parentEmail = "Enter a valid email address.";
 
   const firstError = Object.values(fieldErrors)[0];
@@ -79,7 +78,7 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
     ok: true,
     data: {
       first_name: values.firstName,
-      last_name: values.lastName,
+      last_name: optionalText(values.lastName),
       date_of_birth: optionalText(values.dateOfBirth),
       position: optionalText(values.position),
       strong_foot: optionalText(values.strongFoot),

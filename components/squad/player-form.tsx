@@ -35,7 +35,7 @@ export function PlayerForm({ action, mode, player }: PlayerFormProps) {
         <p className="mt-1 text-sm text-slate-500">Start with the essentials. Attendance and ratings will build on this profile later.</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <TextInput name="firstName" label="First name" required defaultValue={values.firstName} error={fieldErrors.firstName} />
-          <TextInput name="lastName" label="Last name" required defaultValue={values.lastName} error={fieldErrors.lastName} />
+          <TextInput name="lastName" label="Last name" defaultValue={values.lastName} error={fieldErrors.lastName} />
           <TextInput name="dateOfBirth" label="Date of birth" type="date" defaultValue={values.dateOfBirth} error={fieldErrors.dateOfBirth} />
           <TextInput name="position" label="Position" defaultValue={values.position} error={fieldErrors.position} />
           <SelectInput

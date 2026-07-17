@@ -14,7 +14,7 @@ export function mapSquadPlayerRow(row: SquadPlayerRow): SquadPlayer {
     id: row.id,
     userId: row.user_id,
     firstName: row.first_name,
-    lastName: row.last_name,
+    lastName: row.last_name ?? undefined,
     dateOfBirth: optional(row.date_of_birth),
     position: optional(row.position),
     strongFoot: optional(row.strong_foot),
