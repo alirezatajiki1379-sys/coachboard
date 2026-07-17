@@ -134,11 +134,35 @@ type DragEvent = {
 };
 type DragPointEvent = {
   cancelBubble?: boolean;
-  target: { x: () => number; y: () => number };
+  target: {
+    x: () => number;
+    y: () => number;
+    getStage?: () => {
+      getPointerPosition: () => { x: number; y: number } | null;
+    } | null;
+  };
+};
+type SelectEvent = {
+  cancelBubble?: boolean;
+  evt?: {
+    metaKey?: boolean;
+    ctrlKey?: boolean;
+    shiftKey?: boolean;
+    clientX?: number;
+    clientY?: number;
+    preventDefault?: () => void;
+  };
 };
 type StagePointerEvent = {
   target: {
     getStage: () => {
+      getPointerPosition: () => { x: number; y: number } | null;
+    } | null;
+  };
+};
+type CanvasPointerEvent = {
+  target: {
+    getStage?: () => {
       getPointerPosition: () => { x: number; y: number } | null;
     } | null;
   };
@@ -159,6 +183,11 @@ type SelectionBox = {
   endX: number;
   endY: number;
 };
+type ContextMenuState = {
+  x: number;
+  y: number;
+  selectedIds: string[];
+} | null;
 
 type AlignmentGuide =
   | { type: "vertical"; x: number; variant: "align" }
@@ -262,6 +291,15 @@ export function DrillEditor({ name = "graphicJson", initialValue, onDirty }: Dri
     selectedIds: string[];
     objects: DrillEditorObject[];
   } | null>(null);
+  const groupScaleRef = useRef<{
+    bounds: EditorBounds;
+    center: { x: number; y: number };
+    handlePoint: { x: number; y: number };
+    startDistance: number;
+    selectedIds: string[];
+    objects: DrillEditorObject[];
+  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [spawnIndex, setSpawnIndex] = useState(0);
   const [pasteIndex, setPasteIndex] = useState(0);
   const [textEdit, setTextEdit] = useState<TextEditState | null>(null);
@@ -279,6 +317,8 @@ export function DrillEditor({ name = "graphicJson", initialValue, onDirty }: Dri
   const selectedGroupBounds = selectedObjects.length > 1 ? objectsSelectionBounds(selectedObjects, state.objects) : null;
   const groupRotationBounds = groupRotationRef.current?.bounds ?? selectedGroupBounds;
   const groupRotationHandlePoint = groupRotationRef.current?.handlePoint;
+  const selectedPersistentGroupIds = Array.from(new Set(selectedObjects.map((object) => object.groupId).filter((groupId): groupId is string => Boolean(groupId))));
+  const showGroupProperties = selectedObjects.length > 1;
 
   useEffect(() => {
     stateRef.current = initialState;
@@ -292,6 +332,20 @@ export function DrillEditor({ name = "graphicJson", initialValue, onDirty }: Dri
   useEffect(() => {
     setLineConnectionsOpen(false);
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    function closeMenu(event: KeyboardEvent | MouseEvent) {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      setContextMenu(null);
+    }
+    window.addEventListener("keydown", closeMenu);
+    window.addEventListener("mousedown", closeMenu);
+    return () => {
+      window.removeEventListener("keydown", closeMenu);
+      window.removeEventListener("mousedown", closeMenu);
+    };
+  }, [contextMenu]);
 
   useEffect(() => {
     let active = true;
@@ -395,6 +449,56 @@ export function DrillEditor({ name = "graphicJson", initialValue, onDirty }: Dri
     }), options);
   }
 
+  function objectSelectionIds(object: DrillEditorObject, objects = state.objects) {
+    return object.groupId ? objects.filter((candidate) => candidate.groupId === object.groupId).map((candidate) => candidate.id) : [object.id];
+  }
+
+  function expandIdsToGroups(ids: string[], objects = state.objects) {
+    const expanded = new Set<string>();
+    ids.forEach((id) => {
+      const object = objects.find((candidate) => candidate.id === id);
+      if (!object) return;
+      objectSelectionIds(object, objects).forEach((selectionId) => expanded.add(selectionId));
+    });
+    return objects.filter((object) => expanded.has(object.id)).map((object) => object.id);
+  }
+
+  function selectEditorObject(object: DrillEditorObject, event?: SelectEvent) {
+    if (event) event.cancelBubble = true;
+    const ids = objectSelectionIds(object);
+    const additive = Boolean(event?.evt?.metaKey || event?.evt?.ctrlKey || event?.evt?.shiftKey);
+    setSelectedIds((current) => {
+      if (!additive) return ids;
+      const expandedCurrent = expandIdsToGroups(current);
+      const allSelected = ids.every((id) => expandedCurrent.includes(id));
+      return allSelected
+        ? expandedCurrent.filter((id) => !ids.includes(id))
+        : state.objects.filter((candidate) => expandedCurrent.includes(candidate.id) || ids.includes(candidate.id)).map((candidate) => candidate.id);
+    });
+    focusEditorCanvas();
+  }
+
+  function openEditorContextMenu(event: SelectEvent, object: DrillEditorObject) {
+    event.evt?.preventDefault?.();
+    event.cancelBubble = true;
+    const objectIds = objectSelectionIds(object);
+    const expandedSelection = expandIdsToGroups(selectedIds);
+    const nextSelection = expandedSelection.includes(object.id) ? expandedSelection : objectIds;
+    if (!expandedSelection.includes(object.id)) setSelectedIds(nextSelection);
+    const rect = stageContainerRef.current?.getBoundingClientRect();
+    const clientX = event.evt?.clientX ?? rect?.left ?? 0;
+    const clientY = event.evt?.clientY ?? rect?.top ?? 0;
+    const menuWidth = 190;
+    const menuHeight = 300;
+    const viewportWidth = typeof window === "undefined" ? clientX + menuWidth : window.innerWidth;
+    const viewportHeight = typeof window === "undefined" ? clientY + menuHeight : window.innerHeight;
+    setContextMenu({
+      x: clamp(clientX, 8, Math.max(8, viewportWidth - menuWidth - 8)),
+      y: clamp(clientY, 8, Math.max(8, viewportHeight - menuHeight - 8)),
+      selectedIds: nextSelection
+    });
+  }
+
   function beginTextEdit(object: DrillEditorObject, field: EditableField, localX: number, localY: number, width: number) {
     const rotation = ((object.rotation % 360) * Math.PI) / 180;
     const scale = object.scale ?? 1;
@@ -443,10 +547,40 @@ export function DrillEditor({ name = "graphicJson", initialValue, onDirty }: Dri
 function pasteObjects(objectsToPaste: DrillEditorObject[]) {
     if (!objectsToPaste.length) return;
     const offset = nextPasteOffset();
-    const copies = objectsToPaste.map((object) => copyObjectWithOffset(object, offset.x, offset.y));
+    const copies = copyObjectsWithFreshGroups(objectsToPaste, offset.x, offset.y);
     updateState((current) => ({ ...current, objects: [...current.objects, ...copies] }));
     setSelectedIds(copies.map((object) => object.id));
     setPasteIndex((current) => current + 1);
+    focusEditorCanvas();
+  }
+
+  function groupSelectedObjects() {
+    const ids = expandIdsToGroups(selectedIds);
+    if (ids.length < 2) return;
+    const groupId = crypto.randomUUID();
+    updateState((current) => ({
+      ...current,
+      objects: current.objects.map((object) => {
+        if (!ids.includes(object.id)) return object;
+        const prepared = object.type === "arrow" ? resolvedFreeLineObject(object, current.objects) : object;
+        return { ...prepared, groupId };
+      })
+    }));
+    setSelectedIds(ids);
+    setContextMenu(null);
+    focusEditorCanvas();
+  }
+
+  function ungroupSelectedObjects() {
+    const groupIds = new Set(selectedObjects.map((object) => object.groupId).filter((groupId): groupId is string => Boolean(groupId)));
+    if (!groupIds.size) return;
+    const affectedIds = state.objects.filter((object) => object.groupId && groupIds.has(object.groupId)).map((object) => object.id);
+    updateState((current) => ({
+      ...current,
+      objects: current.objects.map((object) => (object.groupId && groupIds.has(object.groupId) ? { ...object, groupId: undefined } : object))
+    }));
+    setSelectedIds(affectedIds);
+    setContextMenu(null);
     focusEditorCanvas();
   }
 
@@ -469,25 +603,12 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
   }
 
   function moveSelectedLayer(action: "forward" | "backward" | "front" | "back") {
-    if (!selectedId) return;
+    const ids = expandIdsToGroups(selectedIds);
+    if (!ids.length) return;
     updateState((current) => {
-      const currentIndex = current.objects.findIndex((object) => object.id === selectedId);
-      if (currentIndex < 0) return current;
-
-      const objects = [...current.objects];
-      const [object] = objects.splice(currentIndex, 1);
-      const nextIndex =
-        action === "front"
-          ? objects.length
-          : action === "back"
-          ? 0
-          : action === "forward"
-          ? Math.min(objects.length, currentIndex + 1)
-          : Math.max(0, currentIndex - 1);
-
-      objects.splice(nextIndex, 0, object);
-      return { ...current, objects };
+      return { ...current, objects: moveLayerBlock(current.objects, ids, action) };
     });
+    setContextMenu(null);
   }
 
   function clearCanvas() {
@@ -655,7 +776,8 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
 
   function moveSelectedBy(dx: number, dy: number) {
     if (!selectedIds.length) return;
-    if (selectedIds.length === 1) {
+    const activeIds = expandIdsToGroups(selectedIds);
+    if (activeIds.length === 1) {
       const selected = state.objects.find((object) => object.id === selectedIds[0]);
       if (selected && isSetupGuideObject(selected)) {
         updateState((current) => {
@@ -669,13 +791,16 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
 
     setAlignmentGuides([]);
     updateState((current) => {
-      const movements = new Map(selectedIds.map((id) => [id, { dx, dy }]));
+      const movements = new Map(activeIds.map((id) => [id, { dx, dy }]));
       return { ...current, objects: applyObjectMovements(current.objects, movements) };
     });
   }
 
   function beginObjectDrag(movedObject: DrillEditorObject) {
-    const activeIds = selectedIds.includes(movedObject.id) ? selectedIds : [movedObject.id];
+    const clickedIds = objectSelectionIds(movedObject);
+    const currentSelection = expandIdsToGroups(selectedIds);
+    const activeIds = currentSelection.includes(movedObject.id) ? currentSelection : clickedIds;
+    if (!currentSelection.includes(movedObject.id)) setSelectedIds(activeIds);
     liveDragRef.current = {
       movedId: movedObject.id,
       baseX: movedObject.x,
@@ -720,15 +845,19 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
   }
 
   function beginGroupRotation(point: { x: number; y: number }) {
-    if (!selectedGroupBounds || selectedObjects.length < 2) return;
-    const center = boundsCenter(selectedGroupBounds);
+    const currentObjects = stateRef.current.objects;
+    const currentSelectedObjects = currentObjects.filter((object) => selectedIds.includes(object.id));
+    const bounds = currentSelectedObjects.length > 1 ? objectsSelectionBounds(currentSelectedObjects, currentObjects) : null;
+    if (!bounds || currentSelectedObjects.length < 2) return;
+    const center = boundsCenter(bounds);
+    const baselineObjects = groupRotationBaselineObjects(currentObjects, selectedIds);
     groupRotationRef.current = {
-      bounds: selectedGroupBounds,
+      bounds,
       center,
       handlePoint: point,
       startAngle: angleFromCenter(center, point),
       selectedIds: [...selectedIds],
-      objects: state.objects.map((object) => ({ ...object }))
+      objects: baselineObjects
     };
     captureHistorySnapshot();
   }
@@ -760,14 +889,54 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
     focusEditorCanvas();
   }
 
+  function beginGroupScale(point: { x: number; y: number }) {
+    const currentObjects = stateRef.current.objects;
+    const currentSelectedObjects = currentObjects.filter((object) => selectedIds.includes(object.id));
+    const bounds = currentSelectedObjects.length > 1 ? objectsSelectionBounds(currentSelectedObjects, currentObjects) : null;
+    if (!bounds || currentSelectedObjects.length < 2) return;
+    const center = boundsCenter(bounds);
+    groupScaleRef.current = {
+      bounds,
+      center,
+      handlePoint: point,
+      startDistance: Math.max(1, Math.hypot(point.x - center.x, point.y - center.y)),
+      selectedIds: [...selectedIds],
+      objects: groupRotationBaselineObjects(currentObjects, selectedIds)
+    };
+    captureHistorySnapshot();
+  }
+
+  function scaleSelectedGroup(point: { x: number; y: number }) {
+    const scaleBase = groupScaleRef.current;
+    if (!scaleBase) return;
+    scaleBase.handlePoint = point;
+    const distance = Math.max(1, Math.hypot(point.x - scaleBase.center.x, point.y - scaleBase.center.y));
+    const factor = clamp(distance / scaleBase.startDistance, 0.1, 8);
+    const baseObjects = new Map(scaleBase.objects.map((object) => [object.id, object]));
+    updateState((current) => ({
+      ...current,
+      objects: current.objects.map((object) => {
+        if (!scaleBase.selectedIds.includes(object.id)) return object;
+        const baseObject = baseObjects.get(object.id);
+        return baseObject ? scaleObjectAroundPoint(baseObject, scaleBase.center, factor) : object;
+      })
+    }), { history: false });
+  }
+
+  function finishGroupScale(point: { x: number; y: number }) {
+    scaleSelectedGroup(point);
+    groupScaleRef.current = null;
+    focusEditorCanvas();
+  }
+
   function showKeyboardAlignmentGuides(movedObject: DrillEditorObject) {
     if (keyboardGuideTimeoutRef.current) clearTimeout(keyboardGuideTimeoutRef.current);
     setAlignmentGuides(calculateAlignmentGuides(movedObject, movedObject.x, movedObject.y, state.objects, 1));
     keyboardGuideTimeoutRef.current = setTimeout(() => setAlignmentGuides([]), 900);
   }
 
-  function stageCanvasPoint(event: StagePointerEvent) {
-    const point = event.target.getStage()?.getPointerPosition();
+  function stageCanvasPoint(event: CanvasPointerEvent) {
+    const point = event.target.getStage?.()?.getPointerPosition();
     if (!point) return null;
     return inverseViewPoint({ x: point.x / actualZoom, y: point.y / actualZoom }, viewTransform);
   }
@@ -910,7 +1079,7 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
     const rect = normalizedSelectionRect(selectionBox);
     const movedEnough = rect.width > 6 || rect.height > 6;
     if (movedEnough) {
-      setSelectedIds(state.objects.filter((object) => objectIntersectsRect(object, rect)).map((object) => object.id));
+      setSelectedIds(expandIdsToGroups(state.objects.filter((object) => objectIntersectsRect(object, rect)).map((object) => object.id)));
     } else {
       setSelectedIds([]);
     }
@@ -1099,6 +1268,7 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
           <div
             ref={stageContainerRef}
             className="relative overflow-auto"
+            onContextMenu={(event) => event.preventDefault()}
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => {
               event.preventDefault();
@@ -1112,6 +1282,7 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
               scaleX={actualZoom}
               scaleY={actualZoom}
               onMouseDown={(event) => {
+                setContextMenu(null);
                 if (activeTool !== "select") {
                   startLineDrawing(event);
                   return;
@@ -1142,7 +1313,8 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
                       selected={selectedIds.includes(object.id)}
                       multiSelected={selectedIds.length > 1 && selectedIds.includes(object.id)}
                       zoom={actualZoom}
-                      onSelect={() => setSelectedIds([object.id])}
+                      onSelect={(event) => selectEditorObject(object, event)}
+                      onContextMenu={(event) => openEditorContextMenu(event, object)}
                       onChange={(patch, options) => updateObject(object.id, patch, options)}
                       onCaptureHistory={captureHistorySnapshot}
                       onMoveStart={() => beginObjectDrag(object)}
@@ -1156,7 +1328,7 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
                     />
                   ))}
                   {draftLine ? (
-                    <EditorObject object={draftLine} selected={false} multiSelected={false} zoom={actualZoom} onSelect={() => undefined} onChange={() => undefined} onCaptureHistory={() => undefined} onMoveStart={() => undefined} onMove={(x, y) => ({ x, y })} onMoveEnd={() => undefined} onRotationGuide={() => undefined} onRotationGuideEnd={() => undefined} onAlignmentGuides={() => undefined} objects={state.objects} onTextEdit={() => undefined} />
+                    <EditorObject object={draftLine} selected={false} multiSelected={false} zoom={actualZoom} onSelect={() => undefined} onContextMenu={() => undefined} onChange={() => undefined} onCaptureHistory={() => undefined} onMoveStart={() => undefined} onMove={(x, y) => ({ x, y })} onMoveEnd={() => undefined} onRotationGuide={() => undefined} onRotationGuideEnd={() => undefined} onAlignmentGuides={() => undefined} objects={state.objects} onTextEdit={() => undefined} />
                   ) : null}
                   {draftLine ? <AlignmentGuides guides={[lineLengthGuide(draftLine, state.objects)]} /> : null}
                   {groupRotationBounds ? (
@@ -1164,9 +1336,20 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
                       bounds={groupRotationBounds}
                       handlePoint={groupRotationHandlePoint}
                       zoom={actualZoom}
+                      toCanvasPoint={stageCanvasPoint}
                       onDragStart={beginGroupRotation}
                       onDragMove={rotateSelectedGroup}
                       onDragEnd={finishGroupRotation}
+                    />
+                  ) : null}
+                  {groupRotationBounds ? (
+                    <GroupScaleHandle
+                      bounds={groupRotationBounds}
+                      zoom={actualZoom}
+                      toCanvasPoint={stageCanvasPoint}
+                      onDragStart={beginGroupScale}
+                      onDragMove={scaleSelectedGroup}
+                      onDragEnd={finishGroupScale}
                     />
                   ) : null}
                   {alignmentGuides.length ? <AlignmentGuides guides={alignmentGuides} /> : null}
@@ -1190,10 +1373,68 @@ function pasteObjects(objectsToPaste: DrillEditorObject[]) {
                 style={{ left: textEdit.x, top: textEdit.y, width: Math.max(textEdit.width, 72) }}
               />
             ) : null}
+            {contextMenu ? (
+              <EditorContextMenu
+                menu={contextMenu}
+                canGroup={selectedIds.length >= 2}
+                canUngroup={selectedPersistentGroupIds.length > 0}
+                onClose={() => setContextMenu(null)}
+                onLayer={moveSelectedLayer}
+                onGroup={groupSelectedObjects}
+                onUngroup={ungroupSelectedObjects}
+                onDuplicate={duplicateSelected}
+                onDelete={deleteSelected}
+              />
+            ) : null}
           </div>
         </div>
 
-        {selectedObject ? (
+        {showGroupProperties ? (
+        <aside className="rounded-lg border border-board-line bg-board-paper p-4">
+          <p className="text-xs font-bold uppercase text-slate-500">Properties</p>
+          <div className="mt-4 space-y-4">
+            <div className="rounded-lg border border-board-line bg-white p-3">
+              <p className="text-sm font-bold text-board-navy">Group: {selectedObjects.length} items</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                Move, rotate, scale, layer, duplicate or delete the selected items together.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="secondary" className="h-9 px-3" onClick={groupSelectedObjects} disabled={selectedObjects.length < 2}>
+                Group
+              </Button>
+              <Button type="button" variant="secondary" className="h-9 px-3" onClick={ungroupSelectedObjects} disabled={!selectedPersistentGroupIds.length}>
+                Ungroup
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => moveSelectedLayer("forward")}>
+                Bring forward
+              </Button>
+              <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => moveSelectedLayer("backward")}>
+                Send backward
+              </Button>
+              <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => moveSelectedLayer("front")}>
+                Bring to front
+              </Button>
+              <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => moveSelectedLayer("back")}>
+                Send to back
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" className="h-9 px-3" onClick={duplicateSelected}>
+                <Copy className="h-4 w-4" />
+                Duplicate
+              </Button>
+              <Button type="button" variant="danger" className="h-9 px-3" onClick={deleteSelected}>
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </Button>
+            </div>
+            <p className="text-xs leading-5 text-slate-500">Use the corner handle to scale the group and the green handle to rotate it.</p>
+          </div>
+        </aside>
+        ) : selectedObject ? (
         <aside className="rounded-lg border border-board-line bg-board-paper p-4">
           <p className="text-xs font-bold uppercase text-slate-500">Properties</p>
             <div className="mt-4 space-y-4">
@@ -1836,7 +2077,14 @@ function instantiateTemplateObjects(template: DrillGraphicTemplate, center: { x:
     : { x: 0, y: 0 };
   const dx = center.x - templateCenter.x;
   const dy = center.y - templateCenter.y;
-  return template.objects.map((object) => moveObjectBy({ ...object, id: crypto.randomUUID() }, dx, dy));
+  const groupMap = new Map<string, string>();
+  return template.objects.map((object) => {
+    const nextGroupId = object.groupId
+      ? groupMap.get(object.groupId) ?? crypto.randomUUID()
+      : undefined;
+    if (object.groupId && nextGroupId) groupMap.set(object.groupId, nextGroupId);
+    return moveObjectBy({ ...object, id: crypto.randomUUID(), groupId: nextGroupId }, dx, dy);
+  });
 }
 
 function templateObjectBounds(objects: DrillGraphicTemplateObject[]) {
@@ -1979,6 +2227,7 @@ function templateObjectFromUnknown(value: unknown): DrillGraphicTemplateObject |
   assignBoolean(value, object, "arrowHead");
   assignBoolean(value, object, "curveEdited");
   assignBoolean(value, object, "mirrored");
+  assignString(value, object, "groupId");
   if (isLineStyle(value.lineStyle)) object.lineStyle = value.lineStyle;
   if (Array.isArray(value.points) && value.points.every((point) => typeof point === "number" && Number.isFinite(point))) {
     object.points = value.points;
@@ -2376,6 +2625,7 @@ function EditorObject({
   multiSelected,
   zoom,
   onSelect,
+  onContextMenu,
   onChange,
   onCaptureHistory,
   onMoveStart,
@@ -2391,7 +2641,8 @@ function EditorObject({
   selected: boolean;
   multiSelected: boolean;
   zoom: number;
-  onSelect: () => void;
+  onSelect: (event?: SelectEvent) => void;
+  onContextMenu: (event: SelectEvent) => void;
   onChange: (patch: Partial<DrillEditorObject>, options?: { history?: boolean }) => void;
   onCaptureHistory: () => void;
   onMoveStart: () => void;
@@ -2421,6 +2672,7 @@ function EditorObject({
         selected={selected}
         multiSelected={multiSelected}
         onSelect={onSelect}
+        onContextMenu={onContextMenu}
         onChange={onChange}
         onCaptureHistory={onCaptureHistory}
         onMoveStart={onMoveStart}
@@ -2458,6 +2710,7 @@ function EditorObject({
         draggable
         onClick={onSelect}
         onTap={onSelect}
+        onContextMenu={onContextMenu}
         onDblClick={onSelect}
         onDragStart={onMoveStart}
         onDragMove={(event: DragEvent) => {
@@ -2524,6 +2777,7 @@ function GroupRotationHandle({
   bounds,
   handlePoint,
   zoom,
+  toCanvasPoint,
   onDragStart,
   onDragMove,
   onDragEnd
@@ -2531,6 +2785,7 @@ function GroupRotationHandle({
   bounds: EditorBounds;
   handlePoint?: { x: number; y: number };
   zoom: number;
+  toCanvasPoint: (event: DragPointEvent) => { x: number; y: number } | null;
   onDragStart: (point: { x: number; y: number }) => void;
   onDragMove: (point: { x: number; y: number }) => void;
   onDragEnd: (point: { x: number; y: number }) => void;
@@ -2539,6 +2794,8 @@ function GroupRotationHandle({
   const handle = handlePoint ?? groupRotationHandlePosition(bounds);
 
   function eventPoint(event: DragPointEvent) {
+    const canvasPoint = toCanvasPoint(event);
+    if (canvasPoint) return canvasPoint;
     return {
       x: finiteNumber(event.target.x(), handle.x),
       y: finiteNumber(event.target.y(), handle.y)
@@ -2580,6 +2837,118 @@ function GroupRotationHandle({
       />
       <KonvaCircle x={center.x} y={center.y} radius={2.5 / zoom} fill="#16a34a" listening={false} />
     </Group>
+  );
+}
+
+function GroupScaleHandle({
+  bounds,
+  zoom,
+  toCanvasPoint,
+  onDragStart,
+  onDragMove,
+  onDragEnd
+}: {
+  bounds: EditorBounds;
+  zoom: number;
+  toCanvasPoint: (event: DragPointEvent) => { x: number; y: number } | null;
+  onDragStart: (point: { x: number; y: number }) => void;
+  onDragMove: (point: { x: number; y: number }) => void;
+  onDragEnd: (point: { x: number; y: number }) => void;
+}) {
+  const handle = { x: bounds.maxX, y: bounds.maxY };
+  function eventPoint(event: DragPointEvent) {
+    const canvasPoint = toCanvasPoint(event);
+    if (canvasPoint) return canvasPoint;
+    return {
+      x: finiteNumber(event.target.x(), handle.x),
+      y: finiteNumber(event.target.y(), handle.y)
+    };
+  }
+
+  return (
+    <KonvaCircle
+      x={handle.x}
+      y={handle.y}
+      radius={6 / zoom}
+      fill="#ffffff"
+      stroke="#111827"
+      strokeWidth={1.8 / zoom}
+      draggable
+      onDragStart={(event: DragPointEvent) => {
+        event.cancelBubble = true;
+        onDragStart(eventPoint(event));
+      }}
+      onDragMove={(event: DragPointEvent) => {
+        event.cancelBubble = true;
+        onDragMove(eventPoint(event));
+      }}
+      onDragEnd={(event: DragPointEvent) => {
+        event.cancelBubble = true;
+        onDragEnd(eventPoint(event));
+      }}
+    />
+  );
+}
+
+function EditorContextMenu({
+  menu,
+  canGroup,
+  canUngroup,
+  onClose,
+  onLayer,
+  onGroup,
+  onUngroup,
+  onDuplicate,
+  onDelete
+}: {
+  menu: NonNullable<ContextMenuState>;
+  canGroup: boolean;
+  canUngroup: boolean;
+  onClose: () => void;
+  onLayer: (action: "forward" | "backward" | "front" | "back") => void;
+  onGroup: () => void;
+  onUngroup: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  function action(callback: () => void) {
+    return (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      callback();
+      onClose();
+    };
+  }
+
+  return (
+    <div
+      className="fixed z-50 w-48 overflow-hidden rounded-lg border border-board-line bg-white py-1 text-sm shadow-xl"
+      style={{ left: menu.x, top: menu.y }}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <MenuButton onClick={action(() => onLayer("front"))}>Bring to front</MenuButton>
+      <MenuButton onClick={action(() => onLayer("forward"))}>Bring forward</MenuButton>
+      <MenuButton onClick={action(() => onLayer("backward"))}>Send backward</MenuButton>
+      <MenuButton onClick={action(() => onLayer("back"))}>Send to back</MenuButton>
+      <div className="my-1 border-t border-board-line" />
+      <MenuButton onClick={action(onGroup)} disabled={!canGroup}>Group</MenuButton>
+      <MenuButton onClick={action(onUngroup)} disabled={!canUngroup}>Ungroup</MenuButton>
+      <div className="my-1 border-t border-board-line" />
+      <MenuButton onClick={action(onDuplicate)}>Duplicate</MenuButton>
+      <MenuButton onClick={action(onDelete)} danger>Delete</MenuButton>
+    </div>
+  );
+}
+
+function MenuButton({ children, onClick, disabled, danger }: { children: ReactNode; onClick: (event: React.MouseEvent<HTMLButtonElement>) => void; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`block w-full px-3 py-2 text-left font-semibold disabled:cursor-not-allowed disabled:text-slate-300 ${danger ? "text-red-600 hover:bg-red-50" : "text-slate-700 hover:bg-green-50"}`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -2973,13 +3342,15 @@ function EditorLine({
   onMoveStart,
   onMove,
   onMoveEnd,
+  onContextMenu,
   onAlignmentGuides
 }: {
   object: DrillEditorObject;
   objects: DrillEditorObject[];
   selected: boolean;
   multiSelected: boolean;
-  onSelect: () => void;
+  onSelect: (event?: SelectEvent) => void;
+  onContextMenu: (event: SelectEvent) => void;
   onChange: (patch: Partial<DrillEditorObject>, options?: { history?: boolean }) => void;
   onCaptureHistory: () => void;
   onMoveStart: () => void;
@@ -3117,13 +3488,13 @@ function EditorLine({
       {selected ? <Line points={points} stroke="rgba(255,255,255,0.72)" strokeWidth={thickness + 7} lineCap="round" lineJoin="round" tension={0.35} listening={false} /> : null}
       {object.lineStyle === "slalom" ? (
         <>
-          <Line points={points} stroke={object.color} strokeWidth={thickness} lineCap="round" lineJoin="round" tension={0.35} hitStrokeWidth={18} onClick={onSelect} onTap={onSelect} />
-          {lineShowsArrow(object) ? <Arrow points={lastSegment(points)} stroke={object.color} fill={object.color} strokeWidth={thickness} pointerLength={arrowSize} pointerWidth={arrowSize} onClick={onSelect} onTap={onSelect} /> : null}
+          <Line points={points} stroke={object.color} strokeWidth={thickness} lineCap="round" lineJoin="round" tension={0.35} hitStrokeWidth={18} onClick={onSelect} onTap={onSelect} onContextMenu={onContextMenu} />
+          {lineShowsArrow(object) ? <Arrow points={lastSegment(points)} stroke={object.color} fill={object.color} strokeWidth={thickness} pointerLength={arrowSize} pointerWidth={arrowSize} onClick={onSelect} onTap={onSelect} onContextMenu={onContextMenu} /> : null}
         </>
       ) : (
         <>
-          <Line points={points} stroke={object.color} strokeWidth={thickness} dash={dash} lineCap="round" lineJoin="round" tension={0.5} hitStrokeWidth={18} onClick={onSelect} onTap={onSelect} />
-          {lineShowsArrow(object) ? <Arrow points={lastSegment(points)} stroke={object.color} fill={object.color} strokeWidth={thickness} pointerLength={arrowSize} pointerWidth={arrowSize} dash={dash} onClick={onSelect} onTap={onSelect} /> : null}
+          <Line points={points} stroke={object.color} strokeWidth={thickness} dash={dash} lineCap="round" lineJoin="round" tension={0.5} hitStrokeWidth={18} onClick={onSelect} onTap={onSelect} onContextMenu={onContextMenu} />
+          {lineShowsArrow(object) ? <Arrow points={lastSegment(points)} stroke={object.color} fill={object.color} strokeWidth={thickness} pointerLength={arrowSize} pointerWidth={arrowSize} dash={dash} onClick={onSelect} onTap={onSelect} onContextMenu={onContextMenu} /> : null}
         </>
       )}
       {object.label ? <Text text={object.label} x={controlX - 36} y={controlY - 28} width={72} align="center" fill={object.color} fontStyle="bold" /> : null}
@@ -3147,11 +3518,12 @@ function EditorLine({
         draggable
         onClick={onSelect}
         onTap={onSelect}
+        onContextMenu={onContextMenu}
         onDragStart={beginLineDrag}
         onDragMove={moveLine}
         onDragEnd={finishLineDrag}
       />
-      {selected ? (
+      {selected && !multiSelected ? (
         <>
           <EndpointHandle
             x={line.x}
@@ -3476,6 +3848,41 @@ function copyObjectWithOffset(object: DrillEditorObject, offsetX: number, offset
   };
 }
 
+function copyObjectsWithFreshGroups(objects: DrillEditorObject[], offsetX: number, offsetY: number) {
+  const groupMap = new Map<string, string>();
+  return objects.map((object) => {
+    const copy = copyObjectWithOffset(object, offsetX, offsetY);
+    if (!object.groupId) return { ...copy, groupId: undefined };
+    const nextGroupId = groupMap.get(object.groupId) ?? crypto.randomUUID();
+    groupMap.set(object.groupId, nextGroupId);
+    return { ...copy, groupId: nextGroupId };
+  });
+}
+
+function moveLayerBlock(objects: DrillEditorObject[], selectedIds: string[], action: "forward" | "backward" | "front" | "back") {
+  const selected = new Set(selectedIds);
+  const block = objects.filter((object) => selected.has(object.id));
+  if (!block.length) return objects;
+  const rest = objects.filter((object) => !selected.has(object.id));
+  if (action === "front") return [...rest, ...block];
+  if (action === "back") return [...block, ...rest];
+
+  const indexes = objects.map((object, index) => (selected.has(object.id) ? index : -1)).filter((index) => index >= 0);
+  const start = Math.min(...indexes);
+  const end = Math.max(...indexes);
+  if (action === "forward") {
+    const after = objects.slice(end + 1).find((object) => !selected.has(object.id));
+    if (!after) return objects;
+    const afterIndex = rest.findIndex((object) => object.id === after.id);
+    return [...rest.slice(0, afterIndex + 1), ...block, ...rest.slice(afterIndex + 1)];
+  }
+
+  const before = [...objects.slice(0, start)].reverse().find((object) => !selected.has(object.id));
+  if (!before) return objects;
+  const beforeIndex = rest.findIndex((object) => object.id === before.id);
+  return [...rest.slice(0, beforeIndex), ...block, ...rest.slice(beforeIndex)];
+}
+
 function spawnOffset(index: number) {
   const offsets = [
     { x: 0, y: 0 },
@@ -3558,6 +3965,32 @@ function objectPositionPatch(object: DrillEditorObject, dx: number, dy: number):
   };
 }
 
+function groupRotationBaselineObjects(objects: DrillEditorObject[], selectedIds: string[]) {
+  const selected = new Set(selectedIds);
+  return objects.map((object) => {
+    if (!selected.has(object.id)) return { ...object };
+    if (object.type !== "arrow") return { ...object };
+    return resolvedFreeLineObject(object, objects);
+  });
+}
+
+function resolvedFreeLineObject(line: DrillEditorObject, objects: DrillEditorObject[]): DrillEditorObject {
+  const resolved = resolveLineObject(line, objects);
+  return {
+    ...resolved,
+    startAnchorType: undefined,
+    startAnchorObjectId: undefined,
+    startAnchorEndpoint: undefined,
+    startAnchorOffsetX: undefined,
+    startAnchorOffsetY: undefined,
+    endAnchorType: undefined,
+    endAnchorObjectId: undefined,
+    endAnchorEndpoint: undefined,
+    endAnchorOffsetX: undefined,
+    endAnchorOffsetY: undefined
+  };
+}
+
 function rotateObjectAroundPoint(
   object: DrillEditorObject,
   center: { x: number; y: number },
@@ -3574,6 +4007,50 @@ function rotateObjectAroundPoint(
     x: rotated.x,
     y: rotated.y,
     rotation: positiveRotation(object.rotation + degrees)
+  };
+}
+
+function scaleObjectAroundPoint(object: DrillEditorObject, center: { x: number; y: number }, factor: number): DrillEditorObject {
+  if (object.type === "arrow") {
+    const geometry = lineGeometry(object, [object]);
+    const start = scalePointAround(geometry.start, center, factor);
+    const end = scalePointAround(geometry.end, center, factor);
+    const control = scalePointAround(geometry.control, center, factor);
+    return {
+      ...object,
+      x: start.x,
+      y: start.y,
+      endX: end.x,
+      endY: end.y,
+      controlX: control.x,
+      controlY: control.y,
+      scale: clamp((object.scale ?? 1) * factor, minObjectScale, maxObjectScale),
+      startAnchorType: undefined,
+      startAnchorObjectId: undefined,
+      startAnchorEndpoint: undefined,
+      startAnchorOffsetX: undefined,
+      startAnchorOffsetY: undefined,
+      endAnchorType: undefined,
+      endAnchorObjectId: undefined,
+      endAnchorEndpoint: undefined,
+      endAnchorOffsetX: undefined,
+      endAnchorOffsetY: undefined
+    };
+  }
+
+  const point = scalePointAround({ x: object.x, y: object.y }, center, factor);
+  return {
+    ...object,
+    x: point.x,
+    y: point.y,
+    scale: clamp((object.scale ?? 1) * factor, minObjectScale, maxObjectScale)
+  };
+}
+
+function scalePointAround(point: { x: number; y: number }, center: { x: number; y: number }, factor: number) {
+  return {
+    x: center.x + (point.x - center.x) * factor,
+    y: center.y + (point.y - center.y) * factor
   };
 }
 

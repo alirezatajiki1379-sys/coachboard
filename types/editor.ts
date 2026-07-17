@@ -46,6 +46,7 @@ export type DrillEditorObject = {
   arrowHead?: boolean;
   curveEdited?: boolean;
   mirrored?: boolean;
+  groupId?: string;
   startAnchorType?: DrillEditorAnchorType;
   startAnchorObjectId?: string;
   startAnchorEndpoint?: DrillEditorEndpoint;

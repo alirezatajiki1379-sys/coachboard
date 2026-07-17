@@ -126,6 +126,7 @@ export function parseEditorState(value: unknown): DrillEditorState {
             arrowHead: booleanValue(object.arrowHead, true),
             curveEdited: booleanValue(object.curveEdited, false),
             mirrored: booleanValue(object.mirrored, false),
+            groupId: stringValue(object.groupId),
             startAnchorType: anchorTypeValue(object.startAnchorType),
             startAnchorObjectId: stringValue(object.startAnchorObjectId),
             startAnchorEndpoint: endpointValue(object.startAnchorEndpoint),
