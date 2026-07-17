@@ -40,6 +40,7 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [returnTo, setReturnTo] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+  const returnToInputRef = useRef<HTMLInputElement>(null);
   const fieldErrors = state.fieldErrors ?? {};
   const draftKey = `coachboard:draft:drill:${drill?.id ?? "new"}`;
 
@@ -71,6 +72,7 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
     isDirty,
     isSaving: isSubmitting || isPending,
     onSaveAndLeave: (href) => {
+      if (returnToInputRef.current) returnToInputRef.current.value = href;
       setReturnTo(href);
       setIsSubmitting(true);
       window.setTimeout(() => formRef.current?.requestSubmit(), 0);
@@ -117,7 +119,7 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
       onSubmitCapture={() => setIsSubmitting(true)}
     >
       {drill ? <input type="hidden" name="drillId" value={drill.id} /> : null}
-      <input type="hidden" name="returnTo" value={returnTo} readOnly />
+      <input ref={returnToInputRef} type="hidden" name="returnTo" value={returnTo} readOnly />
       {unsavedChangesDialog}
       {recoveryDialog}
 

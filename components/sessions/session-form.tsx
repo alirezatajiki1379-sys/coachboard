@@ -64,6 +64,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [returnTo, setReturnTo] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+  const returnToInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [ageGroup, setAgeGroup] = useState("");
   const [mainFocus, setMainFocus] = useState("");
@@ -98,6 +99,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
     isDirty,
     isSaving: isSubmitting || isPending,
     onSaveAndLeave: (href) => {
+      if (returnToInputRef.current) returnToInputRef.current.value = href;
       setReturnTo(href);
       setIsSubmitting(true);
       window.setTimeout(() => formRef.current?.requestSubmit(), 0);
@@ -392,7 +394,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
   return (
     <form ref={formRef} action={formAction} className="space-y-6" onSubmitCapture={() => setIsSubmitting(true)}>
       {session ? <input type="hidden" name="sessionId" value={session.id} /> : null}
-      <input type="hidden" name="returnTo" value={returnTo} readOnly />
+      <input ref={returnToInputRef} type="hidden" name="returnTo" value={returnTo} readOnly />
       <input type="hidden" name="sessionPayload" value={JSON.stringify(values)} />
       {unsavedChangesDialog}
       {recoveryDialog}
