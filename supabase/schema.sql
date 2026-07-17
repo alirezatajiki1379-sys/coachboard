@@ -108,6 +108,27 @@ create table if not exists public.training_session_drills (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.squad_players (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  first_name text not null,
+  last_name text not null,
+  date_of_birth date,
+  position text,
+  strong_foot text,
+  club text,
+  parent_phone text,
+  player_phone text,
+  parent_email text,
+  hobbies text,
+  development_goal text,
+  work_on text,
+  notes text,
+  archived_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.tags (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -123,6 +144,8 @@ create index if not exists drill_graphic_templates_user_id_updated_at_idx on pub
 create index if not exists materials_user_id_drill_id_idx on public.materials(user_id, drill_id);
 create index if not exists training_sessions_user_id_updated_at_idx on public.training_sessions(user_id, updated_at desc);
 create index if not exists training_session_drills_session_id_order_idx on public.training_session_drills(session_id, order_index);
+create index if not exists squad_players_user_id_last_name_idx on public.squad_players(user_id, last_name, first_name);
+create index if not exists squad_players_user_id_updated_at_idx on public.squad_players(user_id, updated_at desc);
 create unique index if not exists tags_user_id_lower_name_idx on public.tags(user_id, lower(name));
 
 create or replace function public.set_updated_at()
@@ -181,6 +204,10 @@ drop trigger if exists set_training_session_drills_updated_at on public.training
 create trigger set_training_session_drills_updated_at before update on public.training_session_drills
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_squad_players_updated_at on public.squad_players;
+create trigger set_squad_players_updated_at before update on public.squad_players
+for each row execute function public.set_updated_at();
+
 alter table public.profiles enable row level security;
 alter table public.drills enable row level security;
 alter table public.drill_graphics enable row level security;
@@ -188,6 +215,7 @@ alter table public.drill_graphic_templates enable row level security;
 alter table public.materials enable row level security;
 alter table public.training_sessions enable row level security;
 alter table public.training_session_drills enable row level security;
+alter table public.squad_players enable row level security;
 alter table public.tags enable row level security;
 
 drop policy if exists "profiles are owned by the user" on public.profiles;
@@ -255,6 +283,11 @@ with check (
 
 drop policy if exists "tags are owned by the user" on public.tags;
 create policy "tags are owned by the user" on public.tags
+for all using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "squad players are owned by the user" on public.squad_players;
+create policy "squad players are owned by the user" on public.squad_players
 for all using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 

@@ -3,6 +3,7 @@ export const en = {
   nav: {
     dashboard: "Dashboard",
     drills: "Drill Library",
+    squad: "Squad",
     sessions: "Training Sessions",
     settings: "Settings"
   },

@@ -177,3 +177,24 @@ export type TrainingSession = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type SquadPlayer = {
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string;
+  position?: string;
+  strongFoot?: string;
+  club?: string;
+  parentPhone?: string;
+  playerPhone?: string;
+  parentEmail?: string;
+  hobbies?: string;
+  developmentGoal?: string;
+  workOn?: string;
+  notes?: string;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
