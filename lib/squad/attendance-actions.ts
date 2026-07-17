@@ -19,6 +19,9 @@ export type TrainingEventActionState = {
   submissionId?: number;
 };
 
+const plannedStatuses = ["expected", "unavailable", "unclear"] as const;
+const finalStatuses = ["present", "Z", "V", "K", "E", "P", "S", "U"] as const;
+
 async function requireUser() {
   const supabase = await createClient();
   const {
@@ -38,8 +41,28 @@ function optional(value: string) {
   return value ? value : null;
 }
 
+function numberOrNull(value: string) {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function boundedRating(value: string) {
+  const parsed = numberOrNull(value);
+  return parsed && parsed >= 1 && parsed <= 5 ? parsed : null;
+}
+
 function eventPath(eventId: string, suffix = "") {
   return `/squad/attendance/${eventId}${suffix}`;
+}
+
+function revalidateEvent(eventId: string) {
+  revalidatePath("/squad");
+  revalidatePath("/squad/attendance");
+  revalidatePath("/squad/ratings");
+  revalidatePath(eventPath(eventId));
+  revalidatePath(eventPath(eventId, "/check-in"));
+  revalidatePath(eventPath(eventId, "/ratings"));
 }
 
 export async function createTrainingEvent(_: TrainingEventActionState, formData: FormData): Promise<TrainingEventActionState> {
@@ -71,7 +94,7 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
       label: optional(values.label),
       linked_training_session_id: optional(values.linkedTrainingSessionId),
       general_notes: optional(values.generalNotes),
-      status: "planned"
+      status: "draft"
     })
     .select("id")
     .single();
@@ -90,33 +113,24 @@ export async function addSquadPlayersToEvent(formData: FormData) {
     .from("squad_players")
     .select("id")
     .eq("user_id", user.id)
+    .eq("player_type", "permanent")
     .is("archived_at", null);
   if (playersError) throw new Error(playersError.message);
 
-  const { data: existing, error: existingError } = await db
-    .from("squad_event_attendance")
-    .select("player_id")
-    .eq("user_id", user.id)
-    .eq("event_id", eventId);
-  if (existingError) throw new Error(existingError.message);
-
-  const existingIds = new Set((existing ?? []).map((row: { player_id: string | null }) => row.player_id).filter(Boolean));
-  const rows = (players ?? [])
-    .filter((player: { id: string }) => !existingIds.has(player.id))
-    .map((player: { id: string }) => ({
-      user_id: user.id,
-      event_id: eventId,
-      player_id: player.id,
-      planned_status: "expected",
-      status: "expected"
-    }));
+  const rows = ((players ?? []) as { id: string }[]).map((player) => ({
+    user_id: user.id,
+    event_id: eventId,
+    player_id: player.id,
+    planned_status: "expected"
+  }));
 
   if (rows.length) {
-    const { error } = await db.from("squad_event_attendance").insert(rows);
+    const { error } = await db.from("squad_attendance_records").upsert(rows, { onConflict: "event_id,player_id", ignoreDuplicates: true });
     if (error) throw new Error(error.message);
   }
 
-  revalidatePath(eventPath(eventId));
+  await markEventPrepared(db, user.id, eventId);
+  revalidateEvent(eventId);
   redirect(eventPath(eventId));
 }
 
@@ -127,77 +141,196 @@ export async function addTrialPlayerToEvent(formData: FormData) {
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  const { data: trial, error: trialError } = await db
-    .from("squad_trial_players")
+  const { data: player, error: playerError } = await db
+    .from("squad_players")
     .insert({
       user_id: user.id,
-      display_name: displayName,
-      contact: optional(formString(formData, "contact")),
+      player_type: "trial",
+      first_name: displayName,
+      player_phone: optional(formString(formData, "contact")),
       notes: optional(formString(formData, "notes"))
     })
     .select("id")
     .single();
-  if (trialError) throw new Error(trialError.message);
+  if (playerError) throw new Error(playerError.message);
 
-  const { error } = await db.from("squad_event_attendance").insert({
-    user_id: user.id,
-    event_id: eventId,
-    trial_player_id: trial.id,
-    planned_status: "expected",
-    status: "expected"
-  });
-  if (error) throw new Error(error.message);
-
-  revalidatePath(eventPath(eventId));
+  await upsertAttendanceRecord(db, user.id, eventId, player.id);
+  await markEventPrepared(db, user.id, eventId);
+  revalidateEvent(eventId);
   redirect(eventPath(eventId));
 }
 
-export async function updateAttendanceStatus(formData: FormData) {
+export async function addExistingTrialPlayerToEvent(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const playerId = formString(formData, "playerId");
+  if (!playerId) redirect(eventPath(eventId));
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { data: player, error: playerError } = await db
+    .from("squad_players")
+    .select("id")
+    .eq("id", playerId)
+    .eq("user_id", user.id)
+    .eq("player_type", "trial")
+    .is("converted_at", null)
+    .maybeSingle();
+  if (playerError) throw new Error(playerError.message);
+  if (player) await upsertAttendanceRecord(db, user.id, eventId, player.id);
+
+  await markEventPrepared(db, user.id, eventId);
+  revalidateEvent(eventId);
+  redirect(eventPath(eventId));
+}
+
+export async function removePlayerFromEvent(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const attendanceId = formString(formData, "attendanceId");
-  const status = formString(formData, "status");
-  if (!["expected", "unavailable", "unclear", "present", "absent"].includes(status)) redirect(eventPath(eventId));
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("squad_attendance_records")
+    .delete()
+    .eq("id", attendanceId)
+    .eq("event_id", eventId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidateEvent(eventId);
+  redirect(eventPath(eventId));
+}
+
+export async function updatePlannedAttendance(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const attendanceId = formString(formData, "attendanceId");
+  const plannedStatus = formString(formData, "plannedStatus");
+  if (!plannedStatuses.includes(plannedStatus as (typeof plannedStatuses)[number])) redirect(eventPath(eventId));
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  const plannedStatus = status === "present" || status === "absent" ? undefined : status;
   const { error } = await db
-    .from("squad_event_attendance")
+    .from("squad_attendance_records")
     .update({
-      status,
-      ...(plannedStatus ? { planned_status: plannedStatus } : {})
+      planned_status: plannedStatus,
+      planned_reason_note: plannedStatus === "unavailable" ? optional(formString(formData, "plannedReasonNote")) : null
     })
     .eq("id", attendanceId)
     .eq("event_id", eventId)
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);
 
-  revalidatePath(eventPath(eventId));
-  revalidatePath(eventPath(eventId, "/check-in"));
+  await markEventPrepared(db, user.id, eventId);
+  revalidateEvent(eventId);
   redirect(formString(formData, "returnTo") || eventPath(eventId));
+}
+
+export async function markAllExpected(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("squad_attendance_records")
+    .update({ planned_status: "expected", planned_reason_note: null })
+    .eq("event_id", eventId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  await markEventPrepared(db, user.id, eventId);
+  revalidateEvent(eventId);
+  redirect(eventPath(eventId));
+}
+
+export async function updateFinalAttendance(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const attendanceId = formString(formData, "attendanceId");
+  const finalStatus = formString(formData, "finalStatus");
+  if (!finalStatuses.includes(finalStatus as (typeof finalStatuses)[number])) redirect(eventPath(eventId));
+
+  const lateMinutes = finalStatus === "Z" ? numberOrNull(formString(formData, "lateMinutes")) : null;
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("squad_attendance_records")
+    .update({
+      final_status: finalStatus,
+      late_minutes: lateMinutes,
+      late_penalty_applied: formData.get("latePenaltyApplied") !== "off"
+    })
+    .eq("id", attendanceId)
+    .eq("event_id", eventId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  await markEventInProgress(db, user.id, eventId);
+  revalidateEvent(eventId);
+  redirect(formString(formData, "returnTo") || eventPath(eventId));
+}
+
+export async function markAllExpectedPresent(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("squad_attendance_records")
+    .update({ final_status: "present" })
+    .eq("event_id", eventId)
+    .eq("user_id", user.id)
+    .eq("planned_status", "expected")
+    .is("final_status", null);
+  if (error) throw new Error(error.message);
+
+  await markEventInProgress(db, user.id, eventId);
+  revalidateEvent(eventId);
+  redirect(eventPath(eventId, "/check-in"));
+}
+
+export async function markAllPresent(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("squad_attendance_records")
+    .update({ final_status: "present" })
+    .eq("event_id", eventId)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  await markEventInProgress(db, user.id, eventId);
+  revalidateEvent(eventId);
+  redirect(eventPath(eventId, "/check-in"));
 }
 
 export async function updateAttendanceRating(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const attendanceId = formString(formData, "attendanceId");
-  const rating = numberOrNull(formString(formData, "rating"));
-  const effortRating = numberOrNull(formString(formData, "effortRating"));
+  const ratingTechnique = boundedRating(formString(formData, "ratingTechnique"));
+  const ratingGameUnderstanding = boundedRating(formString(formData, "ratingGameUnderstanding"));
+  const ratingIntensity = boundedRating(formString(formData, "ratingIntensity"));
+  const ratingBehavior = boundedRating(formString(formData, "ratingBehavior"));
+  const categoryRatings = [ratingTechnique, ratingGameUnderstanding, ratingIntensity, ratingBehavior].filter((value): value is number => value !== null);
+  const suggestion = categoryRatings.length ? Math.round(categoryRatings.reduce((sum, value) => sum + value, 0) / categoryRatings.length) : null;
+  const overallRating = boundedRating(formString(formData, "overallRating")) ?? suggestion;
+
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
   const { error } = await db
-    .from("squad_event_attendance")
+    .from("squad_attendance_records")
     .update({
-      rating,
-      effort_rating: effortRating,
-      notes: optional(formString(formData, "notes"))
+      overall_rating: overallRating,
+      rating_technique: ratingTechnique,
+      rating_game_understanding: ratingGameUnderstanding,
+      rating_intensity: ratingIntensity,
+      rating_behavior: ratingBehavior,
+      rating_auto_suggestion: suggestion,
+      coach_note: optional(formString(formData, "coachNote")),
+      sensitive_note: formData.get("sensitiveNote") === "on"
     })
     .eq("id", attendanceId)
     .eq("event_id", eventId)
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);
 
-  revalidatePath(eventPath(eventId));
-  revalidatePath(eventPath(eventId, "/ratings"));
+  await markEventRatingOpen(db, user.id, eventId);
+  revalidateEvent(eventId);
   redirect(eventPath(eventId, "/ratings"));
 }
 
@@ -205,58 +338,66 @@ export async function completeTrainingEvent(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const { data: existing, error: existingError } = await db
+    .from("squad_training_events")
+    .select("completed_at")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+
   const { error } = await db
     .from("squad_training_events")
-    .update({ status: "completed", completed_at: new Date().toISOString() })
+    .update({ status: "completed", completed_at: existing?.completed_at ?? new Date().toISOString() })
     .eq("id", eventId)
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);
 
-  revalidatePath("/squad/attendance");
-  revalidatePath(eventPath(eventId));
+  revalidateEvent(eventId);
   redirect(eventPath(eventId));
 }
 
 export async function convertTrialPlayerToSquadPlayer(formData: FormData) {
   const eventId = formString(formData, "eventId");
-  const trialPlayerId = formString(formData, "trialPlayerId");
+  const playerId = formString(formData, "playerId");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  const { data: trial, error: trialError } = await db
-    .from("squad_trial_players")
-    .select("*")
-    .eq("id", trialPlayerId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (trialError) throw new Error(trialError.message);
-  if (!trial) redirect(eventPath(eventId));
-
-  const { data: player, error: playerError } = await db
+  const { error } = await db
     .from("squad_players")
-    .insert({
-      user_id: user.id,
-      first_name: trial.display_name,
-      notes: trial.notes,
-      player_phone: trial.contact
-    })
-    .select("id")
-    .single();
-  if (playerError) throw new Error(playerError.message);
+    .update({ player_type: "permanent", converted_at: new Date().toISOString() })
+    .eq("id", playerId)
+    .eq("user_id", user.id)
+    .eq("player_type", "trial");
+  if (error) throw new Error(error.message);
 
-  const { error: trialUpdateError } = await db
-    .from("squad_trial_players")
-    .update({ converted_player_id: player.id })
-    .eq("id", trialPlayerId)
-    .eq("user_id", user.id);
-  if (trialUpdateError) throw new Error(trialUpdateError.message);
-
+  revalidateEvent(eventId);
   revalidatePath("/squad");
-  revalidatePath(eventPath(eventId));
   redirect(eventPath(eventId));
 }
 
-function numberOrNull(value: string) {
-  if (!value) return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 5) : null;
+async function upsertAttendanceRecord(db: SupabaseClient, userId: string, eventId: string, playerId: string) {
+  const { error } = await db
+    .from("squad_attendance_records")
+    .upsert(
+      {
+        user_id: userId,
+        event_id: eventId,
+        player_id: playerId,
+        planned_status: "expected"
+      },
+      { onConflict: "event_id,player_id", ignoreDuplicates: true }
+    );
+  if (error) throw new Error(error.message);
+}
+
+async function markEventPrepared(db: SupabaseClient, userId: string, eventId: string) {
+  await db.from("squad_training_events").update({ status: "prepared" }).eq("id", eventId).eq("user_id", userId).neq("status", "completed");
+}
+
+async function markEventInProgress(db: SupabaseClient, userId: string, eventId: string) {
+  await db.from("squad_training_events").update({ status: "in_progress" }).eq("id", eventId).eq("user_id", userId).neq("status", "completed");
+}
+
+async function markEventRatingOpen(db: SupabaseClient, userId: string, eventId: string) {
+  await db.from("squad_training_events").update({ status: "rating_open" }).eq("id", eventId).eq("user_id", userId).neq("status", "completed");
 }

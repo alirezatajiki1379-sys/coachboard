@@ -1,23 +1,9 @@
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { Database } from "@/types/database";
-import type { SquadAttendanceEntry, SquadTrialPlayer, SquadTrainingEvent } from "@/types/domain";
+import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
 
 export type SquadTrainingEventRow = Database["public"]["Tables"]["squad_training_events"]["Row"];
-export type SquadAttendanceRow = Database["public"]["Tables"]["squad_event_attendance"]["Row"];
-export type SquadTrialPlayerRow = Database["public"]["Tables"]["squad_trial_players"]["Row"];
-
-export function mapTrialPlayerRow(row: SquadTrialPlayerRow): SquadTrialPlayer {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    displayName: row.display_name,
-    contact: row.contact ?? undefined,
-    notes: row.notes ?? undefined,
-    convertedPlayerId: row.converted_player_id ?? undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  };
-}
+export type SquadAttendanceRow = Database["public"]["Tables"]["squad_attendance_records"]["Row"];
 
 export function mapTrainingEventRow(row: SquadTrainingEventRow, linkedTitle?: string): SquadTrainingEvent {
   return {
@@ -37,24 +23,26 @@ export function mapTrainingEventRow(row: SquadTrainingEventRow, linkedTitle?: st
   };
 }
 
-export function mapAttendanceRow(
-  row: SquadAttendanceRow,
-  player?: SquadPlayerRow,
-  trialPlayer?: SquadTrialPlayerRow
-): SquadAttendanceEntry {
+export function mapAttendanceRow(row: SquadAttendanceRow, player?: SquadPlayerRow): SquadAttendanceEntry {
   return {
     id: row.id,
     userId: row.user_id,
     eventId: row.event_id,
-    playerId: row.player_id ?? undefined,
-    trialPlayerId: row.trial_player_id ?? undefined,
-    status: row.status,
-    plannedStatus: row.planned_status,
-    rating: row.rating ?? undefined,
-    effortRating: row.effort_rating ?? undefined,
-    notes: row.notes ?? undefined,
+    playerId: row.player_id,
+    plannedStatus: row.planned_status ?? undefined,
+    plannedReasonNote: row.planned_reason_note ?? undefined,
+    finalStatus: row.final_status ?? undefined,
+    lateMinutes: row.late_minutes ?? undefined,
+    latePenaltyApplied: row.late_penalty_applied,
+    overallRating: row.overall_rating ?? undefined,
+    ratingTechnique: row.rating_technique ?? undefined,
+    ratingGameUnderstanding: row.rating_game_understanding ?? undefined,
+    ratingIntensity: row.rating_intensity ?? undefined,
+    ratingBehavior: row.rating_behavior ?? undefined,
+    ratingAutoSuggestion: row.rating_auto_suggestion ?? undefined,
+    coachNote: row.coach_note ?? undefined,
+    sensitiveNote: row.sensitive_note,
     player: player ? mapSquadPlayerRow(player) : undefined,
-    trialPlayer: trialPlayer ? mapTrialPlayerRow(trialPlayer) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

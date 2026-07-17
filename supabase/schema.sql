@@ -111,6 +111,7 @@ create table if not exists public.training_session_drills (
 create table if not exists public.squad_players (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
+  player_type text not null default 'permanent' check (player_type in ('permanent', 'trial')),
   first_name text not null,
   last_name text,
   date_of_birth date,
@@ -124,6 +125,7 @@ create table if not exists public.squad_players (
   development_goal text,
   work_on text,
   notes text,
+  converted_at timestamptz,
   archived_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -148,27 +150,34 @@ create table if not exists public.squad_training_events (
   end_time time,
   label text,
   linked_training_session_id uuid references public.training_sessions(id) on delete set null,
-  status text not null default 'draft' check (status in ('draft', 'planned', 'completed')),
+  status text not null default 'draft' check (status in ('draft', 'prepared', 'in_progress', 'rating_open', 'completed')),
   general_notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   completed_at timestamptz
 );
 
-create table if not exists public.squad_event_attendance (
+create table if not exists public.squad_attendance_records (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   event_id uuid not null references public.squad_training_events(id) on delete cascade,
-  player_id uuid references public.squad_players(id) on delete cascade,
-  trial_player_id uuid references public.squad_trial_players(id) on delete cascade,
-  planned_status text not null default 'expected' check (planned_status in ('expected', 'unavailable', 'unclear')),
-  status text not null default 'expected' check (status in ('expected', 'unavailable', 'unclear', 'present', 'absent')),
-  rating integer check (rating is null or rating between 1 and 5),
-  effort_rating integer check (effort_rating is null or effort_rating between 1 and 5),
-  notes text,
+  player_id uuid not null references public.squad_players(id) on delete cascade,
+  planned_status text check (planned_status is null or planned_status in ('expected', 'unavailable', 'unclear')),
+  planned_reason_note text,
+  final_status text check (final_status is null or final_status in ('present', 'Z', 'V', 'K', 'E', 'P', 'S', 'U')),
+  late_minutes integer check (late_minutes is null or late_minutes >= 0),
+  late_penalty_applied boolean not null default true,
+  overall_rating integer check (overall_rating is null or overall_rating between 1 and 5),
+  rating_technique integer check (rating_technique is null or rating_technique between 1 and 5),
+  rating_game_understanding integer check (rating_game_understanding is null or rating_game_understanding between 1 and 5),
+  rating_intensity integer check (rating_intensity is null or rating_intensity between 1 and 5),
+  rating_behavior integer check (rating_behavior is null or rating_behavior between 1 and 5),
+  rating_auto_suggestion integer check (rating_auto_suggestion is null or rating_auto_suggestion between 1 and 5),
+  coach_note text,
+  sensitive_note boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check ((player_id is not null and trial_player_id is null) or (player_id is null and trial_player_id is not null))
+  unique(event_id, player_id)
 );
 
 create table if not exists public.tags (
@@ -189,9 +198,8 @@ create index if not exists training_session_drills_session_id_order_idx on publi
 create index if not exists squad_players_user_id_last_name_idx on public.squad_players(user_id, last_name, first_name);
 create index if not exists squad_players_user_id_updated_at_idx on public.squad_players(user_id, updated_at desc);
 create index if not exists squad_training_events_user_id_date_idx on public.squad_training_events(user_id, date desc, start_time desc);
-create index if not exists squad_event_attendance_event_id_idx on public.squad_event_attendance(event_id);
-create unique index if not exists squad_event_attendance_player_unique_idx on public.squad_event_attendance(event_id, player_id) where player_id is not null;
-create unique index if not exists squad_event_attendance_trial_unique_idx on public.squad_event_attendance(event_id, trial_player_id) where trial_player_id is not null;
+create index if not exists squad_attendance_records_event_id_idx on public.squad_attendance_records(event_id);
+create index if not exists squad_attendance_records_player_id_idx on public.squad_attendance_records(player_id);
 create index if not exists squad_trial_players_user_id_updated_at_idx on public.squad_trial_players(user_id, updated_at desc);
 create unique index if not exists tags_user_id_lower_name_idx on public.tags(user_id, lower(name));
 
@@ -263,8 +271,8 @@ drop trigger if exists set_squad_training_events_updated_at on public.squad_trai
 create trigger set_squad_training_events_updated_at before update on public.squad_training_events
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_squad_event_attendance_updated_at on public.squad_event_attendance;
-create trigger set_squad_event_attendance_updated_at before update on public.squad_event_attendance
+drop trigger if exists set_squad_attendance_records_updated_at on public.squad_attendance_records;
+create trigger set_squad_attendance_records_updated_at before update on public.squad_attendance_records
 for each row execute function public.set_updated_at();
 
 alter table public.profiles enable row level security;
@@ -277,7 +285,7 @@ alter table public.training_session_drills enable row level security;
 alter table public.squad_players enable row level security;
 alter table public.squad_trial_players enable row level security;
 alter table public.squad_training_events enable row level security;
-alter table public.squad_event_attendance enable row level security;
+alter table public.squad_attendance_records enable row level security;
 alter table public.tags enable row level security;
 
 drop policy if exists "profiles are owned by the user" on public.profiles;
@@ -372,29 +380,20 @@ with check (
   )
 );
 
-drop policy if exists "squad attendance is owned by the user" on public.squad_event_attendance;
-create policy "squad attendance is owned by the user" on public.squad_event_attendance
+drop policy if exists "squad attendance is owned by the user" on public.squad_attendance_records;
+create policy "squad attendance is owned by the user" on public.squad_attendance_records
 for all using (auth.uid() = user_id)
 with check (
   auth.uid() = user_id and
   exists (
     select 1 from public.squad_training_events
-    where squad_training_events.id = squad_event_attendance.event_id
+    where squad_training_events.id = squad_attendance_records.event_id
     and squad_training_events.user_id = auth.uid()
   ) and
-  (
-    player_id is null or exists (
-      select 1 from public.squad_players
-      where squad_players.id = squad_event_attendance.player_id
-      and squad_players.user_id = auth.uid()
-    )
-  ) and
-  (
-    trial_player_id is null or exists (
-      select 1 from public.squad_trial_players
-      where squad_trial_players.id = squad_event_attendance.trial_player_id
-      and squad_trial_players.user_id = auth.uid()
-    )
+  exists (
+    select 1 from public.squad_players
+    where squad_players.id = squad_attendance_records.player_id
+    and squad_players.user_id = auth.uid()
   )
 );
 
@@ -408,4 +407,32 @@ add column if not exists archived_at timestamptz,
 add column if not exists deleted_at timestamptz;
 
 alter table public.squad_players
-alter column last_name drop not null;
+alter column last_name drop not null,
+add column if not exists player_type text not null default 'permanent',
+add column if not exists converted_at timestamptz;
+
+alter table public.squad_players
+alter column player_type set default 'permanent';
+
+update public.squad_players
+set player_type = 'permanent'
+where player_type is null;
+
+alter table public.squad_players
+alter column player_type set not null;
+
+alter table public.squad_players
+drop constraint if exists squad_players_player_type_check;
+
+alter table public.squad_players
+add constraint squad_players_player_type_check check (player_type in ('permanent', 'trial'));
+
+alter table public.squad_training_events
+drop constraint if exists squad_training_events_status_check;
+
+update public.squad_training_events
+set status = 'prepared'
+where status = 'planned';
+
+alter table public.squad_training_events
+add constraint squad_training_events_status_check check (status in ('draft', 'prepared', 'in_progress', 'rating_open', 'completed'));

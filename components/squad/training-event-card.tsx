@@ -17,7 +17,7 @@ export function TrainingEventCard({ event, attendance = [] }: { event: SquadTrai
             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-3.5 w-3.5" />{attendance.length} players</span>
           </div>
           {event.linkedTrainingSessionTitle ? <p className="mt-3 text-sm text-slate-600">Plan: {event.linkedTrainingSessionTitle}</p> : null}
-          {attendance.length ? <p className="mt-2 text-sm text-slate-600">{counts.present} present · {counts.absent} absent · {counts.unavailable} unavailable</p> : null}
+          {attendance.length ? <p className="mt-2 text-sm text-slate-600">{counts.confirmedTotal} expected · {counts.present} present · {counts.absent} absent</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <ButtonLink href={`/squad/attendance/${event.id}`} variant="secondary" className="h-9 px-3">Open</ButtonLink>

@@ -4,8 +4,7 @@ import {
   mapAttendanceRow,
   mapTrainingEventRow,
   type SquadAttendanceRow,
-  type SquadTrainingEventRow,
-  type SquadTrialPlayerRow
+  type SquadTrainingEventRow
 } from "@/lib/squad/attendance-mappers";
 import type { SquadPlayerRow } from "@/lib/squad/mappers";
 import type { SquadTrainingEvent, SquadTrainingEventDetail } from "@/types/domain";
@@ -37,8 +36,8 @@ export async function listTrainingEventDetails(supabase: SupabaseServerClient, u
   if (!events.length) return [];
   const db = supabase as unknown as SupabaseClient;
   const { data, error } = await db
-    .from("squad_event_attendance")
-    .select("*, squad_players(*), squad_trial_players(*)")
+    .from("squad_attendance_records")
+    .select("*, squad_players(*)")
     .eq("user_id", userId)
     .in("event_id", events.map((event) => event.id))
     .order("created_at", { ascending: true });
@@ -47,10 +46,9 @@ export async function listTrainingEventDetails(supabase: SupabaseServerClient, u
   for (const row of (data ?? []) as Array<
     SquadAttendanceRow & {
       squad_players?: SquadPlayerRow | null;
-      squad_trial_players?: SquadTrialPlayerRow | null;
     }
   >) {
-    const mapped = mapAttendanceRow(row, row.squad_players ?? undefined, row.squad_trial_players ?? undefined);
+    const mapped = mapAttendanceRow(row, row.squad_players ?? undefined);
     attendanceByEvent.set(row.event_id, [...(attendanceByEvent.get(row.event_id) ?? []), mapped]);
   }
   return events.map((event) => ({ ...event, attendance: attendanceByEvent.get(event.id) ?? [] }));
@@ -73,8 +71,8 @@ export async function getTrainingEventDetail(
   if (!eventData) return null;
 
   const { data: attendanceData, error: attendanceError } = await db
-    .from("squad_event_attendance")
-    .select("*, squad_players(*), squad_trial_players(*)")
+    .from("squad_attendance_records")
+    .select("*, squad_players(*)")
     .eq("user_id", userId)
     .eq("event_id", eventId)
     .order("created_at", { ascending: true });
@@ -84,9 +82,8 @@ export async function getTrainingEventDetail(
   const attendance = ((attendanceData ?? []) as Array<
     SquadAttendanceRow & {
       squad_players?: SquadPlayerRow | null;
-      squad_trial_players?: SquadTrialPlayerRow | null;
     }
-  >).map((row) => mapAttendanceRow(row, row.squad_players ?? undefined, row.squad_trial_players ?? undefined));
+  >).map((row) => mapAttendanceRow(row, row.squad_players ?? undefined));
 
   const event = mapTrainingEventRow(
     eventData as SquadTrainingEventRow,
@@ -107,4 +104,31 @@ export async function getLinkableTrainingSessions(supabase: SupabaseServerClient
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as LinkedSessionRow[];
+}
+
+export async function listAvailableTrialPlayers(
+  supabase: SupabaseServerClient,
+  userId: string,
+  eventId: string
+): Promise<SquadPlayerRow[]> {
+  const db = supabase as unknown as SupabaseClient;
+  const { data: existing, error: existingError } = await db
+    .from("squad_attendance_records")
+    .select("player_id")
+    .eq("user_id", userId)
+    .eq("event_id", eventId);
+  if (existingError) throw new Error(existingError.message);
+  const existingIds = new Set((existing ?? []).map((row: { player_id: string }) => row.player_id));
+
+  const { data, error } = await db
+    .from("squad_players")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("player_type", "trial")
+    .is("converted_at", null)
+    .is("archived_at", null)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as SquadPlayerRow[]).filter((player) => !existingIds.has(player.id));
 }

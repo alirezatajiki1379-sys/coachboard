@@ -1,6 +1,8 @@
 import type { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
-import type { SquadPlayer } from "@/types/domain";
+import type { SquadAttendanceEntry, SquadPlayer, SquadTrainingEvent } from "@/types/domain";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -21,6 +23,7 @@ export async function listSquadPlayers(
     .from("squad_players")
     .select("*")
     .eq("user_id", userId)
+    .eq("player_type", "permanent")
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
 
@@ -45,4 +48,28 @@ export async function getSquadPlayer(
 
   if (error) throw new Error(error.message);
   return data ? mapSquadPlayerRow(data as SquadPlayerRow) : null;
+}
+
+export async function getSquadPlayerTrainingHistory(
+  supabase: SupabaseServerClient,
+  userId: string,
+  playerId: string
+): Promise<Array<SquadAttendanceEntry & { event?: SquadTrainingEvent }>> {
+  const db = supabase as unknown as SupabaseClient;
+  const { data, error } = await db
+    .from("squad_attendance_records")
+    .select("*, squad_training_events(*)")
+    .eq("user_id", userId)
+    .eq("player_id", playerId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as Array<
+    SquadAttendanceRow & {
+      squad_training_events?: SquadTrainingEventRow | null;
+    }
+  >).map((row) => ({
+    ...mapAttendanceRow(row),
+    event: row.squad_training_events ? mapTrainingEventRow(row.squad_training_events) : undefined
+  }));
 }

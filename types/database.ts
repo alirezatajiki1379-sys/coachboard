@@ -234,6 +234,7 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
+          player_type: "permanent" | "trial";
           first_name: string;
           last_name: string | null;
           date_of_birth: string | null;
@@ -247,6 +248,7 @@ export type Database = {
           development_goal: string | null;
           work_on: string | null;
           notes: string | null;
+          converted_at: string | null;
           archived_at: string | null;
           created_at: string;
           updated_at: string;
@@ -254,6 +256,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
+          player_type?: "permanent" | "trial";
           first_name: string;
           last_name?: string | null;
           date_of_birth?: string | null;
@@ -267,6 +270,7 @@ export type Database = {
           development_goal?: string | null;
           work_on?: string | null;
           notes?: string | null;
+          converted_at?: string | null;
           archived_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -307,7 +311,7 @@ export type Database = {
           end_time: string | null;
           label: string | null;
           linked_training_session_id: string | null;
-          status: "draft" | "planned" | "completed";
+          status: "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
           general_notes: string | null;
           created_at: string;
           updated_at: string;
@@ -321,7 +325,7 @@ export type Database = {
           end_time?: string | null;
           label?: string | null;
           linked_training_session_id?: string | null;
-          status?: "draft" | "planned" | "completed";
+          status?: "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
           general_notes?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -330,18 +334,25 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["squad_training_events"]["Insert"]>;
         Relationships: [];
       };
-      squad_event_attendance: {
+      squad_attendance_records: {
         Row: {
           id: string;
           user_id: string;
           event_id: string;
-          player_id: string | null;
-          trial_player_id: string | null;
-          planned_status: "expected" | "unavailable" | "unclear";
-          status: "expected" | "unavailable" | "unclear" | "present" | "absent";
-          rating: number | null;
-          effort_rating: number | null;
-          notes: string | null;
+          player_id: string;
+          planned_status: "expected" | "unavailable" | "unclear" | null;
+          planned_reason_note: string | null;
+          final_status: "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
+          late_minutes: number | null;
+          late_penalty_applied: boolean;
+          overall_rating: number | null;
+          rating_technique: number | null;
+          rating_game_understanding: number | null;
+          rating_intensity: number | null;
+          rating_behavior: number | null;
+          rating_auto_suggestion: number | null;
+          coach_note: string | null;
+          sensitive_note: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -349,17 +360,24 @@ export type Database = {
           id?: string;
           user_id: string;
           event_id: string;
-          player_id?: string | null;
-          trial_player_id?: string | null;
-          planned_status?: "expected" | "unavailable" | "unclear";
-          status?: "expected" | "unavailable" | "unclear" | "present" | "absent";
-          rating?: number | null;
-          effort_rating?: number | null;
-          notes?: string | null;
+          player_id: string;
+          planned_status?: "expected" | "unavailable" | "unclear" | null;
+          planned_reason_note?: string | null;
+          final_status?: "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
+          late_minutes?: number | null;
+          late_penalty_applied?: boolean;
+          overall_rating?: number | null;
+          rating_technique?: number | null;
+          rating_game_understanding?: number | null;
+          rating_intensity?: number | null;
+          rating_behavior?: number | null;
+          rating_auto_suggestion?: number | null;
+          coach_note?: string | null;
+          sensitive_note?: boolean;
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["squad_event_attendance"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["squad_attendance_records"]["Insert"]>;
         Relationships: [];
       };
     };

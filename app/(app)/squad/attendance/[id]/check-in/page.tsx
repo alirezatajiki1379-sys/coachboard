@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { CheckInRow } from "@/components/squad/attendance-controls";
+import { CheckInActions, CheckInRow } from "@/components/squad/attendance-controls";
 import { attendanceCounts, eventTimeRange, eventTitle, formatEventDate } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
 import { createClient } from "@/lib/supabase/server";
@@ -32,7 +32,8 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <p className="text-sm font-semibold uppercase text-board-green">{formatEventDate(event.date)} · {eventTimeRange(event)}</p>
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{eventTitle(event)}</h1>
-        <p className="mt-2 text-sm text-slate-600">{counts.present} present · {counts.absent} absent · {counts.unavailable} unavailable · {counts.unclear} unclear</p>
+        <p className="mt-2 text-sm text-slate-600">{counts.present} present · {counts.late} late · {counts.absent} absent · {counts.unavailable} unavailable · {counts.unclear} unclear</p>
+        {event.attendance.length ? <div className="mt-4"><CheckInActions eventId={event.id} /></div> : null}
       </section>
 
       <section className="space-y-3">

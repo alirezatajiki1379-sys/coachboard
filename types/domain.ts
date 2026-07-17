@@ -181,6 +181,7 @@ export type TrainingSession = {
 export type SquadPlayer = {
   id: string;
   userId: string;
+  playerType: "permanent" | "trial";
   firstName: string;
   lastName?: string;
   dateOfBirth?: string;
@@ -194,13 +195,15 @@ export type SquadPlayer = {
   developmentGoal?: string;
   workOn?: string;
   notes?: string;
+  convertedAt?: string;
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-export type SquadTrainingEventStatus = "draft" | "planned" | "completed";
-export type SquadAttendanceStatus = "expected" | "unavailable" | "unclear" | "present" | "absent";
+export type SquadTrainingEventStatus = "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
+export type SquadPlannedAttendanceStatus = "expected" | "unavailable" | "unclear";
+export type SquadFinalAttendanceStatus = "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
 
 export type SquadTrialPlayer = {
   id: string;
@@ -217,15 +220,21 @@ export type SquadAttendanceEntry = {
   id: string;
   userId: string;
   eventId: string;
-  playerId?: string;
-  trialPlayerId?: string;
-  status: SquadAttendanceStatus;
-  plannedStatus: "expected" | "unavailable" | "unclear";
-  rating?: number;
-  effortRating?: number;
-  notes?: string;
+  playerId: string;
+  plannedStatus?: SquadPlannedAttendanceStatus;
+  plannedReasonNote?: string;
+  finalStatus?: SquadFinalAttendanceStatus;
+  lateMinutes?: number;
+  latePenaltyApplied: boolean;
+  overallRating?: number;
+  ratingTechnique?: number;
+  ratingGameUnderstanding?: number;
+  ratingIntensity?: number;
+  ratingBehavior?: number;
+  ratingAutoSuggestion?: number;
+  coachNote?: string;
+  sensitiveNote: boolean;
   player?: SquadPlayer;
-  trialPlayer?: SquadTrialPlayer;
   createdAt: string;
   updatedAt: string;
 };

@@ -21,6 +21,8 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
 
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
+  const activeEntries = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z" || !entry.finalStatus);
+  const absentEntries = event.attendance.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus));
 
   return (
     <div className="space-y-5">
@@ -36,7 +38,17 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
 
       <section className="space-y-3">
         {event.attendance.length ? (
-          event.attendance.map((entry) => <RatingRow key={entry.id} entry={entry} eventId={event.id} />)
+          <>
+            {activeEntries.map((entry) => <RatingRow key={entry.id} entry={entry} eventId={event.id} />)}
+            {absentEntries.length ? (
+              <div className="rounded-lg border border-board-line bg-board-paper p-4">
+                <h2 className="font-bold text-board-navy">Absent players</h2>
+                <div className="mt-3 space-y-3">
+                  {absentEntries.map((entry) => <RatingRow key={entry.id} entry={entry} eventId={event.id} />)}
+                </div>
+              </div>
+            ) : null}
+          </>
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
             <h2 className="font-bold text-board-navy">No players to rate</h2>

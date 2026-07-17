@@ -13,6 +13,7 @@ export function mapSquadPlayerRow(row: SquadPlayerRow): SquadPlayer {
   return {
     id: row.id,
     userId: row.user_id,
+    playerType: row.player_type ?? "permanent",
     firstName: row.first_name,
     lastName: row.last_name ?? undefined,
     dateOfBirth: optional(row.date_of_birth),
@@ -26,6 +27,7 @@ export function mapSquadPlayerRow(row: SquadPlayerRow): SquadPlayer {
     developmentGoal: optional(row.development_goal),
     workOn: optional(row.work_on),
     notes: optional(row.notes),
+    convertedAt: optional(row.converted_at),
     archivedAt: optional(row.archived_at),
     createdAt: row.created_at,
     updatedAt: row.updated_at
