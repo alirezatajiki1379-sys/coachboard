@@ -129,7 +129,6 @@ export default async function DashboardPage() {
           value={templateCount.count ?? 0}
           detail="Reusable graphic setups"
           icon={<Shapes className="h-5 w-5" />}
-          href="/drills/new"
         />
         <StatCard
           label="Most used focus"
@@ -166,9 +165,15 @@ export default async function DashboardPage() {
                 </div>
               ))
             ) : (
-              <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">
-                No drills yet. Create your first drill, draw the setup, and the library will become your reusable coaching base.
-              </p>
+              <div className="rounded-md border border-dashed border-board-line p-5">
+                <p className="text-sm text-slate-500">
+                  No drills yet. Create your first drill, draw the setup, and the library will become your reusable coaching base.
+                </p>
+                <ButtonLink href="/drills/new" className="mt-4 h-9 justify-center px-3">
+                  <Dumbbell className="h-4 w-4" />
+                  Create drill
+                </ButtonLink>
+              </div>
             )}
           </div>
         </div>
@@ -200,9 +205,15 @@ export default async function DashboardPage() {
                 </div>
               ))
             ) : (
-              <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">
-                No sessions yet. Add a few drills, then create a session to build the training timeline and material list.
-              </p>
+              <div className="rounded-md border border-dashed border-board-line p-5">
+                <p className="text-sm text-slate-500">
+                  No sessions yet. Add a few drills, then create a session to build the training timeline and material list.
+                </p>
+                <ButtonLink href="/sessions/new" variant="secondary" className="mt-4 h-9 justify-center px-3">
+                  <CalendarPlus className="h-4 w-4" />
+                  Create session
+                </ButtonLink>
+              </div>
             )}
           </div>
         </div>
