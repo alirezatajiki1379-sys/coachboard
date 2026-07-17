@@ -32,7 +32,7 @@ export async function upsertDrillGraphic(
   state: DrillEditorState
 ) {
   const db = supabase as unknown as SupabaseClient;
-  await db.from("drill_graphics").upsert(
+  const { error } = await db.from("drill_graphics").upsert(
     {
       drill_id: drillId,
       user_id: userId,
@@ -42,4 +42,5 @@ export async function upsertDrillGraphic(
       onConflict: "drill_id"
     }
   );
+  if (error) throw new Error(error.message);
 }

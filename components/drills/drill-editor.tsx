@@ -1938,6 +1938,13 @@ function NumberInput({
   step?: number;
   onChange: (value: number) => void;
 }) {
+  function parseNextValue(rawValue: string) {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return min;
+    const rounded = Number.isInteger(step) ? Math.round(parsed) : parsed;
+    return clamp(rounded, min, max);
+  }
+
   return (
     <label className="block">
       <span className="text-xs font-semibold text-slate-500">{label}</span>
@@ -1947,7 +1954,7 @@ function NumberInput({
         min={min}
         max={max}
         step={step}
-        onChange={(event) => onChange(clamp(Number(event.target.value), min, max))}
+        onChange={(event) => onChange(parseNextValue(event.target.value))}
         className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
       />
     </label>

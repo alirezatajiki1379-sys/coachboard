@@ -112,6 +112,7 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
       key={`${state.submissionId ?? 0}-${formRevision}-${drill?.id ?? "new-drill"}`}
       ref={formRef}
       action={formAction}
+      noValidate
       className="space-y-6"
       onInputCapture={markDirty}
       onChangeCapture={markDirty}

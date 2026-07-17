@@ -69,10 +69,17 @@ export async function createDrill(_: DrillActionState, formData: FormData): Prom
     .single();
 
   if (error) {
-    return { error: error.message };
+    return { error: error.message, submissionId: Date.now() };
   }
 
-  await upsertDrillGraphic(supabase, user.id, data.id, parsed.graphic);
+  try {
+    await upsertDrillGraphic(supabase, user.id, data.id, parsed.graphic);
+  } catch (graphicError) {
+    return {
+      error: graphicError instanceof Error ? graphicError.message : "The drill was created, but the graphic could not be saved.",
+      submissionId: Date.now()
+    };
+  }
 
   revalidatePath("/drills");
   redirect(returnTo || `/drills/${data.id}`);
@@ -104,10 +111,17 @@ export async function updateDrill(_: DrillActionState, formData: FormData): Prom
     .eq("user_id", user.id);
 
   if (error) {
-    return { error: error.message };
+    return { error: error.message, submissionId: Date.now() };
   }
 
-  await upsertDrillGraphic(supabase, user.id, drillId, parsed.graphic);
+  try {
+    await upsertDrillGraphic(supabase, user.id, drillId, parsed.graphic);
+  } catch (graphicError) {
+    return {
+      error: graphicError instanceof Error ? graphicError.message : "The drill details were saved, but the graphic could not be saved.",
+      submissionId: Date.now()
+    };
+  }
 
   revalidatePath("/drills");
   revalidatePath(`/drills/${drillId}`);
