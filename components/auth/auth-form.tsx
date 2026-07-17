@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { login, signup } from "@/lib/auth/actions";
@@ -41,7 +42,14 @@ export function AuthForm({ mode, action }: AuthFormProps) {
       </label>
 
       <label className="block">
-        <span className="text-sm font-medium text-slate-700">Password</span>
+        <span className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium text-slate-700">Password</span>
+          {!isSignup ? (
+            <Link href="/forgot-password" className="text-sm font-semibold text-board-green hover:underline">
+              Forgot your password?
+            </Link>
+          ) : null}
+        </span>
         <input
           required
           name="password"
