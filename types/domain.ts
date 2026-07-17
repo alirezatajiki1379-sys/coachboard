@@ -198,3 +198,54 @@ export type SquadPlayer = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type SquadTrainingEventStatus = "draft" | "planned" | "completed";
+export type SquadAttendanceStatus = "expected" | "unavailable" | "unclear" | "present" | "absent";
+
+export type SquadTrialPlayer = {
+  id: string;
+  userId: string;
+  displayName: string;
+  contact?: string;
+  notes?: string;
+  convertedPlayerId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SquadAttendanceEntry = {
+  id: string;
+  userId: string;
+  eventId: string;
+  playerId?: string;
+  trialPlayerId?: string;
+  status: SquadAttendanceStatus;
+  plannedStatus: "expected" | "unavailable" | "unclear";
+  rating?: number;
+  effortRating?: number;
+  notes?: string;
+  player?: SquadPlayer;
+  trialPlayer?: SquadTrialPlayer;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SquadTrainingEvent = {
+  id: string;
+  userId: string;
+  date: string;
+  startTime: string;
+  endTime?: string;
+  label?: string;
+  linkedTrainingSessionId?: string;
+  linkedTrainingSessionTitle?: string;
+  status: SquadTrainingEventStatus;
+  generalNotes?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SquadTrainingEventDetail = SquadTrainingEvent & {
+  attendance: SquadAttendanceEntry[];
+};

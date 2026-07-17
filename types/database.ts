@@ -274,6 +274,94 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["squad_players"]["Insert"]>;
         Relationships: [];
       };
+      squad_trial_players: {
+        Row: {
+          id: string;
+          user_id: string;
+          display_name: string;
+          contact: string | null;
+          notes: string | null;
+          converted_player_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          display_name: string;
+          contact?: string | null;
+          notes?: string | null;
+          converted_player_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["squad_trial_players"]["Insert"]>;
+        Relationships: [];
+      };
+      squad_training_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          date: string;
+          start_time: string;
+          end_time: string | null;
+          label: string | null;
+          linked_training_session_id: string | null;
+          status: "draft" | "planned" | "completed";
+          general_notes: string | null;
+          created_at: string;
+          updated_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          date: string;
+          start_time: string;
+          end_time?: string | null;
+          label?: string | null;
+          linked_training_session_id?: string | null;
+          status?: "draft" | "planned" | "completed";
+          general_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["squad_training_events"]["Insert"]>;
+        Relationships: [];
+      };
+      squad_event_attendance: {
+        Row: {
+          id: string;
+          user_id: string;
+          event_id: string;
+          player_id: string | null;
+          trial_player_id: string | null;
+          planned_status: "expected" | "unavailable" | "unclear";
+          status: "expected" | "unavailable" | "unclear" | "present" | "absent";
+          rating: number | null;
+          effort_rating: number | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          event_id: string;
+          player_id?: string | null;
+          trial_player_id?: string | null;
+          planned_status?: "expected" | "unavailable" | "unclear";
+          status?: "expected" | "unavailable" | "unclear" | "present" | "absent";
+          rating?: number | null;
+          effort_rating?: number | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["squad_event_attendance"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

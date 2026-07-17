@@ -129,6 +129,48 @@ create table if not exists public.squad_players (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.squad_trial_players (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  display_name text not null,
+  contact text,
+  notes text,
+  converted_player_id uuid references public.squad_players(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.squad_training_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date date not null,
+  start_time time not null,
+  end_time time,
+  label text,
+  linked_training_session_id uuid references public.training_sessions(id) on delete set null,
+  status text not null default 'draft' check (status in ('draft', 'planned', 'completed')),
+  general_notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+
+create table if not exists public.squad_event_attendance (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_id uuid not null references public.squad_training_events(id) on delete cascade,
+  player_id uuid references public.squad_players(id) on delete cascade,
+  trial_player_id uuid references public.squad_trial_players(id) on delete cascade,
+  planned_status text not null default 'expected' check (planned_status in ('expected', 'unavailable', 'unclear')),
+  status text not null default 'expected' check (status in ('expected', 'unavailable', 'unclear', 'present', 'absent')),
+  rating integer check (rating is null or rating between 1 and 5),
+  effort_rating integer check (effort_rating is null or effort_rating between 1 and 5),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check ((player_id is not null and trial_player_id is null) or (player_id is null and trial_player_id is not null))
+);
+
 create table if not exists public.tags (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -146,6 +188,11 @@ create index if not exists training_sessions_user_id_updated_at_idx on public.tr
 create index if not exists training_session_drills_session_id_order_idx on public.training_session_drills(session_id, order_index);
 create index if not exists squad_players_user_id_last_name_idx on public.squad_players(user_id, last_name, first_name);
 create index if not exists squad_players_user_id_updated_at_idx on public.squad_players(user_id, updated_at desc);
+create index if not exists squad_training_events_user_id_date_idx on public.squad_training_events(user_id, date desc, start_time desc);
+create index if not exists squad_event_attendance_event_id_idx on public.squad_event_attendance(event_id);
+create unique index if not exists squad_event_attendance_player_unique_idx on public.squad_event_attendance(event_id, player_id) where player_id is not null;
+create unique index if not exists squad_event_attendance_trial_unique_idx on public.squad_event_attendance(event_id, trial_player_id) where trial_player_id is not null;
+create index if not exists squad_trial_players_user_id_updated_at_idx on public.squad_trial_players(user_id, updated_at desc);
 create unique index if not exists tags_user_id_lower_name_idx on public.tags(user_id, lower(name));
 
 create or replace function public.set_updated_at()
@@ -208,6 +255,18 @@ drop trigger if exists set_squad_players_updated_at on public.squad_players;
 create trigger set_squad_players_updated_at before update on public.squad_players
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_squad_trial_players_updated_at on public.squad_trial_players;
+create trigger set_squad_trial_players_updated_at before update on public.squad_trial_players
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_squad_training_events_updated_at on public.squad_training_events;
+create trigger set_squad_training_events_updated_at before update on public.squad_training_events
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_squad_event_attendance_updated_at on public.squad_event_attendance;
+create trigger set_squad_event_attendance_updated_at before update on public.squad_event_attendance
+for each row execute function public.set_updated_at();
+
 alter table public.profiles enable row level security;
 alter table public.drills enable row level security;
 alter table public.drill_graphics enable row level security;
@@ -216,6 +275,9 @@ alter table public.materials enable row level security;
 alter table public.training_sessions enable row level security;
 alter table public.training_session_drills enable row level security;
 alter table public.squad_players enable row level security;
+alter table public.squad_trial_players enable row level security;
+alter table public.squad_training_events enable row level security;
+alter table public.squad_event_attendance enable row level security;
 alter table public.tags enable row level security;
 
 drop policy if exists "profiles are owned by the user" on public.profiles;
@@ -290,6 +352,51 @@ drop policy if exists "squad players are owned by the user" on public.squad_play
 create policy "squad players are owned by the user" on public.squad_players
 for all using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+drop policy if exists "squad trial players are owned by the user" on public.squad_trial_players;
+create policy "squad trial players are owned by the user" on public.squad_trial_players
+for all using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "squad training events are owned by the user" on public.squad_training_events;
+create policy "squad training events are owned by the user" on public.squad_training_events
+for all using (auth.uid() = user_id)
+with check (
+  auth.uid() = user_id and
+  (
+    linked_training_session_id is null or exists (
+      select 1 from public.training_sessions
+      where training_sessions.id = squad_training_events.linked_training_session_id
+      and training_sessions.user_id = auth.uid()
+    )
+  )
+);
+
+drop policy if exists "squad attendance is owned by the user" on public.squad_event_attendance;
+create policy "squad attendance is owned by the user" on public.squad_event_attendance
+for all using (auth.uid() = user_id)
+with check (
+  auth.uid() = user_id and
+  exists (
+    select 1 from public.squad_training_events
+    where squad_training_events.id = squad_event_attendance.event_id
+    and squad_training_events.user_id = auth.uid()
+  ) and
+  (
+    player_id is null or exists (
+      select 1 from public.squad_players
+      where squad_players.id = squad_event_attendance.player_id
+      and squad_players.user_id = auth.uid()
+    )
+  ) and
+  (
+    trial_player_id is null or exists (
+      select 1 from public.squad_trial_players
+      where squad_trial_players.id = squad_event_attendance.trial_player_id
+      and squad_trial_players.user_id = auth.uid()
+    )
+  )
+);
 
 -- Archive / Trash support for existing projects.
 alter table public.drills
