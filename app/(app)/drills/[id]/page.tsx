@@ -29,6 +29,7 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
   if (!drill) {
     notFound();
   }
+  const view = drill.deletedAt ? "trash" : drill.archivedAt ? "archived" : "active";
 
   return (
     <div className="space-y-6">
@@ -40,16 +41,20 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
       <section className="rounded-lg border border-board-line bg-white p-6 shadow-soft">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
-            <p className="text-sm font-semibold uppercase text-board-green">{drill.mainFocus}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold uppercase text-board-green">{drill.mainFocus}</p>
+              {view === "archived" ? <StatusBadge label="Archived" /> : null}
+              {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
+            </div>
             <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{drill.title}</h1>
             <p className="mt-3 max-w-3xl text-slate-600">{drill.shortDescription || "No short description yet."}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <ButtonLink href={`/drills/${drill.id}/edit`} variant="secondary">
+            {view !== "trash" ? <ButtonLink href={`/drills/${drill.id}/edit`} variant="secondary">
               <Edit className="h-4 w-4" />
               Edit
-            </ButtonLink>
-            <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} />
+            </ButtonLink> : null}
+            <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} view={view} />
           </div>
         </div>
 
@@ -98,6 +103,14 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
         </aside>
       </section>
     </div>
+  );
+}
+
+function StatusBadge({ label, danger = false }: { label: string; danger?: boolean }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${danger ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+      {label}
+    </span>
   );
 }
 

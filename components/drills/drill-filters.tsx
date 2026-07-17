@@ -10,6 +10,7 @@ type DrillFiltersProps = {
 export function DrillFilters({ filters }: DrillFiltersProps) {
   return (
     <form className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <input type="hidden" name="view" value={filters.view} />
       <div className="grid gap-3 lg:grid-cols-[1.5fr_repeat(4,1fr)_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />

@@ -34,11 +34,18 @@ export default async function DashboardPage() {
   }
 
   const [drillCount, sessionCount, templateCount, recentDrills, recentSessions] = await Promise.all([
-    supabase.from("drills").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase
+      .from("drills")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .is("archived_at", null)
+      .is("deleted_at", null),
     supabase
       .from("training_sessions")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id),
+      .eq("user_id", user.id)
+      .is("archived_at", null)
+      .is("deleted_at", null),
     supabase
       .from("drill_graphic_templates")
       .select("id", { count: "exact", head: true })
@@ -47,12 +54,16 @@ export default async function DashboardPage() {
       .from("drills")
       .select("id,title,main_focus,duration_minutes,updated_at")
       .eq("user_id", user.id)
+      .is("archived_at", null)
+      .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(5),
     supabase
       .from("training_sessions")
       .select("id,title,session_date,main_focus,duration_target_minutes,updated_at")
       .eq("user_id", user.id)
+      .is("archived_at", null)
+      .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(5)
   ]);

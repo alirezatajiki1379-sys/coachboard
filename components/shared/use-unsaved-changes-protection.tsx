@@ -8,10 +8,10 @@ const warningMessage = "You have unsaved changes.";
 type UnsavedChangesOptions = {
   isDirty: boolean;
   isSaving?: boolean;
-  onSaveAndLeave?: (href: string) => void;
+  onSaveDraftAndLeave?: (href: string) => void;
 };
 
-export function useUnsavedChangesProtection({ isDirty, isSaving = false, onSaveAndLeave }: UnsavedChangesOptions) {
+export function useUnsavedChangesProtection({ isDirty, isSaving = false, onSaveDraftAndLeave }: UnsavedChangesOptions) {
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const bypassWarningRef = useRef(false);
 
@@ -56,10 +56,10 @@ export function useUnsavedChangesProtection({ isDirty, isSaving = false, onSaveA
     window.location.href = pendingHref;
   }, [pendingHref]);
 
-  const saveAndLeave = useCallback(() => {
+  const saveDraftAndLeave = useCallback(() => {
     if (!pendingHref) return;
-    onSaveAndLeave?.(pendingHref);
-  }, [onSaveAndLeave, pendingHref]);
+    onSaveDraftAndLeave?.(pendingHref);
+  }, [onSaveDraftAndLeave, pendingHref]);
 
   const dismissDialog = useCallback(() => {
     setPendingHref(null);
@@ -69,10 +69,10 @@ export function useUnsavedChangesProtection({ isDirty, isSaving = false, onSaveA
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
       <div className="w-full max-w-md rounded-lg border border-board-line bg-white p-4 shadow-2xl sm:p-5">
         <h2 className="text-lg font-bold text-board-navy">You have unsaved changes.</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Do you want to save before leaving?</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Do you want to keep a local draft before leaving?</p>
         <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          <Button type="button" variant="primary" className="w-full justify-center sm:w-auto" onClick={saveAndLeave} disabled={isSaving}>
-            Save &amp; leave
+          <Button type="button" variant="primary" className="w-full justify-center sm:w-auto" onClick={saveDraftAndLeave} disabled={isSaving}>
+            Save draft &amp; leave
           </Button>
           <Button type="button" variant="danger" className="w-full justify-center sm:w-auto" onClick={leaveWithoutSaving} disabled={isSaving}>
             Leave without saving
@@ -83,7 +83,7 @@ export function useUnsavedChangesProtection({ isDirty, isSaving = false, onSaveA
         </div>
       </div>
     </div>
-  ) : null, [dismissDialog, isSaving, leaveWithoutSaving, pendingHref, saveAndLeave]);
+  ) : null, [dismissDialog, isSaving, leaveWithoutSaving, pendingHref, saveDraftAndLeave]);
 
   return { dialog, dismissDialog };
 }

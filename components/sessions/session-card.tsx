@@ -3,12 +3,16 @@ import { ButtonLink } from "@/components/ui/button";
 import { SessionActions } from "@/components/sessions/session-actions";
 import type { SessionSummary } from "@/lib/sessions/queries";
 
-export function SessionCard({ session }: { session: SessionSummary }) {
+export function SessionCard({ session, view = "active" }: { session: SessionSummary; view?: "active" | "archived" | "trash" }) {
   return (
     <article className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
-          <p className="text-xs font-semibold uppercase text-board-green">{session.mainFocus || "Session plan"}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold uppercase text-board-green">{session.mainFocus || "Session plan"}</p>
+            {view === "archived" ? <StatusBadge label="Archived" /> : null}
+            {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
+          </div>
           <h2 className="mt-1 text-xl font-bold tracking-normal text-board-navy">{session.title}</h2>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
             <span className="rounded-md bg-slate-100 px-2 py-1">{session.teamAgeGroup || "No team set"}</span>
@@ -30,13 +34,21 @@ export function SessionCard({ session }: { session: SessionSummary }) {
             <Eye className="h-4 w-4" />
             View
           </ButtonLink>
-          <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary" className="h-9 justify-center px-3">
+          {view !== "trash" ? <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary" className="h-9 justify-center px-3">
             <Edit className="h-4 w-4" />
             Edit
-          </ButtonLink>
-          <SessionActions sessionId={session.id} compact />
+          </ButtonLink> : null}
+          <SessionActions sessionId={session.id} view={view} compact />
         </div>
       </div>
     </article>
+  );
+}
+
+function StatusBadge({ label, danger = false }: { label: string; danger?: boolean }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${danger ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+      {label}
+    </span>
   );
 }

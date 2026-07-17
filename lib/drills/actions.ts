@@ -115,6 +115,55 @@ export async function updateDrill(_: DrillActionState, formData: FormData): Prom
 }
 
 export async function deleteDrill(_: DrillDeleteState, formData: FormData): Promise<DrillDeleteState> {
+  return moveDrillToTrash(formData);
+}
+
+export async function archiveDrill(formData: FormData) {
+  const drillId = formString(formData, "drillId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  await db
+    .from("drills")
+    .update({ archived_at: new Date().toISOString(), deleted_at: null })
+    .eq("id", drillId)
+    .eq("user_id", user.id);
+  revalidatePath("/drills");
+  revalidatePath(`/drills/${drillId}`);
+  redirect("/drills");
+}
+
+export async function restoreDrill(formData: FormData) {
+  const drillId = formString(formData, "drillId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  await db
+    .from("drills")
+    .update({ archived_at: null, deleted_at: null })
+    .eq("id", drillId)
+    .eq("user_id", user.id);
+  revalidatePath("/drills");
+  revalidatePath(`/drills/${drillId}`);
+  redirect("/drills");
+}
+
+export async function moveDrillToTrash(formData: FormData): Promise<DrillDeleteState> {
+  const drillId = formString(formData, "drillId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("drills")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", drillId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message, submissionId: Date.now() };
+
+  revalidatePath("/drills");
+  revalidatePath(`/drills/${drillId}`);
+  redirect("/drills?view=trash");
+}
+
+export async function permanentlyDeleteDrill(_: DrillDeleteState, formData: FormData): Promise<DrillDeleteState> {
   const drillId = formString(formData, "drillId");
   if (!drillId) {
     return { error: "Missing drill id.", submissionId: Date.now() };
@@ -139,7 +188,8 @@ export async function deleteDrill(_: DrillDeleteState, formData: FormData): Prom
     };
   }
 
-  const { error } = await db.from("drills").delete().eq("id", drillId).eq("user_id", user.id);
+  await db.from("drill_graphics").delete().eq("drill_id", drillId).eq("user_id", user.id);
+  const { error } = await db.from("drills").delete().eq("id", drillId).eq("user_id", user.id).not("deleted_at", "is", null);
 
   if (error) {
     if (error.code === "23503") {
@@ -153,7 +203,7 @@ export async function deleteDrill(_: DrillDeleteState, formData: FormData): Prom
 
   revalidatePath("/drills");
   revalidatePath("/dashboard");
-  redirect("/drills");
+  redirect("/drills?view=trash");
 }
 
 export async function duplicateDrill(formData: FormData) {

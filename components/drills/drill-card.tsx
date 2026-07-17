@@ -11,9 +11,10 @@ import type { DrillEditorState } from "@/types/editor";
 
 type DrillCardProps = {
   drill: Drill & { graphic?: DrillEditorState };
+  view?: "active" | "archived" | "trash";
 };
 
-export function DrillCard({ drill }: DrillCardProps) {
+export function DrillCard({ drill, view = "active" }: DrillCardProps) {
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const materialsPopoverRef = useRef<HTMLDivElement | null>(null);
   const visibleMaterials = drill.materials.slice(0, 4);
@@ -47,11 +48,15 @@ export function DrillCard({ drill }: DrillCardProps) {
         <div className="min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase text-board-green">{drill.mainFocus}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold uppercase text-board-green">{drill.mainFocus}</p>
+                {view === "archived" ? <StatusBadge label="Archived" /> : null}
+                {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
+              </div>
               <h2 className="mt-1 line-clamp-2 text-xl font-bold tracking-normal text-board-navy">{drill.title}</h2>
             </div>
             <div className="shrink-0">
-              <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} compact />
+              <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} view={view} compact />
             </div>
           </div>
 
@@ -128,13 +133,21 @@ export function DrillCard({ drill }: DrillCardProps) {
               <Eye className="h-4 w-4" />
               Open
             </ButtonLink>
-            <ButtonLink href={`/drills/${drill.id}/edit`} variant="secondary" className="h-9 px-3">
+            {view !== "trash" ? <ButtonLink href={`/drills/${drill.id}/edit`} variant="secondary" className="h-9 px-3">
               <Edit className="h-4 w-4" />
               Edit
-            </ButtonLink>
+            </ButtonLink> : null}
           </div>
         </div>
       </div>
     </article>
+  );
+}
+
+function StatusBadge({ label, danger = false }: { label: string; danger?: boolean }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${danger ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+      {label}
+    </span>
   );
 }

@@ -39,6 +39,8 @@ export function mapDrillRow(row: DrillRow): Drill {
     intensityLevel: toLevel(row.intensity_level),
     isFavorite: row.is_favorite,
     tags: row.tags,
+    archivedAt: row.archived_at ?? undefined,
+    deletedAt: row.deleted_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

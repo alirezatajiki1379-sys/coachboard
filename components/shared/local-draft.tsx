@@ -52,6 +52,28 @@ export function useLocalDraft<TData>({
     setSavedAt(null);
   }, [draftKey]);
 
+  const saveDraftNow = useCallback(() => {
+    const nextSavedAt = new Date().toISOString();
+    const record: DraftRecord<TData> = {
+      version: draftVersion,
+      entityType,
+      entityId,
+      baseUpdatedAt,
+      savedAt: nextSavedAt,
+      data: getData()
+    };
+
+    try {
+      window.localStorage.setItem(draftKey, JSON.stringify(record));
+      setSavedAt(nextSavedAt);
+      setStatus("saved");
+      return true;
+    } catch {
+      setStatus("error");
+      return false;
+    }
+  }, [baseUpdatedAt, draftKey, entityId, entityType, getData]);
+
   useEffect(() => {
     let stored: string | null = null;
     try {
@@ -99,27 +121,11 @@ export function useLocalDraft<TData>({
 
     setStatus("saving");
     const timeout = window.setTimeout(() => {
-      const nextSavedAt = new Date().toISOString();
-      const record: DraftRecord<TData> = {
-        version: draftVersion,
-        entityType,
-        entityId,
-        baseUpdatedAt,
-        savedAt: nextSavedAt,
-        data: getData()
-      };
-
-      try {
-        window.localStorage.setItem(draftKey, JSON.stringify(record));
-        setSavedAt(nextSavedAt);
-        setStatus("saved");
-      } catch {
-        setStatus("error");
-      }
+      saveDraftNow();
     }, autosaveDelayMs);
 
     return () => window.clearTimeout(timeout);
-  }, [baseUpdatedAt, draftKey, entityId, entityType, getData, isDirty]);
+  }, [isDirty, saveDraftNow]);
 
   const hasConflict = useMemo(() => {
     if (!pendingDraft?.baseUpdatedAt || !baseUpdatedAt) return false;
@@ -155,7 +161,8 @@ export function useLocalDraft<TData>({
         onDiscard={discardDraft}
         onKeepCurrent={keepCurrentVersion}
       />
-    ) : null
+    ) : null,
+    saveDraftNow
   };
 }
 

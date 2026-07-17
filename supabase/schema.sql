@@ -257,3 +257,12 @@ drop policy if exists "tags are owned by the user" on public.tags;
 create policy "tags are owned by the user" on public.tags
 for all using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- Archive / Trash support for existing projects.
+alter table public.drills
+add column if not exists archived_at timestamptz,
+add column if not exists deleted_at timestamptz;
+
+alter table public.training_sessions
+add column if not exists archived_at timestamptz,
+add column if not exists deleted_at timestamptz;

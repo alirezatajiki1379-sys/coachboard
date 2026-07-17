@@ -132,6 +132,8 @@ export type Drill = {
   isFavorite: boolean;
   tags: string[];
   previewImageUrl?: string;
+  archivedAt?: string;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -170,6 +172,8 @@ export type TrainingSession = {
   notes?: string;
   playerGroups: SessionPlayerGroup[];
   drills: TrainingSessionDrill[];
+  archivedAt?: string;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };

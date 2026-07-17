@@ -125,12 +125,59 @@ export async function updateSession(_: SessionActionState, formData: FormData): 
 }
 
 export async function deleteSession(formData: FormData) {
+  return moveSessionToTrash(formData);
+}
+
+export async function archiveSession(formData: FormData) {
   const sessionId = formString(formData, "sessionId");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  await db.from("training_sessions").delete().eq("id", sessionId).eq("user_id", user.id);
+  await db
+    .from("training_sessions")
+    .update({ archived_at: new Date().toISOString(), deleted_at: null })
+    .eq("id", sessionId)
+    .eq("user_id", user.id);
   revalidatePath("/sessions");
+  revalidatePath(`/sessions/${sessionId}`);
   redirect("/sessions");
+}
+
+export async function restoreSession(formData: FormData) {
+  const sessionId = formString(formData, "sessionId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  await db
+    .from("training_sessions")
+    .update({ archived_at: null, deleted_at: null })
+    .eq("id", sessionId)
+    .eq("user_id", user.id);
+  revalidatePath("/sessions");
+  revalidatePath(`/sessions/${sessionId}`);
+  redirect("/sessions");
+}
+
+export async function moveSessionToTrash(formData: FormData) {
+  const sessionId = formString(formData, "sessionId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  await db
+    .from("training_sessions")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", sessionId)
+    .eq("user_id", user.id);
+  revalidatePath("/sessions");
+  revalidatePath(`/sessions/${sessionId}`);
+  redirect("/sessions?view=trash");
+}
+
+export async function permanentlyDeleteSession(formData: FormData) {
+  const sessionId = formString(formData, "sessionId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  await db.from("training_session_drills").delete().eq("session_id", sessionId).eq("user_id", user.id);
+  await db.from("training_sessions").delete().eq("id", sessionId).eq("user_id", user.id).not("deleted_at", "is", null);
+  revalidatePath("/sessions");
+  redirect("/sessions?view=trash");
 }
 
 export async function duplicateSession(formData: FormData) {

@@ -1,5 +1,7 @@
 import { Plus } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
 import { DrillCard } from "@/components/drills/drill-card";
 import { DrillFilters } from "@/components/drills/drill-filters";
@@ -23,6 +25,7 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
   const resolvedSearchParams = await searchParams;
   const filters = parseDrillFilters(resolvedSearchParams);
   const drills = await listUserDrills(supabase, user.id, filters);
+  const viewLabels = { active: "Active", archived: "Archived", trash: "Trash" } as const;
 
   return (
     <div className="space-y-6">
@@ -40,14 +43,29 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
         </ButtonLink>
       </section>
 
+      <nav className="flex flex-wrap gap-2 rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label="Drill library views">
+        {(["active", "archived", "trash"] as const).map((view) => (
+          <Link
+            key={view}
+            href={view === "active" ? "/drills" : `/drills?view=${view}`}
+            className={cn(
+              "rounded-md px-3 py-2 text-sm font-semibold transition",
+              filters.view === view ? "bg-board-green text-white" : "text-slate-600 hover:bg-slate-100 hover:text-board-navy"
+            )}
+          >
+            {viewLabels[view]}
+          </Link>
+        ))}
+      </nav>
+
       <DrillFilters filters={filters} />
 
       <section className={drills.length ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1900px]:grid-cols-5" : "space-y-4"}>
         {drills.length ? (
-          drills.map((drill) => <DrillCard key={drill.id} drill={drill} />)
+          drills.map((drill) => <DrillCard key={drill.id} drill={drill} view={filters.view} />)
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">No drills found</h2>
+            <h2 className="text-lg font-bold text-board-navy">No {viewLabels[filters.view].toLowerCase()} drills found</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
               Create your first drill, or clear the filters if you were searching. Drill cards show previews, materials,
               and quick actions once your library has content.

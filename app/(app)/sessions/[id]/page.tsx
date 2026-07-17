@@ -38,6 +38,7 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
   );
   const blocks = groupByTrainingBlock(session.drills);
   const targetLabel = durationDeltaLabel(total, session.durationTargetMinutes);
+  const view = session.deletedAt ? "trash" : session.archivedAt ? "archived" : "active";
 
   return (
     <div className="space-y-6">
@@ -49,7 +50,11 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
       <section className="rounded-lg border border-board-line bg-white p-6 shadow-soft">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
-            <p className="text-sm font-semibold uppercase text-board-green">{session.mainFocus || "Training session"}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold uppercase text-board-green">{session.mainFocus || "Training session"}</p>
+              {view === "archived" ? <StatusBadge label="Archived" /> : null}
+              {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
+            </div>
             <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{session.title}</h1>
             <p className="mt-2 text-slate-600">
               {session.date || "No date"} {session.startTime ? `- ${session.startTime}` : ""} {session.teamAgeGroup ? `- ${session.teamAgeGroup}` : ""}
@@ -60,11 +65,11 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
               <FileText className="h-4 w-4" />
               Export PDF
             </ButtonLink>
-            <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary">
+            {view !== "trash" ? <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary">
               <Edit className="h-4 w-4" />
               Edit
-            </ButtonLink>
-            <SessionActions sessionId={session.id} />
+            </ButtonLink> : null}
+            <SessionActions sessionId={session.id} view={view} />
           </div>
         </div>
         <div className="mt-6 grid gap-3 md:grid-cols-4">
@@ -169,6 +174,14 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
         </aside>
       </section>
     </div>
+  );
+}
+
+function StatusBadge({ label, danger = false }: { label: string; danger?: boolean }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${danger ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+      {label}
+    </span>
   );
 }
 

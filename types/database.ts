@@ -56,6 +56,8 @@ export type Database = {
           intensity_level: number;
           is_favorite: boolean;
           tags: string[];
+          archived_at: string | null;
+          deleted_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -83,6 +85,8 @@ export type Database = {
           intensity_level?: number;
           is_favorite?: boolean;
           tags?: string[];
+          archived_at?: string | null;
+          deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -110,6 +114,8 @@ export type Database = {
           intensity_level?: number;
           is_favorite?: boolean;
           tags?: string[];
+          archived_at?: string | null;
+          deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -187,6 +193,8 @@ export type Database = {
           location: string | null;
           notes: string | null;
           player_groups: Json | null;
+          archived_at: string | null;
+          deleted_at: string | null;
           created_at: string;
           updated_at: string;
         };

@@ -83,7 +83,8 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
   const {
     clearDraft,
     indicator: autosaveIndicator,
-    recoveryDialog
+    recoveryDialog,
+    saveDraftNow
   } = useLocalDraft<SessionFormValues>({
     draftKey,
     entityType: "session",
@@ -98,11 +99,9 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
   const { dialog: unsavedChangesDialog, dismissDialog: dismissUnsavedChangesDialog } = useUnsavedChangesProtection({
     isDirty,
     isSaving: isSubmitting || isPending,
-    onSaveAndLeave: (href) => {
-      if (returnToInputRef.current) returnToInputRef.current.value = href;
-      setReturnTo(href);
-      setIsSubmitting(true);
-      window.setTimeout(() => formRef.current?.requestSubmit(), 0);
+    onSaveDraftAndLeave: (href) => {
+      saveDraftNow();
+      window.location.href = href;
     }
   });
 

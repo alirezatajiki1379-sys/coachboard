@@ -25,13 +25,27 @@ export type SessionSummary = TrainingSession & {
   totalDuration: number;
 };
 
-export async function listUserSessions(supabase: SupabaseServerClient, userId: string): Promise<SessionSummary[]> {
+export type SessionListView = "active" | "archived" | "trash";
+
+export function parseSessionListView(searchParams: Record<string, string | string[] | undefined>): SessionListView {
+  const value = searchParams.view;
+  const view = Array.isArray(value) ? value[0] : value;
+  return view === "archived" || view === "trash" ? view : "active";
+}
+
+export async function listUserSessions(supabase: SupabaseServerClient, userId: string, view: SessionListView = "active"): Promise<SessionSummary[]> {
   const db = supabase as unknown as SupabaseClient;
-  const { data, error } = await db
+  let query = db
     .from("training_sessions")
     .select("*")
     .eq("user_id", userId)
     .order("updated_at", { ascending: false });
+
+  if (view === "active") query = query.is("archived_at", null).is("deleted_at", null);
+  if (view === "archived") query = query.not("archived_at", "is", null).is("deleted_at", null);
+  if (view === "trash") query = query.not("deleted_at", "is", null);
+
+  const { data, error } = await query;
 
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as SessionRow[];
@@ -110,7 +124,13 @@ export async function getUserSession(
 
 export async function getDrillsForSessionBuilder(supabase: SupabaseServerClient, userId: string) {
   const db = supabase as unknown as SupabaseClient;
-  const { data, error } = await db.from("drills").select("*").eq("user_id", userId).order("title", { ascending: true });
+  const { data, error } = await db
+    .from("drills")
+    .select("*")
+    .eq("user_id", userId)
+    .is("archived_at", null)
+    .is("deleted_at", null)
+    .order("title", { ascending: true });
   if (error) throw new Error(error.message);
   const drills = ((data ?? []) as DrillRow[]).map(mapDrillRow);
   const graphics = await getGraphicsByDrillId(supabase, userId, drills.map((drill) => drill.id));
@@ -162,6 +182,8 @@ function mapSessionRow(row: SessionRow, drills: TrainingSessionDrill[]): Trainin
     notes: row.notes ?? undefined,
     playerGroups: normalizePlayerGroups(row.player_groups),
     drills,
+    archivedAt: row.archived_at ?? undefined,
+    deletedAt: row.deleted_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

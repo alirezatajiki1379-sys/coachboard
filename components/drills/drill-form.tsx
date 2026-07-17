@@ -52,7 +52,8 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
   const {
     clearDraft,
     indicator: autosaveIndicator,
-    recoveryDialog
+    recoveryDialog,
+    saveDraftNow
   } = useLocalDraft<DrillFormValues>({
     draftKey,
     entityType: "drill",
@@ -71,11 +72,9 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
   const { dialog: unsavedChangesDialog, dismissDialog: dismissUnsavedChangesDialog } = useUnsavedChangesProtection({
     isDirty,
     isSaving: isSubmitting || isPending,
-    onSaveAndLeave: (href) => {
-      if (returnToInputRef.current) returnToInputRef.current.value = href;
-      setReturnTo(href);
-      setIsSubmitting(true);
-      window.setTimeout(() => formRef.current?.requestSubmit(), 0);
+    onSaveDraftAndLeave: (href) => {
+      saveDraftNow();
+      window.location.href = href;
     }
   });
 

@@ -1,11 +1,17 @@
 import { CalendarPlus } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
 import { SessionCard } from "@/components/sessions/session-card";
 import { createClient } from "@/lib/supabase/server";
-import { listUserSessions } from "@/lib/sessions/queries";
+import { listUserSessions, parseSessionListView } from "@/lib/sessions/queries";
+import { cn } from "@/lib/utils";
 
-export default async function SessionsPage() {
+type SessionsPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function SessionsPage({ searchParams }: SessionsPageProps) {
   const supabase = await createClient();
   const {
     data: { user }
@@ -13,7 +19,9 @@ export default async function SessionsPage() {
 
   if (!user) redirect("/login");
 
-  const sessions = await listUserSessions(supabase, user.id);
+  const view = parseSessionListView(await searchParams);
+  const sessions = await listUserSessions(supabase, user.id, view);
+  const viewLabels = { active: "Active", archived: "Archived", trash: "Trash" } as const;
 
   return (
     <div className="space-y-6">
@@ -29,12 +37,27 @@ export default async function SessionsPage() {
         </ButtonLink>
       </section>
 
+      <nav className="flex flex-wrap gap-2 rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label="Session views">
+        {(["active", "archived", "trash"] as const).map((item) => (
+          <Link
+            key={item}
+            href={item === "active" ? "/sessions" : `/sessions?view=${item}`}
+            className={cn(
+              "rounded-md px-3 py-2 text-sm font-semibold transition",
+              view === item ? "bg-board-green text-white" : "text-slate-600 hover:bg-slate-100 hover:text-board-navy"
+            )}
+          >
+            {viewLabels[item]}
+          </Link>
+        ))}
+      </nav>
+
       <section className="space-y-4">
         {sessions.length ? (
-          sessions.map((session) => <SessionCard key={session.id} session={session} />)
+          sessions.map((session) => <SessionCard key={session.id} session={session} view={view} />)
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">No training sessions yet. Create your first session.</h2>
+            <h2 className="text-lg font-bold text-board-navy">No {viewLabels[view].toLowerCase()} training sessions found.</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
               Sessions combine saved drills into blocks, station sets, player groups, timelines, and a printable material list.
             </p>

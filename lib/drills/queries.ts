@@ -8,6 +8,7 @@ import type { DrillEditorState } from "@/types/editor";
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 export type DrillFilters = {
+  view: "active" | "archived" | "trash";
   search?: string;
   ageGroup?: string;
   mainFocus?: string;
@@ -33,6 +34,7 @@ export function parseDrillFilters(searchParams: Record<string, string | string[]
   };
 
   return {
+    view: get("view") === "archived" || get("view") === "trash" ? get("view") as DrillFilters["view"] : "active",
     search: get("search")?.trim() || undefined,
     ageGroup: get("ageGroup") || undefined,
     mainFocus: get("mainFocus") || undefined,
@@ -56,6 +58,10 @@ export async function listUserDrills(
   let query = supabase.from("drills").select("*").eq("user_id", userId).order("updated_at", {
     ascending: false
   });
+
+  if (filters.view === "active") query = query.is("archived_at", null).is("deleted_at", null);
+  if (filters.view === "archived") query = query.not("archived_at", "is", null).is("deleted_at", null);
+  if (filters.view === "trash") query = query.not("deleted_at", "is", null);
 
   if (filters.search) {
     const search = filters.search.replaceAll("%", "").replaceAll("_", "");
