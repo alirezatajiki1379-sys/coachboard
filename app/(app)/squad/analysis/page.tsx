@@ -34,6 +34,7 @@ const playerTypeOptions: Array<{ id: AnalyticsPlayerTypeFilter; label: string; c
 const sortOptions: Array<{ id: AnalyticsSortKey; label: string }> = [
   { id: "name", label: "Name" },
   { id: "position", label: "Position" },
+  { id: "status", label: "Status" },
   { id: "trainings", label: "Trainings" },
   { id: "attendance", label: "Attendance" },
   { id: "average", label: "Average rating" },
@@ -41,6 +42,7 @@ const sortOptions: Array<{ id: AnalyticsSortKey; label: string }> = [
   { id: "trend", label: "Trend" },
   { id: "reliability", label: "Reliability" },
   { id: "lastTraining", label: "Last training" },
+  { id: "evidence", label: "Evidence" },
   { id: "coachAssessment", label: "Coach assessment" }
 ];
 
@@ -55,7 +57,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
 
   const { summaries, positions, seasonSettings } = await getSquadAnalyticsOverview(supabase, user.id, filters);
   const allFilteredRecords = summaries.flatMap((summary) => summary.records);
-  const periodDefinition = getPeriodDefinition(filters.period, allFilteredRecords, seasonSettings);
+  const periodDefinition = getPeriodDefinition(filters, allFilteredRecords, seasonSettings);
   const totalTrainings = summaries.reduce((sum, summary) => sum + summary.trainings, 0);
   const totalRated = summaries.reduce((sum, summary) => sum + summary.rated, 0);
   const playersWithAttendance = summaries.filter((summary) => summary.attendanceRate !== null);
@@ -86,7 +88,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
           <Filter className="h-4 w-4" />
           Filters{activeFilters ? ` (${activeFilters})` : ""}
         </div>
-        <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_1fr_1.35fr_1fr] md:mt-0">
+        <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_1fr_1.35fr] md:mt-0">
           <ControlField label="Players">
             <div className="flex flex-wrap gap-2">
               {playerTypeOptions.map((option) => (
@@ -114,17 +116,36 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
                 </FilterLink>
               ))}
             </div>
+            <form action="/squad/analysis" className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <input type="hidden" name="period" value="custom" />
+              {filters.playerType !== "all" ? <input type="hidden" name="playerType" value={filters.playerType} /> : null}
+              {filters.position ? <input type="hidden" name="position" value={filters.position} /> : null}
+              {filters.ratedOnly ? <input type="hidden" name="ratedOnly" value="true" /> : null}
+              {filters.sort !== "name" ? <input type="hidden" name="sort" value={filters.sort} /> : null}
+              <label>
+                <span className="sr-only">Custom period from date</span>
+                <input
+                  name="from"
+                  placeholder="dd.mm.yyyy"
+                  defaultValue={formatGermanDate(filters.customFrom)}
+                  className="h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-board-navy outline-none placeholder:text-slate-400 focus:border-board-green focus:ring-4 focus:ring-green-100"
+                />
+              </label>
+              <label>
+                <span className="sr-only">Custom period to date</span>
+                <input
+                  name="to"
+                  placeholder="dd.mm.yyyy"
+                  defaultValue={formatGermanDate(filters.customTo)}
+                  className="h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-board-navy outline-none placeholder:text-slate-400 focus:border-board-green focus:ring-4 focus:ring-green-100"
+                />
+              </label>
+              <button type="submit" className="inline-flex h-10 items-center justify-center rounded-md bg-board-navy px-3 text-sm font-bold text-white hover:bg-slate-800">
+                Apply
+              </button>
+            </form>
             <p className="mt-2 text-sm font-semibold text-board-navy">{periodDefinition.rangeLabel}</p>
             {periodDefinition.note ? <p className="mt-1 text-xs text-slate-500">{periodDefinition.note}</p> : null}
-          </ControlField>
-          <ControlField label="Sort by">
-            <div className="flex flex-wrap gap-2">
-              {sortOptions.map((option) => (
-                <FilterLink key={option.id} href={hrefFor({ ...filters, sort: option.id })} active={filters.sort === option.id}>
-                  {option.label}
-                </FilterLink>
-              ))}
-            </div>
           </ControlField>
         </div>
         <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
@@ -134,6 +155,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
             {filters.position || "All positions"}
             {" · "}
             {analyticsPeriodLabels[filters.period]}
+            {filters.period === "custom" && filters.customFrom && filters.customTo ? ` (${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)})` : ""}
             {" · "}
             Sorted by {sortOptions.find((option) => option.id === filters.sort)?.label ?? "Name"}
           </p>
@@ -159,17 +181,17 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
             <table className="w-full border-collapse text-left text-sm">
               <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <SortableHeader label="Player" sortKey="name" activeSort={filters.sort} />
-                  <SortableHeader label="Position" sortKey="position" activeSort={filters.sort} />
-                  <th className="px-3 py-3 font-bold">Status</th>
-                  <SortableHeader label="Trainings" sortKey="trainings" activeSort={filters.sort} align="right" />
-                  <SortableHeader label="Attendance" sortKey="attendance" activeSort={filters.sort} align="right" />
-                  <SortableHeader label="Average" sortKey="average" activeSort={filters.sort} align="right" />
-                  <SortableHeader label="Latest 5" sortKey="latestFive" activeSort={filters.sort} align="right" />
-                  <SortableHeader label="Trend" sortKey="trend" activeSort={filters.sort} align="right" />
-                  <SortableHeader label="Reliability" sortKey="reliability" activeSort={filters.sort} align="right" />
-                  <th className="px-3 py-3 font-bold">Evidence</th>
-                  <SortableHeader label="Coach assessment" sortKey="coachAssessment" activeSort={filters.sort} />
+                  <SortableHeader label="Player" sortKey="name" filters={filters} />
+                  <SortableHeader label="Position" sortKey="position" filters={filters} />
+                  <SortableHeader label="Status" sortKey="status" filters={filters} />
+                  <SortableHeader label="Trainings" sortKey="trainings" filters={filters} align="right" />
+                  <SortableHeader label="Attendance" sortKey="attendance" filters={filters} align="right" />
+                  <SortableHeader label="Average" sortKey="average" filters={filters} align="right" />
+                  <SortableHeader label="Latest 5" sortKey="latestFive" filters={filters} align="right" />
+                  <SortableHeader label="Trend" sortKey="trend" filters={filters} align="right" />
+                  <SortableHeader label="Reliability" sortKey="reliability" filters={filters} align="right" />
+                  <SortableHeader label="Evidence" sortKey="evidence" filters={filters} />
+                  <SortableHeader label="Coach assessment" sortKey="coachAssessment" filters={filters} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -195,15 +217,20 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
       )}
 
       <section id="analytics-help" className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Info className="h-5 w-5" />How analytics are calculated</h2>
-        <div className="mt-4 grid gap-4 text-sm leading-6 text-slate-600 md:grid-cols-2">
-          <p><strong className="text-board-navy">Average rating:</strong> only final overall ratings intentionally entered by the coach. Unrated trainings are not counted as 3.</p>
-          <p><strong className="text-board-navy">Trend:</strong> latest five rated trainings compared with the five rated trainings before them, inside the selected period.</p>
-          <p><strong className="text-board-navy">Attendance rate:</strong> Present and Late count as attended. Absence reasons do not count as attended.</p>
-          <p><strong className="text-board-navy">Reliability:</strong> Injured, Sick and Excused are 0; Private reason -0.5; Late cancellation -1; Unexcused -2; Late -0.5 only when the penalty is active.</p>
-          <p><strong className="text-board-navy">Data basis:</strong> shows how many rated trainings support the performance view, so one high rating does not look like a confirmed trend.</p>
-          <p><strong className="text-board-navy">Coach assessment:</strong> a manual coach decision marker. It is intentionally separate from automatic summaries.</p>
-        </div>
+        <details>
+          <summary className="flex cursor-pointer items-center gap-2 text-lg font-bold text-board-navy">
+            <Info className="h-5 w-5" />
+            How analytics are calculated
+          </summary>
+          <div className="mt-4 grid gap-4 text-sm leading-6 text-slate-600 md:grid-cols-2">
+            <p><strong className="text-board-navy">Average rating:</strong> only final overall ratings intentionally entered by the coach. Unrated trainings are not counted as 3.</p>
+            <p><strong className="text-board-navy">Trend:</strong> latest five rated trainings compared with the five rated trainings before them, inside the selected period.</p>
+            <p><strong className="text-board-navy">Attendance rate:</strong> Present and Late count as attended. Absence reasons do not count as attended.</p>
+            <p><strong className="text-board-navy">Reliability:</strong> existing malus rules; late only counts when the penalty is active.</p>
+            <p><strong className="text-board-navy">Evidence:</strong> shows how many rated trainings support the performance view.</p>
+            <p><strong className="text-board-navy">Coach assessment:</strong> manual coach marker, separate from automatic summaries.</p>
+          </div>
+        </details>
       </section>
     </div>
   );
@@ -211,7 +238,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
 
 function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
   return (
-    <tr className="align-top hover:bg-slate-50/70">
+    <tr className="align-middle hover:bg-slate-50/70">
       <td className="px-3 py-3">
         <Link href={`/squad/players/${summary.player.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
           {playerName(summary.player)}
@@ -221,7 +248,7 @@ function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsS
       <MetricCell active={activeSort === "position"}>
         <span className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{summary.player.position || "No position"}</span>
       </MetricCell>
-      <td className="px-3 py-3 text-slate-600">{summary.player.playerType === "trial" ? "Trial" : "Roster"}</td>
+      <MetricCell active={activeSort === "status"}>{summary.player.playerType === "trial" ? "Trial" : "Roster"}</MetricCell>
       <MetricCell active={activeSort === "trainings"} align="right">{summary.trainings}</MetricCell>
       <MetricCell active={activeSort === "attendance"} align="right">
         <MetricStack value={formatPercent(summary.attendanceRate)} detail={`${summary.attended} of ${summary.trainings}`} />
@@ -236,10 +263,10 @@ function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsS
       <MetricCell active={activeSort === "reliability"} align="right">
         <MetricStack value={summary.reliabilityPenalty.toFixed(1)} detail={`${summary.late} late · ${summary.unexcused} unexcused`} />
       </MetricCell>
-      <td className="px-3 py-3">
+      <MetricCell active={activeSort === "evidence"}>
         <span className={cn("inline-flex rounded-full px-2 py-1 text-xs font-bold", evidenceBadgeTone(summary.evidenceBase.label))}>{summary.evidenceBase.label}</span>
         <p className="mt-1 text-xs text-slate-500">{summary.rated} rated</p>
-      </td>
+      </MetricCell>
       <MetricCell active={activeSort === "coachAssessment"}>
         <span className="line-clamp-2 text-sm font-semibold text-board-navy">
           {summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : "Decision open"}
@@ -334,20 +361,45 @@ function SummaryMetric({ icon, label, value, hint }: { icon: ReactNode; label: s
   );
 }
 
-function SortableHeader({ label, sortKey, activeSort, align }: { label: string; sortKey: AnalyticsSortKey; activeSort: AnalyticsSortKey; align?: "right" }) {
-  const active = sortKey === activeSort;
+function SortableHeader({
+  label,
+  sortKey,
+  filters,
+  align
+}: {
+  label: string;
+  sortKey: AnalyticsSortKey;
+  filters: {
+    period: AnalyticsPeriod;
+    playerType: AnalyticsPlayerTypeFilter;
+    position?: string;
+    ratedOnly: boolean;
+    sort: AnalyticsSortKey;
+    customFrom?: string;
+    customTo?: string;
+  };
+  align?: "right";
+}) {
+  const active = sortKey === filters.sort;
   return (
-    <th aria-sort={active ? "descending" : "none"} className={cn("px-3 py-3 font-bold", align === "right" && "text-right", active && "bg-green-50 text-board-green")}>
-      <span className={cn("inline-flex items-center gap-1", align === "right" && "justify-end")}>
+    <th aria-sort={active ? "descending" : "none"} className={cn("px-0 py-0 font-bold", active && "bg-green-50 text-board-green")}>
+      <Link
+        href={hrefFor({ ...filters, sort: sortKey })}
+        className={cn(
+          "flex min-h-11 items-center gap-1 px-3 py-3 underline-offset-4 hover:text-board-green hover:underline focus:outline-none focus:ring-4 focus:ring-green-100",
+          align === "right" && "justify-end text-right"
+        )}
+        title={`Sort by ${label}`}
+      >
         {label}
-        {active ? <ArrowUpDown className="h-3.5 w-3.5" /> : null}
-      </span>
+        <ArrowUpDown className={cn("h-3.5 w-3.5", active ? "opacity-100" : "opacity-35")} />
+      </Link>
     </th>
   );
 }
 
 function MetricCell({ active, align, children }: { active: boolean; align?: "right"; children: ReactNode }) {
-  return <td className={cn("px-3 py-3", align === "right" && "text-right", active && "bg-green-50/60 font-bold text-board-navy")}>{children}</td>;
+  return <td className={cn("px-3 py-3 text-slate-700", align === "right" && "text-right tabular-nums", active && "bg-green-50/60 font-bold text-board-navy")}>{children}</td>;
 }
 
 function MetricStack({ value, detail }: { value: string; detail: string }) {
@@ -370,40 +422,51 @@ function CompactMetric({ label, value, muted }: { label: string; value: string; 
 
 function mobilePrimaryMetric(summary: PlayerAnalyticsSummary, sort: AnalyticsSortKey) {
   if (sort === "position") return { label: "Position", value: summary.player.position || "No position", detail: `${summary.player.playerType === "trial" ? "Trial player" : "Roster player"}` };
+  if (sort === "status") return { label: "Status", value: summary.player.playerType === "trial" ? "Trial" : "Roster", detail: summary.player.position || "No position" };
   if (sort === "average") return { label: "Average rating", value: formatRating(summary.averageRating), detail: `${summary.rated} rated trainings` };
   if (sort === "latestFive") return { label: "Latest 5", value: formatRating(summary.latestFiveAverage), detail: "Average of latest five rated trainings" };
   if (sort === "attendance") return { label: "Attendance", value: formatPercent(summary.attendanceRate), detail: `${summary.attended} of ${summary.trainings} trainings` };
   if (sort === "trend") return { label: "Trend", value: summary.trend.value === null ? "No trend yet" : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`, detail: summary.trend.label };
   if (sort === "reliability") return { label: "Reliability malus", value: summary.reliabilityPenalty.toFixed(1), detail: `${summary.late} late · ${summary.unexcused} unexcused` };
   if (sort === "lastTraining") return { label: "Last training", value: summary.latestTraining?.event?.date ? formatShortDate(summary.latestTraining.event.date) : "No data", detail: summary.latestTraining?.event?.label || "No latest training" };
+  if (sort === "evidence") return { label: "Evidence", value: summary.evidenceBase.label, detail: `${summary.rated} rated trainings` };
   if (sort === "coachAssessment") return { label: "Coach assessment", value: summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : "Decision open", detail: "Manual coach marker" };
   return { label: "Trainings", value: String(summary.trainings), detail: `${summary.rated} rated · ${summary.attended} present` };
 }
 
 function getPeriodDefinition(
-  period: AnalyticsPeriod,
+  filters: {
+    period: AnalyticsPeriod;
+    customFrom?: string;
+    customTo?: string;
+  },
   records: PlayerAnalyticsRecord[],
   seasonSettings: { seasonStartMonth: number; seasonStartDay: number }
 ) {
   const today = new Date();
-  if (period === "season") {
-    const range = seasonDateRange(today, seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay);
-    return { shortLabel: "This season", rangeLabel: `${formatDisplayDate(range.from)} – ${formatDisplayDate(range.to)}` };
+  if (filters.period === "custom") {
+    if (!filters.customFrom || !filters.customTo) return { shortLabel: "Custom range", rangeLabel: "Choose from and to dates", note: "Use dd.mm.yyyy, for example 01.07.2026." };
+    if (filters.customFrom > filters.customTo) return { shortLabel: "Custom range", rangeLabel: "Invalid custom range", note: "The from date must be before the to date." };
+    return { shortLabel: "Custom range", rangeLabel: `${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)}` };
   }
-  if (period === "30d" || period === "90d") {
-    const days = period === "30d" ? 30 : 90;
+  if (filters.period === "season") {
+    const range = seasonDateRange(today, seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay);
+    return { shortLabel: "This season", rangeLabel: `${formatGermanDate(range.from)} – ${formatGermanDate(range.to)}` };
+  }
+  if (filters.period === "30d" || filters.period === "90d") {
+    const days = filters.period === "30d" ? 30 : 90;
     const to = dateOnly(today);
     const fromDate = new Date(today);
     fromDate.setDate(fromDate.getDate() - days + 1);
-    return { shortLabel: analyticsPeriodLabels[period], rangeLabel: `${formatDisplayDate(dateOnly(fromDate))} – ${formatDisplayDate(to)}` };
+    return { shortLabel: analyticsPeriodLabels[filters.period], rangeLabel: `${formatGermanDate(dateOnly(fromDate))} – ${formatGermanDate(to)}` };
   }
 
   const dates = Array.from(new Set(records.map((record) => record.event?.date).filter((date): date is string => Boolean(date)))).sort();
-  if (!dates.length) return { shortLabel: analyticsPeriodLabels[period], rangeLabel: "No training data in this period" };
+  if (!dates.length) return { shortLabel: analyticsPeriodLabels[filters.period], rangeLabel: "No training data in this period" };
   return {
-    shortLabel: analyticsPeriodLabels[period],
-    rangeLabel: `${formatDisplayDate(dates[0])} – ${formatDisplayDate(dates[dates.length - 1])}`,
-    note: period === "last5" || period === "last10" ? `${dates.length} training${dates.length === 1 ? "" : "s"} available` : undefined
+    shortLabel: analyticsPeriodLabels[filters.period],
+    rangeLabel: `${formatGermanDate(dates[0])} – ${formatGermanDate(dates[dates.length - 1])}`,
+    note: filters.period === "last5" || filters.period === "last10" ? `${dates.length} training${dates.length === 1 ? "" : "s"} available` : undefined
   };
 }
 
@@ -422,16 +485,16 @@ function dateOnly(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function formatDisplayDate(date: string) {
-  const parsed = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-
 function formatShortDate(date: string) {
   const parsed = new Date(`${date}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
   return parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
+function formatGermanDate(date?: string) {
+  if (!date) return "";
+  const [year, month, day] = date.split("-");
+  return year && month && day ? `${day}.${month}.${year}` : date;
 }
 
 function countActiveFilters(filters: {
@@ -440,6 +503,8 @@ function countActiveFilters(filters: {
   position?: string;
   ratedOnly: boolean;
   sort: AnalyticsSortKey;
+  customFrom?: string;
+  customTo?: string;
 }) {
   return Number(filters.period !== "season") + Number(filters.playerType !== "all") + Number(Boolean(filters.position)) + Number(filters.ratedOnly) + Number(filters.sort !== "name");
 }
@@ -450,9 +515,15 @@ function hrefFor(filters: {
   position?: string;
   ratedOnly: boolean;
   sort: AnalyticsSortKey;
+  customFrom?: string;
+  customTo?: string;
 }) {
   const params = new URLSearchParams();
   if (filters.period !== "season") params.set("period", filters.period);
+  if (filters.period === "custom") {
+    if (filters.customFrom) params.set("from", formatGermanDate(filters.customFrom));
+    if (filters.customTo) params.set("to", formatGermanDate(filters.customTo));
+  }
   if (filters.playerType !== "all") params.set("playerType", filters.playerType);
   if (filters.position) params.set("position", filters.position);
   if (filters.ratedOnly) params.set("ratedOnly", "true");

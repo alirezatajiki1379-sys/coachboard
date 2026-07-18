@@ -15,6 +15,8 @@ export type AnalyticsFilters = {
   position?: string;
   ratedOnly: boolean;
   sort: AnalyticsSortKey;
+  customFrom?: string;
+  customTo?: string;
 };
 
 export function parseAnalyticsFilters(searchParams: Record<string, string | string[] | undefined>): AnalyticsFilters {
@@ -22,12 +24,15 @@ export function parseAnalyticsFilters(searchParams: Record<string, string | stri
   const playerType = one(searchParams.playerType);
   const sort = one(searchParams.sort);
   return {
-    period: period === "last5" || period === "last10" || period === "30d" || period === "90d" || period === "season" || period === "all" ? period : "season",
+    period: period === "last5" || period === "last10" || period === "30d" || period === "90d" || period === "season" || period === "all" || period === "custom" ? period : "season",
     playerType: playerType === "roster" || playerType === "trial" ? playerType : "all",
     position: one(searchParams.position) || undefined,
     ratedOnly: one(searchParams.ratedOnly) === "true",
+    customFrom: normalizeDateParam(one(searchParams.from)),
+    customTo: normalizeDateParam(one(searchParams.to)),
     sort:
       sort === "position" ||
+      sort === "status" ||
       sort === "trainings" ||
       sort === "rated" ||
       sort === "average" ||
@@ -36,6 +41,7 @@ export function parseAnalyticsFilters(searchParams: Record<string, string | stri
       sort === "attendance" ||
       sort === "reliability" ||
       sort === "lastTraining" ||
+      sort === "evidence" ||
       sort === "coachAssessment"
         ? sort
         : "name"
@@ -70,7 +76,9 @@ export async function getSquadAnalyticsOverview(
         filters.period,
         assessmentByPlayer.get(player.id),
         seasonSettings.seasonStartMonth,
-        seasonSettings.seasonStartDay
+        seasonSettings.seasonStartDay,
+        filters.customFrom,
+        filters.customTo
       )
     )
     .filter((summary) => (filters.ratedOnly ? summary.rated > 0 : true));
@@ -186,4 +194,14 @@ function mapAssessmentRow(row: AssessmentRow): PlayerCoachAssessment {
 
 function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeDateParam(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(trimmed);
+  if (!match) return undefined;
+  const [, day, month, year] = match;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }

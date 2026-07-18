@@ -8,11 +8,12 @@ import type {
   SquadTrainingEvent
 } from "@/types/domain";
 
-export type AnalyticsPeriod = "last5" | "last10" | "30d" | "90d" | "season" | "all";
+export type AnalyticsPeriod = "last5" | "last10" | "30d" | "90d" | "season" | "all" | "custom";
 export type AnalyticsPlayerTypeFilter = "all" | "roster" | "trial";
 export type AnalyticsSortKey =
   | "name"
   | "position"
+  | "status"
   | "trainings"
   | "rated"
   | "average"
@@ -21,6 +22,7 @@ export type AnalyticsSortKey =
   | "attendance"
   | "reliability"
   | "lastTraining"
+  | "evidence"
   | "coachAssessment";
 
 export type PlayerAnalyticsRecord = SquadAttendanceEntry & {
@@ -102,7 +104,8 @@ export const analyticsPeriodLabels: Record<AnalyticsPeriod, string> = {
   "30d": "Last 30 days",
   "90d": "Last 90 days",
   season: "This season",
-  all: "All time"
+  all: "All time",
+  custom: "Custom range"
 };
 
 export const coachAssessmentLabels: Record<PlayerCoachAssessmentValue, string> = {
@@ -212,10 +215,21 @@ export function filterRecordsByPeriod(
   period: AnalyticsPeriod,
   today = new Date(),
   seasonStartMonth = 7,
-  seasonStartDay = 1
+  seasonStartDay = 1,
+  customFrom?: string,
+  customTo?: string
 ) {
   const sorted = sortRecordsByEventDate(records);
   if (period === "all") return sorted;
+  if (period === "custom") {
+    const fromTime = customFrom ? parseDateToUtc(customFrom) : Number.NaN;
+    const toTime = customTo ? parseDateToUtc(customTo) : Number.NaN;
+    if (!Number.isFinite(fromTime) || !Number.isFinite(toTime) || fromTime > toTime) return [];
+    return sorted.filter((record) => {
+      const parsed = record.event?.date ? Date.parse(`${record.event.date}T00:00:00Z`) : Number.NaN;
+      return Number.isFinite(parsed) && parsed >= fromTime && parsed <= toTime;
+    });
+  }
   if (period === "last5" || period === "last10") {
     const limit = period === "last5" ? 5 : 10;
     const eventIds = uniqueEventIds(sorted).slice(0, limit);
@@ -241,14 +255,18 @@ export function createPlayerAnalyticsSummary(
   period: AnalyticsPeriod,
   assessment?: PlayerCoachAssessment,
   seasonStartMonth = 7,
-  seasonStartDay = 1
+  seasonStartDay = 1,
+  customFrom?: string,
+  customTo?: string
 ): PlayerAnalyticsSummary {
   const records = filterRecordsByPeriod(
     allRecords.filter((record) => record.playerId === player.id),
     period,
     new Date(),
     seasonStartMonth,
-    seasonStartDay
+    seasonStartDay,
+    customFrom,
+    customTo
   );
   const ratings = records.map((record) => record.overallRating).filter(isRating);
   const attendanceDistribution = calculateAttendanceDistribution(records);
@@ -299,6 +317,7 @@ export function createPlayerAnalyticsSummary(
 export function sortPlayerAnalytics(summaries: PlayerAnalyticsSummary[], sort: AnalyticsSortKey) {
   return [...summaries].sort((a, b) => {
     if (sort === "position") return (a.player.position ?? "").localeCompare(b.player.position ?? "") || playerName(a.player).localeCompare(playerName(b.player));
+    if (sort === "status") return a.player.playerType.localeCompare(b.player.playerType) || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "trainings") return b.trainings - a.trainings || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "rated") return b.rated - a.rated || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "average") return nullableDesc(a.averageRating, b.averageRating) || playerName(a.player).localeCompare(playerName(b.player));
@@ -309,6 +328,7 @@ export function sortPlayerAnalytics(summaries: PlayerAnalyticsSummary[], sort: A
     if (sort === "lastTraining") {
       return (b.latestTraining?.event?.date ?? "").localeCompare(a.latestTraining?.event?.date ?? "") || playerName(a.player).localeCompare(playerName(b.player));
     }
+    if (sort === "evidence") return evidenceRank(b.evidenceBase.label) - evidenceRank(a.evidenceBase.label) || b.rated - a.rated || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "coachAssessment") {
       return (a.assessment?.assessment ?? "decision_open").localeCompare(b.assessment?.assessment ?? "decision_open") || playerName(a.player).localeCompare(playerName(b.player));
     }
@@ -385,6 +405,14 @@ function nullableDesc(a: number | null, b: number | null) {
   return b - a;
 }
 
+function evidenceRank(label: EvidenceBase["label"]) {
+  if (label === "Stronger evidence base") return 4;
+  if (label === "Developing evidence") return 3;
+  if (label === "Early tendency") return 2;
+  if (label === "First impressions") return 1;
+  return 0;
+}
+
 function classifyDataSummary(averageRating: number | null, reliabilityPenalty: number, ratedCount: number) {
   if (ratedCount < 5) return "Not enough data for an overall tendency";
   if (averageRating !== null && averageRating >= 4 && reliabilityPenalty >= -1) return "Strong performance and stable reliability";
@@ -398,4 +426,19 @@ function dateToDateString(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function parseDateToUtc(value: string) {
+  const iso = normalizeDateInput(value);
+  return iso ? Date.parse(`${iso}T00:00:00Z`) : Number.NaN;
+}
+
+function normalizeDateInput(value: string) {
+  const trimmed = value.trim();
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (isoMatch) return trimmed;
+  const germanMatch = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(trimmed);
+  if (!germanMatch) return "";
+  const [, day, month, year] = germanMatch;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }

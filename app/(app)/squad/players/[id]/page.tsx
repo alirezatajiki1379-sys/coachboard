@@ -22,6 +22,8 @@ type PlayerDetailPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+const playerDetailPeriods = (Object.keys(analyticsPeriodLabels) as AnalyticsPeriod[]).filter((period) => period !== "custom");
+
 export default async function PlayerDetailPage({ params, searchParams }: PlayerDetailPageProps) {
   const { id } = await params;
   const query = await searchParams;
@@ -94,7 +96,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
             <p className="mt-1 text-sm text-slate-600">Period: {analyticsPeriodLabels[period]}. Unrated trainings stay unrated and are not counted as 3.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(Object.keys(analyticsPeriodLabels) as AnalyticsPeriod[]).map((item) => (
+            {playerDetailPeriods.map((item) => (
               <Link
                 key={item}
                 href={item === "season" ? `/squad/players/${player.id}` : `/squad/players/${player.id}?period=${item}`}
