@@ -106,7 +106,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
                     <p className="mt-1 text-sm text-slate-600">
                       Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
                       {entry.overallRating ? ` · Rating: ${entry.overallRating}` : ""}
-                      {entry.plannedReason ? ` · Reason: ${entry.plannedReason} ${plannedReasonLabel(entry.plannedReason)}` : ""}
+                      {entry.plannedReason ? ` · Reason: ${plannedReasonLabel(entry.plannedReason)}` : ""}
                       {entry.lateMinutes ? ` · Late: ${entry.lateMinutes} min` : ""}
                       {` · Malus: ${reliabilityMalus(entry)}`}
                     </p>

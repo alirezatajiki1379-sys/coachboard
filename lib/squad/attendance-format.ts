@@ -38,6 +38,7 @@ export function plannedReasonLabel(reason?: SquadAttendanceEntry["plannedReason"
 export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"]) {
   const labels: Record<NonNullable<SquadAttendanceEntry["finalStatus"]>, string> = {
     present: "Present",
+    absent: "Absent",
     Z: "Late",
     V: "Injured",
     K: "Sick",

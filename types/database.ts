@@ -333,7 +333,7 @@ export type Database = {
           planned_status: "expected" | "unavailable" | "unclear" | null;
           planned_reason: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | null;
           planned_reason_note: string | null;
-          final_status: "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
+          final_status: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
           late_minutes: number | null;
           late_penalty_applied: boolean;
           overall_rating: number | null;
@@ -355,7 +355,7 @@ export type Database = {
           planned_status?: "expected" | "unavailable" | "unclear" | null;
           planned_reason?: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | null;
           planned_reason_note?: string | null;
-          final_status?: "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
+          final_status?: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
           late_minutes?: number | null;
           late_penalty_applied?: boolean;
           overall_rating?: number | null;

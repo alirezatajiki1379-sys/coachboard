@@ -110,7 +110,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
                       Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
-                      {entry.plannedReason ? ` · Reason: ${entry.plannedReason} ${plannedReasonLabel(entry.plannedReason)}` : ""}
+                      {entry.plannedReason ? ` · Reason: ${plannedReasonLabel(entry.plannedReason)}` : ""}
                       {entry.overallRating ? ` · Rating: ${entry.overallRating}` : ""}
                       {` · Malus: ${reliabilityMalus(entry)}`}
                     </p>

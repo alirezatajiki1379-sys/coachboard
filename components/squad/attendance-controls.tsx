@@ -22,9 +22,8 @@ const plannedButtons: Array<{ status: SquadPlannedAttendanceStatus; label: strin
   { status: "unclear", label: "Unclear", icon: HelpCircle, className: "bg-slate-100 text-slate-700 hover:bg-slate-200" }
 ];
 
-const finalOptions: Array<{ status: SquadFinalAttendanceStatus; label: string }> = [
-  { status: "present", label: "Present" },
-  { status: "Z", label: "Late" },
+const absenceOptions: Array<{ status: SquadFinalAttendanceStatus; label: string }> = [
+  { status: "absent", label: "Absent, no reason added" },
   { status: "V", label: "Injured" },
   { status: "K", label: "Sick" },
   { status: "E", label: "Excused" },
@@ -71,7 +70,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
           >
             <option value="">Reason optional</option>
             {(["V", "K", "E", "P", "S"] as const).map((reason) => (
-              <option key={reason} value={reason}>{reason} · {attendanceReasonLabels[reason]}</option>
+              <option key={reason} value={reason}>{attendanceReasonLabels[reason]}</option>
             ))}
           </select>
           <input
@@ -122,6 +121,8 @@ export function MarkAllExpectedButton({ eventId }: { eventId: string }) {
 }
 
 export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; eventId: string }) {
+  const isLate = entry.finalStatus === "Z";
+  const isAbsent = Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z");
   const statusTone = entry.finalStatus
     ? entry.finalStatus === "present" || entry.finalStatus === "Z"
       ? "bg-green-50 text-green-700"
@@ -148,29 +149,40 @@ export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; ev
           <div className="flex w-full gap-2 sm:w-auto">
             <FinalStatusButton entry={entry} eventId={eventId} status="present" label="Present" icon={<Check className="h-4 w-4" />} />
             <FinalStatusButton entry={entry} eventId={eventId} status="Z" label="Late" icon={<Clock3 className="h-4 w-4" />} />
+            <FinalStatusButton entry={entry} eventId={eventId} status="absent" label="Absent" icon={<UserMinus className="h-4 w-4" />} />
           </div>
         </div>
-        <form action={updateFinalAttendance} className="grid gap-2 sm:grid-cols-[1fr_120px_140px_auto] sm:items-end">
-          <input type="hidden" name="eventId" value={eventId} />
-          <input type="hidden" name="attendanceId" value={entry.id} />
-          <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
-          <label>
-            <span className="text-xs font-bold uppercase text-slate-500">Status / absence reason</span>
-            <select name="finalStatus" defaultValue={entry.finalStatus ?? ""} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-              <option value="">Open</option>
-              {finalOptions.map((option) => <option key={option.status} value={option.status}>{option.status === "present" ? option.label : `${option.status} · ${option.label}`}</option>)}
-            </select>
-          </label>
-          <label>
-            <span className="text-xs font-bold uppercase text-slate-500">Late min</span>
-            <input name="lateMinutes" type="number" min="0" defaultValue={entry.lateMinutes ?? ""} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-          </label>
-          <label className="flex h-10 items-center gap-2 rounded-md border border-board-line px-3 text-sm font-semibold text-slate-600">
-            <input name="latePenaltyApplied" type="checkbox" defaultChecked={entry.latePenaltyApplied} className="h-4 w-4" />
-            Late malus
-          </label>
-          <Button type="submit" variant="secondary" className="h-10">Save</Button>
-        </form>
+        {isLate ? (
+          <form action={updateFinalAttendance} className="grid gap-2 rounded-md bg-amber-50 p-3 sm:grid-cols-[120px_150px_auto] sm:items-end">
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="attendanceId" value={entry.id} />
+            <input type="hidden" name="finalStatus" value="Z" />
+            <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
+            <label>
+              <span className="text-xs font-bold uppercase text-amber-700">Late minutes</span>
+              <input name="lateMinutes" type="number" min="0" defaultValue={entry.lateMinutes ?? ""} className="mt-1 h-10 w-full rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+            </label>
+            <label className="flex h-10 items-center gap-2 rounded-md border border-amber-200 bg-white px-3 text-sm font-semibold text-slate-600">
+              <input name="latePenaltyApplied" type="checkbox" defaultChecked={entry.latePenaltyApplied} className="h-4 w-4" />
+              Reliability penalty
+            </label>
+            <Button type="submit" variant="secondary" className="h-10">Save late details</Button>
+          </form>
+        ) : null}
+        {isAbsent ? (
+          <form action={updateFinalAttendance} className="grid gap-2 rounded-md bg-red-50 p-3 sm:grid-cols-[minmax(180px,1fr)_auto] sm:items-end">
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="attendanceId" value={entry.id} />
+            <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
+            <label>
+              <span className="text-xs font-bold uppercase text-red-700">Optional absence reason</span>
+              <select name="finalStatus" defaultValue={entry.finalStatus ?? "absent"} className="mt-1 h-10 w-full rounded-md border border-red-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+                {absenceOptions.map((option) => <option key={option.status} value={option.status}>{option.label}</option>)}
+              </select>
+            </label>
+            <Button type="submit" variant="secondary" className="h-10">Save absence</Button>
+          </form>
+        ) : null}
       </div>
     </article>
   );

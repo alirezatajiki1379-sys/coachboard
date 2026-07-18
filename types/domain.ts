@@ -204,7 +204,7 @@ export type SquadPlayer = {
 export type SquadTrainingEventStatus = "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
 export type SquadPlannedAttendanceStatus = "expected" | "unavailable" | "unclear";
 export type SquadAttendanceReason = "V" | "K" | "E" | "P" | "S" | "Z" | "U";
-export type SquadFinalAttendanceStatus = "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
+export type SquadFinalAttendanceStatus = "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
 
 export type SquadTrialPlayer = {
   id: string;

@@ -25,7 +25,7 @@ export type TrainingEventActionState = {
 
 const plannedStatuses = ["expected", "unavailable", "unclear"] as const;
 const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U"] as const;
-const finalStatuses = ["present", "Z", "V", "K", "E", "P", "S", "U"] as const;
+const finalStatuses = ["present", "absent", "Z", "V", "K", "E", "P", "S", "U"] as const;
 
 async function requireUser() {
   const supabase = await createClient();

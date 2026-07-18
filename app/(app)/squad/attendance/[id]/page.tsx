@@ -114,7 +114,7 @@ export default async function TrainingEventPage({ params }: EventPageProps) {
                   </p>
                   {entry.plannedReason || entry.plannedReasonNote ? (
                     <p className="mt-1 text-sm text-slate-600">
-                      Reason: {[entry.plannedReason, plannedReasonLabel(entry.plannedReason), entry.plannedReasonNote].filter(Boolean).join(" · ")}
+                      Reason: {[plannedReasonLabel(entry.plannedReason), entry.plannedReasonNote].filter(Boolean).join(" · ")}
                     </p>
                   ) : null}
                 </div>

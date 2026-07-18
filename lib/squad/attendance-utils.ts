@@ -67,7 +67,7 @@ export function calculateReliabilityPenalty(entry: Pick<SquadAttendanceEntry, "f
 }
 
 export function calculateReliabilityPenaltyFromStatus(status?: SquadFinalAttendanceStatus | null, latePenaltyApplied = true) {
-  if (!status || status === "present" || status === "V" || status === "K" || status === "E") return 0;
+  if (!status || status === "present" || status === "absent" || status === "V" || status === "K" || status === "E") return 0;
   if (status === "Z") return latePenaltyApplied ? -0.5 : 0;
   if (status === "P") return -0.5;
   if (status === "S") return -1;

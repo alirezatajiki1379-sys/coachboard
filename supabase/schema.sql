@@ -559,6 +559,7 @@ create table if not exists public.squad_attendance_records (
       final_status is null
       or final_status in (
         'present',
+        'absent',
         'Z',
         'V',
         'K',
@@ -640,6 +641,9 @@ alter table public.squad_attendance_records
 drop constraint if exists squad_attendance_records_planned_reason_check;
 
 alter table public.squad_attendance_records
+drop constraint if exists squad_attendance_records_final_status_check;
+
+alter table public.squad_attendance_records
 add constraint squad_attendance_records_planned_status_check
 check (
   planned_status is null
@@ -651,6 +655,13 @@ add constraint squad_attendance_records_planned_reason_check
 check (
   planned_reason is null
   or planned_reason in ('V', 'K', 'E', 'P', 'S', 'Z', 'U')
+);
+
+alter table public.squad_attendance_records
+add constraint squad_attendance_records_final_status_check
+check (
+  final_status is null
+  or final_status in ('present', 'absent', 'Z', 'V', 'K', 'E', 'P', 'S', 'U')
 );
 
 
