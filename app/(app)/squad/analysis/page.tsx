@@ -7,12 +7,14 @@ import { SquadNav } from "@/components/squad/squad-nav";
 import {
   analyticsPeriodLabels,
   coachAssessmentLabels,
+  defaultSortDirection,
   evidenceBadgeTone,
   formatPercent,
   formatRating,
   playerName,
   type AnalyticsPeriod,
   type AnalyticsPlayerTypeFilter,
+  type AnalyticsSortDirection,
   type AnalyticsSortKey,
   type PlayerAnalyticsRecord,
   type PlayerAnalyticsSummary
@@ -122,6 +124,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
               {filters.position ? <input type="hidden" name="position" value={filters.position} /> : null}
               {filters.ratedOnly ? <input type="hidden" name="ratedOnly" value="true" /> : null}
               {filters.sort !== "name" ? <input type="hidden" name="sort" value={filters.sort} /> : null}
+              {filters.direction !== defaultSortDirection(filters.sort) ? <input type="hidden" name="direction" value={filters.direction} /> : null}
               <label>
                 <span className="sr-only">Custom period from date</span>
                 <input
@@ -157,7 +160,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
             {analyticsPeriodLabels[filters.period]}
             {filters.period === "custom" && filters.customFrom && filters.customTo ? ` (${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)})` : ""}
             {" · "}
-            Sorted by {sortOptions.find((option) => option.id === filters.sort)?.label ?? "Name"}
+            Sorted by {sortOptions.find((option) => option.id === filters.sort)?.label ?? "Name"} {filters.direction === "asc" ? "ascending" : "descending"}
           </p>
           {activeFilters ? (
             <Link href="/squad/analysis" className="text-sm font-bold text-board-green underline-offset-4 hover:underline">
@@ -375,6 +378,7 @@ function SortableHeader({
     position?: string;
     ratedOnly: boolean;
     sort: AnalyticsSortKey;
+    direction: AnalyticsSortDirection;
     customFrom?: string;
     customTo?: string;
   };
@@ -382,9 +386,9 @@ function SortableHeader({
 }) {
   const active = sortKey === filters.sort;
   return (
-    <th aria-sort={active ? "descending" : "none"} className={cn("px-0 py-0 font-bold", active && "bg-green-50 text-board-green")}>
+    <th aria-sort={active ? (filters.direction === "asc" ? "ascending" : "descending") : "none"} className={cn("px-0 py-0 font-bold", active && "bg-green-50 text-board-green")}>
       <Link
-        href={hrefFor({ ...filters, sort: sortKey })}
+        href={hrefFor({ ...filters, sort: sortKey, direction: nextSortDirection(filters.sort, filters.direction, sortKey) })}
         className={cn(
           "flex min-h-11 items-center gap-1 px-3 py-3 underline-offset-4 hover:text-board-green hover:underline focus:outline-none focus:ring-4 focus:ring-green-100",
           align === "right" && "justify-end text-right"
@@ -393,6 +397,7 @@ function SortableHeader({
       >
         {label}
         <ArrowUpDown className={cn("h-3.5 w-3.5", active ? "opacity-100" : "opacity-35")} />
+        {active ? <span className="sr-only">Sorted {filters.direction === "asc" ? "ascending" : "descending"}</span> : null}
       </Link>
     </th>
   );
@@ -503,10 +508,18 @@ function countActiveFilters(filters: {
   position?: string;
   ratedOnly: boolean;
   sort: AnalyticsSortKey;
+  direction: AnalyticsSortDirection;
   customFrom?: string;
   customTo?: string;
 }) {
-  return Number(filters.period !== "season") + Number(filters.playerType !== "all") + Number(Boolean(filters.position)) + Number(filters.ratedOnly) + Number(filters.sort !== "name");
+  return (
+    Number(filters.period !== "season") +
+    Number(filters.playerType !== "all") +
+    Number(Boolean(filters.position)) +
+    Number(filters.ratedOnly) +
+    Number(filters.sort !== "name") +
+    Number(filters.direction !== defaultSortDirection(filters.sort))
+  );
 }
 
 function hrefFor(filters: {
@@ -515,6 +528,7 @@ function hrefFor(filters: {
   position?: string;
   ratedOnly: boolean;
   sort: AnalyticsSortKey;
+  direction: AnalyticsSortDirection;
   customFrom?: string;
   customTo?: string;
 }) {
@@ -528,6 +542,12 @@ function hrefFor(filters: {
   if (filters.position) params.set("position", filters.position);
   if (filters.ratedOnly) params.set("ratedOnly", "true");
   if (filters.sort !== "name") params.set("sort", filters.sort);
+  if (filters.direction !== defaultSortDirection(filters.sort)) params.set("direction", filters.direction);
   const query = params.toString();
   return query ? `/squad/analysis?${query}` : "/squad/analysis";
+}
+
+function nextSortDirection(currentSort: AnalyticsSortKey, currentDirection: AnalyticsSortDirection, nextSort: AnalyticsSortKey): AnalyticsSortDirection {
+  if (currentSort !== nextSort) return defaultSortDirection(nextSort);
+  return currentDirection === "asc" ? "desc" : "asc";
 }

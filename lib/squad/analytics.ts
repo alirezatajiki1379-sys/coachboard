@@ -10,6 +10,7 @@ import type {
 
 export type AnalyticsPeriod = "last5" | "last10" | "30d" | "90d" | "season" | "all" | "custom";
 export type AnalyticsPlayerTypeFilter = "all" | "roster" | "trial";
+export type AnalyticsSortDirection = "asc" | "desc";
 export type AnalyticsSortKey =
   | "name"
   | "position"
@@ -314,25 +315,31 @@ export function createPlayerAnalyticsSummary(
   };
 }
 
-export function sortPlayerAnalytics(summaries: PlayerAnalyticsSummary[], sort: AnalyticsSortKey) {
+export function defaultSortDirection(sort: AnalyticsSortKey): AnalyticsSortDirection {
+  return sort === "name" || sort === "position" || sort === "status" || sort === "coachAssessment" ? "asc" : "desc";
+}
+
+export function sortPlayerAnalytics(summaries: PlayerAnalyticsSummary[], sort: AnalyticsSortKey, direction: AnalyticsSortDirection = defaultSortDirection(sort)) {
+  const directionMultiplier = direction === "asc" ? 1 : -1;
   return [...summaries].sort((a, b) => {
-    if (sort === "position") return (a.player.position ?? "").localeCompare(b.player.position ?? "") || playerName(a.player).localeCompare(playerName(b.player));
-    if (sort === "status") return a.player.playerType.localeCompare(b.player.playerType) || playerName(a.player).localeCompare(playerName(b.player));
-    if (sort === "trainings") return b.trainings - a.trainings || playerName(a.player).localeCompare(playerName(b.player));
-    if (sort === "rated") return b.rated - a.rated || playerName(a.player).localeCompare(playerName(b.player));
-    if (sort === "average") return nullableDesc(a.averageRating, b.averageRating) || playerName(a.player).localeCompare(playerName(b.player));
-    if (sort === "latestFive") return nullableDesc(a.latestFiveAverage, b.latestFiveAverage) || playerName(a.player).localeCompare(playerName(b.player));
-    if (sort === "trend") return nullableDesc(a.trend.value, b.trend.value) || playerName(a.player).localeCompare(playerName(b.player));
-    if (sort === "attendance") return nullableDesc(a.attendanceRate, b.attendanceRate) || playerName(a.player).localeCompare(playerName(b.player));
-    if (sort === "reliability") return b.reliabilityPenalty - a.reliabilityPenalty || playerName(a.player).localeCompare(playerName(b.player));
+    const nameFallback = playerName(a.player).localeCompare(playerName(b.player));
+    if (sort === "position") return directionMultiplier * ((a.player.position ?? "").localeCompare(b.player.position ?? "")) || nameFallback;
+    if (sort === "status") return directionMultiplier * a.player.playerType.localeCompare(b.player.playerType) || nameFallback;
+    if (sort === "trainings") return directionMultiplier * (a.trainings - b.trainings) || nameFallback;
+    if (sort === "rated") return directionMultiplier * (a.rated - b.rated) || nameFallback;
+    if (sort === "average") return nullableCompare(a.averageRating, b.averageRating, direction) || nameFallback;
+    if (sort === "latestFive") return nullableCompare(a.latestFiveAverage, b.latestFiveAverage, direction) || nameFallback;
+    if (sort === "trend") return nullableCompare(a.trend.value, b.trend.value, direction) || nameFallback;
+    if (sort === "attendance") return nullableCompare(a.attendanceRate, b.attendanceRate, direction) || nameFallback;
+    if (sort === "reliability") return directionMultiplier * (a.reliabilityPenalty - b.reliabilityPenalty) || nameFallback;
     if (sort === "lastTraining") {
-      return (b.latestTraining?.event?.date ?? "").localeCompare(a.latestTraining?.event?.date ?? "") || playerName(a.player).localeCompare(playerName(b.player));
+      return directionMultiplier * (a.latestTraining?.event?.date ?? "").localeCompare(b.latestTraining?.event?.date ?? "") || nameFallback;
     }
-    if (sort === "evidence") return evidenceRank(b.evidenceBase.label) - evidenceRank(a.evidenceBase.label) || b.rated - a.rated || playerName(a.player).localeCompare(playerName(b.player));
+    if (sort === "evidence") return directionMultiplier * (evidenceRank(a.evidenceBase.label) - evidenceRank(b.evidenceBase.label)) || directionMultiplier * (a.rated - b.rated) || nameFallback;
     if (sort === "coachAssessment") {
-      return (a.assessment?.assessment ?? "decision_open").localeCompare(b.assessment?.assessment ?? "decision_open") || playerName(a.player).localeCompare(playerName(b.player));
+      return directionMultiplier * (a.assessment?.assessment ?? "decision_open").localeCompare(b.assessment?.assessment ?? "decision_open") || nameFallback;
     }
-    return playerName(a.player).localeCompare(playerName(b.player));
+    return directionMultiplier * nameFallback;
   });
 }
 
@@ -398,11 +405,11 @@ function trendLabel(value: number, fallback?: PerformanceTrend["label"]): Perfor
   return fallback ?? "Stable";
 }
 
-function nullableDesc(a: number | null, b: number | null) {
+function nullableCompare(a: number | null, b: number | null, direction: AnalyticsSortDirection) {
   if (a === null && b === null) return 0;
   if (a === null) return 1;
   if (b === null) return -1;
-  return b - a;
+  return direction === "asc" ? a - b : b - a;
 }
 
 function evidenceRank(label: EvidenceBase["label"]) {

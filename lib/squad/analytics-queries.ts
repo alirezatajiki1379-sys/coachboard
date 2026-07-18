@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
-import { createPlayerAnalyticsSummary, sortPlayerAnalytics, type AnalyticsPeriod, type AnalyticsPlayerTypeFilter, type AnalyticsSortKey, type PlayerAnalyticsRecord, type PlayerAnalyticsSummary } from "@/lib/squad/analytics";
+import { createPlayerAnalyticsSummary, defaultSortDirection, sortPlayerAnalytics, type AnalyticsPeriod, type AnalyticsPlayerTypeFilter, type AnalyticsSortDirection, type AnalyticsSortKey, type PlayerAnalyticsRecord, type PlayerAnalyticsSummary } from "@/lib/squad/analytics";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { Database } from "@/types/database";
 import type { PlayerCoachAssessment, SquadPlayer } from "@/types/domain";
@@ -15,6 +15,7 @@ export type AnalyticsFilters = {
   position?: string;
   ratedOnly: boolean;
   sort: AnalyticsSortKey;
+  direction: AnalyticsSortDirection;
   customFrom?: string;
   customTo?: string;
 };
@@ -23,6 +24,22 @@ export function parseAnalyticsFilters(searchParams: Record<string, string | stri
   const period = one(searchParams.period);
   const playerType = one(searchParams.playerType);
   const sort = one(searchParams.sort);
+  const parsedSort: AnalyticsSortKey =
+    sort === "position" ||
+    sort === "status" ||
+    sort === "trainings" ||
+    sort === "rated" ||
+    sort === "average" ||
+    sort === "latestFive" ||
+    sort === "trend" ||
+    sort === "attendance" ||
+    sort === "reliability" ||
+    sort === "lastTraining" ||
+    sort === "evidence" ||
+    sort === "coachAssessment"
+      ? sort
+      : "name";
+  const direction = one(searchParams.direction);
   return {
     period: period === "last5" || period === "last10" || period === "30d" || period === "90d" || period === "season" || period === "all" || period === "custom" ? period : "season",
     playerType: playerType === "roster" || playerType === "trial" ? playerType : "all",
@@ -30,21 +47,8 @@ export function parseAnalyticsFilters(searchParams: Record<string, string | stri
     ratedOnly: one(searchParams.ratedOnly) === "true",
     customFrom: normalizeDateParam(one(searchParams.from)),
     customTo: normalizeDateParam(one(searchParams.to)),
-    sort:
-      sort === "position" ||
-      sort === "status" ||
-      sort === "trainings" ||
-      sort === "rated" ||
-      sort === "average" ||
-      sort === "latestFive" ||
-      sort === "trend" ||
-      sort === "attendance" ||
-      sort === "reliability" ||
-      sort === "lastTraining" ||
-      sort === "evidence" ||
-      sort === "coachAssessment"
-        ? sort
-        : "name"
+    sort: parsedSort,
+    direction: direction === "asc" || direction === "desc" ? direction : defaultSortDirection(parsedSort)
   };
 }
 
@@ -83,7 +87,7 @@ export async function getSquadAnalyticsOverview(
     )
     .filter((summary) => (filters.ratedOnly ? summary.rated > 0 : true));
 
-  return { summaries: sortPlayerAnalytics(summaries, filters.sort), positions, seasonSettings };
+  return { summaries: sortPlayerAnalytics(summaries, filters.sort, filters.direction), positions, seasonSettings };
 }
 
 export async function getPlayerAnalytics(
