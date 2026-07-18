@@ -35,7 +35,7 @@ export function SessionActions({ sessionId, view = "active", compact = false }: 
       {view !== "trash" ? <form
         action={deleteSession}
         onSubmit={(event) => {
-          if (!window.confirm("Move this training session to Trash? The original drills will stay in your library.")) {
+          if (!window.confirm("Move this training plan to Trash? The original drills will stay in your library.")) {
             event.preventDefault();
           }
         }}
@@ -50,7 +50,7 @@ export function SessionActions({ sessionId, view = "active", compact = false }: 
         <form
           action={permanentlyDeleteSession}
           onSubmit={(event) => {
-            if (!window.confirm("Delete this training session permanently? This cannot be undone. Original drills will stay in your library.")) {
+            if (!window.confirm("Delete this training plan permanently? This cannot be undone. Original drills will stay in your library.")) {
               event.preventDefault();
             }
           }}

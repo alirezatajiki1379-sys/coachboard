@@ -45,7 +45,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
       <div className="no-print mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-board-line bg-white p-4">
         <Link href={`/sessions/${session.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
           <ArrowLeft className="h-4 w-4" />
-          Back to session
+          Back to training plan
         </Link>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary" className="flex-1 justify-center sm:flex-none">Edit session</ButtonLink>
@@ -59,7 +59,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-200">Football training plan</p>
             <h1 className="mt-2 text-3xl font-bold tracking-normal print:text-3xl sm:text-4xl">{session.title}</h1>
             <p className="mt-2 text-sm text-white/80">
-              {session.mainFocus || "Training session"}
+              {session.mainFocus || "Training plan"}
               {session.secondaryFocus ? ` · ${session.secondaryFocus}` : ""}
             </p>
           </div>
@@ -98,7 +98,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
         </section>
 
         {session.notes ? (
-          <PrintPanel title="Session notes">
+          <PrintPanel title="Training plan notes">
             <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{session.notes}</p>
           </PrintPanel>
         ) : null}
@@ -107,7 +107,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
           <div className="border-b border-board-line pb-3">
             <h2 className="text-2xl font-bold text-board-navy">Training timeline</h2>
             <p className="mt-1 text-sm text-slate-500">
-              {session.startTime ? "Times are shown as real clock ranges from the session start time." : "Times are shown as relative session ranges because no start time is set."}
+              {session.startTime ? "Times are shown as real clock ranges from the training plan start time." : "Times are shown as relative training plan ranges because no start time is set."}
             </p>
           </div>
 

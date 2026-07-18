@@ -406,7 +406,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
       </section>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-bold text-board-navy">Session details</h2>
+        <h2 className="text-lg font-bold text-board-navy">Training plan details</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <TextInput label="Title" required value={values.title} error={actionState.fieldErrors?.title} onChange={(value) => updateField("title", value)} />
           <TextInput label="Date" type="date" value={values.sessionDate} onChange={(value) => updateField("sessionDate", value)} />
@@ -425,7 +425,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
         <details>
           <summary className="cursor-pointer text-lg font-bold text-board-navy">Player groups</summary>
           <p className="mt-2 text-sm text-slate-500">
-            Player groups can be assigned to stations and rotated during the session. Notes can hold player names, levels, or quick coaching reminders.
+            Player groups can be assigned to stations and rotated during the training plan. Notes can hold player names, levels, or quick coaching reminders.
           </p>
           <div className="mt-4 space-y-3">
             {values.playerGroups.length ? (
@@ -455,7 +455,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-4 rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <h2 className="text-lg font-bold text-board-navy">Session drills</h2>
+            <h2 className="text-lg font-bold text-board-navy">Training plan drills</h2>
             <div className="text-sm font-semibold text-slate-600">
               {total} min {targetLabel ? `- ${targetLabel}` : ""}
             </div>
@@ -660,7 +660,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
           ) : (
             <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center">
               <p className="font-semibold text-board-navy">No drills added yet.</p>
-              <p className="mt-2 text-sm text-slate-500">Search your drill library and add the blocks for this session.</p>
+            <p className="mt-2 text-sm text-slate-500">Search your drill library and add the blocks for this training plan.</p>
             </div>
           )}
         </div>
@@ -698,7 +698,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-bold text-board-navy">Add drills from library</h2>
-        <p className="mt-1 text-sm text-slate-500">Only saved drills appear here. Create drills first, then add them to this session.</p>
+        <p className="mt-1 text-sm text-slate-500">Only saved drills appear here. Create drills first, then add them to this training plan.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-5">
           <label className="md:col-span-2">
             <span className="text-xs font-semibold text-slate-500">Search</span>
@@ -743,7 +743,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
         <ButtonLink href={session ? `/sessions/${session.id}` : "/sessions"} variant="secondary" className="justify-center">Cancel</ButtonLink>
         <Button type="submit" disabled={isPending} className="justify-center">
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {mode === "create" ? "Create session" : "Save session"}
+          {mode === "create" ? "Create training plan" : "Save training plan"}
         </Button>
       </div>
     </form>

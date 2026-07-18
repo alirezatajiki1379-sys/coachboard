@@ -11,7 +11,7 @@ export const en = {
   },
   actions: {
     createDrill: "Create new drill",
-    createSession: "Create new training session",
+    createSession: "Create new training plan",
     openLibrary: "Open drill library"
   }
 } as const;

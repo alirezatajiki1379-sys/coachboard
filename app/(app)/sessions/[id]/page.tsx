@@ -44,14 +44,14 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
     <div className="space-y-6">
       <Link href="/sessions" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
         <ArrowLeft className="h-4 w-4" />
-        Back to sessions
+        Back to training plans
       </Link>
 
       <section className="rounded-lg border border-board-line bg-white p-6 shadow-soft">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold uppercase text-board-green">{session.mainFocus || "Training session"}</p>
+              <p className="text-sm font-semibold uppercase text-board-green">{session.mainFocus || "Training plan"}</p>
               {view === "archived" ? <StatusBadge label="Archived" /> : null}
               {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
             </div>

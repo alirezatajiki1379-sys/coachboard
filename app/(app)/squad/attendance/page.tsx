@@ -28,7 +28,7 @@ export default async function AttendancePage() {
         </div>
         <ButtonLink href="/trainings/new" className="justify-center">
           <Plus className="h-4 w-4" />
-          New training event
+          New training
         </ButtonLink>
       </div>
 
@@ -39,10 +39,10 @@ export default async function AttendancePage() {
           events.map((event) => <TrainingEventCard key={event.id} event={event} attendance={event.attendance} hrefBase="/trainings" />)
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">No training events yet</h2>
+            <h2 className="text-lg font-bold text-board-navy">No trainings yet</h2>
             <p className="mt-2 text-sm text-slate-600">Create your first real training appointment, then add players for availability and check-in.</p>
             <ButtonLink href="/trainings/new" className="mt-5">
-              Create training event
+              Create training
             </ButtonLink>
           </div>
         )}

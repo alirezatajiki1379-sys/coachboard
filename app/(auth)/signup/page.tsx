@@ -8,7 +8,7 @@ export default function SignupPage() {
       <p className="text-sm font-semibold uppercase text-board-green">Start planning</p>
       <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Create your coach account</h1>
       <p className="mt-2 text-sm leading-6 text-slate-600">
-        Your drills and sessions are private to your Supabase user.
+        Your drills, trainings, and training plans are private to your Supabase user.
       </p>
       <div className="mt-6">
         <AuthForm mode="signup" action={signup} />

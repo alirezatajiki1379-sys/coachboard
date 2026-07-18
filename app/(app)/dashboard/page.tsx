@@ -72,10 +72,7 @@ export default async function DashboardPage() {
   const trainingEvents = sortTrainings(await listTrainingEventDetails(supabase, user.id));
   const today = new Date().toISOString().slice(0, 10);
   const nextTraining = trainingEvents.find((event) => event.date >= today);
-  const openRatings = trainingEvents.filter((event) => {
-    const { ratings } = trainingSummaryCounts(event);
-    return event.status === "rating_open" || (event.date < today && ratings.rateable > ratings.rated);
-  });
+  const openRatings = trainingEvents.filter((event) => event.status === "rating_open");
 
   const drills = (recentDrills.data ?? []) as RecentDrill[];
   const sessions = (recentSessions.data ?? []) as RecentSession[];

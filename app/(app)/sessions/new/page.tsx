@@ -17,8 +17,8 @@ export default async function NewSessionPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-semibold uppercase text-board-green">Create Training Session</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Build a session plan</h1>
+        <p className="text-sm font-semibold uppercase text-board-green">Create Training Plan</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Build a training plan</h1>
         <p className="mt-2 text-slate-600">Select drills, arrange the timeline, and calculate the equipment list.</p>
       </div>
       <SessionForm action={createSession} mode="create" drills={drills} />

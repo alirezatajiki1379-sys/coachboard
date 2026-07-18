@@ -1,5 +1,5 @@
 import type { SquadTrainingEventDetail } from "@/types/domain";
-import { calculateAttendanceForecast } from "@/lib/squad/attendance-utils";
+import { getFinalAttendanceSummary, getPlannedAttendanceSummary } from "@/lib/squad/attendance-utils";
 
 export type TrainingFilter = "all" | "upcoming" | "past" | "rating_open" | "completed" | "draft";
 
@@ -96,9 +96,10 @@ export function generateRecurringTrainingDates(input: RecurringTrainingInput) {
 }
 
 export function trainingSummaryCounts(event: SquadTrainingEventDetail) {
-  const attendance = calculateAttendanceForecast(event.attendance);
+  const plannedAttendance = getPlannedAttendanceSummary(event.attendance);
+  const finalAttendance = getFinalAttendanceSummary(event.attendance);
   const ratings = trainingRatingStats(event);
-  return { attendance, ratings };
+  return { attendance: { ...plannedAttendance, ...finalAttendance, confirmedTotal: plannedAttendance.expected }, plannedAttendance, finalAttendance, ratings };
 }
 
 function parseDateOnly(date: string) {
@@ -107,6 +108,10 @@ function parseDateOnly(date: string) {
   return { year, month, day };
 }
 
-function todayDateString() {
-  return new Date().toISOString().slice(0, 10);
+export function todayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

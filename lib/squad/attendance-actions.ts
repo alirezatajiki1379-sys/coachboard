@@ -320,7 +320,7 @@ export async function updateFinalAttendance(formData: FormData) {
     .update({
       final_status: finalStatus,
       late_minutes: lateMinutes,
-      late_penalty_applied: finalStatus === "Z" ? formData.get("latePenaltyApplied") !== "off" : true
+      late_penalty_applied: finalStatus === "Z" ? formData.get("latePenaltyApplied") === "on" : true
     })
     .eq("id", attendanceId)
     .eq("event_id", eventId)
@@ -338,7 +338,7 @@ export async function markAllExpectedPresent(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   const { error } = await db
     .from("squad_attendance_records")
-    .update({ final_status: "present" })
+    .update({ final_status: "present", late_minutes: null, late_penalty_applied: true })
     .eq("event_id", eventId)
     .eq("user_id", user.id)
     .is("final_status", null)
@@ -356,7 +356,7 @@ export async function markAllPresent(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   const { error } = await db
     .from("squad_attendance_records")
-    .update({ final_status: "present" })
+    .update({ final_status: "present", late_minutes: null, late_penalty_applied: true })
     .eq("event_id", eventId)
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);

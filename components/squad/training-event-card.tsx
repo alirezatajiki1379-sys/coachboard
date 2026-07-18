@@ -2,13 +2,13 @@ import Link from "next/link";
 import { CalendarDays, Clock, MapPin, Star, UsersRound } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
-import { formatDateLabel, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingTimeRange, weekdayLabel } from "@/lib/trainings/utils";
+import { formatDateLabel, todayDateString, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingTimeRange, weekdayLabel } from "@/lib/trainings/utils";
 import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
 
 export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/attendance" }: { event: SquadTrainingEvent; attendance?: SquadAttendanceEntry[]; hrefBase?: string }) {
   const counts = attendanceCounts(attendance);
   const ratings = trainingRatingStats({ ...event, attendance });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateString();
   const isPast = event.date < today || event.status === "completed" || event.status === "rating_open";
   const isLive = !isPast && (event.date === today || event.status === "in_progress");
   const unresolved = attendance.filter((entry) => !entry.finalStatus).length;

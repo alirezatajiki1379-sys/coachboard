@@ -4,7 +4,6 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import { CheckInActions, CheckInRow } from "@/components/squad/attendance-controls";
 import { attendanceCounts, eventTimeRange, eventTitle, formatEventDate } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
-import { isGoalkeeperPosition } from "@/lib/squad/attendance-utils";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -40,8 +39,6 @@ export default async function CheckInPage({ params, searchParams }: CheckInPageP
   const counts = attendanceCounts(event.attendance);
   const unresolved = event.attendance.filter((entry) => !entry.finalStatus).length;
   const presentEntries = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
-  const presentGoalkeepers = presentEntries.filter((entry) => isGoalkeeperPosition(entry.player?.position)).length;
-  const presentTrialPlayers = presentEntries.filter((entry) => entry.player?.playerType === "trial").length;
   const hasStarted = event.attendance.some((entry) => entry.finalStatus);
   const rawFilter = Array.isArray(query.view) ? query.view[0] : query.view;
   const selectedFilter = parseCheckInFilter(rawFilter, hasStarted && unresolved > 0 ? "unresolved" : "all");
@@ -92,7 +89,7 @@ export default async function CheckInPage({ params, searchParams }: CheckInPageP
         </div>
         {presentEntries.length ? (
           <p className="mt-3 text-xs font-semibold text-slate-500">
-            {presentGoalkeepers} GK present · {presentTrialPlayers} trial player{presentTrialPlayers === 1 ? "" : "s"} present
+            {counts.goalkeepersPresent} GK present · {counts.trialPlayersPresent} trial player{counts.trialPlayersPresent === 1 ? "" : "s"} present
           </p>
         ) : null}
         {event.attendance.length ? <div className="mt-4"><CheckInActions eventId={event.id} /></div> : null}

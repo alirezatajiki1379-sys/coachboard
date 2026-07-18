@@ -20,7 +20,7 @@ export default async function RatingsPage() {
       <div>
         <p className="text-sm font-semibold uppercase text-board-green">Squad</p>
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Ratings</h1>
-        <p className="mt-2 text-slate-600">Choose a training event to add optional performance ratings and notes.</p>
+        <p className="mt-2 text-slate-600">Choose a training to add optional performance ratings and notes.</p>
       </div>
       <SquadNav />
       <section className="space-y-3">
@@ -38,8 +38,8 @@ export default async function RatingsPage() {
           ))
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">No training events yet</h2>
-            <p className="mt-2 text-sm text-slate-600">Create an attendance event first, then ratings can be added after training.</p>
+            <h2 className="text-lg font-bold text-board-navy">No trainings yet</h2>
+            <p className="mt-2 text-sm text-slate-600">Create a training first, then ratings can be added after check-in.</p>
             <ButtonLink href="/trainings/new" className="mt-5">Create training</ButtonLink>
           </div>
         )}

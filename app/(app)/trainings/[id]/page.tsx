@@ -24,7 +24,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
 
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
-  const { attendance } = trainingSummaryCounts(event);
+  const { plannedAttendance, finalAttendance } = trainingSummaryCounts(event);
   const ratings = trainingRatingStats(event);
 
   return (
@@ -55,22 +55,22 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <Metric label="Expected" value={String(attendance.confirmedTotal)} />
-        <Metric label="Unavailable" value={String(attendance.unavailable)} />
-        <Metric label="Unclear" value={String(attendance.unclear)} />
-        <Metric label="Field players" value={String(attendance.fieldPlayers)} />
-        <Metric label="Goalkeepers" value={String(attendance.goalkeepers)} tone={attendance.goalkeepers === 0 ? "warning" : "normal"} />
-        <Metric label="Trial players" value={String(attendance.trialPlayers)} />
+        <Metric label="Expected" value={String(plannedAttendance.expected)} />
+        <Metric label="Unavailable" value={String(plannedAttendance.unavailable)} />
+        <Metric label="Unclear" value={String(plannedAttendance.unclear)} />
+        <Metric label="Field players" value={String(plannedAttendance.fieldPlayers)} />
+        <Metric label="Goalkeepers" value={String(plannedAttendance.goalkeepers)} tone={plannedAttendance.goalkeepers === 0 ? "warning" : "normal"} />
+        <Metric label="Trial players" value={String(plannedAttendance.trialPlayers)} />
       </section>
-      {attendance.goalkeepers === 0 ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">No goalkeeper expected.</p> : null}
+      {plannedAttendance.goalkeepers === 0 ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">No goalkeeper expected.</p> : null}
 
       <section className="grid gap-6 lg:grid-cols-2">
         <Panel title="Actual attendance" icon={<UsersRound className="h-5 w-5" />}>
           <MissingStatusesNotice entries={event.attendance} />
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <Metric label="Present" value={String(attendance.present)} />
-            <Metric label="Late" value={String(attendance.late)} />
-            <Metric label="Absent" value={String(attendance.absent)} />
+            <Metric label="Present" value={String(finalAttendance.present)} />
+            <Metric label="Late" value={String(finalAttendance.late)} />
+            <Metric label="Absent" value={String(finalAttendance.absent)} />
           </div>
           <ButtonLink href={`/trainings/${event.id}/check-in`} className="mt-4 justify-center">Open quick check-in</ButtonLink>
         </Panel>

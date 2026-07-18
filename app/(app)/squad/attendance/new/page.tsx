@@ -23,7 +23,7 @@ export default async function NewTrainingEventPage() {
       </Link>
       <div>
         <p className="text-sm font-semibold uppercase text-board-green">Attendance</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">New training event</h1>
+        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">New training</h1>
         <p className="mt-2 text-slate-600">Create the real appointment your players will attend.</p>
       </div>
       <TrainingEventForm sessions={sessions} />

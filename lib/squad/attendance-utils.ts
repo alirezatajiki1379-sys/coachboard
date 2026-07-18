@@ -26,19 +26,39 @@ export function isConfirmedAttending(entry: SquadAttendanceEntry) {
   return isExpectedFromPlannedStatus(entry);
 }
 
-export function calculateAttendanceForecast(entries: SquadAttendanceEntry[]) {
-  const expectedEntries = entries.filter(isConfirmedAttending);
+export function getPlannedAttendanceSummary(entries: SquadAttendanceEntry[]) {
+  const expectedEntries = entries.filter(isExpectedFromPlannedStatus);
   return {
-    expected: entries.filter(isExpectedFromPlannedStatus).length,
-    present: entries.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z").length,
-    absent: entries.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus)).length,
+    expected: expectedEntries.length,
     unavailable: entries.filter((entry) => entry.plannedStatus === "unavailable").length,
     unclear: entries.filter((entry) => entry.plannedStatus === "unclear").length,
-    confirmedTotal: expectedEntries.length,
     fieldPlayers: expectedEntries.filter((entry) => !isGoalkeeperPosition(entry.player?.position)).length,
     goalkeepers: expectedEntries.filter((entry) => isGoalkeeperPosition(entry.player?.position)).length,
     trialPlayers: expectedEntries.filter((entry) => entry.player?.playerType === "trial").length,
-    late: entries.filter((entry) => entry.finalStatus === "Z").length
+    total: entries.length
+  };
+}
+
+export function getFinalAttendanceSummary(entries: SquadAttendanceEntry[]) {
+  const presentEntries = entries.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
+  return {
+    present: presentEntries.length,
+    late: entries.filter((entry) => entry.finalStatus === "Z").length,
+    absent: entries.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus)).length,
+    unresolved: entries.filter((entry) => !entry.finalStatus).length,
+    goalkeepersPresent: presentEntries.filter((entry) => isGoalkeeperPosition(entry.player?.position)).length,
+    trialPlayersPresent: presentEntries.filter((entry) => entry.player?.playerType === "trial").length,
+    totalParticipants: entries.length
+  };
+}
+
+export function calculateAttendanceForecast(entries: SquadAttendanceEntry[]) {
+  const planned = getPlannedAttendanceSummary(entries);
+  const final = getFinalAttendanceSummary(entries);
+  return {
+    ...planned,
+    ...final,
+    confirmedTotal: planned.expected
   };
 }
 
