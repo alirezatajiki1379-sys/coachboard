@@ -378,7 +378,7 @@ create table if not exists public.squad_players (
     on delete cascade,
 
   first_name text not null,
-  last_name text not null,
+  last_name text,
 
   date_of_birth date,
   position text,
@@ -414,6 +414,9 @@ add column if not exists player_type text not null default 'roster';
 
 alter table public.squad_players
 add column if not exists converted_at timestamptz;
+
+alter table public.squad_players
+alter column last_name drop not null;
 
 
 -- Ungültige oder leere Werte bereinigen
@@ -502,7 +505,15 @@ create table if not exists public.squad_attendance_records (
       planned_status is null
       or planned_status in (
         'expected',
-        'unclear',
+        'unavailable',
+        'unclear'
+      )
+    ),
+
+  planned_reason text
+    check (
+      planned_reason is null
+      or planned_reason in (
         'V',
         'K',
         'E',
@@ -584,6 +595,34 @@ create table if not exists public.squad_attendance_records (
     event_id,
     player_id
   )
+);
+
+alter table public.squad_attendance_records
+add column if not exists planned_reason text;
+
+update public.squad_attendance_records
+set planned_reason = planned_status,
+    planned_status = 'unavailable'
+where planned_status in ('V', 'K', 'E', 'P', 'S', 'Z', 'U');
+
+alter table public.squad_attendance_records
+drop constraint if exists squad_attendance_records_planned_status_check;
+
+alter table public.squad_attendance_records
+drop constraint if exists squad_attendance_records_planned_reason_check;
+
+alter table public.squad_attendance_records
+add constraint squad_attendance_records_planned_status_check
+check (
+  planned_status is null
+  or planned_status in ('expected', 'unavailable', 'unclear')
+);
+
+alter table public.squad_attendance_records
+add constraint squad_attendance_records_planned_reason_check
+check (
+  planned_reason is null
+  or planned_reason in ('V', 'K', 'E', 'P', 'S', 'Z', 'U')
 );
 
 

@@ -13,6 +13,7 @@ import {
   updatePlannedAttendance
 } from "@/lib/squad/attendance-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
+import { attendanceReasonLabels } from "@/lib/squad/attendance-utils";
 import type { SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus } from "@/types/domain";
 
 const plannedButtons: Array<{ status: SquadPlannedAttendanceStatus; label: string; icon: typeof Check; className: string }> = [
@@ -57,11 +58,22 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
         })}
       </div>
       {entry.plannedStatus === "unavailable" ? (
-        <form action={updatePlannedAttendance} className="flex flex-col gap-2 sm:flex-row">
+        <form action={updatePlannedAttendance} className="grid gap-2 sm:grid-cols-[160px_1fr_auto]">
           <input type="hidden" name="eventId" value={eventId} />
           <input type="hidden" name="attendanceId" value={entry.id} />
           <input type="hidden" name="plannedStatus" value="unavailable" />
           <input type="hidden" name="returnTo" value={returnTo} />
+          <select
+            name="plannedReason"
+            defaultValue={entry.plannedReason ?? ""}
+            className="h-10 rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
+            aria-label="Unavailable reason"
+          >
+            <option value="">Reason optional</option>
+            {(["V", "K", "E", "P", "S"] as const).map((reason) => (
+              <option key={reason} value={reason}>{reason} · {attendanceReasonLabels[reason]}</option>
+            ))}
+          </select>
           <input
             name="plannedReasonNote"
             defaultValue={entry.plannedReasonNote ?? ""}
@@ -84,7 +96,17 @@ export function CheckInActions({ eventId }: { eventId: string }) {
       </form>
       <form action={markAllPresent}>
         <input type="hidden" name="eventId" value={eventId} />
-        <Button type="submit" className="h-10 px-3">Mark all present</Button>
+        <Button
+          type="submit"
+          className="h-10 px-3"
+          onClick={(event) => {
+            if (!window.confirm("Mark every player in this event as present? This can overwrite existing actual statuses.")) {
+              event.preventDefault();
+            }
+          }}
+        >
+          Mark all present
+        </Button>
       </form>
     </div>
   );

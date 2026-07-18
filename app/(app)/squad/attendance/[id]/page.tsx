@@ -4,7 +4,7 @@ import { ArrowLeft, UserPlus, UsersRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { CompleteEventButton, MarkAllExpectedButton, MissingStatusesNotice, PlannedAttendanceControls } from "@/components/squad/attendance-controls";
 import { addExistingTrialPlayerToEvent, addSquadPlayersToEvent, addTrialPlayerToEvent, convertTrialPlayerToSquadPlayer, removePlayerFromEvent } from "@/lib/squad/attendance-actions";
-import { attendanceCounts, attendanceDisplayName, eventTimeRange, eventTitle, finalStatusLabel, formatEventDate, plannedStatusLabel } from "@/lib/squad/attendance-format";
+import { attendanceCounts, attendanceDisplayName, eventTimeRange, eventTitle, finalStatusLabel, formatEventDate, plannedReasonLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail, listAvailableTrialPlayers } from "@/lib/squad/attendance-queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -112,6 +112,11 @@ export default async function TrainingEventPage({ params }: EventPageProps) {
                   <p className="mt-1 text-sm text-slate-500">
                     Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
                   </p>
+                  {entry.plannedReason || entry.plannedReasonNote ? (
+                    <p className="mt-1 text-sm text-slate-600">
+                      Reason: {[entry.plannedReason, plannedReasonLabel(entry.plannedReason), entry.plannedReasonNote].filter(Boolean).join(" · ")}
+                    </p>
+                  ) : null}
                 </div>
                 <PlannedAttendanceControls entry={entry} eventId={event.id} returnTo={`/squad/attendance/${event.id}`} />
                 <div className="flex flex-wrap gap-2">

@@ -181,7 +181,7 @@ export type TrainingSession = {
 export type SquadPlayer = {
   id: string;
   userId: string;
-  playerType: "permanent" | "trial";
+  playerType: "roster" | "trial";
   firstName: string;
   lastName?: string;
   dateOfBirth?: string;
@@ -203,6 +203,7 @@ export type SquadPlayer = {
 
 export type SquadTrainingEventStatus = "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
 export type SquadPlannedAttendanceStatus = "expected" | "unavailable" | "unclear";
+export type SquadAttendanceReason = "V" | "K" | "E" | "P" | "S" | "Z" | "U";
 export type SquadFinalAttendanceStatus = "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
 
 export type SquadTrialPlayer = {
@@ -222,6 +223,7 @@ export type SquadAttendanceEntry = {
   eventId: string;
   playerId: string;
   plannedStatus?: SquadPlannedAttendanceStatus;
+  plannedReason?: SquadAttendanceReason;
   plannedReasonNote?: string;
   finalStatus?: SquadFinalAttendanceStatus;
   lateMinutes?: number;

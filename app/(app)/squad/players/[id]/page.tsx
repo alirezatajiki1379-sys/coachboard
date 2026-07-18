@@ -7,7 +7,7 @@ import { PlayerActions } from "@/components/squad/player-actions";
 import { createClient } from "@/lib/supabase/server";
 import { getSquadPlayer, getSquadPlayerTrainingHistory } from "@/lib/squad/queries";
 import { formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
-import { finalStatusLabel, formatEventDate, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
+import { finalStatusLabel, formatEventDate, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
 
 type PlayerDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -106,6 +106,9 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
                     <p className="mt-1 text-sm text-slate-600">
                       Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
                       {entry.overallRating ? ` · Rating: ${entry.overallRating}` : ""}
+                      {entry.plannedReason ? ` · Reason: ${entry.plannedReason} ${plannedReasonLabel(entry.plannedReason)}` : ""}
+                      {entry.lateMinutes ? ` · Late: ${entry.lateMinutes} min` : ""}
+                      {` · Malus: ${reliabilityMalus(entry)}`}
                     </p>
                   </div>
                   {entry.sensitiveNote ? <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-700">Sensitive note</span> : null}

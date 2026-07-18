@@ -234,7 +234,7 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
-          player_type: "permanent" | "trial";
+          player_type: "roster" | "trial";
           first_name: string;
           last_name: string | null;
           date_of_birth: string | null;
@@ -256,7 +256,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
-          player_type?: "permanent" | "trial";
+          player_type?: "roster" | "trial";
           first_name: string;
           last_name?: string | null;
           date_of_birth?: string | null;
@@ -341,6 +341,7 @@ export type Database = {
           event_id: string;
           player_id: string;
           planned_status: "expected" | "unavailable" | "unclear" | null;
+          planned_reason: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | null;
           planned_reason_note: string | null;
           final_status: "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
           late_minutes: number | null;
@@ -362,6 +363,7 @@ export type Database = {
           event_id: string;
           player_id: string;
           planned_status?: "expected" | "unavailable" | "unclear" | null;
+          planned_reason?: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | null;
           planned_reason_note?: string | null;
           final_status?: "present" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
           late_minutes?: number | null;

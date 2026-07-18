@@ -13,7 +13,7 @@ export function mapSquadPlayerRow(row: SquadPlayerRow): SquadPlayer {
   return {
     id: row.id,
     userId: row.user_id,
-    playerType: row.player_type ?? "permanent",
+    playerType: row.player_type ?? "roster",
     firstName: row.first_name,
     lastName: row.last_name ?? undefined,
     dateOfBirth: optional(row.date_of_birth),

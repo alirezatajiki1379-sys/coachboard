@@ -1,4 +1,5 @@
 import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
+import { attendanceReasonLabels, calculateAttendanceForecast, calculateReliabilityPenalty } from "@/lib/squad/attendance-utils";
 
 export function formatEventDate(value: string) {
   const [year, month, day] = value.split("-");
@@ -20,26 +21,18 @@ export function attendanceDisplayName(entry: SquadAttendanceEntry) {
 }
 
 export function attendanceCounts(entries: SquadAttendanceEntry[]) {
-  const isAttending = (entry: SquadAttendanceEntry) => entry.finalStatus === "present" || entry.finalStatus === "Z" || (!entry.finalStatus && entry.plannedStatus === "expected");
-  return {
-    expected: entries.filter((entry) => entry.plannedStatus === "expected").length,
-    present: entries.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z").length,
-    absent: entries.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus)).length,
-    unavailable: entries.filter((entry) => entry.plannedStatus === "unavailable").length,
-    unclear: entries.filter((entry) => entry.plannedStatus === "unclear").length,
-    confirmedTotal: entries.filter(isAttending).length,
-    fieldPlayers: entries.filter((entry) => isAttending(entry) && entry.player?.position?.toLowerCase() !== "goalkeeper").length,
-    goalkeepers: entries.filter((entry) => isAttending(entry) && entry.player?.position?.toLowerCase() === "goalkeeper").length,
-    trialPlayers: entries.filter((entry) => isAttending(entry) && entry.player?.playerType === "trial").length,
-    late: entries.filter((entry) => entry.finalStatus === "Z").length
-  };
+  return calculateAttendanceForecast(entries);
 }
 
 export function plannedStatusLabel(status?: SquadAttendanceEntry["plannedStatus"]) {
   if (status === "expected") return "Expected";
   if (status === "unavailable") return "Unavailable";
   if (status === "unclear") return "Unclear";
-  return "Not planned";
+  return "Expected";
+}
+
+export function plannedReasonLabel(reason?: SquadAttendanceEntry["plannedReason"]) {
+  return reason ? attendanceReasonLabels[reason] : "";
 }
 
 export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"]) {
@@ -57,10 +50,5 @@ export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"]) {
 }
 
 export function reliabilityMalus(entry: SquadAttendanceEntry) {
-  if (!entry.finalStatus || entry.finalStatus === "present" || ["V", "K", "E"].includes(entry.finalStatus)) return 0;
-  if (entry.finalStatus === "Z") return entry.latePenaltyApplied ? -0.5 : 0;
-  if (entry.finalStatus === "P") return -0.5;
-  if (entry.finalStatus === "S") return -1;
-  if (entry.finalStatus === "U") return -2;
-  return 0;
+  return calculateReliabilityPenalty(entry);
 }

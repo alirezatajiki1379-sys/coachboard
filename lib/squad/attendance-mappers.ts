@@ -30,6 +30,7 @@ export function mapAttendanceRow(row: SquadAttendanceRow, player?: SquadPlayerRo
     eventId: row.event_id,
     playerId: row.player_id,
     plannedStatus: row.planned_status ?? undefined,
+    plannedReason: row.planned_reason ?? undefined,
     plannedReasonNote: row.planned_reason_note ?? undefined,
     finalStatus: row.final_status ?? undefined,
     lateMinutes: row.late_minutes ?? undefined,

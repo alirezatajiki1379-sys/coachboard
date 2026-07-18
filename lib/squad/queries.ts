@@ -23,7 +23,7 @@ export async function listSquadPlayers(
     .from("squad_players")
     .select("*")
     .eq("user_id", userId)
-    .eq("player_type", "permanent")
+    .eq("player_type", "roster")
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
 

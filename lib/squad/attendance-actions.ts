@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
 
 export type TrainingEventActionState = {
   error?: string;
@@ -20,6 +21,7 @@ export type TrainingEventActionState = {
 };
 
 const plannedStatuses = ["expected", "unavailable", "unclear"] as const;
+const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U"] as const;
 const finalStatuses = ["present", "Z", "V", "K", "E", "P", "S", "U"] as const;
 
 async function requireUser() {
@@ -77,6 +79,7 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
   const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
   if (!values.date) fieldErrors.date = "Choose the training date.";
   if (!values.startTime) fieldErrors.startTime = "Add the start time.";
+  if (values.endTime && values.startTime && values.endTime < values.startTime) fieldErrors.startTime = "End time cannot be before the start time.";
 
   if (Object.keys(fieldErrors).length) {
     return { error: "Please fix the highlighted event details.", fieldErrors, values, submissionId: Date.now() };
@@ -113,7 +116,7 @@ export async function addSquadPlayersToEvent(formData: FormData) {
     .from("squad_players")
     .select("id")
     .eq("user_id", user.id)
-    .eq("player_type", "permanent")
+    .eq("player_type", "roster")
     .is("archived_at", null);
   if (playersError) throw new Error(playersError.message);
 
@@ -204,6 +207,11 @@ export async function updatePlannedAttendance(formData: FormData) {
   const attendanceId = formString(formData, "attendanceId");
   const plannedStatus = formString(formData, "plannedStatus");
   if (!plannedStatuses.includes(plannedStatus as (typeof plannedStatuses)[number])) redirect(eventPath(eventId));
+  const plannedReason = formString(formData, "plannedReason");
+  const safeReason =
+    plannedStatus === "unavailable" && plannedReasons.includes(plannedReason as (typeof plannedReasons)[number])
+      ? plannedReason
+      : null;
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
@@ -211,6 +219,7 @@ export async function updatePlannedAttendance(formData: FormData) {
     .from("squad_attendance_records")
     .update({
       planned_status: plannedStatus,
+      planned_reason: safeReason,
       planned_reason_note: plannedStatus === "unavailable" ? optional(formString(formData, "plannedReasonNote")) : null
     })
     .eq("id", attendanceId)
@@ -229,7 +238,7 @@ export async function markAllExpected(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   const { error } = await db
     .from("squad_attendance_records")
-    .update({ planned_status: "expected", planned_reason_note: null })
+    .update({ planned_status: "expected", planned_reason: null, planned_reason_note: null })
     .eq("event_id", eventId)
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);
@@ -253,7 +262,7 @@ export async function updateFinalAttendance(formData: FormData) {
     .update({
       final_status: finalStatus,
       late_minutes: lateMinutes,
-      late_penalty_applied: formData.get("latePenaltyApplied") !== "off"
+      late_penalty_applied: finalStatus === "Z" ? formData.get("latePenaltyApplied") !== "off" : true
     })
     .eq("id", attendanceId)
     .eq("event_id", eventId)
@@ -274,8 +283,8 @@ export async function markAllExpectedPresent(formData: FormData) {
     .update({ final_status: "present" })
     .eq("event_id", eventId)
     .eq("user_id", user.id)
-    .eq("planned_status", "expected")
-    .is("final_status", null);
+    .is("final_status", null)
+    .or("planned_status.is.null,planned_status.eq.expected");
   if (error) throw new Error(error.message);
 
   await markEventInProgress(db, user.id, eventId);
@@ -306,9 +315,8 @@ export async function updateAttendanceRating(formData: FormData) {
   const ratingGameUnderstanding = boundedRating(formString(formData, "ratingGameUnderstanding"));
   const ratingIntensity = boundedRating(formString(formData, "ratingIntensity"));
   const ratingBehavior = boundedRating(formString(formData, "ratingBehavior"));
-  const categoryRatings = [ratingTechnique, ratingGameUnderstanding, ratingIntensity, ratingBehavior].filter((value): value is number => value !== null);
-  const suggestion = categoryRatings.length ? Math.round(categoryRatings.reduce((sum, value) => sum + value, 0) / categoryRatings.length) : null;
-  const overallRating = boundedRating(formString(formData, "overallRating")) ?? suggestion;
+  const suggestion = calculateSuggestedOverallRating([ratingTechnique, ratingGameUnderstanding, ratingIntensity, ratingBehavior]);
+  const overallRating = boundedRating(formString(formData, "overallRating"));
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
@@ -364,7 +372,7 @@ export async function convertTrialPlayerToSquadPlayer(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   const { error } = await db
     .from("squad_players")
-    .update({ player_type: "permanent", converted_at: new Date().toISOString() })
+    .update({ player_type: "roster", converted_at: new Date().toISOString() })
     .eq("id", playerId)
     .eq("user_id", user.id)
     .eq("player_type", "trial");
