@@ -13,11 +13,16 @@ export function mapTrainingEventRow(row: SquadTrainingEventRow, linkedTitle?: st
     startTime: row.start_time.slice(0, 5),
     endTime: row.end_time?.slice(0, 5) ?? undefined,
     label: row.label ?? undefined,
+    location: row.location ?? undefined,
+    focus: row.focus ?? undefined,
+    seasonLabel: row.season_label ?? undefined,
     linkedTrainingSessionId: row.linked_training_session_id ?? undefined,
     linkedTrainingSessionTitle: linkedTitle,
     status: row.status,
     generalNotes: row.general_notes ?? undefined,
     completedAt: row.completed_at ?? undefined,
+    archivedAt: row.archived_at ?? undefined,
+    deletedAt: row.deleted_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

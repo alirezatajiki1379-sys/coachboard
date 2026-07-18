@@ -5,15 +5,18 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
+import { generateRecurringTrainingDates, seasonLabelForDate } from "@/lib/trainings/utils";
 
 export type TrainingEventActionState = {
   error?: string;
-  fieldErrors?: Partial<Record<"date" | "startTime" | "label", string>>;
+  fieldErrors?: Partial<Record<"date" | "startTime" | "endDate" | "label", string>>;
   values?: {
     date: string;
     startTime: string;
     endTime: string;
     label: string;
+    location: string;
+    focus: string;
     linkedTrainingSessionId: string;
     generalNotes: string;
   };
@@ -73,6 +76,8 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
     startTime: formString(formData, "startTime"),
     endTime: formString(formData, "endTime"),
     label: formString(formData, "label"),
+    location: formString(formData, "location"),
+    focus: formString(formData, "focus"),
     linkedTrainingSessionId: formString(formData, "linkedTrainingSessionId"),
     generalNotes: formString(formData, "generalNotes")
   };
@@ -95,6 +100,9 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
       start_time: values.startTime,
       end_time: optional(values.endTime),
       label: optional(values.label),
+      location: optional(values.location),
+      focus: optional(values.focus),
+      season_label: seasonLabelForDate(values.date),
       linked_training_session_id: optional(values.linkedTrainingSessionId),
       general_notes: optional(values.generalNotes),
       status: "draft"
@@ -104,8 +112,58 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
 
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
+  revalidatePath("/trainings");
   revalidatePath("/squad/attendance");
-  redirect(data?.id ? eventPath(data.id) : "/squad/attendance");
+  redirect(data?.id ? `/trainings/${data.id}` : "/trainings");
+}
+
+export async function createRecurringTrainingEvents(_: TrainingEventActionState, formData: FormData): Promise<TrainingEventActionState> {
+  const values = {
+    date: formString(formData, "date"),
+    startTime: formString(formData, "startTime"),
+    endTime: formString(formData, "endTime"),
+    label: formString(formData, "label"),
+    location: formString(formData, "location"),
+    focus: formString(formData, "focus"),
+    linkedTrainingSessionId: "",
+    generalNotes: formString(formData, "generalNotes")
+  };
+  const endDate = formString(formData, "endDate");
+  const intervalWeeks = formString(formData, "intervalWeeks") === "2" ? 2 : 1;
+  const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
+  if (!values.date) fieldErrors.date = "Choose the first training date.";
+  if (!endDate) fieldErrors.endDate = "Choose the end date.";
+  if (!values.startTime) fieldErrors.startTime = "Add the start time.";
+  if (values.endTime && values.startTime && values.endTime < values.startTime) fieldErrors.startTime = "End time cannot be before the start time.";
+
+  const dates = generateRecurringTrainingDates({ startDate: values.date, endDate, intervalWeeks });
+  if (!dates.length && !Object.keys(fieldErrors).length) fieldErrors.endDate = "The series does not contain any training dates.";
+
+  if (Object.keys(fieldErrors).length) {
+    return { error: "Please fix the highlighted series details.", fieldErrors, values, submissionId: Date.now() };
+  }
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const rows = dates.map((date) => ({
+    user_id: user.id,
+    date,
+    start_time: values.startTime,
+    end_time: optional(values.endTime),
+    label: optional(values.label),
+    location: optional(values.location),
+    focus: optional(values.focus),
+    season_label: seasonLabelForDate(date),
+    general_notes: optional(values.generalNotes),
+    status: "draft"
+  }));
+
+  const { error } = await db.from("squad_training_events").insert(rows);
+  if (error) return { error: error.message, values, submissionId: Date.now() };
+
+  revalidatePath("/trainings");
+  revalidatePath("/squad/attendance");
+  redirect("/trainings");
 }
 
 export async function addSquadPlayersToEvent(formData: FormData) {

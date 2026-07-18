@@ -248,11 +248,17 @@ export type SquadTrainingEvent = {
   startTime: string;
   endTime?: string;
   label?: string;
+  location?: string;
+  focus?: string;
+  seasonLabel?: string;
   linkedTrainingSessionId?: string;
   linkedTrainingSessionTitle?: string;
+  linkedTrainingSessionDuration?: number;
   status: SquadTrainingEventStatus;
   generalNotes?: string;
   completedAt?: string;
+  archivedAt?: string;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };

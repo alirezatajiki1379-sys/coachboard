@@ -5,6 +5,8 @@ import { ButtonLink } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { createClient } from "@/lib/supabase/server";
 import { en } from "@/lib/i18n/en";
+import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
+import { sortTrainings, trainingDisplayTitle, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
 
 type RecentDrill = {
   id: string;
@@ -67,6 +69,13 @@ export default async function DashboardPage() {
       .order("updated_at", { ascending: false })
       .limit(5)
   ]);
+  const trainingEvents = sortTrainings(await listTrainingEventDetails(supabase, user.id));
+  const today = new Date().toISOString().slice(0, 10);
+  const nextTraining = trainingEvents.find((event) => event.date >= today);
+  const openRatings = trainingEvents.filter((event) => {
+    const { ratings } = trainingSummaryCounts(event);
+    return event.status === "rating_open" || (event.date < today && ratings.rateable > ratings.rated);
+  });
 
   const drills = (recentDrills.data ?? []) as RecentDrill[];
   const sessions = (recentSessions.data ?? []) as RecentSession[];
@@ -86,7 +95,7 @@ export default async function DashboardPage() {
             Welcome back, Coach
           </h1>
           <p className="mt-2 max-w-2xl text-slate-600">
-            Build reusable drills, assemble training sessions, and keep material planning under control.
+            Plan concrete trainings, prepare attendance, rate players, and build reusable training plans.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -94,9 +103,9 @@ export default async function DashboardPage() {
             <Dumbbell className="h-4 w-4" />
             {en.actions.createDrill}
           </ButtonLink>
-          <ButtonLink href="/sessions/new" variant="secondary">
+          <ButtonLink href="/trainings/new" variant="secondary">
             <CalendarPlus className="h-4 w-4" />
-            {en.actions.createSession}
+            Create training
           </ButtonLink>
           <ButtonLink href="/drills" variant="secondary">
             <LibraryBig className="h-4 w-4" />
@@ -104,10 +113,29 @@ export default async function DashboardPage() {
           </ButtonLink>
           <ButtonLink href="/sessions" variant="secondary">
             <CalendarDays className="h-4 w-4" />
-            Sessions
+            Training plans
           </ButtonLink>
         </div>
       </section>
+
+      {nextTraining ? (
+        <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase text-board-green">Next training</p>
+              <h2 className="mt-1 text-2xl font-bold text-board-navy">{trainingDisplayTitle(nextTraining)}</h2>
+              <p className="mt-2 text-sm text-slate-600">{nextTraining.date} · {trainingTimeRange(nextTraining)}{nextTraining.location ? ` · ${nextTraining.location}` : ""}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-700">
+                {trainingSummaryCounts(nextTraining).attendance.confirmedTotal} expected · {trainingSummaryCounts(nextTraining).attendance.unavailable} unavailable · {trainingSummaryCounts(nextTraining).attendance.goalkeepers} GK · {trainingSummaryCounts(nextTraining).attendance.trialPlayers} trial · {nextTraining.linkedTrainingSessionId ? "Plan available" : "No plan"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <ButtonLink href={`/trainings/${nextTraining.id}`} variant="secondary" className="justify-center">Open</ButtonLink>
+              <ButtonLink href={`/trainings/${nextTraining.id}/check-in`} className="justify-center">Check-in</ButtonLink>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -180,9 +208,9 @@ export default async function DashboardPage() {
 
         <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-board-navy">Recent training sessions</h2>
+            <h2 className="text-lg font-bold text-board-navy">Recent training plans</h2>
             <ButtonLink href="/sessions" variant="ghost" className="h-9 px-3">
-              View sessions
+              View plans
             </ButtonLink>
           </div>
           <div className="space-y-3">
@@ -207,13 +235,39 @@ export default async function DashboardPage() {
             ) : (
               <div className="rounded-md border border-dashed border-board-line p-5">
                 <p className="text-sm text-slate-500">
-                  No sessions yet. Add a few drills, then create a session to build the training timeline and material list.
+                  No training plans yet. Add a few drills, then create a plan to build the timeline and material list.
                 </p>
                 <ButtonLink href="/sessions/new" variant="secondary" className="mt-4 h-9 justify-center px-3">
                   <CalendarPlus className="h-4 w-4" />
-                  Create session
+                  Create plan
                 </ButtonLink>
               </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-board-navy">Open rating work</h2>
+            <ButtonLink href="/trainings?view=rating_open" variant="ghost" className="h-9 px-3">
+              View
+            </ButtonLink>
+          </div>
+          <div className="space-y-3">
+            {openRatings.length ? (
+              openRatings.slice(0, 4).map((event) => {
+                const summary = trainingSummaryCounts(event);
+                return (
+                  <div key={event.id} className="rounded-md border border-board-line p-4">
+                    <Link href={`/trainings/${event.id}`} className="font-semibold text-board-navy hover:text-board-green">
+                      {trainingDisplayTitle(event)}
+                    </Link>
+                    <p className="mt-1 text-sm text-slate-500">{event.date} · {summary.ratings.rated} of {summary.ratings.rateable} rated</p>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">No open rating work right now.</p>
             )}
           </div>
         </div>

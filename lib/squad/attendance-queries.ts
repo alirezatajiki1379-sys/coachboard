@@ -14,20 +14,26 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type LinkedSessionRow = {
   id: string;
   title: string;
+  duration_target_minutes?: number | null;
 };
 
 export async function listTrainingEvents(supabase: SupabaseServerClient, userId: string): Promise<SquadTrainingEvent[]> {
   const db = supabase as unknown as SupabaseClient;
   const { data, error } = await db
     .from("squad_training_events")
-    .select("*, training_sessions(id, title)")
+    .select("*, training_sessions(id, title, duration_target_minutes)")
     .eq("user_id", userId)
+    .is("archived_at", null)
+    .is("deleted_at", null)
     .order("date", { ascending: false })
     .order("start_time", { ascending: false });
 
   if (error) throw new Error(error.message);
   return ((data ?? []) as Array<SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }>).map((row) =>
-    mapTrainingEventRow(row, row.training_sessions?.title)
+    {
+      const mapped = mapTrainingEventRow(row, row.training_sessions?.title);
+      return { ...mapped, linkedTrainingSessionDuration: row.training_sessions?.duration_target_minutes ?? undefined };
+    }
   );
 }
 
@@ -62,7 +68,7 @@ export async function getTrainingEventDetail(
   const db = supabase as unknown as SupabaseClient;
   const { data: eventData, error } = await db
     .from("squad_training_events")
-    .select("*, training_sessions(id, title)")
+    .select("*, training_sessions(id, title, duration_target_minutes)")
     .eq("user_id", userId)
     .eq("id", eventId)
     .maybeSingle();
@@ -90,7 +96,8 @@ export async function getTrainingEventDetail(
     (eventData as SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }).training_sessions?.title
   );
 
-  return { ...event, attendance };
+  const linked = (eventData as SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }).training_sessions;
+  return { ...event, linkedTrainingSessionDuration: linked?.duration_target_minutes ?? undefined, attendance };
 }
 
 export async function getLinkableTrainingSessions(supabase: SupabaseServerClient, userId: string): Promise<LinkedSessionRow[]> {

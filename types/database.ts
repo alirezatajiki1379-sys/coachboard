@@ -13,6 +13,8 @@ export type Database = {
           default_pitch_background: string | null;
           pdf_branding_name: string | null;
           logo_url: string | null;
+          season_start_month: number;
+          season_start_day: number;
           created_at: string;
           updated_at: string;
         };
@@ -25,6 +27,8 @@ export type Database = {
           default_pitch_background?: string | null;
           pdf_branding_name?: string | null;
           logo_url?: string | null;
+          season_start_month?: number;
+          season_start_day?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -278,30 +282,6 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["squad_players"]["Insert"]>;
         Relationships: [];
       };
-      squad_trial_players: {
-        Row: {
-          id: string;
-          user_id: string;
-          display_name: string;
-          contact: string | null;
-          notes: string | null;
-          converted_player_id: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          display_name: string;
-          contact?: string | null;
-          notes?: string | null;
-          converted_player_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["squad_trial_players"]["Insert"]>;
-        Relationships: [];
-      };
       squad_training_events: {
         Row: {
           id: string;
@@ -310,12 +290,17 @@ export type Database = {
           start_time: string;
           end_time: string | null;
           label: string | null;
+          location: string | null;
+          focus: string | null;
+          season_label: string | null;
           linked_training_session_id: string | null;
           status: "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
           general_notes: string | null;
           created_at: string;
           updated_at: string;
           completed_at: string | null;
+          archived_at: string | null;
+          deleted_at: string | null;
         };
         Insert: {
           id?: string;
@@ -324,12 +309,17 @@ export type Database = {
           start_time: string;
           end_time?: string | null;
           label?: string | null;
+          location?: string | null;
+          focus?: string | null;
+          season_label?: string | null;
           linked_training_session_id?: string | null;
           status?: "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
           general_notes?: string | null;
           created_at?: string;
           updated_at?: string;
           completed_at?: string | null;
+          archived_at?: string | null;
+          deleted_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["squad_training_events"]["Insert"]>;
         Relationships: [];

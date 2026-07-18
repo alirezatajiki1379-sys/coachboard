@@ -40,7 +40,7 @@ export default async function RatingsPage() {
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
             <h2 className="text-lg font-bold text-board-navy">No training events yet</h2>
             <p className="mt-2 text-sm text-slate-600">Create an attendance event first, then ratings can be added after training.</p>
-            <ButtonLink href="/squad/attendance/new" className="mt-5">Create event</ButtonLink>
+            <ButtonLink href="/trainings/new" className="mt-5">Create training</ButtonLink>
           </div>
         )}
       </section>

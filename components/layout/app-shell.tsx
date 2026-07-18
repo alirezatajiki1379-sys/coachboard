@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { BarChart3, CalendarDays, Dumbbell, LayoutDashboard, Settings, UsersRound } from "lucide-react";
+import { BarChart3, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Settings, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { en } from "@/lib/i18n/en";
 
 const navItems = [
   { href: "/dashboard", label: en.nav.dashboard, icon: LayoutDashboard },
+  { href: "/trainings", label: en.nav.trainings, icon: CalendarDays },
+  { href: "/sessions", label: en.nav.trainingPlans, icon: ClipboardList },
   { href: "/drills", label: en.nav.drills, icon: Dumbbell },
-  { href: "/sessions", label: en.nav.sessions, icon: CalendarDays },
   { href: "/squad", label: en.nav.squad, icon: UsersRound },
   { href: "/settings", label: en.nav.settings, icon: Settings }
 ];

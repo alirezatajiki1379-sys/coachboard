@@ -66,10 +66,28 @@ create table if not exists public.profiles (
   default_pitch_background text,
   pdf_branding_name text,
   logo_url text,
+  season_start_month integer not null default 7 check (season_start_month between 1 and 12),
+  season_start_day integer not null default 1 check (season_start_day between 1 and 31),
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+add column if not exists season_start_month integer not null default 7,
+add column if not exists season_start_day integer not null default 1;
+
+alter table public.profiles
+drop constraint if exists profiles_season_start_month_check;
+
+alter table public.profiles
+drop constraint if exists profiles_season_start_day_check;
+
+alter table public.profiles
+add constraint profiles_season_start_month_check check (season_start_month between 1 and 12);
+
+alter table public.profiles
+add constraint profiles_season_start_day_check check (season_start_day between 1 and 31);
 
 
 -- =========================================================
@@ -456,6 +474,9 @@ create table if not exists public.squad_training_events (
   end_time time,
 
   label text,
+  location text,
+  focus text,
+  season_label text,
 
   linked_training_session_id uuid
     references public.training_sessions(id)
@@ -478,6 +499,13 @@ create table if not exists public.squad_training_events (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.squad_training_events
+add column if not exists location text,
+add column if not exists focus text,
+add column if not exists season_label text,
+add column if not exists archived_at timestamptz,
+add column if not exists deleted_at timestamptz;
 
 
 -- =========================================================
@@ -729,6 +757,13 @@ create index if not exists squad_training_events_user_id_status_idx
 on public.squad_training_events (
   user_id,
   status
+);
+
+create index if not exists squad_training_events_user_id_archived_deleted_idx
+on public.squad_training_events (
+  user_id,
+  archived_at,
+  deleted_at
 );
 
 create index if not exists squad_training_events_linked_session_idx

@@ -2,9 +2,11 @@ export const en = {
   appName: "CoachBoard",
   nav: {
     dashboard: "Dashboard",
+    trainings: "Trainings",
+    trainingPlans: "Training Plans",
     drills: "Drill Library",
     squad: "Squad",
-    sessions: "Training Sessions",
+    sessions: "Training Plans",
     settings: "Settings"
   },
   actions: {
