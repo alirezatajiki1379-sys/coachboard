@@ -16,10 +16,12 @@ export type AnalyticsSortKey =
   | "trainings"
   | "rated"
   | "average"
+  | "latestFive"
   | "trend"
   | "attendance"
   | "reliability"
-  | "lastTraining";
+  | "lastTraining"
+  | "coachAssessment";
 
 export type PlayerAnalyticsRecord = SquadAttendanceEntry & {
   event?: SquadTrainingEvent;
@@ -69,6 +71,8 @@ export type PerformanceTrend = {
   label: "No trend" | "Early trend" | "Improving" | "Stable" | "Declining";
   value: number | null;
   description: string;
+  latestAverage?: number;
+  previousAverage?: number;
 };
 
 export type EvidenceBase = {
@@ -136,10 +140,14 @@ export function calculatePerformanceTrend(values: number[]): PerformanceTrend {
   const latestFive = ratings.slice(0, 5);
   const previousFive = ratings.slice(5, 10);
   if (previousFive.length) {
-    const value = roundOne(average(latestFive) - average(previousFive));
+    const latestAverage = average(latestFive);
+    const previousAverage = average(previousFive);
+    const value = roundOne(latestAverage - previousAverage);
     return {
       label: trendLabel(value, previousFive.length < 5 ? "Early trend" : undefined),
       value,
+      latestAverage,
+      previousAverage,
       description:
         previousFive.length < 5
           ? "Early trend compares the latest five rated trainings with the available previous rated trainings in this period."
@@ -294,11 +302,15 @@ export function sortPlayerAnalytics(summaries: PlayerAnalyticsSummary[], sort: A
     if (sort === "trainings") return b.trainings - a.trainings || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "rated") return b.rated - a.rated || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "average") return nullableDesc(a.averageRating, b.averageRating) || playerName(a.player).localeCompare(playerName(b.player));
+    if (sort === "latestFive") return nullableDesc(a.latestFiveAverage, b.latestFiveAverage) || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "trend") return nullableDesc(a.trend.value, b.trend.value) || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "attendance") return nullableDesc(a.attendanceRate, b.attendanceRate) || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "reliability") return b.reliabilityPenalty - a.reliabilityPenalty || playerName(a.player).localeCompare(playerName(b.player));
     if (sort === "lastTraining") {
       return (b.latestTraining?.event?.date ?? "").localeCompare(a.latestTraining?.event?.date ?? "") || playerName(a.player).localeCompare(playerName(b.player));
+    }
+    if (sort === "coachAssessment") {
+      return (a.assessment?.assessment ?? "decision_open").localeCompare(b.assessment?.assessment ?? "decision_open") || playerName(a.player).localeCompare(playerName(b.player));
     }
     return playerName(a.player).localeCompare(playerName(b.player));
   });

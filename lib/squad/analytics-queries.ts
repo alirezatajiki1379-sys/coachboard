@@ -31,10 +31,12 @@ export function parseAnalyticsFilters(searchParams: Record<string, string | stri
       sort === "trainings" ||
       sort === "rated" ||
       sort === "average" ||
+      sort === "latestFive" ||
       sort === "trend" ||
       sort === "attendance" ||
       sort === "reliability" ||
-      sort === "lastTraining"
+      sort === "lastTraining" ||
+      sort === "coachAssessment"
         ? sort
         : "name"
   };
@@ -44,7 +46,7 @@ export async function getSquadAnalyticsOverview(
   supabase: SupabaseServerClient,
   userId: string,
   filters: AnalyticsFilters
-): Promise<{ summaries: PlayerAnalyticsSummary[]; positions: string[] }> {
+): Promise<{ summaries: PlayerAnalyticsSummary[]; positions: string[]; seasonSettings: { seasonStartMonth: number; seasonStartDay: number } }> {
   const db = supabase as unknown as SupabaseClient;
   const [players, records, assessments, seasonSettings] = await Promise.all([
     listAnalyticsPlayers(db, userId),
@@ -73,7 +75,7 @@ export async function getSquadAnalyticsOverview(
     )
     .filter((summary) => (filters.ratedOnly ? summary.rated > 0 : true));
 
-  return { summaries: sortPlayerAnalytics(summaries, filters.sort), positions };
+  return { summaries: sortPlayerAnalytics(summaries, filters.sort), positions, seasonSettings };
 }
 
 export async function getPlayerAnalytics(
