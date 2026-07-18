@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
 import { mapDrillRow, type DrillRow } from "@/lib/drills/mappers";
 import { parseEditorState } from "@/lib/drills/editor";
+import { jsonToMaterials, materialCategoryLabel, materialCategoryKey } from "@/lib/drills/materials";
 import { calculateSessionDuration, normalizePlayerGroups, normalizeSimultaneousGroup } from "@/lib/sessions/utils";
 import type { Database, Json } from "@/types/database";
 import type { Drill, TrainingSession, TrainingSessionDrill } from "@/types/domain";
@@ -23,6 +24,8 @@ export type TrainingSessionDetail = Omit<TrainingSession, "drills"> & {
 export type SessionSummary = TrainingSession & {
   drillCount: number;
   totalDuration: number;
+  blockCount: number;
+  materialLabels: string[];
 };
 
 export type SessionListView = "active" | "archived" | "trash";
@@ -62,13 +65,19 @@ export async function listUserSessions(supabase: SupabaseServerClient, userId: s
     groups[item.session_id] = [...(groups[item.session_id] ?? []), item];
     return groups;
   }, {});
+  const allDrillIds = Array.from(new Set((itemData ?? []).map((item) => (item as SessionDrillRow).drill_id)));
+  const materialLabelsByDrillId = await getMaterialLabelsByDrillId(supabase, userId, allDrillIds);
 
   return rows.map((row) => {
     const drills = (items[row.id] ?? []).map(mapSessionDrillRow);
+    const blockCount = new Set(drills.map((drill) => drill.block)).size;
+    const materialLabels = compactMaterialLabels((items[row.id] ?? []).flatMap((item) => materialLabelsByDrillId.get(item.drill_id) ?? []));
     return {
       ...mapSessionRow(row, drills),
       drillCount: drills.length,
-      totalDuration: calculateSessionDuration(drills)
+      totalDuration: calculateSessionDuration(drills),
+      blockCount,
+      materialLabels
     };
   });
 }
@@ -148,6 +157,29 @@ async function getDrillsById(supabase: SupabaseServerClient, userId: string, dri
     drills.set(drill.id, drill);
   }
   return drills;
+}
+
+async function getMaterialLabelsByDrillId(supabase: SupabaseServerClient, userId: string, drillIds: string[]) {
+  const labels = new Map<string, string[]>();
+  if (!drillIds.length) return labels;
+  const db = supabase as unknown as SupabaseClient;
+  const { data, error } = await db.from("drills").select("id,materials").eq("user_id", userId).in("id", drillIds);
+  if (error) throw new Error(error.message);
+  for (const row of (data ?? []) as Array<{ id: string; materials: Json }>) {
+    labels.set(
+      row.id,
+      Array.from(
+        new Set(
+          jsonToMaterials(row.materials).map((material) => materialCategoryLabel(materialCategoryKey(material.type)))
+        )
+      )
+    );
+  }
+  return labels;
+}
+
+function compactMaterialLabels(labels: string[]) {
+  return Array.from(new Set(labels)).sort((a, b) => a.localeCompare(b));
 }
 
 async function getGraphicsByDrillId(supabase: SupabaseServerClient, userId: string, drillIds: string[]) {

@@ -39,11 +39,11 @@ export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"]) {
   const labels: Record<NonNullable<SquadAttendanceEntry["finalStatus"]>, string> = {
     present: "Present",
     Z: "Late",
-    V: "Excused",
-    K: "Ill",
-    E: "Parents excused",
-    P: "Private",
-    S: "School",
+    V: "Injured",
+    K: "Sick",
+    E: "Excused",
+    P: "Private reason",
+    S: "Late cancellation",
     U: "Unexcused"
   };
   return status ? labels[status] : "Open";

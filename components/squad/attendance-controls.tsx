@@ -25,11 +25,11 @@ const plannedButtons: Array<{ status: SquadPlannedAttendanceStatus; label: strin
 const finalOptions: Array<{ status: SquadFinalAttendanceStatus; label: string }> = [
   { status: "present", label: "Present" },
   { status: "Z", label: "Late" },
-  { status: "V", label: "Excused" },
-  { status: "K", label: "Ill" },
-  { status: "E", label: "Parents excused" },
-  { status: "P", label: "Private" },
-  { status: "S", label: "School" },
+  { status: "V", label: "Injured" },
+  { status: "K", label: "Sick" },
+  { status: "E", label: "Excused" },
+  { status: "P", label: "Private reason" },
+  { status: "S", label: "Late cancellation" },
   { status: "U", label: "Unexcused" }
 ];
 
@@ -89,16 +89,16 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
 
 export function CheckInActions({ eventId }: { eventId: string }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <form action={markAllExpectedPresent}>
         <input type="hidden" name="eventId" value={eventId} />
-        <Button type="submit" variant="secondary" className="h-10 px-3">Mark expected present</Button>
+        <Button type="submit" variant="secondary" className="h-10 w-full justify-center px-3 sm:w-auto">Mark expected as present</Button>
       </form>
       <form action={markAllPresent}>
         <input type="hidden" name="eventId" value={eventId} />
         <Button
           type="submit"
-          className="h-10 px-3"
+          className="h-10 w-full justify-center px-3 sm:w-auto"
           onClick={(event) => {
             if (!window.confirm("Mark every player in this event as present? This can overwrite existing actual statuses.")) {
               event.preventDefault();
@@ -122,6 +122,12 @@ export function MarkAllExpectedButton({ eventId }: { eventId: string }) {
 }
 
 export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; eventId: string }) {
+  const statusTone = entry.finalStatus
+    ? entry.finalStatus === "present" || entry.finalStatus === "Z"
+      ? "bg-green-50 text-green-700"
+      : "bg-red-50 text-red-700"
+    : "bg-amber-50 text-amber-700";
+
   return (
     <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <div className="flex flex-col gap-3">
@@ -131,11 +137,15 @@ export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; ev
               {attendanceDisplayName(entry)}
               {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
             </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
-            </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+              {entry.player?.position ? <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entry.player.position}</span> : null}
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entry.player?.playerType === "trial" ? "Trial player" : "Roster"}</span>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Planned: {plannedStatusLabel(entry.plannedStatus)}</span>
+              <span className={`rounded-full px-2 py-1 ${statusTone}`}>Actual: {finalStatusLabel(entry.finalStatus)}</span>
+            </div>
+            {entry.coachNote ? <p className="mt-2 text-sm text-slate-600">{entry.coachNote}</p> : null}
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto">
             <FinalStatusButton entry={entry} eventId={eventId} status="present" label="Present" icon={<Check className="h-4 w-4" />} />
             <FinalStatusButton entry={entry} eventId={eventId} status="Z" label="Late" icon={<Clock3 className="h-4 w-4" />} />
           </div>
@@ -148,7 +158,7 @@ export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; ev
             <span className="text-xs font-bold uppercase text-slate-500">Status / absence reason</span>
             <select name="finalStatus" defaultValue={entry.finalStatus ?? ""} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
               <option value="">Open</option>
-              {finalOptions.map((option) => <option key={option.status} value={option.status}>{option.label}</option>)}
+              {finalOptions.map((option) => <option key={option.status} value={option.status}>{option.status === "present" ? option.label : `${option.status} · ${option.label}`}</option>)}
             </select>
           </label>
           <label>
@@ -216,14 +226,14 @@ export function CompleteEventButton({ eventId }: { eventId: string }) {
 function FinalStatusButton({ entry, eventId, status, label, icon }: { entry: SquadAttendanceEntry; eventId: string; status: SquadFinalAttendanceStatus; label: string; icon: ReactNode }) {
   const active = entry.finalStatus === status;
   return (
-    <form action={updateFinalAttendance}>
+    <form action={updateFinalAttendance} className="flex-1 sm:flex-none">
       <input type="hidden" name="eventId" value={eventId} />
       <input type="hidden" name="attendanceId" value={entry.id} />
       <input type="hidden" name="finalStatus" value={status} />
       <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
       <button
         type="submit"
-        className={`inline-flex h-11 items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition ${active ? "bg-green-600 text-white hover:bg-green-700" : "bg-white text-board-navy ring-1 ring-board-line hover:bg-slate-50"}`}
+        className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition sm:w-auto ${active ? "bg-green-600 text-white hover:bg-green-700" : "bg-white text-board-navy ring-1 ring-board-line hover:bg-slate-50"}`}
       >
         {icon}
         {label}

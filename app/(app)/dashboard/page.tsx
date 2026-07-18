@@ -122,7 +122,12 @@ export default async function DashboardPage() {
         <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase text-board-green">Next training</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm font-semibold uppercase text-board-green">Next training</p>
+                <Link href="/trainings" className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-board-green hover:underline">
+                  View all trainings
+                </Link>
+              </div>
               <h2 className="mt-1 text-2xl font-bold text-board-navy">{trainingDisplayTitle(nextTraining)}</h2>
               <p className="mt-2 text-sm text-slate-600">{nextTraining.date} · {trainingTimeRange(nextTraining)}{nextTraining.location ? ` · ${nextTraining.location}` : ""}</p>
               <p className="mt-2 text-sm font-semibold text-slate-700">
@@ -155,8 +160,9 @@ export default async function DashboardPage() {
         <StatCard
           label="Saved templates"
           value={templateCount.count ?? 0}
-          detail="Reusable graphic setups"
+          detail="Open the drill editor template section"
           icon={<Shapes className="h-5 w-5" />}
+          href="/drills/new"
         />
         <StatCard
           label="Most used focus"

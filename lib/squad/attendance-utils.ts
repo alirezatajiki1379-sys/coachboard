@@ -2,9 +2,9 @@ import type { SquadAttendanceEntry, SquadAttendanceReason, SquadFinalAttendanceS
 
 export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
   V: "Injured",
-  K: "Ill",
+  K: "Sick",
   E: "Excused",
-  P: "Private",
+  P: "Private reason",
   S: "Late cancellation",
   Z: "Late",
   U: "Unexcused"
