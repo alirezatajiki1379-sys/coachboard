@@ -9,6 +9,7 @@ const navItems = [
   { href: "/sessions", label: en.nav.trainingPlans, icon: ClipboardList },
   { href: "/drills", label: en.nav.drills, icon: Dumbbell },
   { href: "/squad", label: en.nav.squad, icon: UsersRound },
+  { href: "/squad/analysis", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: en.nav.settings, icon: Settings }
 ];
 

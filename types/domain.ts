@@ -266,3 +266,23 @@ export type SquadTrainingEvent = {
 export type SquadTrainingEventDetail = SquadTrainingEvent & {
   attendance: SquadAttendanceEntry[];
 };
+
+export type PlayerCoachAssessmentValue =
+  | "decision_open"
+  | "continue_observing"
+  | "positive_development"
+  | "prospect_player"
+  | "squad_candidate"
+  | "below_required_level";
+
+export type PlayerCoachAssessment = {
+  id: string;
+  userId: string;
+  playerId: string;
+  assessment: PlayerCoachAssessmentValue;
+  reason?: string;
+  assessmentDate: string;
+  reviewDate?: string;
+  createdAt: string;
+  updatedAt: string;
+};

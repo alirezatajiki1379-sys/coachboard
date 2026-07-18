@@ -5,7 +5,7 @@ const items = [
   { href: "/squad", label: "Players" },
   { href: "/squad/attendance", label: "Attendance" },
   { href: "/squad/ratings", label: "Ratings" },
-  { href: "/squad/analysis", label: "Analysis" }
+  { href: "/squad/analysis", label: "Analytics" }
 ];
 
 export function SquadNav() {

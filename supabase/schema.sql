@@ -666,7 +666,44 @@ check (
 
 
 -- =========================================================
--- 14. INDEXES
+-- 14. PLAYER COACH ASSESSMENTS
+-- Manual coach assessments are intentionally separate from automatic analytics.
+-- =========================================================
+
+create table if not exists public.player_coach_assessments (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null
+    references auth.users(id)
+    on delete cascade,
+
+  player_id uuid not null
+    references public.squad_players(id)
+    on delete cascade,
+
+  assessment text not null default 'decision_open'
+    check (
+      assessment in (
+        'decision_open',
+        'continue_observing',
+        'positive_development',
+        'prospect_player',
+        'squad_candidate',
+        'below_required_level'
+      )
+    ),
+
+  reason text,
+  assessment_date date not null default current_date,
+  review_date date,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+
+-- =========================================================
+-- 15. INDEXES
 -- =========================================================
 
 create index if not exists drills_user_id_updated_at_idx
@@ -797,9 +834,17 @@ on public.squad_attendance_records (
   user_id
 );
 
+create index if not exists player_coach_assessments_user_player_date_idx
+on public.player_coach_assessments (
+  user_id,
+  player_id,
+  assessment_date desc,
+  created_at desc
+);
+
 
 -- =========================================================
--- 15. UPDATED_AT TRIGGERS
+-- 16. UPDATED_AT TRIGGERS
 -- =========================================================
 
 drop trigger if exists set_profiles_updated_at
@@ -891,6 +936,14 @@ before update on public.squad_attendance_records
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_player_coach_assessments_updated_at
+on public.player_coach_assessments;
+
+create trigger set_player_coach_assessments_updated_at
+before update on public.player_coach_assessments
+for each row
+execute function public.set_updated_at();
+
 
 -- Auth profile trigger
 
@@ -904,7 +957,7 @@ execute function public.handle_new_user();
 
 
 -- =========================================================
--- 16. ENABLE ROW LEVEL SECURITY
+-- 17. ENABLE ROW LEVEL SECURITY
 -- =========================================================
 
 alter table public.profiles
@@ -940,9 +993,12 @@ enable row level security;
 alter table public.squad_attendance_records
 enable row level security;
 
+alter table public.player_coach_assessments
+enable row level security;
+
 
 -- =========================================================
--- 17. RLS POLICIES
+-- 18. RLS POLICIES
 -- =========================================================
 
 
@@ -1176,6 +1232,30 @@ with check (
     from public.squad_players
     where squad_players.id =
       squad_attendance_records.player_id
+    and squad_players.user_id = auth.uid()
+  )
+);
+
+
+-- PLAYER COACH ASSESSMENTS
+
+drop policy if exists "player coach assessments are owned by the user"
+on public.player_coach_assessments;
+
+create policy "player coach assessments are owned by the user"
+on public.player_coach_assessments
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
+
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id =
+      player_coach_assessments.player_id
     and squad_players.user_id = auth.uid()
   )
 );

@@ -372,6 +372,32 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["squad_attendance_records"]["Insert"]>;
         Relationships: [];
       };
+      player_coach_assessments: {
+        Row: {
+          id: string;
+          user_id: string;
+          player_id: string;
+          assessment: "decision_open" | "continue_observing" | "positive_development" | "prospect_player" | "squad_candidate" | "below_required_level";
+          reason: string | null;
+          assessment_date: string;
+          review_date: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          player_id: string;
+          assessment: "decision_open" | "continue_observing" | "positive_development" | "prospect_player" | "squad_candidate" | "below_required_level";
+          reason?: string | null;
+          assessment_date?: string;
+          review_date?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_coach_assessments"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
