@@ -49,11 +49,28 @@ const timelineFilters: Array<{ id: PlayerTimelineFilter; label: string }> = [
   { id: "coach", label: "Coach assessments" }
 ];
 
+type AttendanceFilter = "all" | "present" | "late" | "absent" | "injured" | "sick" | "excused" | "private" | "cancelled" | "unexcused";
+const attendanceFilters: Array<{ id: AttendanceFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "present", label: "Present" },
+  { id: "late", label: "Late" },
+  { id: "absent", label: "Absent" },
+  { id: "injured", label: "Injured" },
+  { id: "sick", label: "Sick" },
+  { id: "excused", label: "Excused" },
+  { id: "private", label: "Private" },
+  { id: "cancelled", label: "Late cancellation" },
+  { id: "unexcused", label: "Unexcused" }
+];
+
 export default async function PlayerDetailPage({ params, searchParams }: PlayerDetailPageProps) {
   const { id } = await params;
   const query = await searchParams;
   const tab = parsePlayerHubTab(query.tab);
   const timelineFilter = parsePlayerHubTimelineFilter(query.filter);
+  const attendanceFilter = parseAttendanceFilter(query.attendance);
+  const medicalError = one(query.medicalError);
+  const contactError = one(query.contactError);
   const { period, customFrom, customTo } = parsePlayerHubPeriod(query);
   const supabase = await createClient();
   const {
@@ -74,14 +91,15 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
 
       <PlayerHubHeader hub={hub} period={period} tab={tab} />
       <PlayerHubTabs playerId={hub.player.id} activeTab={tab} period={period} customFrom={customFrom} customTo={customTo} />
+      {isPeriodAwareTab(tab) ? <PeriodControls playerId={hub.player.id} tab={tab} period={period} customFrom={customFrom} customTo={customTo} /> : null}
 
       {tab === "overview" ? <OverviewTab hub={hub} period={period} /> : null}
-      {tab === "analytics" ? <AnalyticsTab hub={hub} period={period} customFrom={customFrom} customTo={customTo} /> : null}
+      {tab === "analytics" ? <AnalyticsTab hub={hub} period={period} /> : null}
       {tab === "development" ? <PlayerDevelopmentSection playerId={hub.player.id} development={hub.development} /> : null}
       {tab === "history" ? <HistoryTab hub={hub} filter={timelineFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
-      {tab === "attendance" ? <AttendanceTab hub={hub} /> : null}
+      {tab === "attendance" ? <AttendanceTab hub={hub} filter={attendanceFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "notes" ? <NotesTab hub={hub} /> : null}
-      {tab === "details" ? <DetailsTab hub={hub} /> : null}
+      {tab === "details" ? <DetailsTab hub={hub} medicalError={medicalError} contactError={contactError} /> : null}
     </div>
   );
 }
@@ -243,12 +261,11 @@ function OverviewTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPer
   );
 }
 
-function AnalyticsTab({ hub, period, customFrom, customTo }: { hub: PlayerHubData; period: AnalyticsPeriod; customFrom?: string; customTo?: string }) {
+function AnalyticsTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPeriod }) {
   const { player, analytics } = hub;
   const { summary, assessmentHistory } = analytics;
   return (
     <div className="space-y-6">
-      <PeriodControls playerId={player.id} tab="analytics" period={period} customFrom={customFrom} customTo={customTo} />
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -317,8 +334,8 @@ function HistoryTab({ hub, filter, period, customFrom, customTo }: { hub: Player
   );
 }
 
-function AttendanceTab({ hub }: { hub: PlayerHubData }) {
-  const records = hub.analytics.summary.records;
+function AttendanceTab({ hub, filter, period, customFrom, customTo }: { hub: PlayerHubData; filter: AttendanceFilter; period: AnalyticsPeriod; customFrom?: string; customTo?: string }) {
+  const records = filterAttendanceRecords(hub.analytics.summary.records, filter);
   const distribution = hub.analytics.summary.attendanceDistribution;
   return (
     <div className="space-y-6">
@@ -330,6 +347,13 @@ function AttendanceTab({ hub }: { hub: PlayerHubData }) {
         <Stat label="Reliability" value={hub.analytics.summary.reliabilityPenalty.toFixed(1)} />
       </section>
       <Card title="Attendance record" icon={<CalendarDays className="h-5 w-5" />}>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {attendanceFilters.map((item) => (
+            <Link key={item.id} href={`${tabHref(hub.player.id, "attendance", period, customFrom, customTo)}&attendance=${item.id}`} className={cn("rounded-md px-3 py-2 text-sm font-bold", filter === item.id ? "bg-board-green text-white" : "bg-slate-100 text-slate-700 hover:bg-green-50 hover:text-board-green")}>
+              {item.label}
+            </Link>
+          ))}
+        </div>
         <div className="space-y-3">
           {records.length ? records.map((entry) => <AttendanceEntryCard key={entry.id} entry={entry} />) : <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No attendance records for this period.</p>}
         </div>
@@ -371,7 +395,7 @@ function NotesTab({ hub }: { hub: PlayerHubData }) {
   );
 }
 
-function DetailsTab({ hub }: { hub: PlayerHubData }) {
+function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; medicalError?: string; contactError?: string }) {
   const player = hub.player;
   return (
     <div className="space-y-6">
@@ -403,7 +427,7 @@ function DetailsTab({ hub }: { hub: PlayerHubData }) {
             <DetailRow label="Legacy parent phone" value={player.parentPhone} href={player.parentPhone ? `tel:${player.parentPhone}` : undefined} />
             <DetailRow label="Legacy parent email" value={player.parentEmail} href={player.parentEmail ? `mailto:${player.parentEmail}` : undefined} />
           </DetailGrid>
-          <ContactSection playerId={player.id} contacts={hub.contacts} />
+          <ContactSection playerId={player.id} contacts={hub.contacts} error={contactError} />
         </Card>
       </section>
       <Card title="Development background" icon={<Target className="h-5 w-5" />}>
@@ -414,7 +438,7 @@ function DetailsTab({ hub }: { hub: PlayerHubData }) {
           <DetailRow label="General notes" value={player.notes} />
         </DetailGrid>
       </Card>
-      <MedicalSection playerId={player.id} player={player} periods={hub.medicalPeriods} />
+      <MedicalSection playerId={player.id} player={player} periods={hub.medicalPeriods} error={medicalError} />
     </div>
   );
 }
@@ -460,10 +484,11 @@ function CoachAssessmentPanel({ playerId, period, currentAssessment, assessmentH
   );
 }
 
-function ContactSection({ playerId, contacts }: { playerId: string; contacts: PlayerContact[] }) {
+function ContactSection({ playerId, contacts, error }: { playerId: string; contacts: PlayerContact[]; error?: string }) {
   return (
     <div className="mt-5 border-t border-slate-100 pt-4">
       <p className="text-sm font-bold text-board-navy">Related contacts</p>
+      {error ? <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p> : null}
       <div className="mt-3 space-y-3">
         {contacts.length ? contacts.map((contact) => (
           <article key={contact.id} className="rounded-md bg-slate-50 p-3 text-sm">
@@ -506,11 +531,12 @@ function ContactSection({ playerId, contacts }: { playerId: string; contacts: Pl
   );
 }
 
-function MedicalSection({ playerId, player, periods }: { playerId: string; player: SquadPlayer; periods: PlayerMedicalPeriod[] }) {
+function MedicalSection({ playerId, player, periods, error }: { playerId: string; player: SquadPlayer; periods: PlayerMedicalPeriod[]; error?: string }) {
   const active = periods.filter((period) => period.status === "active");
   return (
     <Card title="Medical availability" icon={<Stethoscope className="h-5 w-5" />}>
       <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">Private medical information. Only minimal availability labels are shown in attendance workflows.</p>
+      {error ? <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p> : null}
       <DetailGrid>
         <DetailRow label="Allergies" value={player.allergies} />
         <DetailRow label="Medication" value={player.medication} />
@@ -726,4 +752,32 @@ function captainLabel(value: string) {
   if (value === "captain") return "Captain";
   if (value === "vice_captain") return "Vice captain";
   return "No captain status";
+}
+
+function one(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function isPeriodAwareTab(tab: PlayerHubTab) {
+  return tab === "overview" || tab === "analytics" || tab === "history" || tab === "attendance" || tab === "notes";
+}
+
+function parseAttendanceFilter(value?: string | string[]): AttendanceFilter {
+  const raw = one(value);
+  return raw === "present" || raw === "late" || raw === "absent" || raw === "injured" || raw === "sick" || raw === "excused" || raw === "private" || raw === "cancelled" || raw === "unexcused"
+    ? raw
+    : "all";
+}
+
+function filterAttendanceRecords(records: PlayerAnalyticsRecord[], filter: AttendanceFilter) {
+  if (filter === "all") return records;
+  if (filter === "present") return records.filter((entry) => entry.finalStatus === "present");
+  if (filter === "late") return records.filter((entry) => entry.finalStatus === "Z");
+  if (filter === "absent") return records.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus));
+  if (filter === "injured") return records.filter((entry) => entry.finalStatus === "V" || entry.plannedReason === "V");
+  if (filter === "sick") return records.filter((entry) => entry.finalStatus === "K" || entry.plannedReason === "K");
+  if (filter === "excused") return records.filter((entry) => entry.finalStatus === "E" || entry.plannedReason === "E");
+  if (filter === "private") return records.filter((entry) => entry.finalStatus === "P" || entry.plannedReason === "P");
+  if (filter === "cancelled") return records.filter((entry) => entry.finalStatus === "S" || entry.plannedReason === "S");
+  return records.filter((entry) => entry.finalStatus === "U" || entry.plannedReason === "U");
 }

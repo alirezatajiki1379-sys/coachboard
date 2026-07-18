@@ -563,6 +563,14 @@ create table if not exists public.player_medical_periods (
   check (
     end_date is null
     or end_date >= start_date
+  ),
+  check (
+    actual_return_date is null
+    or actual_return_date >= start_date
+  ),
+  check (
+    expected_return_date is null
+    or expected_return_date >= start_date
   )
 );
 
@@ -580,6 +588,36 @@ create table if not exists public.player_header_preferences (
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+alter table public.player_medical_periods
+drop constraint if exists player_medical_periods_date_order_check;
+
+alter table public.player_medical_periods
+add constraint player_medical_periods_date_order_check
+check (
+  end_date is null
+  or end_date >= start_date
+);
+
+alter table public.player_medical_periods
+drop constraint if exists player_medical_periods_actual_return_check;
+
+alter table public.player_medical_periods
+add constraint player_medical_periods_actual_return_check
+check (
+  actual_return_date is null
+  or actual_return_date >= start_date
+);
+
+alter table public.player_medical_periods
+drop constraint if exists player_medical_periods_expected_return_check;
+
+alter table public.player_medical_periods
+add constraint player_medical_periods_expected_return_check
+check (
+  expected_return_date is null
+  or expected_return_date >= start_date
 );
 
 
