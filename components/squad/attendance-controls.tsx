@@ -140,7 +140,7 @@ export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; ev
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
               {entry.player?.position ? <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entry.player.position}</span> : null}
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entry.player?.playerType === "trial" ? "Trial player" : "Roster"}</span>
+              {entry.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Trial player</span> : null}
               <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Planned: {plannedStatusLabel(entry.plannedStatus)}</span>
               <span className={`rounded-full px-2 py-1 ${statusTone}`}>Actual: {finalStatusLabel(entry.finalStatus)}</span>
             </div>
