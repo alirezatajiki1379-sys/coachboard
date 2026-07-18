@@ -3,6 +3,8 @@
 import { Check, Clock3, HelpCircle, ShieldAlert, UserMinus } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { developmentCategoryLabel, developmentGoalCategories } from "@/config/development";
+import { createPlayerObservation } from "@/lib/squad/development-actions";
 import {
   completeTrainingEvent,
   markAllExpectedPresent,
@@ -14,7 +16,7 @@ import {
 } from "@/lib/squad/attendance-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { attendanceReasonLabels } from "@/lib/squad/attendance-utils";
-import type { SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus } from "@/types/domain";
+import type { PlayerDevelopmentGoal, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus } from "@/types/domain";
 
 const plannedButtons: Array<{ status: SquadPlannedAttendanceStatus; label: string; icon: typeof Check; className: string }> = [
   { status: "expected", label: "Expected", icon: Check, className: "bg-green-600 text-white hover:bg-green-700" },
@@ -188,39 +190,76 @@ export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; ev
   );
 }
 
-export function RatingRow({ entry, eventId }: { entry: SquadAttendanceEntry; eventId: string }) {
+export function RatingRow({ entry, eventId, goals = [] }: { entry: SquadAttendanceEntry; eventId: string; goals?: PlayerDevelopmentGoal[] }) {
   return (
-    <form action={updateAttendanceRating} className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-      <input type="hidden" name="eventId" value={eventId} />
-      <input type="hidden" name="attendanceId" value={entry.id} />
-      <div className="space-y-3">
-        <div>
-          <p className="font-bold text-board-navy">
-            {attendanceDisplayName(entry)}
-            {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
-          </p>
-          <p className="text-sm text-slate-500">Actual: {finalStatusLabel(entry.finalStatus)}{entry.ratingAutoSuggestion ? ` · Suggested ${entry.ratingAutoSuggestion}` : ""}</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <RatingSelect name="overallRating" label="Overall" defaultValue={entry.overallRating} />
-          <RatingSelect name="ratingTechnique" label="Technique" defaultValue={entry.ratingTechnique} />
-          <RatingSelect name="ratingGameUnderstanding" label="Game IQ" defaultValue={entry.ratingGameUnderstanding} />
-          <RatingSelect name="ratingIntensity" label="Intensity" defaultValue={entry.ratingIntensity} />
-          <RatingSelect name="ratingBehavior" label="Behavior" defaultValue={entry.ratingBehavior} />
-        </div>
-        <label className="block">
-          <span className="text-xs font-bold uppercase text-slate-500">Coach note</span>
-          <textarea name="coachNote" defaultValue={entry.coachNote ?? ""} rows={2} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-        </label>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
-            <input name="sensitiveNote" type="checkbox" defaultChecked={entry.sensitiveNote} className="h-4 w-4" />
-            Sensitive note
+    <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+      <form action={updateAttendanceRating}>
+        <input type="hidden" name="eventId" value={eventId} />
+        <input type="hidden" name="attendanceId" value={entry.id} />
+        <div className="space-y-3">
+          <div>
+            <p className="font-bold text-board-navy">
+              {attendanceDisplayName(entry)}
+              {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
+            </p>
+            <p className="text-sm text-slate-500">Actual: {finalStatusLabel(entry.finalStatus)}{entry.ratingAutoSuggestion ? ` · Suggested ${entry.ratingAutoSuggestion}` : ""}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <RatingSelect name="overallRating" label="Overall" defaultValue={entry.overallRating} />
+            <RatingSelect name="ratingTechnique" label="Technique" defaultValue={entry.ratingTechnique} />
+            <RatingSelect name="ratingGameUnderstanding" label="Game IQ" defaultValue={entry.ratingGameUnderstanding} />
+            <RatingSelect name="ratingIntensity" label="Intensity" defaultValue={entry.ratingIntensity} />
+            <RatingSelect name="ratingBehavior" label="Behavior" defaultValue={entry.ratingBehavior} />
+          </div>
+          <label className="block">
+            <span className="text-xs font-bold uppercase text-slate-500">Coach note</span>
+            <textarea name="coachNote" defaultValue={entry.coachNote ?? ""} rows={2} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
           </label>
-          <Button type="submit" variant="secondary" className="h-10">Save rating</Button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
+              <input name="sensitiveNote" type="checkbox" defaultChecked={entry.sensitiveNote} className="h-4 w-4" />
+              Sensitive note
+            </label>
+            <Button type="submit" variant="secondary" className="h-10">Save rating</Button>
+          </div>
         </div>
-      </div>
-    </form>
+      </form>
+      {entry.player ? (
+        <details className="mt-4 rounded-md bg-board-paper p-3">
+          <summary className="cursor-pointer text-sm font-bold text-board-navy">Add observation</summary>
+          <form action={createPlayerObservation} className="mt-3 grid gap-2">
+            <input type="hidden" name="playerId" value={entry.player.id} />
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/ratings`} />
+            <div className="grid gap-2 sm:grid-cols-3">
+              <label>
+                <span className="text-xs font-bold uppercase text-slate-500">Date</span>
+                <input name="observationDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+              </label>
+              <label>
+                <span className="text-xs font-bold uppercase text-slate-500">Goal</span>
+                <select name="goalId" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+                  <option value="">No linked goal</option>
+                  {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className="text-xs font-bold uppercase text-slate-500">Category</span>
+                <select name="category" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+                  <option value="">Optional</option>
+                  {developmentGoalCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+                </select>
+              </label>
+            </div>
+            {goals.length ? (
+              <p className="text-xs text-slate-500">Active goals: {goals.map((goal) => `${goal.title} (${developmentCategoryLabel(goal.category)})`).join(", ")}</p>
+            ) : null}
+            <textarea name="note" required rows={2} placeholder="What did you notice?" className="w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+            <Button type="submit" variant="secondary" className="h-10 w-full justify-center px-3 sm:w-auto">Save observation</Button>
+          </form>
+        </details>
+      ) : null}
+    </article>
   );
 }
 

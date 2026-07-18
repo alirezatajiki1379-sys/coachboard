@@ -398,6 +398,98 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["player_coach_assessments"]["Insert"]>;
         Relationships: [];
       };
+      player_development_goals: {
+        Row: {
+          id: string;
+          user_id: string;
+          player_id: string;
+          title: string;
+          description: string | null;
+          category: "technique" | "tactical_understanding" | "decision_making" | "physical" | "mental" | "communication" | "leadership" | "goalkeeping" | "behaviour" | "individual";
+          priority: "low" | "medium" | "high";
+          status: "active" | "completed" | "paused" | "cancelled";
+          progress: "not_started" | "in_progress" | "almost_there" | "completed";
+          start_date: string;
+          target_date: string | null;
+          review_date: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          player_id: string;
+          title: string;
+          description?: string | null;
+          category?: "technique" | "tactical_understanding" | "decision_making" | "physical" | "mental" | "communication" | "leadership" | "goalkeeping" | "behaviour" | "individual";
+          priority?: "low" | "medium" | "high";
+          status?: "active" | "completed" | "paused" | "cancelled";
+          progress?: "not_started" | "in_progress" | "almost_there" | "completed";
+          start_date?: string;
+          target_date?: string | null;
+          review_date?: string | null;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_development_goals"]["Insert"]>;
+        Relationships: [];
+      };
+      player_goal_actions: {
+        Row: {
+          id: string;
+          user_id: string;
+          goal_id: string;
+          description: string;
+          completed: boolean;
+          due_date: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          goal_id: string;
+          description: string;
+          completed?: boolean;
+          due_date?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_goal_actions"]["Insert"]>;
+        Relationships: [];
+      };
+      player_observations: {
+        Row: {
+          id: string;
+          user_id: string;
+          player_id: string;
+          goal_id: string | null;
+          event_id: string | null;
+          observation_date: string;
+          category: "technique" | "tactical_understanding" | "decision_making" | "physical" | "mental" | "communication" | "leadership" | "goalkeeping" | "behaviour" | "individual" | null;
+          note: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          player_id: string;
+          goal_id?: string | null;
+          event_id?: string | null;
+          observation_date?: string;
+          category?: "technique" | "tactical_understanding" | "decision_making" | "physical" | "mental" | "communication" | "leadership" | "goalkeeping" | "behaviour" | "individual" | null;
+          note: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_observations"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

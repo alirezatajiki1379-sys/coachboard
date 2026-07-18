@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { RatingRow } from "@/components/squad/attendance-controls";
 import { attendanceDisplayName, eventTimeRange, eventTitle, finalStatusLabel, formatEventDate } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
+import { getActiveDevelopmentGoalsForPlayers } from "@/lib/squad/development";
 import { createClient } from "@/lib/supabase/server";
 
 type RatingsPageProps = {
@@ -21,6 +22,7 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
 
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
+  const goalsByPlayer = await getActiveDevelopmentGoalsForPlayers(supabase, user.id, event.attendance.map((entry) => entry.playerId));
   const activeEntries = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
   const unresolvedEntries = event.attendance.filter((entry) => !entry.finalStatus);
   const absentEntries = event.attendance.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus));
@@ -41,7 +43,7 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
         {event.attendance.length ? (
           <>
             {activeEntries.length ? (
-              activeEntries.map((entry) => <RatingRow key={entry.id} entry={entry} eventId={event.id} />)
+              activeEntries.map((entry) => <RatingRow key={entry.id} entry={entry} eventId={event.id} goals={goalsByPlayer.get(entry.playerId) ?? []} />)
             ) : (
               <p className="rounded-lg border border-dashed border-board-line bg-white p-5 text-sm font-semibold text-slate-600 shadow-soft">
                 No present or late players are ready to rate yet. Complete check-in first, or leave ratings empty.

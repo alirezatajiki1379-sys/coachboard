@@ -1,4 +1,4 @@
-import { CalendarDays, CalendarPlus, ClipboardList, Dumbbell, LibraryBig, Shapes } from "lucide-react";
+import { CalendarDays, CalendarPlus, ClipboardList, Dumbbell, LibraryBig, Shapes, Target } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { createClient } from "@/lib/supabase/server";
 import { en } from "@/lib/i18n/en";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
+import { getDevelopmentDashboardSummary } from "@/lib/squad/development";
 import { sortTrainings, trainingDisplayTitle, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
 
 type RecentDrill = {
@@ -69,6 +70,7 @@ export default async function DashboardPage() {
       .order("updated_at", { ascending: false })
       .limit(5)
   ]);
+  const developmentSummary = await getDevelopmentDashboardSummary(supabase, user.id);
   const trainingEvents = sortTrainings(await listTrainingEventDetails(supabase, user.id));
   const today = new Date().toISOString().slice(0, 10);
   const nextTraining = trainingEvents.find((event) => event.date >= today);
@@ -171,6 +173,32 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Target className="h-5 w-5" />Development</h2>
+            <ButtonLink href="/squad/development" variant="ghost" className="h-9 px-3">
+              Open
+            </ButtonLink>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md bg-slate-50 p-3">
+              <p className="text-xs font-bold uppercase text-slate-500">Review</p>
+              <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.playersNeedingReview}</p>
+              <p className="mt-1 text-xs text-slate-500">players need review</p>
+            </div>
+            <div className="rounded-md bg-slate-50 p-3">
+              <p className="text-xs font-bold uppercase text-slate-500">High priority</p>
+              <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.activeHighPriorityGoals}</p>
+              <p className="mt-1 text-xs text-slate-500">active goals</p>
+            </div>
+            <div className="rounded-md bg-slate-50 p-3">
+              <p className="text-xs font-bold uppercase text-slate-500">This week</p>
+              <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.observationsThisWeek}</p>
+              <p className="mt-1 text-xs text-slate-500">observations</p>
+            </div>
+          </div>
+        </div>
+
         <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-board-navy">Recent drills</h2>

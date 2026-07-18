@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, BarChart3, CalendarDays, FileText, Footprints, Mail, Phone, Printer } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
+import { PlayerDevelopmentSection } from "@/components/squad/player-development";
 import { createPlayerCoachAssessment } from "@/lib/squad/analytics-actions";
 import {
   analyticsPeriodLabels,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/squad/analytics";
 import { getPlayerAnalytics } from "@/lib/squad/analytics-queries";
 import { createClient } from "@/lib/supabase/server";
+import { getPlayerDevelopmentProfile } from "@/lib/squad/development";
 import { formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
 import { finalStatusLabel, formatEventDate, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
 
@@ -37,6 +39,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
   const period = parsePeriod(query.period);
   const analytics = await getPlayerAnalytics(supabase, user.id, id, period);
   if (!analytics) notFound();
+  const development = await getPlayerDevelopmentProfile(supabase, user.id, id);
   const { player, summary, assessmentHistory } = analytics;
   const history = summary.records;
 
@@ -154,8 +157,8 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
           <DetailRow icon={<Mail className="h-4 w-4" />} label="Parent email" value={player.parentEmail} href={player.parentEmail ? `mailto:${player.parentEmail}` : undefined} />
         </DetailSection>
 
-        <DetailSection title="Development">
-          <DetailRow label="Development goal" value={player.developmentGoal} />
+        <DetailSection title="Player notes">
+          <DetailRow label="Old development note" value={player.developmentGoal} />
           <DetailRow label="Work on" value={player.workOn} />
           <DetailRow label="Hobbies" value={player.hobbies} />
           <DetailRow label="Coach notes" value={player.notes} />
@@ -214,6 +217,8 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
           </div>
         ) : null}
       </section>
+
+      <PlayerDevelopmentSection playerId={player.id} development={development} />
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-bold text-board-navy">Training history</h2>

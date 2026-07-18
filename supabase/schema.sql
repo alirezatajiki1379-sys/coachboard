@@ -703,7 +703,64 @@ create table if not exists public.player_coach_assessments (
 
 
 -- =========================================================
--- 15. INDEXES
+-- 15. PLAYER DEVELOPMENT
+-- Development goals, lightweight action plans and observations.
+-- =========================================================
+
+create table if not exists public.player_development_goals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  player_id uuid not null references public.squad_players(id) on delete cascade,
+  title text not null,
+  description text,
+  category text not null default 'individual'
+    check (category in ('technique', 'tactical_understanding', 'decision_making', 'physical', 'mental', 'communication', 'leadership', 'goalkeeping', 'behaviour', 'individual')),
+  priority text not null default 'medium'
+    check (priority in ('low', 'medium', 'high')),
+  status text not null default 'active'
+    check (status in ('active', 'completed', 'paused', 'cancelled')),
+  progress text not null default 'in_progress'
+    check (progress in ('not_started', 'in_progress', 'almost_there', 'completed')),
+  start_date date not null default current_date,
+  target_date date,
+  review_date date,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.player_goal_actions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  goal_id uuid not null references public.player_development_goals(id) on delete cascade,
+  description text not null,
+  completed boolean not null default false,
+  due_date date,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.player_observations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  player_id uuid not null references public.squad_players(id) on delete cascade,
+  goal_id uuid references public.player_development_goals(id) on delete set null,
+  event_id uuid references public.squad_training_events(id) on delete set null,
+  observation_date date not null default current_date,
+  category text
+    check (
+      category is null
+      or category in ('technique', 'tactical_understanding', 'decision_making', 'physical', 'mental', 'communication', 'leadership', 'goalkeeping', 'behaviour', 'individual')
+    ),
+  note text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+
+-- =========================================================
+-- 16. INDEXES
 -- =========================================================
 
 create index if not exists drills_user_id_updated_at_idx
@@ -842,9 +899,43 @@ on public.player_coach_assessments (
   created_at desc
 );
 
+create index if not exists player_development_goals_user_player_status_idx
+on public.player_development_goals (
+  user_id,
+  player_id,
+  status,
+  review_date
+);
+
+create index if not exists player_development_goals_user_review_idx
+on public.player_development_goals (
+  user_id,
+  status,
+  review_date
+);
+
+create index if not exists player_goal_actions_user_goal_idx
+on public.player_goal_actions (
+  user_id,
+  goal_id
+);
+
+create index if not exists player_observations_user_player_date_idx
+on public.player_observations (
+  user_id,
+  player_id,
+  observation_date desc
+);
+
+create index if not exists player_observations_user_event_idx
+on public.player_observations (
+  user_id,
+  event_id
+);
+
 
 -- =========================================================
--- 16. UPDATED_AT TRIGGERS
+-- 17. UPDATED_AT TRIGGERS
 -- =========================================================
 
 drop trigger if exists set_profiles_updated_at
@@ -944,6 +1035,30 @@ before update on public.player_coach_assessments
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_player_development_goals_updated_at
+on public.player_development_goals;
+
+create trigger set_player_development_goals_updated_at
+before update on public.player_development_goals
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_player_goal_actions_updated_at
+on public.player_goal_actions;
+
+create trigger set_player_goal_actions_updated_at
+before update on public.player_goal_actions
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_player_observations_updated_at
+on public.player_observations;
+
+create trigger set_player_observations_updated_at
+before update on public.player_observations
+for each row
+execute function public.set_updated_at();
+
 
 -- Auth profile trigger
 
@@ -957,7 +1072,7 @@ execute function public.handle_new_user();
 
 
 -- =========================================================
--- 17. ENABLE ROW LEVEL SECURITY
+-- 18. ENABLE ROW LEVEL SECURITY
 -- =========================================================
 
 alter table public.profiles
@@ -996,9 +1111,18 @@ enable row level security;
 alter table public.player_coach_assessments
 enable row level security;
 
+alter table public.player_development_goals
+enable row level security;
+
+alter table public.player_goal_actions
+enable row level security;
+
+alter table public.player_observations
+enable row level security;
+
 
 -- =========================================================
--- 18. RLS POLICIES
+-- 19. RLS POLICIES
 -- =========================================================
 
 
@@ -1257,6 +1381,91 @@ with check (
     where squad_players.id =
       player_coach_assessments.player_id
     and squad_players.user_id = auth.uid()
+  )
+);
+
+
+-- PLAYER DEVELOPMENT GOALS
+
+drop policy if exists "player development goals are owned by the user"
+on public.player_development_goals;
+
+create policy "player development goals are owned by the user"
+on public.player_development_goals
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = player_development_goals.player_id
+    and squad_players.user_id = auth.uid()
+  )
+);
+
+
+-- PLAYER GOAL ACTIONS
+
+drop policy if exists "player goal actions are owned by the user"
+on public.player_goal_actions;
+
+create policy "player goal actions are owned by the user"
+on public.player_goal_actions
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.player_development_goals
+    where player_development_goals.id = player_goal_actions.goal_id
+    and player_development_goals.user_id = auth.uid()
+  )
+);
+
+
+-- PLAYER OBSERVATIONS
+
+drop policy if exists "player observations are owned by the user"
+on public.player_observations;
+
+create policy "player observations are owned by the user"
+on public.player_observations
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = player_observations.player_id
+    and squad_players.user_id = auth.uid()
+  )
+  and (
+    goal_id is null
+    or exists (
+      select 1
+      from public.player_development_goals
+      where player_development_goals.id = player_observations.goal_id
+      and player_development_goals.user_id = auth.uid()
+      and player_development_goals.player_id = player_observations.player_id
+    )
+  )
+  and (
+    event_id is null
+    or exists (
+      select 1
+      from public.squad_training_events
+      where squad_training_events.id = player_observations.event_id
+      and squad_training_events.user_id = auth.uid()
+    )
   )
 );
 
