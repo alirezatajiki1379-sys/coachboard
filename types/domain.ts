@@ -186,11 +186,21 @@ export type SquadPlayer = {
   lastName?: string;
   dateOfBirth?: string;
   position?: string;
+  secondaryPositions: string[];
   strongFoot?: string;
   club?: string;
+  playerEmail?: string;
   parentPhone?: string;
   playerPhone?: string;
   parentEmail?: string;
+  heightCm?: number;
+  weightKg?: number;
+  jerseyNumber?: string;
+  captainStatus?: "none" | "captain" | "vice_captain";
+  joinedDate?: string;
+  allergies?: string;
+  medication?: string;
+  medicalNotes?: string;
   hobbies?: string;
   developmentGoal?: string;
   workOn?: string;
@@ -205,6 +215,50 @@ export type SquadTrainingEventStatus = "draft" | "prepared" | "in_progress" | "r
 export type SquadPlannedAttendanceStatus = "expected" | "unavailable" | "unclear";
 export type SquadAttendanceReason = "V" | "K" | "E" | "P" | "S" | "Z" | "U";
 export type SquadFinalAttendanceStatus = "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
+export type SquadPlannedAttendanceSource = "default" | "manual" | "medical";
+export type PlayerContactRelationship = "mother" | "father" | "parent" | "guardian" | "emergency" | "other";
+export type PlayerMedicalPeriodType = "injured" | "sick";
+export type PlayerMedicalPeriodStatus = "active" | "completed" | "cancelled";
+
+export type PlayerContact = {
+  id: string;
+  userId: string;
+  playerId: string;
+  name?: string;
+  relationship: PlayerContactRelationship;
+  phone?: string;
+  email?: string;
+  isPrimary: boolean;
+  isEmergency: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlayerMedicalPeriod = {
+  id: string;
+  userId: string;
+  playerId: string;
+  type: PlayerMedicalPeriodType;
+  startDate: string;
+  endDate?: string;
+  expectedReturnDate?: string;
+  actualReturnDate?: string;
+  description: string;
+  notes?: string;
+  status: PlayerMedicalPeriodStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlayerHeaderPreferences = {
+  showHeight: boolean;
+  showWeight: boolean;
+  showJerseyNumber: boolean;
+  showCaptain: boolean;
+  showJoinedDate: boolean;
+  showLastTraining: boolean;
+};
 
 export type SquadTrialPlayer = {
   id: string;
@@ -225,6 +279,7 @@ export type SquadAttendanceEntry = {
   plannedStatus?: SquadPlannedAttendanceStatus;
   plannedReason?: SquadAttendanceReason;
   plannedReasonNote?: string;
+  plannedStatusSource?: SquadPlannedAttendanceSource;
   finalStatus?: SquadFinalAttendanceStatus;
   lateMinutes?: number;
   latePenaltyApplied: boolean;
@@ -237,6 +292,12 @@ export type SquadAttendanceEntry = {
   coachNote?: string;
   sensitiveNote: boolean;
   player?: SquadPlayer;
+  medicalAvailability?: {
+    type: PlayerMedicalPeriodType;
+    label: string;
+    until?: string;
+    description: string;
+  };
   createdAt: string;
   updatedAt: string;
 };

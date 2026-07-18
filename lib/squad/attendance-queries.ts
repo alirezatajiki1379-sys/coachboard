@@ -8,6 +8,9 @@ import {
 } from "@/lib/squad/attendance-mappers";
 import type { SquadPlayerRow } from "@/lib/squad/mappers";
 import type { SquadTrainingEvent, SquadTrainingEventDetail } from "@/types/domain";
+import type { PlayerMedicalPeriod } from "@/types/domain";
+import { isMedicalPeriodActiveOnDate, medicalLabel, medicalReasonForType } from "@/lib/squad/player-hub";
+import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -85,11 +88,14 @@ export async function getTrainingEventDetail(
 
   if (attendanceError) throw new Error(attendanceError.message);
 
-  const attendance = ((attendanceData ?? []) as Array<
+  const attendanceRows = (attendanceData ?? []) as Array<
     SquadAttendanceRow & {
       squad_players?: SquadPlayerRow | null;
     }
-  >).map((row) => mapAttendanceRow(row, row.squad_players ?? undefined));
+  >;
+
+  const medicalByPlayer = await getMedicalByPlayer(db, userId, eventData.date, attendanceRows.map((row) => row.player_id));
+  const attendance = attendanceRows.map((row) => applyMedicalPrefill(mapAttendanceRow(row, row.squad_players ?? undefined), medicalByPlayer.get(row.player_id)));
 
   const event = mapTrainingEventRow(
     eventData as SquadTrainingEventRow,
@@ -98,6 +104,49 @@ export async function getTrainingEventDetail(
 
   const linked = (eventData as SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }).training_sessions;
   return { ...event, linkedTrainingSessionDuration: linked?.duration_target_minutes ?? undefined, attendance };
+}
+
+async function getMedicalByPlayer(db: SupabaseClient, userId: string, eventDate: string, playerIds: string[]) {
+  const result = new Map<string, PlayerMedicalPeriod>();
+  if (!playerIds.length) return result;
+  const { data, error } = await db
+    .from("player_medical_periods")
+    .select("*")
+    .eq("user_id", userId)
+    .in("player_id", Array.from(new Set(playerIds)))
+    .eq("status", "active")
+    .lte("start_date", eventDate)
+    .or(`end_date.is.null,end_date.gte.${eventDate}`);
+  if (error) return result;
+  for (const row of (data ?? []) as PlayerMedicalPeriodRow[]) {
+    const period = mapPlayerMedicalPeriodRow(row);
+    if (isMedicalPeriodActiveOnDate(period, eventDate) && !result.has(period.playerId)) result.set(period.playerId, period);
+  }
+  return result;
+}
+
+function applyMedicalPrefill<T extends ReturnType<typeof mapAttendanceRow>>(entry: T, medical: PlayerMedicalPeriod | undefined): T {
+  if (!medical) {
+    if (entry.plannedStatusSource === "medical" && !entry.finalStatus) {
+      return { ...entry, plannedStatus: "expected", plannedReason: undefined, plannedReasonNote: undefined, plannedStatusSource: "default" };
+    }
+    return entry;
+  }
+  const availability = {
+    type: medical.type,
+    label: medicalLabel(medical),
+    until: medical.actualReturnDate ?? medical.expectedReturnDate ?? medical.endDate,
+    description: medical.description
+  };
+  if (entry.finalStatus || entry.plannedStatusSource === "manual") return { ...entry, medicalAvailability: availability };
+  return {
+    ...entry,
+    plannedStatus: "unavailable",
+    plannedReason: medicalReasonForType(medical.type),
+    plannedReasonNote: medical.description,
+    plannedStatusSource: "medical",
+    medicalAvailability: availability
+  };
 }
 
 export async function getLinkableTrainingSessions(supabase: SupabaseServerClient, userId: string): Promise<LinkedSessionRow[]> {

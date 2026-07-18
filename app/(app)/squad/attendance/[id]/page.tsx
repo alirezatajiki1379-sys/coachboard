@@ -117,6 +117,13 @@ export default async function TrainingEventPage({ params }: EventPageProps) {
                       Reason: {[plannedReasonLabel(entry.plannedReason), entry.plannedReasonNote].filter(Boolean).join(" · ")}
                     </p>
                   ) : null}
+                  {entry.medicalAvailability ? (
+                    <p className="mt-1 text-xs font-bold text-red-700">
+                      Medical status: {entry.medicalAvailability.label}
+                      {entry.medicalAvailability.until ? ` until ${formatEventDate(entry.medicalAvailability.until)}` : " until further notice"}
+                      {entry.plannedStatusSource === "manual" ? " · Manual attendance override" : ""}
+                    </p>
+                  ) : null}
                 </div>
                 <PlannedAttendanceControls entry={entry} eventId={event.id} returnTo={`/squad/attendance/${event.id}`} />
                 <div className="flex flex-wrap gap-2">

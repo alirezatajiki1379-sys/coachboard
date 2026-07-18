@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Clock3, HelpCircle, ShieldAlert, UserMinus } from "lucide-react";
+import { Check, Clock3, HelpCircle, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { developmentCategoryLabel, developmentGoalCategories } from "@/config/development";
@@ -84,6 +84,14 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
           <Button type="submit" variant="secondary" className="h-10 px-3">Save reason</Button>
         </form>
       ) : null}
+      {entry.medicalAvailability ? (
+        <p className="inline-flex items-center gap-2 rounded-md bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
+          <Stethoscope className="h-3.5 w-3.5" />
+          Medical status: {entry.medicalAvailability.label}
+          {entry.medicalAvailability.until ? ` until ${entry.medicalAvailability.until}` : " until further notice"}
+          {entry.plannedStatusSource === "manual" ? " · Attendance override active" : ""}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -145,6 +153,7 @@ export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; ev
               {entry.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Trial player</span> : null}
               <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Planned: {plannedStatusLabel(entry.plannedStatus)}</span>
               <span className={`rounded-full px-2 py-1 ${statusTone}`}>Actual: {finalStatusLabel(entry.finalStatus)}</span>
+              {entry.medicalAvailability ? <span className="rounded-full bg-red-50 px-2 py-1 text-red-700">{entry.medicalAvailability.label}</span> : null}
             </div>
             {entry.coachNote ? <p className="mt-2 text-sm text-slate-600">{entry.coachNote}</p> : null}
           </div>

@@ -400,12 +400,27 @@ create table if not exists public.squad_players (
 
   date_of_birth date,
   position text,
+  secondary_positions text[] not null default '{}',
   strong_foot text,
   club text,
+  player_email text,
 
   parent_phone text,
   player_phone text,
   parent_email text,
+
+  height_cm integer,
+  weight_kg integer,
+  jersey_number text,
+  captain_status text not null default 'none'
+    check (
+      captain_status in ('none', 'captain', 'vice_captain')
+    ),
+  joined_date date,
+
+  allergies text,
+  medication text,
+  medical_notes text,
 
   hobbies text,
   development_goal text,
@@ -436,6 +451,18 @@ add column if not exists converted_at timestamptz;
 alter table public.squad_players
 alter column last_name drop not null;
 
+alter table public.squad_players
+add column if not exists secondary_positions text[] not null default '{}',
+add column if not exists player_email text,
+add column if not exists height_cm integer,
+add column if not exists weight_kg integer,
+add column if not exists jersey_number text,
+add column if not exists captain_status text not null default 'none',
+add column if not exists joined_date date,
+add column if not exists allergies text,
+add column if not exists medication text,
+add column if not exists medical_notes text;
+
 
 -- Ungültige oder leere Werte bereinigen
 
@@ -454,6 +481,105 @@ alter table public.squad_players
 add constraint squad_players_player_type_check
 check (
   player_type in ('roster', 'trial')
+);
+
+alter table public.squad_players
+drop constraint if exists squad_players_captain_status_check;
+
+alter table public.squad_players
+add constraint squad_players_captain_status_check
+check (
+  captain_status in ('none', 'captain', 'vice_captain')
+);
+
+
+-- =========================================================
+-- 11B. PLAYER HUB CONTACTS, MEDICAL PERIODS AND HEADER PREFS
+-- =========================================================
+
+create table if not exists public.player_contacts (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null
+    references auth.users(id)
+    on delete cascade,
+
+  player_id uuid not null
+    references public.squad_players(id)
+    on delete cascade,
+
+  name text,
+  relationship text not null default 'parent'
+    check (
+      relationship in (
+        'mother',
+        'father',
+        'parent',
+        'guardian',
+        'emergency',
+        'other'
+      )
+    ),
+  phone text,
+  email text,
+  is_primary boolean not null default false,
+  is_emergency boolean not null default false,
+  notes text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.player_medical_periods (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null
+    references auth.users(id)
+    on delete cascade,
+
+  player_id uuid not null
+    references public.squad_players(id)
+    on delete cascade,
+
+  type text not null
+    check (
+      type in ('injured', 'sick')
+    ),
+
+  start_date date not null,
+  end_date date,
+  expected_return_date date,
+  actual_return_date date,
+  description text not null,
+  notes text,
+  status text not null default 'active'
+    check (
+      status in ('active', 'completed', 'cancelled')
+    ),
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  check (
+    end_date is null
+    or end_date >= start_date
+  )
+);
+
+create table if not exists public.player_header_preferences (
+  user_id uuid primary key
+    references auth.users(id)
+    on delete cascade,
+
+  show_height boolean not null default false,
+  show_weight boolean not null default false,
+  show_jersey_number boolean not null default false,
+  show_captain boolean not null default false,
+  show_joined_date boolean not null default false,
+  show_last_training boolean not null default false,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 
@@ -553,6 +679,15 @@ create table if not exists public.squad_attendance_records (
     ),
 
   planned_reason_note text,
+  planned_status_source text
+    check (
+      planned_status_source is null
+      or planned_status_source in (
+        'default',
+        'manual',
+        'medical'
+      )
+    ),
 
   final_status text
     check (
@@ -627,7 +762,8 @@ create table if not exists public.squad_attendance_records (
 );
 
 alter table public.squad_attendance_records
-add column if not exists planned_reason text;
+add column if not exists planned_reason text,
+add column if not exists planned_status_source text default 'default';
 
 update public.squad_attendance_records
 set planned_reason = planned_status,
@@ -642,6 +778,9 @@ drop constraint if exists squad_attendance_records_planned_reason_check;
 
 alter table public.squad_attendance_records
 drop constraint if exists squad_attendance_records_final_status_check;
+
+alter table public.squad_attendance_records
+drop constraint if exists squad_attendance_records_planned_status_source_check;
 
 alter table public.squad_attendance_records
 add constraint squad_attendance_records_planned_status_check
@@ -662,6 +801,13 @@ add constraint squad_attendance_records_final_status_check
 check (
   final_status is null
   or final_status in ('present', 'absent', 'Z', 'V', 'K', 'E', 'P', 'S', 'U')
+);
+
+alter table public.squad_attendance_records
+add constraint squad_attendance_records_planned_status_source_check
+check (
+  planned_status_source is null
+  or planned_status_source in ('default', 'manual', 'medical')
 );
 
 
@@ -851,6 +997,20 @@ on public.squad_players (
   archived_at
 );
 
+create index if not exists player_contacts_user_player_idx
+on public.player_contacts (
+  user_id,
+  player_id
+);
+
+create index if not exists player_medical_periods_user_player_status_idx
+on public.player_medical_periods (
+  user_id,
+  player_id,
+  status,
+  start_date
+);
+
 create index if not exists squad_training_events_user_id_date_idx
 on public.squad_training_events (
   user_id,
@@ -1027,6 +1187,30 @@ before update on public.squad_attendance_records
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_player_contacts_updated_at
+on public.player_contacts;
+
+create trigger set_player_contacts_updated_at
+before update on public.player_contacts
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_player_medical_periods_updated_at
+on public.player_medical_periods;
+
+create trigger set_player_medical_periods_updated_at
+before update on public.player_medical_periods
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_player_header_preferences_updated_at
+on public.player_header_preferences;
+
+create trigger set_player_header_preferences_updated_at
+before update on public.player_header_preferences
+for each row
+execute function public.set_updated_at();
+
 drop trigger if exists set_player_coach_assessments_updated_at
 on public.player_coach_assessments;
 
@@ -1106,6 +1290,15 @@ alter table public.squad_training_events
 enable row level security;
 
 alter table public.squad_attendance_records
+enable row level security;
+
+alter table public.player_contacts
+enable row level security;
+
+alter table public.player_medical_periods
+enable row level security;
+
+alter table public.player_header_preferences
 enable row level security;
 
 alter table public.player_coach_assessments
@@ -1358,6 +1551,66 @@ with check (
       squad_attendance_records.player_id
     and squad_players.user_id = auth.uid()
   )
+);
+
+
+-- PLAYER CONTACTS
+
+drop policy if exists "player contacts are owned by the user"
+on public.player_contacts;
+
+create policy "player contacts are owned by the user"
+on public.player_contacts
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = player_contacts.player_id
+    and squad_players.user_id = auth.uid()
+  )
+);
+
+
+-- PLAYER MEDICAL PERIODS
+
+drop policy if exists "player medical periods are owned by the user"
+on public.player_medical_periods;
+
+create policy "player medical periods are owned by the user"
+on public.player_medical_periods
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = player_medical_periods.player_id
+    and squad_players.user_id = auth.uid()
+  )
+);
+
+
+-- PLAYER HEADER PREFERENCES
+
+drop policy if exists "player header preferences are owned by the user"
+on public.player_header_preferences;
+
+create policy "player header preferences are owned by the user"
+on public.player_header_preferences
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
 );
 
 

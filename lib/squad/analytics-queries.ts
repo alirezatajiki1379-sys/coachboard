@@ -94,7 +94,9 @@ export async function getPlayerAnalytics(
   supabase: SupabaseServerClient,
   userId: string,
   playerId: string,
-  period: AnalyticsPeriod
+  period: AnalyticsPeriod,
+  customFrom?: string,
+  customTo?: string
 ): Promise<{ player: SquadPlayer; summary: PlayerAnalyticsSummary; assessmentHistory: PlayerCoachAssessment[] } | null> {
   const db = supabase as unknown as SupabaseClient;
   const { data: playerData, error: playerError } = await db.from("squad_players").select("*").eq("user_id", userId).eq("id", playerId).maybeSingle();
@@ -109,7 +111,7 @@ export async function getPlayerAnalytics(
   const player = mapSquadPlayerRow(playerData as SquadPlayerRow);
   return {
     player,
-    summary: createPlayerAnalyticsSummary(player, records, period, assessments[0], seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay),
+    summary: createPlayerAnalyticsSummary(player, records, period, assessments[0], seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, customFrom, customTo),
     assessmentHistory: assessments
   };
 }

@@ -38,6 +38,7 @@ export function PlayerForm({ action, mode, player }: PlayerFormProps) {
           <TextInput name="lastName" label="Last name" defaultValue={values.lastName} error={fieldErrors.lastName} />
           <TextInput name="dateOfBirth" label="Date of birth" type="date" defaultValue={values.dateOfBirth} error={fieldErrors.dateOfBirth} />
           <TextInput name="position" label="Position" defaultValue={values.position} error={fieldErrors.position} />
+          <TextInput name="secondaryPositions" label="Secondary positions" defaultValue={values.secondaryPositions} error={fieldErrors.secondaryPositions} />
           <SelectInput
             name="strongFoot"
             label="Strong foot"
@@ -46,13 +47,26 @@ export function PlayerForm({ action, mode, player }: PlayerFormProps) {
             error={fieldErrors.strongFoot}
           />
           <TextInput name="club" label="Club" defaultValue={values.club} error={fieldErrors.club} />
+          <TextInput name="jerseyNumber" label="Jersey number" defaultValue={values.jerseyNumber} error={fieldErrors.jerseyNumber} />
+          <TextInput name="heightCm" label="Height (cm)" type="number" defaultValue={values.heightCm} error={fieldErrors.heightCm} />
+          <TextInput name="weightKg" label="Weight (kg)" type="number" defaultValue={values.weightKg} error={fieldErrors.weightKg} />
+          <SelectInput
+            name="captainStatus"
+            label="Captain status"
+            defaultValue={values.captainStatus}
+            options={["none", "captain", "vice_captain"]}
+            error={fieldErrors.captainStatus}
+          />
+          <TextInput name="joinedDate" label="Joined date" type="date" defaultValue={values.joinedDate} error={fieldErrors.joinedDate} />
         </div>
+        <p className="mt-3 text-xs text-slate-500">Separate secondary positions with commas, for example DM, AM. Optional fields are hidden in the Player Hub header unless enabled.</p>
       </section>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-bold text-board-navy">Contact</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <TextInput name="playerPhone" label="Player phone" defaultValue={values.playerPhone} error={fieldErrors.playerPhone} />
+          <TextInput name="playerEmail" label="Player email" type="email" defaultValue={values.playerEmail} error={fieldErrors.playerEmail} />
           <TextInput name="parentPhone" label="Parent phone" defaultValue={values.parentPhone} error={fieldErrors.parentPhone} />
           <TextInput name="parentEmail" label="Parent email" type="email" defaultValue={values.parentEmail} error={fieldErrors.parentEmail} />
         </div>
@@ -65,6 +79,16 @@ export function PlayerForm({ action, mode, player }: PlayerFormProps) {
           <TextArea name="workOn" label="Work on" defaultValue={values.workOn} error={fieldErrors.workOn} />
           <TextArea name="hobbies" label="Hobbies / personality notes" defaultValue={values.hobbies} error={fieldErrors.hobbies} />
           <TextArea name="notes" label="Coach notes" defaultValue={values.notes} error={fieldErrors.notes} />
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+        <h2 className="text-lg font-bold text-board-navy">Medical notes</h2>
+        <p className="mt-1 text-sm text-slate-500">Private medical background stays inside the Player Hub and is not shown in general squad overviews.</p>
+        <div className="mt-4 grid gap-4">
+          <TextArea name="allergies" label="Allergies" defaultValue={values.allergies} error={fieldErrors.allergies} />
+          <TextArea name="medication" label="Medication" defaultValue={values.medication} error={fieldErrors.medication} />
+          <TextArea name="medicalNotes" label="Medical notes" defaultValue={values.medicalNotes} error={fieldErrors.medicalNotes} />
         </div>
       </section>
 
@@ -87,11 +111,21 @@ function getInitialValues(player?: SquadPlayer): SquadPlayerFormValues {
     lastName: player?.lastName ?? "",
     dateOfBirth: player?.dateOfBirth ?? "",
     position: player?.position ?? "",
+    secondaryPositions: player?.secondaryPositions.join(", ") ?? "",
     strongFoot: player?.strongFoot ?? "",
     club: player?.club ?? "",
+    playerEmail: player?.playerEmail ?? "",
     parentPhone: player?.parentPhone ?? "",
     playerPhone: player?.playerPhone ?? "",
     parentEmail: player?.parentEmail ?? "",
+    heightCm: player?.heightCm ? String(player.heightCm) : "",
+    weightKg: player?.weightKg ? String(player.weightKg) : "",
+    jerseyNumber: player?.jerseyNumber ?? "",
+    captainStatus: player?.captainStatus ?? "none",
+    joinedDate: player?.joinedDate ?? "",
+    allergies: player?.allergies ?? "",
+    medication: player?.medication ?? "",
+    medicalNotes: player?.medicalNotes ?? "",
     hobbies: player?.hobbies ?? "",
     developmentGoal: player?.developmentGoal ?? "",
     workOn: player?.workOn ?? "",
