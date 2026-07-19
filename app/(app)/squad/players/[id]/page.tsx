@@ -74,6 +74,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
   const attendanceFilter = parseAttendanceFilter(query.attendance);
   const medicalError = one(query.medicalError);
   const contactError = one(query.contactError);
+  const returnTo = safeReturnPath(one(query.returnTo));
   const { period, customFrom, customTo } = parsePlayerHubPeriod(query);
   const supabase = await createClient();
   const {
@@ -88,9 +89,9 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
 
   return (
     <div className="space-y-6">
-      <Link href="/squad" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
+      <Link href={returnTo} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
         <ArrowLeft className="h-4 w-4" />
-        Back to squad
+        Back
       </Link>
 
       <PlayerHubHeader hub={hub} period={period} tab={tab} />
@@ -1121,6 +1122,12 @@ function captainLabel(value: string) {
 
 function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function safeReturnPath(value?: string) {
+  if (!value) return "/squad";
+  if (value.startsWith("/squad") || value.startsWith("/actions") || value.startsWith("/dashboard")) return value;
+  return "/squad";
 }
 
 function isPeriodAwareTab(tab: PlayerHubTab) {

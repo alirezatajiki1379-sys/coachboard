@@ -158,7 +158,7 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
 
         {data.configuration.inspectorMode === "open" ? <aside className="hidden xl:block">
           <div className="sticky top-6">
-            <InspectorPanel player={data.selected} />
+            <InspectorPanel player={data.selected} returnTo={workspaceHref(data.state, {})} />
           </div>
         </aside> : null}
       </section>
@@ -582,7 +582,7 @@ function WorkspaceMobileCard({ data, player }: { data: WorkspaceData; player: Wo
             <StatusDot player={player} compact />
           </div>
         </div>
-        <Link href={`/squad/players/${summary.player.id}`} className="rounded-md bg-board-green px-3 py-2 text-sm font-bold text-white">Open</Link>
+        <Link href={playerHubHref(summary.player.id, workspaceHref(data.state, {}))} className="rounded-md bg-board-green px-3 py-2 text-sm font-bold text-white">Open</Link>
       </div>
       {(data.configuration.showAttentionIndicators || data.state.view === "needs-attention") && player.attention.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -603,7 +603,7 @@ function WorkspaceMobileCard({ data, player }: { data: WorkspaceData; player: Wo
   );
 }
 
-function InspectorPanel({ player }: { player?: WorkspacePlayerSummary }) {
+function InspectorPanel({ player, returnTo }: { player?: WorkspacePlayerSummary; returnTo: string }) {
   if (!player) {
     return (
       <section className="rounded-lg border border-dashed border-board-line bg-white p-5 shadow-soft">
@@ -669,10 +669,10 @@ function InspectorPanel({ player }: { player?: WorkspacePlayerSummary }) {
           )}
         </InspectorSection>
         <div className="grid gap-2">
-          <ButtonLink href={`/squad/players/${summary.player.id}`} className="justify-center">Open Player Hub</ButtonLink>
-          <ButtonLink href={`/squad/players/${summary.player.id}?tab=development`} variant="secondary" className="justify-center">Add observation or goal</ButtonLink>
-          <ButtonLink href={`/squad/players/${summary.player.id}?tab=medical`} variant="secondary" className="justify-center">Add injury or sickness</ButtonLink>
-          <ButtonLink href={`/squad/players/${summary.player.id}?tab=analytics`} variant="secondary" className="justify-center">Update assessment</ButtonLink>
+          <ButtonLink href={playerHubHref(summary.player.id, returnTo)} className="justify-center">Open Player Hub</ButtonLink>
+          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "development")} variant="secondary" className="justify-center">Add observation or goal</ButtonLink>
+          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "medical")} variant="secondary" className="justify-center">Add injury or sickness</ButtonLink>
+          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "analytics")} variant="secondary" className="justify-center">Update assessment</ButtonLink>
         </div>
       </div>
     </section>
@@ -793,7 +793,7 @@ function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: Works
   if (columnId === "player") {
     return (
       <div className="min-w-[190px]">
-        <Link href={`/squad/players/${summary.player.id}`} className="font-bold text-board-navy hover:text-board-green">{playerName(summary.player)}</Link>
+        <Link href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))} className="font-bold text-board-navy hover:text-board-green">{playerName(summary.player)}</Link>
         <div className="mt-1 flex flex-wrap gap-1.5">
           <Badge tone={summary.player.playerType === "trial" ? "amber" : "neutral"}>{summary.player.playerType === "trial" ? "Trial" : "Roster"}</Badge>
           {(data.configuration.showAttentionIndicators || data.state.view === "needs-attention") && visibleAttention(player.attention).map((indicator) => <AttentionBadge key={indicator.id} indicator={indicator} />)}
@@ -839,6 +839,13 @@ function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: Works
   if (columnId === "trialRatedTrainings") return summary.player.playerType === "trial" ? String(summary.rated) : "-";
   if (columnId === "trialDecision") return summary.player.playerType === "trial" ? coachAssessmentLabels[summary.assessment?.assessment ?? "decision_open"] : "-";
   return "-";
+}
+
+function playerHubHref(playerId: string, returnTo: string, tab?: string) {
+  const params = new URLSearchParams();
+  if (tab) params.set("tab", tab);
+  params.set("returnTo", returnTo);
+  return `/squad/players/${playerId}?${params.toString()}`;
 }
 
 function mobileMetric(metricId: string, player: WorkspacePlayerSummary) {

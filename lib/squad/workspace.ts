@@ -369,8 +369,10 @@ export function parseWorkspaceState(searchParams: Record<string, string | string
 export async function getCoachWorkspaceData(
   supabase: SupabaseServerClient,
   userId: string,
-  state: WorkspaceState
+  state: WorkspaceState,
+  options: { includeAttention?: boolean } = {}
 ): Promise<WorkspaceData> {
+  const includeAttention = options.includeAttention ?? true;
   const db = supabase as unknown as SupabaseClient;
   const savedViews = await listWorkspaceViews(db, userId);
   const defaultView = savedViews.find((view) => view.isDefault);
@@ -417,12 +419,13 @@ export async function getCoachWorkspaceData(
     createPlayerAnalyticsSummary(player, records, effectiveState.period, assessmentByPlayer.get(player.id), seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, effectiveState.customFrom, effectiveState.customTo)
   );
   const allSummaries = [...activeSummaries, ...archivedSummaries];
+  const resolvedPeriodLabel = periodRangeLabel(activeSummaries, effectiveState);
   const allPlayers = allSummaries.map((summary) => {
     const playerGoals = goalsByPlayer.get(summary.player.id) ?? [];
     const latestObservation = observationsByPlayer.get(summary.player.id);
     const currentMedical = latestApplicableMedicalPeriod(medicalByPlayer.get(summary.player.id) ?? [], todayDate());
     const review = getReviewState(playerGoals, summary.assessment);
-    const workspaceSummary = {
+    const workspaceSummary: WorkspacePlayerSummary = {
       analytics: summary,
       activeGoals: playerGoals,
       latestObservation,
@@ -431,15 +434,17 @@ export async function getCoachWorkspaceData(
       positionGroup: positionGroup(summary.player.position),
       review
     };
-    const attention = getPlayerAttentionItems(workspaceSummary, attentionPreferences, {
-      today: todayDate(),
-      periodLabel: periodRangeLabel(activeSummaries, effectiveState)
-    }).map((item) => ({
-      id: item.key,
-      label: item.title,
-      tone: attentionTone(item.priority),
-      priority: item.priority === "critical" ? 0 : item.priority === "high" ? 1 : item.priority === "medium" ? 2 : item.priority === "low" ? 3 : 9
-    }));
+    const attention = includeAttention
+      ? getPlayerAttentionItems(workspaceSummary, attentionPreferences, {
+          today: todayDate(),
+          periodLabel: resolvedPeriodLabel
+        }).map((item) => ({
+          id: item.key,
+          label: item.title,
+          tone: attentionTone(item.priority),
+          priority: item.priority === "critical" ? 0 : item.priority === "high" ? 1 : item.priority === "medium" ? 2 : item.priority === "low" ? 3 : 9
+        }))
+      : [];
     return {
       analytics: summary,
       activeGoals: playerGoals,
@@ -465,7 +470,7 @@ export async function getCoachWorkspaceData(
     positions,
     selected,
     periodLabel: analyticsPeriodLabels[effectiveState.period],
-    periodRangeLabel: periodRangeLabel(activeSummaries, effectiveState),
+    periodRangeLabel: resolvedPeriodLabel,
     counts: {
       active: active.length,
       roster: active.filter((item) => item.analytics.player.playerType === "roster").length,

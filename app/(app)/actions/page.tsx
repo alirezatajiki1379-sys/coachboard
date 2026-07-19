@@ -193,7 +193,7 @@ function AttentionCard({ item, selected, stateHref, returnTo }: { item: Attentio
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/squad/players/${item.playerId}`} className="font-bold text-board-navy hover:text-board-green">{item.playerName}</Link>
+            <Link href={withReturnTo(`/squad/players/${item.playerId}`, returnTo)} className="font-bold text-board-navy hover:text-board-green">{item.playerName}</Link>
             <span className="text-sm text-slate-500">{item.playerPosition ?? "No position"}</span>
             <Badge tone={item.playerType === "trial" ? "amber" : "neutral"}>{item.playerType === "trial" ? "Trial" : "Roster"}</Badge>
           </div>
@@ -206,7 +206,7 @@ function AttentionCard({ item, selected, stateHref, returnTo }: { item: Attentio
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <ButtonLink href={stateHref} variant="secondary" className="h-9 px-3">Details</ButtonLink>
-          {item.suggestedActions[0] ? <ButtonLink href={item.suggestedActions[0].href} className="h-9 px-3">{item.suggestedActions[0].label}</ButtonLink> : null}
+          {item.suggestedActions[0] ? <ButtonLink href={withReturnTo(item.suggestedActions[0].href, returnTo)} className="h-9 px-3">{item.suggestedActions[0].label}</ButtonLink> : null}
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -266,7 +266,7 @@ function AttentionDetail({ item, returnTo }: { item?: AttentionItem; returnTo: s
       </div>
       <div className="mt-4 grid gap-2">
         {item.suggestedActions.map((action) => (
-          <ButtonLink key={action.label} href={action.href} variant={action.primary ? "primary" : "secondary"} className="justify-center">{action.label}</ButtonLink>
+          <ButtonLink key={action.label} href={withReturnTo(action.href, returnTo)} variant={action.primary ? "primary" : "secondary"} className="justify-center">{action.label}</ButtonLink>
         ))}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
@@ -412,4 +412,11 @@ function Badge({ children, tone = "green" }: { children: React.ReactNode; tone?:
 
 function categoryLabel(category: AttentionItem["category"]) {
   return attentionCategories.find((item) => item.id === category)?.label ?? category;
+}
+
+function withReturnTo(href: string, returnTo: string) {
+  const [path, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.set("returnTo", returnTo);
+  return `${path}?${params.toString()}`;
 }

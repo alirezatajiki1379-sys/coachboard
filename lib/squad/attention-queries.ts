@@ -29,7 +29,7 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
     position: state.position,
     search: ""
   });
-  const workspace = await getCoachWorkspaceData(supabase, userId, workspaceState);
+  const workspace = await getCoachWorkspaceData(supabase, userId, workspaceState, { includeAttention: false });
   const allItems = applyAttentionStates(
     workspace.allPlayers.flatMap((player) => getPlayerAttentionItems(player, preferences, {
       today: new Date().toISOString().slice(0, 10),
