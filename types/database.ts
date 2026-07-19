@@ -634,6 +634,48 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["coach_workspace_views"]["Insert"]>;
         Relationships: [];
       };
+      coach_attention_preferences: {
+        Row: {
+          user_id: string;
+          preferences: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          preferences?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["coach_attention_preferences"]["Insert"]>;
+        Relationships: [];
+      };
+      coach_attention_states: {
+        Row: {
+          id: string;
+          user_id: string;
+          attention_key: string;
+          player_id: string;
+          attention_type: string;
+          snoozed_until: string | null;
+          dismissed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          attention_key: string;
+          player_id: string;
+          attention_type: string;
+          snoozed_until?: string | null;
+          dismissed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["coach_attention_states"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

@@ -14,6 +14,7 @@ import {
   type PlayerAnalyticsSummary
 } from "@/lib/squad/analytics";
 import { getSquadAnalyticsOverview } from "@/lib/squad/analytics-queries";
+import { getAttentionPreferences, getPlayerAttentionItems, attentionTone } from "@/lib/squad/attention";
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
 import { mapGoalRow, mapObservationRow } from "@/lib/squad/development";
 import { calculateAge } from "@/lib/squad/format";
@@ -242,13 +243,6 @@ export type ReviewState = {
   rank: number;
 };
 
-export const attentionThresholds = {
-  noObservationDays: 30,
-  lowAttendanceRate: 0.75,
-  decliningTrend: -0.3,
-  repeatedPenalisedLateness: 2
-};
-
 export const quickViews: Array<{ id: WorkspaceView; label: string; description: string; defaultSort: WorkspaceSortKey; defaultDirection: AnalyticsSortDirection }> = [
   { id: "all", label: "All Players", description: "Roster and Trial Players with current status.", defaultSort: "position", defaultDirection: "asc" },
   { id: "by-position", label: "By Position", description: "Grouped by broad football roles.", defaultSort: "position", defaultDirection: "asc" },
@@ -400,14 +394,15 @@ export async function getCoachWorkspaceData(
     customFrom: effectiveState.customFrom,
     customTo: effectiveState.customTo
   };
-  const [{ summaries, positions, seasonSettings }, archivedPlayers, records, assessments, goalsByPlayer, observationsByPlayer, medicalByPlayer] = await Promise.all([
+  const [{ summaries, positions, seasonSettings }, archivedPlayers, records, assessments, goalsByPlayer, observationsByPlayer, medicalByPlayer, attentionPreferences] = await Promise.all([
     getSquadAnalyticsOverview(supabase, userId, analyticsFilters),
     listArchivedPlayers(db, userId),
     listWorkspaceRecords(db, userId),
     listLatestAssessments(db, userId),
     listActiveGoals(db, userId),
     listLatestObservations(db, userId),
-    listActiveMedical(db, userId)
+    listActiveMedical(db, userId),
+    getAttentionPreferences(db, userId)
   ]);
 
   const assessmentByPlayer = new Map(assessments.map((assessment) => [assessment.playerId, assessment]));
@@ -427,7 +422,24 @@ export async function getCoachWorkspaceData(
     const latestObservation = observationsByPlayer.get(summary.player.id);
     const currentMedical = latestApplicableMedicalPeriod(medicalByPlayer.get(summary.player.id) ?? [], todayDate());
     const review = getReviewState(playerGoals, summary.assessment);
-    const attention = getAttentionIndicators(summary, playerGoals, latestObservation, currentMedical, review);
+    const workspaceSummary = {
+      analytics: summary,
+      activeGoals: playerGoals,
+      latestObservation,
+      currentMedical,
+      attention: [],
+      positionGroup: positionGroup(summary.player.position),
+      review
+    };
+    const attention = getPlayerAttentionItems(workspaceSummary, attentionPreferences, {
+      today: todayDate(),
+      periodLabel: periodRangeLabel(activeSummaries, effectiveState)
+    }).map((item) => ({
+      id: item.key,
+      label: item.title,
+      tone: attentionTone(item.priority),
+      priority: item.priority === "critical" ? 0 : item.priority === "high" ? 1 : item.priority === "medium" ? 2 : item.priority === "low" ? 3 : 9
+    }));
     return {
       analytics: summary,
       activeGoals: playerGoals,
@@ -641,33 +653,6 @@ function sortWorkspacePlayers(players: WorkspacePlayerSummary[], sort: Workspace
     if (sort === "coachAssessment") return dir * (assessmentRank(a.analytics.assessment) - assessmentRank(b.analytics.assessment)) || fallback;
     return dir * fallback;
   });
-}
-
-function getAttentionIndicators(
-  summary: PlayerAnalyticsSummary,
-  goals: PlayerDevelopmentGoal[],
-  latestObservation: PlayerObservation | undefined,
-  medical: PlayerMedicalPeriod | undefined,
-  review: ReviewState
-): AttentionIndicator[] {
-  const indicators: AttentionIndicator[] = [];
-  if (review.rank === 1) indicators.push({ id: "review-overdue", label: "Review overdue", tone: "red", priority: 1 });
-  if (medical && medicalNeedsReview(medical)) indicators.push({ id: "medical-review", label: "Medical review needed", tone: "amber", priority: 2 });
-  if (summary.player.playerType === "trial" && (!summary.assessment || summary.assessment.assessment === "decision_open" || summary.assessment.assessment === "continue_observing")) {
-    indicators.push({ id: "trial-decision", label: "Trial decision open", tone: "amber", priority: 3 });
-  }
-  if (medical?.type === "injured") indicators.push({ id: "injured", label: "Currently injured", tone: "red", priority: 4 });
-  if (medical?.type === "sick") indicators.push({ id: "sick", label: "Currently sick", tone: "amber", priority: 5 });
-  if (summary.trend.value !== null && summary.trend.value <= attentionThresholds.decliningTrend) indicators.push({ id: "declining-trend", label: "Declining trend", tone: "red", priority: 6 });
-  if (summary.attendanceRate !== null && summary.attendanceRate < attentionThresholds.lowAttendanceRate) indicators.push({ id: "low-attendance", label: "Low attendance", tone: "amber", priority: 7 });
-  if (isObservationOld(latestObservation)) indicators.push({ id: "no-observation", label: "No recent observation", tone: "neutral", priority: 8 });
-  if (!hasRatingInLastThreeAttended(summary.records)) indicators.push({ id: "no-recent-rating", label: "No recent rating", tone: "neutral", priority: 9 });
-  if (goals.some((goal) => goal.priority === "high")) indicators.push({ id: "high-goal", label: "High-priority goal", tone: "amber", priority: 10 });
-  if (summary.records.filter((record) => record.finalStatus === "Z" && record.latePenaltyApplied).length >= attentionThresholds.repeatedPenalisedLateness) {
-    indicators.push({ id: "repeated-late", label: "Repeated lateness", tone: "amber", priority: 11 });
-  }
-  if (summary.trend.value !== null && summary.trend.value >= 0.3) indicators.push({ id: "improving", label: "Improving", tone: "green", priority: 20 });
-  return indicators.sort((a, b) => a.priority - b.priority);
 }
 
 function getReviewState(goals: PlayerDevelopmentGoal[], assessment?: PlayerCoachAssessment): ReviewState {
@@ -915,17 +900,6 @@ function periodRangeLabel(summaries: PlayerAnalyticsSummary[], state: WorkspaceS
     return dates.length ? `${dates.length} training${dates.length === 1 ? "" : "s"} available · ${formatShortDate(dates[0])} - ${formatShortDate(dates[dates.length - 1])}` : "No trainings in this period";
   }
   return dates.length ? `${formatShortDate(dates[0])} - ${formatShortDate(dates[dates.length - 1])}` : "No trainings in this period";
-}
-
-function hasRatingInLastThreeAttended(records: PlayerAnalyticsRecord[]) {
-  const attended = records.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").slice(0, 3);
-  if (!attended.length) return true;
-  return attended.some((record) => typeof record.overallRating === "number");
-}
-
-function isObservationOld(observation?: PlayerObservation) {
-  if (!observation) return true;
-  return dayDiff(todayDate(), observation.observationDate) > attentionThresholds.noObservationDays;
 }
 
 function ageValue(player: WorkspacePlayerSummary) {

@@ -660,7 +660,10 @@ function InspectorPanel({ player }: { player?: WorkspacePlayerSummary }) {
         </InspectorSection>
         <InspectorSection title="Attention reasons" icon={<AlertTriangle className="h-4 w-4" />}>
           {player.attention.length ? (
-            <div className="flex flex-wrap gap-2">{player.attention.map((indicator) => <AttentionBadge key={indicator.id} indicator={indicator} />)}</div>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">{player.attention.map((indicator) => <AttentionBadge key={indicator.id} indicator={indicator} />)}</div>
+              <ButtonLink href={`/actions?player=${summary.player.id}`} variant="secondary" className="h-9 justify-center px-3">Review in Action Center</ButtonLink>
+            </div>
           ) : (
             <p className="text-sm text-slate-600">No current attention indicators.</p>
           )}

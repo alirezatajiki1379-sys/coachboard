@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Settings, UsersRound } from "lucide-react";
+import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Settings, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { en } from "@/lib/i18n/en";
 
@@ -9,6 +9,7 @@ const navItems = [
   { href: "/sessions", label: en.nav.trainingPlans, icon: ClipboardList },
   { href: "/drills", label: en.nav.drills, icon: Dumbbell },
   { href: "/squad", label: en.nav.squad, icon: UsersRound },
+  { href: "/actions", label: "Action Center", icon: Bell },
   { href: "/squad/analysis", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: en.nav.settings, icon: Settings }
 ];

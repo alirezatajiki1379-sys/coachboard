@@ -973,6 +973,30 @@ create table if not exists public.coach_workspace_views (
 
 
 -- =========================================================
+-- 15C. COACH ATTENTION SETTINGS AND STATES
+-- =========================================================
+
+create table if not exists public.coach_attention_preferences (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  preferences jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.coach_attention_states (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  attention_key text not null,
+  player_id uuid not null references public.squad_players(id) on delete cascade,
+  attention_type text not null,
+  snoozed_until date,
+  dismissed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+
+-- =========================================================
 -- 16. INDEXES
 -- =========================================================
 
@@ -1188,6 +1212,24 @@ on public.coach_workspace_views (
 )
 where is_default;
 
+create unique index if not exists coach_attention_states_user_key_unique_idx
+on public.coach_attention_states (
+  user_id,
+  attention_key
+);
+
+create index if not exists coach_attention_states_user_player_idx
+on public.coach_attention_states (
+  user_id,
+  player_id
+);
+
+create index if not exists coach_attention_states_user_snoozed_idx
+on public.coach_attention_states (
+  user_id,
+  snoozed_until
+);
+
 
 -- =========================================================
 -- 17. UPDATED_AT TRIGGERS
@@ -1346,6 +1388,22 @@ before update on public.coach_workspace_views
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_coach_attention_preferences_updated_at
+on public.coach_attention_preferences;
+
+create trigger set_coach_attention_preferences_updated_at
+before update on public.coach_attention_preferences
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_coach_attention_states_updated_at
+on public.coach_attention_states;
+
+create trigger set_coach_attention_states_updated_at
+before update on public.coach_attention_states
+for each row
+execute function public.set_updated_at();
+
 
 -- Auth profile trigger
 
@@ -1417,6 +1475,12 @@ alter table public.player_observations
 enable row level security;
 
 alter table public.coach_workspace_views
+enable row level security;
+
+alter table public.coach_attention_preferences
+enable row level security;
+
+alter table public.coach_attention_states
 enable row level security;
 
 
@@ -1842,6 +1906,44 @@ using (
 )
 with check (
   auth.uid() = user_id
+);
+
+
+-- COACH ATTENTION PREFERENCES
+
+drop policy if exists "coach attention preferences are owned by the user"
+on public.coach_attention_preferences;
+
+create policy "coach attention preferences are owned by the user"
+on public.coach_attention_preferences
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
+);
+
+
+-- COACH ATTENTION STATES
+
+drop policy if exists "coach attention states are owned by the user"
+on public.coach_attention_states;
+
+create policy "coach attention states are owned by the user"
+on public.coach_attention_states
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = coach_attention_states.player_id
+    and squad_players.user_id = auth.uid()
+  )
 );
 
 

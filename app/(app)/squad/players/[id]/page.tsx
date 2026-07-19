@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
-import { Activity, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, Minus, Phone, Printer, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, Minus, Phone, Printer, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { PlayerDevelopmentSection } from "@/components/squad/player-development";
@@ -15,6 +15,8 @@ import {
   type PlayerAnalyticsRecord
 } from "@/lib/squad/analytics";
 import { createPlayerContact, createPlayerMedicalPeriod, deletePlayerContact, savePlayerHeaderPreferences, updatePlayerMedicalPeriodDetails, updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
+import { getPlayerAttentionSummary } from "@/lib/squad/attention-queries";
+import { attentionPriorityLabels, attentionTone, type AttentionItem } from "@/lib/squad/attention";
 import { formatEventDate, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
 import { calculateAge, formatLongDate, formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
 import { getPlayerHubData, medicalLabel, parsePlayerHubPeriod, parsePlayerHubTab, parsePlayerHubTimelineFilter, type PlayerHubData, type PlayerHubTab, type PlayerTimelineFilter } from "@/lib/squad/player-hub";
@@ -82,6 +84,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
 
   const hub = await getPlayerHubData(supabase, user.id, id, period, customFrom, customTo);
   if (!hub) notFound();
+  const attentionItems = await getPlayerAttentionSummary(supabase, user.id, id, period);
 
   return (
     <div className="space-y-6">
@@ -94,7 +97,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
       <PlayerHubTabs playerId={hub.player.id} activeTab={tab} period={period} customFrom={customFrom} customTo={customTo} />
       {isPeriodAwareTab(tab) ? <PeriodControls playerId={hub.player.id} tab={tab} period={period} customFrom={customFrom} customTo={customTo} /> : null}
 
-      {tab === "overview" ? <OverviewTab hub={hub} period={period} /> : null}
+      {tab === "overview" ? <OverviewTab hub={hub} period={period} attentionItems={attentionItems} /> : null}
       {tab === "analytics" ? <AnalyticsTab hub={hub} period={period} /> : null}
       {tab === "development" ? <PlayerDevelopmentSection playerId={hub.player.id} development={hub.development} /> : null}
       {tab === "history" ? <HistoryTab hub={hub} filter={timelineFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
@@ -208,13 +211,14 @@ function PlayerHubTabs({ playerId, activeTab, period, customFrom, customTo }: { 
   );
 }
 
-function OverviewTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPeriod }) {
+function OverviewTab({ hub, period, attentionItems }: { hub: PlayerHubData; period: AnalyticsPeriod; attentionItems: AttentionItem[] }) {
   const { summary } = hub.analytics;
   const highestGoal = hub.development.goals.find((goal) => goal.status === "active" && goal.priority === "high") ?? hub.development.goals.find((goal) => goal.status === "active");
   const latestObservation = hub.development.observations[0];
   return (
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
       <section className="space-y-6">
+        <AttentionSummaryCard playerId={hub.player.id} items={attentionItems} />
         <MedicalOverviewCard hub={hub} />
         <AnalyticsMetricGrid hub={hub} period={period} />
         <Card title="Development summary" icon={<Target className="h-5 w-5" />}>
@@ -257,6 +261,37 @@ function OverviewTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPer
       </section>
     </div>
   );
+}
+
+function AttentionSummaryCard({ playerId, items }: { playerId: string; items: AttentionItem[] }) {
+  return (
+    <Card title="Needs attention" icon={<AlertTriangle className="h-5 w-5" />}>
+      {items.length ? (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-slate-700">{items.length} open item{items.length === 1 ? "" : "s"}</p>
+          <div className="space-y-2">
+            {items.slice(0, 3).map((item) => (
+              <div key={item.key} className="rounded-md bg-slate-50 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={playerHubAttentionTone(item.priority)}>{attentionPriorityLabels[item.priority]}</Badge>
+                  <p className="text-sm font-bold text-board-navy">{item.title}</p>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">{item.explanation}</p>
+              </div>
+            ))}
+          </div>
+          <Link href={`/actions?player=${playerId}`} className="font-bold text-board-green underline-offset-4 hover:underline">Review items</Link>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-600">No open attention items for this player.</p>
+      )}
+    </Card>
+  );
+}
+
+function playerHubAttentionTone(priority: AttentionItem["priority"]) {
+  const tone = attentionTone(priority);
+  return tone === "neutral" ? "green" : tone;
 }
 
 function MedicalOverviewCard({ hub }: { hub: PlayerHubData }) {
