@@ -8,10 +8,22 @@ export type SquadPlayerFormField =
   | "secondaryPositions"
   | "strongFoot"
   | "club"
+  | "originalClub"
+  | "clubTrainingSchedule"
   | "playerEmail"
+  | "parentGuardianName"
   | "parentPhone"
   | "playerPhone"
   | "parentEmail"
+  | "emergencyContactName"
+  | "emergencyContactPhone"
+  | "topSize"
+  | "jacketSize"
+  | "trouserSize"
+  | "shoeSize"
+  | "preferredPositions"
+  | "originalPreferredPositions"
+  | "originalStrongFoot"
   | "heightCm"
   | "weightKg"
   | "jerseyNumber"
@@ -23,6 +35,16 @@ export type SquadPlayerFormField =
   | "hobbies"
   | "developmentGoal"
   | "workOn"
+  | "coachExpectations"
+  | "onboardingComments"
+  | "recommendedPlayersRaw"
+  | "recommendedPlayerName"
+  | "recommendedPlayerBirthYear"
+  | "recommendedPlayerPosition"
+  | "recommendedPlayerClub"
+  | "onboardingSource"
+  | "onboardingSubmittedAt"
+  | "onboardingImportBatch"
   | "notes";
 
 export type SquadPlayerFormValues = Record<SquadPlayerFormField, string>;
@@ -68,10 +90,22 @@ export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFo
     secondaryPositions: text(formData, "secondaryPositions"),
     strongFoot: text(formData, "strongFoot"),
     club: text(formData, "club"),
+    originalClub: text(formData, "originalClub"),
+    clubTrainingSchedule: text(formData, "clubTrainingSchedule"),
     playerEmail: text(formData, "playerEmail"),
+    parentGuardianName: text(formData, "parentGuardianName"),
     parentPhone: text(formData, "parentPhone"),
     playerPhone: text(formData, "playerPhone"),
     parentEmail: text(formData, "parentEmail"),
+    emergencyContactName: text(formData, "emergencyContactName"),
+    emergencyContactPhone: text(formData, "emergencyContactPhone"),
+    topSize: text(formData, "topSize"),
+    jacketSize: text(formData, "jacketSize"),
+    trouserSize: text(formData, "trouserSize"),
+    shoeSize: text(formData, "shoeSize"),
+    preferredPositions: text(formData, "preferredPositions"),
+    originalPreferredPositions: text(formData, "originalPreferredPositions"),
+    originalStrongFoot: text(formData, "originalStrongFoot"),
     heightCm: text(formData, "heightCm"),
     weightKg: text(formData, "weightKg"),
     jerseyNumber: text(formData, "jerseyNumber"),
@@ -83,6 +117,16 @@ export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFo
     hobbies: text(formData, "hobbies"),
     developmentGoal: text(formData, "developmentGoal"),
     workOn: text(formData, "workOn"),
+    coachExpectations: text(formData, "coachExpectations"),
+    onboardingComments: text(formData, "onboardingComments"),
+    recommendedPlayersRaw: text(formData, "recommendedPlayersRaw"),
+    recommendedPlayerName: text(formData, "recommendedPlayerName"),
+    recommendedPlayerBirthYear: text(formData, "recommendedPlayerBirthYear"),
+    recommendedPlayerPosition: text(formData, "recommendedPlayerPosition"),
+    recommendedPlayerClub: text(formData, "recommendedPlayerClub"),
+    onboardingSource: text(formData, "onboardingSource"),
+    onboardingSubmittedAt: text(formData, "onboardingSubmittedAt"),
+    onboardingImportBatch: text(formData, "onboardingImportBatch"),
     notes: text(formData, "notes")
   };
 }
@@ -98,6 +142,7 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
   if (values.weightKg && (Number.parseInt(values.weightKg, 10) < 20 || Number.parseInt(values.weightKg, 10) > 180)) fieldErrors.weightKg = "Use a realistic weight in kg.";
 
   const secondaryPositions = parseList(values.secondaryPositions).filter((position) => position !== values.position);
+  const preferredPositions = parseList(values.preferredPositions);
 
   const firstError = Object.values(fieldErrors)[0];
   if (firstError) {
@@ -119,10 +164,22 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       secondary_positions: secondaryPositions,
       strong_foot: optionalText(values.strongFoot),
       club: optionalText(values.club),
+      original_club: optionalText(values.originalClub),
+      club_training_schedule: optionalText(values.clubTrainingSchedule),
       player_email: optionalText(values.playerEmail),
+      parent_guardian_name: optionalText(values.parentGuardianName),
       parent_phone: optionalText(values.parentPhone),
       player_phone: optionalText(values.playerPhone),
       parent_email: optionalText(values.parentEmail),
+      emergency_contact_name: optionalText(values.emergencyContactName),
+      emergency_contact_phone: optionalText(values.emergencyContactPhone),
+      top_size: optionalText(values.topSize),
+      jacket_size: optionalText(values.jacketSize),
+      trouser_size: optionalText(values.trouserSize),
+      shoe_size: optionalText(values.shoeSize),
+      preferred_positions: preferredPositions,
+      original_preferred_positions: optionalText(values.originalPreferredPositions),
+      original_strong_foot: optionalText(values.originalStrongFoot),
       height_cm: optionalNumber(values.heightCm),
       weight_kg: optionalNumber(values.weightKg),
       jersey_number: optionalText(values.jerseyNumber),
@@ -134,6 +191,16 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       hobbies: optionalText(values.hobbies),
       development_goal: optionalText(values.developmentGoal),
       work_on: optionalText(values.workOn),
+      coach_expectations: optionalText(values.coachExpectations),
+      onboarding_comments: optionalText(values.onboardingComments),
+      recommended_players_raw: optionalText(values.recommendedPlayersRaw),
+      recommended_player_name: optionalText(values.recommendedPlayerName),
+      recommended_player_birth_year: optionalText(values.recommendedPlayerBirthYear),
+      recommended_player_position: optionalText(values.recommendedPlayerPosition),
+      recommended_player_club: optionalText(values.recommendedPlayerClub),
+      onboarding_source: optionalText(values.onboardingSource),
+      onboarding_submitted_at: optionalText(values.onboardingSubmittedAt),
+      onboarding_import_batch: optionalText(values.onboardingImportBatch),
       notes: optionalText(values.notes)
     }
   };

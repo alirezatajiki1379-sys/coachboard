@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
-import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, Minus, Phone, Printer, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, Minus, Phone, Printer, Shirt, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { PlayerDevelopmentSection } from "@/components/squad/player-development";
@@ -139,7 +139,9 @@ function PlayerHubHeader({ hub, period, tab }: { hub: PlayerHubData; period: Ana
             <div className="mt-3 flex flex-wrap gap-2 text-sm text-slate-600">
               <InfoPill label="Primary position" value={player.position || "No position"} />
               {player.secondaryPositions.length ? <InfoPill label="Secondary" value={player.secondaryPositions.join(", ")} /> : null}
+              {player.preferredPositions.length ? <InfoPill label="Preferred" value={player.preferredPositions.join(", ")} /> : null}
               {player.strongFoot ? <InfoPill icon={<Footprints className="h-4 w-4" />} label="Dominant foot" value={player.strongFoot} /> : null}
+              {player.club ? <InfoPill label="Club" value={player.club} /> : null}
               {player.dateOfBirth ? <InfoPill icon={<CalendarDays className="h-4 w-4" />} label="Birthdate" value={`${formatLongDate(player.dateOfBirth)}${age !== undefined ? ` · ${age} years` : ""}`} /> : null}
               {optionalItems.map((item) => <span key={item} className="rounded-md bg-slate-100 px-2 py-1 font-semibold text-board-navy">{item}</span>)}
             </div>
@@ -550,6 +552,22 @@ function NotesTab({ hub }: { hub: PlayerHubData }) {
 
 function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; medicalError?: string; contactError?: string }) {
   const player = hub.player;
+  const hasEquipment = Boolean(player.topSize || player.jacketSize || player.trouserSize || player.shoeSize);
+  const hasRecommendation = Boolean(
+    player.recommendedPlayersRaw ||
+    player.recommendedPlayerName ||
+    player.recommendedPlayerBirthYear ||
+    player.recommendedPlayerPosition ||
+    player.recommendedPlayerClub
+  );
+  const hasOnboarding = Boolean(
+    player.onboardingSource ||
+    player.onboardingSubmittedAt ||
+    player.onboardingImportBatch ||
+    player.onboardingWarnings.length ||
+    player.onboardingOriginalAnswers ||
+    player.onboardingNormalizedValues
+  );
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
@@ -560,40 +578,149 @@ function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; m
           <DetailGrid>
             <DetailRow label="First name" value={player.firstName} />
             <DetailRow label="Last name" value={player.lastName} />
-            <DetailRow label="Birthdate" value={player.dateOfBirth ? `${formatLongDate(player.dateOfBirth)} · ${calculateAge(player.dateOfBirth) ?? "-"} years` : undefined} />
+            <DetailRow label="Birthdate" value={player.dateOfBirth ? `${formatPlayerBirthDate(player.dateOfBirth)} · ${calculateAge(player.dateOfBirth) ?? "-"} years` : undefined} />
+            <DetailRow label="Availability" value={hub.currentMedical ? medicalLabel(hub.currentMedical) : "Available"} />
+            <DetailRow label="Current development focus" value={player.workOn || player.developmentGoal} />
+            <DetailRow label="Player type" value={player.playerType === "trial" ? "Trial Player" : "Roster"} />
+          </DetailGrid>
+        </Card>
+        <Card title="Football profile" icon={<Footprints className="h-5 w-5" />}>
+          <DetailGrid>
+            <DetailRow label="Current club" value={player.club} />
+            <DetailRow label="Original imported club" value={player.originalClub} />
             <DetailRow label="Primary position" value={player.position} />
             <DetailRow label="Secondary positions" value={player.secondaryPositions.join(", ")} />
+            <DetailRow label="Player-preferred positions" value={player.preferredPositions.join(", ")} />
+            <DetailRow label="Original preferred positions" value={player.originalPreferredPositions} />
             <DetailRow label="Dominant foot" value={player.strongFoot} />
+            <DetailRow label="Original dominant foot" value={player.originalStrongFoot} />
+            <DetailRow label="Biggest football ambition" value={player.developmentGoal} />
+            <DetailRow label="Self-identified development focus" value={player.workOn} />
             <DetailRow label="Jersey number" value={player.jerseyNumber} />
             <DetailRow label="Height" value={player.heightCm ? `${player.heightCm} cm` : undefined} />
             <DetailRow label="Weight" value={player.weightKg ? `${player.weightKg} kg` : undefined} />
             <DetailRow label="Captain status" value={player.captainStatus ? captainLabel(player.captainStatus) : undefined} />
-            <DetailRow label="Club" value={player.club} />
             <DetailRow label="Joined date" value={player.joinedDate ? formatEventDate(player.joinedDate) : undefined} />
-            <DetailRow label="Player type" value={player.playerType === "trial" ? "Trial Player" : "Roster"} />
           </DetailGrid>
         </Card>
         <Card title="Contact information" icon={<Phone className="h-5 w-5" />}>
           <DetailGrid>
             <DetailRow label="Player phone" value={player.playerPhone} href={player.playerPhone ? `tel:${player.playerPhone}` : undefined} />
             <DetailRow label="Player email" value={player.playerEmail} href={player.playerEmail ? `mailto:${player.playerEmail}` : undefined} />
-            <DetailRow label="Legacy parent phone" value={player.parentPhone} href={player.parentPhone ? `tel:${player.parentPhone}` : undefined} />
-            <DetailRow label="Legacy parent email" value={player.parentEmail} href={player.parentEmail ? `mailto:${player.parentEmail}` : undefined} />
+            <DetailRow label="Parent / guardian" value={player.parentGuardianName} />
+            <DetailRow label="Parent / guardian phone" value={player.parentPhone} href={player.parentPhone ? `tel:${player.parentPhone}` : undefined} />
+            <DetailRow label="Parent / guardian email" value={player.parentEmail} href={player.parentEmail ? `mailto:${player.parentEmail}` : undefined} />
+            <DetailRow label="Emergency contact" value={player.emergencyContactName} />
+            <DetailRow label="Emergency phone" value={player.emergencyContactPhone} href={player.emergencyContactPhone ? `tel:${player.emergencyContactPhone}` : undefined} />
           </DetailGrid>
           <ContactSection playerId={player.id} contacts={hub.contacts} error={contactError} />
         </Card>
+        {hasEquipment ? (
+          <Card title="Equipment" icon={<Shirt className="h-5 w-5" />}>
+            <DetailGrid>
+              <DetailRow label="Top / shirt size" value={player.topSize} />
+              <DetailRow label="Jacket size" value={player.jacketSize} />
+              <DetailRow label="Trouser size" value={player.trouserSize} />
+              <DetailRow label="Shoe size" value={player.shoeSize} />
+            </DetailGrid>
+          </Card>
+        ) : null}
       </section>
-      <Card title="Development background" icon={<Target className="h-5 w-5" />}>
+      <Card title="Player Voice" icon={<Target className="h-5 w-5" />}>
         <DetailGrid>
-          <DetailRow label="Hobbies" value={player.hobbies} />
-          <DetailRow label="Development goal summary" value={player.developmentGoal} />
-          <DetailRow label="Work on" value={player.workOn} />
-          <DetailRow label="General notes" value={player.notes} />
+          <DetailRow label="Hobbies and interests" value={player.hobbies} />
+          <DetailRow label="Biggest football goal" value={player.developmentGoal} />
+          <DetailRow label="What the player wants to improve" value={player.workOn} />
+          <DetailRow label="Expectations and wishes" value={player.coachExpectations} />
+          <DetailRow label="Additional onboarding answers" value={player.onboardingComments} />
+          <DetailRow label="Coach notes" value={player.notes} />
+          <DetailRow label="Response source" value={player.onboardingSource} />
+          <DetailRow label="Submitted" value={player.onboardingSubmittedAt ? formatLongDate(player.onboardingSubmittedAt) : undefined} />
+          <DetailRow label="Last updated" value={formatLongDate(player.updatedAt)} />
         </DetailGrid>
       </Card>
+      {player.clubTrainingSchedule ? (
+        <Card title="Club schedule" icon={<CalendarDays className="h-5 w-5" />}>
+          <ClubSchedule value={player.clubTrainingSchedule} />
+        </Card>
+      ) : null}
+      {hasRecommendation ? (
+        <Card title="Recommended players" icon={<UserRound className="h-5 w-5" />}>
+          <DetailGrid>
+            <DetailRow label="Name" value={player.recommendedPlayerName} />
+            <DetailRow label="Birth year" value={player.recommendedPlayerBirthYear} />
+            <DetailRow label="Position" value={player.recommendedPlayerPosition} />
+            <DetailRow label="Club" value={player.recommendedPlayerClub} />
+            <DetailRow label="Original answer" value={player.recommendedPlayersRaw} />
+          </DetailGrid>
+        </Card>
+      ) : null}
+      {hasOnboarding ? (
+        <Card title="Onboarding responses" icon={<ClipboardList className="h-5 w-5" />}>
+          <div className="space-y-5">
+            <DetailGrid>
+              <DetailRow label="Source" value={player.onboardingSource} />
+              <DetailRow label="Submitted" value={player.onboardingSubmittedAt ? formatLongDate(player.onboardingSubmittedAt) : undefined} />
+              <DetailRow label="Import batch" value={player.onboardingImportBatch} />
+              <DetailRow label="Warnings" value={player.onboardingWarnings.join("\n")} />
+            </DetailGrid>
+            <KeyValueRecord title="Original questionnaire answers" value={player.onboardingOriginalAnswers} />
+            <KeyValueRecord title="Normalized structured values" value={player.onboardingNormalizedValues} />
+          </div>
+        </Card>
+      ) : null}
       <MedicalSection playerId={player.id} player={player} periods={hub.medicalPeriods} error={medicalError} />
     </div>
   );
+}
+
+function ClubSchedule({ value }: { value: string }) {
+  const lines = value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  return (
+    <div className="space-y-3">
+      {lines.length > 1 ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {lines.map((line) => {
+            const [day, ...rest] = line.split(/[:|-]/);
+            const detail = rest.join("-").trim();
+            return (
+              <div key={line} className="rounded-md bg-slate-50 p-3">
+                <p className="text-sm font-bold text-board-navy">{day.trim()}</p>
+                {detail ? <p className="mt-1 text-sm text-slate-600">{detail}</p> : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      <details className="rounded-md border border-board-line bg-white p-3">
+        <summary className="cursor-pointer text-sm font-bold text-board-navy">Original imported schedule</summary>
+        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{value}</p>
+      </details>
+    </div>
+  );
+}
+
+function KeyValueRecord({ title, value }: { title: string; value?: Record<string, unknown> }) {
+  if (!value || !Object.keys(value).length) return null;
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-board-navy">{title}</h3>
+      <dl className="mt-2 divide-y divide-board-line rounded-md border border-board-line">
+        {Object.entries(value).map(([key, answer]) => (
+          <div key={key} className="grid gap-1 p-3 text-sm sm:grid-cols-[220px_1fr]">
+            <dt className="font-bold text-slate-600">{key}</dt>
+            <dd className="whitespace-pre-wrap text-board-navy">{formatRecordValue(answer)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function formatRecordValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "Not added";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value, null, 2);
 }
 
 function MedicalTab({ hub, medicalError }: { hub: PlayerHubData; medicalError?: string }) {

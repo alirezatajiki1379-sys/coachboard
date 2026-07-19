@@ -12,6 +12,10 @@ function optional(value: string | null) {
   return value ?? undefined;
 }
 
+function optionalRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
 export function mapSquadPlayerRow(row: SquadPlayerRow): SquadPlayer {
   return {
     id: row.id,
@@ -24,10 +28,22 @@ export function mapSquadPlayerRow(row: SquadPlayerRow): SquadPlayer {
     secondaryPositions: Array.isArray(row.secondary_positions) ? row.secondary_positions : [],
     strongFoot: optional(row.strong_foot),
     club: optional(row.club),
+    originalClub: optional(row.original_club),
+    clubTrainingSchedule: optional(row.club_training_schedule),
     playerEmail: optional(row.player_email),
+    parentGuardianName: optional(row.parent_guardian_name),
     parentPhone: optional(row.parent_phone),
     playerPhone: optional(row.player_phone),
     parentEmail: optional(row.parent_email),
+    emergencyContactName: optional(row.emergency_contact_name),
+    emergencyContactPhone: optional(row.emergency_contact_phone),
+    topSize: optional(row.top_size),
+    jacketSize: optional(row.jacket_size),
+    trouserSize: optional(row.trouser_size),
+    shoeSize: optional(row.shoe_size),
+    preferredPositions: Array.isArray(row.preferred_positions) ? row.preferred_positions : [],
+    originalPreferredPositions: optional(row.original_preferred_positions),
+    originalStrongFoot: optional(row.original_strong_foot),
     heightCm: row.height_cm ?? undefined,
     weightKg: row.weight_kg ?? undefined,
     jerseyNumber: optional(row.jersey_number),
@@ -39,6 +55,19 @@ export function mapSquadPlayerRow(row: SquadPlayerRow): SquadPlayer {
     hobbies: optional(row.hobbies),
     developmentGoal: optional(row.development_goal),
     workOn: optional(row.work_on),
+    coachExpectations: optional(row.coach_expectations),
+    onboardingComments: optional(row.onboarding_comments),
+    recommendedPlayersRaw: optional(row.recommended_players_raw),
+    recommendedPlayerName: optional(row.recommended_player_name),
+    recommendedPlayerBirthYear: optional(row.recommended_player_birth_year),
+    recommendedPlayerPosition: optional(row.recommended_player_position),
+    recommendedPlayerClub: optional(row.recommended_player_club),
+    onboardingSource: optional(row.onboarding_source),
+    onboardingSubmittedAt: optional(row.onboarding_submitted_at),
+    onboardingImportBatch: optional(row.onboarding_import_batch),
+    onboardingOriginalAnswers: optionalRecord(row.onboarding_original_answers),
+    onboardingNormalizedValues: optionalRecord(row.onboarding_normalized_values),
+    onboardingWarnings: Array.isArray(row.onboarding_warnings) ? row.onboarding_warnings : [],
     notes: optional(row.notes),
     convertedAt: optional(row.converted_at),
     archivedAt: optional(row.archived_at),
