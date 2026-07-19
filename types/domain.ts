@@ -293,10 +293,12 @@ export type SquadAttendanceEntry = {
   sensitiveNote: boolean;
   player?: SquadPlayer;
   medicalAvailability?: {
+    periodId?: string;
     type: PlayerMedicalPeriodType;
     label: string;
     until?: string;
     description: string;
+    needsReview?: boolean;
   };
   createdAt: string;
   updatedAt: string;

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
-import { Activity, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, Phone, Printer, ShieldAlert, SlidersHorizontal, Stethoscope, Target, UserRound } from "lucide-react";
+import { Activity, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, Minus, Phone, Printer, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { PlayerDevelopmentSection } from "@/components/squad/player-development";
@@ -14,7 +14,7 @@ import {
   type AnalyticsPeriod,
   type PlayerAnalyticsRecord
 } from "@/lib/squad/analytics";
-import { createPlayerContact, createPlayerMedicalPeriod, deletePlayerContact, savePlayerHeaderPreferences, updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
+import { createPlayerContact, createPlayerMedicalPeriod, deletePlayerContact, savePlayerHeaderPreferences, updatePlayerMedicalPeriodDetails, updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { formatEventDate, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
 import { calculateAge, formatLongDate, formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
 import { getPlayerHubData, medicalLabel, parsePlayerHubPeriod, parsePlayerHubTab, parsePlayerHubTimelineFilter, type PlayerHubData, type PlayerHubTab, type PlayerTimelineFilter } from "@/lib/squad/player-hub";
@@ -33,6 +33,7 @@ const tabs: Array<{ id: PlayerHubTab; label: string }> = [
   { id: "development", label: "Development" },
   { id: "history", label: "History" },
   { id: "attendance", label: "Attendance" },
+  { id: "medical", label: "Medical" },
   { id: "notes", label: "Notes" },
   { id: "details", label: "Details" }
 ];
@@ -98,6 +99,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
       {tab === "development" ? <PlayerDevelopmentSection playerId={hub.player.id} development={hub.development} /> : null}
       {tab === "history" ? <HistoryTab hub={hub} filter={timelineFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "attendance" ? <AttendanceTab hub={hub} filter={attendanceFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
+      {tab === "medical" ? <MedicalTab hub={hub} medicalError={medicalError} /> : null}
       {tab === "notes" ? <NotesTab hub={hub} /> : null}
       {tab === "details" ? <DetailsTab hub={hub} medicalError={medicalError} contactError={contactError} /> : null}
     </div>
@@ -140,7 +142,7 @@ function PlayerHubHeader({ hub, period, tab }: { hub: PlayerHubData; period: Ana
             {hub.currentMedical ? (
               <p className="mt-3 text-sm font-semibold text-red-700">
                 Current medical status: {medicalLabel(hub.currentMedical)}
-                {hub.currentMedical.endDate ? ` until ${formatEventDate(hub.currentMedical.endDate)}` : " until further notice"} · {hub.currentMedical.description}
+                {hub.currentMedical.expectedReturnDate ? ` · expected return ${formatEventDate(hub.currentMedical.expectedReturnDate)}` : " · expected return not set"} · {hub.currentMedical.description}
               </p>
             ) : null}
           </div>
@@ -213,12 +215,8 @@ function OverviewTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPer
   return (
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
       <section className="space-y-6">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat icon={<Activity className="h-4 w-4" />} label="Average rating" value={formatRating(summary.averageRating)} />
-          <Stat icon={<BarChart3 className="h-4 w-4" />} label="Trend" value={summary.trend.value === null ? summary.trend.label : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`} />
-          <Stat icon={<CalendarDays className="h-4 w-4" />} label="Attendance" value={formatPercent(summary.attendanceRate)} />
-          <Stat icon={<ShieldAlert className="h-4 w-4" />} label="Reliability" value={summary.reliabilityPenalty.toFixed(1)} />
-        </div>
+        <MedicalOverviewCard hub={hub} />
+        <AnalyticsMetricGrid hub={hub} period={period} />
         <Card title="Development summary" icon={<Target className="h-5 w-5" />}>
           {highestGoal ? (
             <div className="space-y-2 text-sm text-slate-600">
@@ -258,6 +256,125 @@ function OverviewTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPer
         </Card>
       </section>
     </div>
+  );
+}
+
+function MedicalOverviewCard({ hub }: { hub: PlayerHubData }) {
+  const current = hub.currentMedical;
+  const needsReview = current ? medicalReviewNeeded(current) : false;
+  return (
+    <Card title="Availability" icon={<Stethoscope className="h-5 w-5" />}>
+      {current ? (
+        <div className="space-y-4">
+          <div className={cn("rounded-md border-l-4 bg-slate-50 p-4", current.type === "injured" ? "border-red-400" : "border-amber-400")}>
+            <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+              <span className={cn("h-2.5 w-2.5 rounded-full", current.type === "injured" ? "bg-red-500" : "bg-amber-500")} />
+              {medicalLabel(current)}
+            </p>
+            <p className="mt-2 text-lg font-bold text-board-navy">{current.description}</p>
+            <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
+              <Mini label="Since" value={formatEventDate(current.startDate)} />
+              <Mini label="Expected return" value={current.expectedReturnDate ? formatEventDate(current.expectedReturnDate) : "Not set"} />
+              <Mini label="Actual return" value={current.actualReturnDate ? formatEventDate(current.actualReturnDate) : "Not entered"} />
+            </div>
+            {needsReview ? (
+              <p className="mt-3 inline-flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+                <ShieldAlert className="h-4 w-4" />
+                Return status needs review
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <details className="rounded-md bg-board-paper px-3 py-2">
+              <summary className="cursor-pointer text-sm font-bold text-board-navy">Add injury or sickness</summary>
+              <MedicalQuickForm playerId={hub.player.id} compact />
+            </details>
+            <details className="rounded-md bg-board-paper px-3 py-2">
+              <summary className="cursor-pointer text-sm font-bold text-board-navy">Update</summary>
+              <MedicalUpdateForm playerId={hub.player.id} period={current} compact />
+            </details>
+            <details className="rounded-md bg-board-paper px-3 py-2">
+              <summary className="cursor-pointer text-sm font-bold text-board-navy">Mark as returned</summary>
+              <MarkReturnedForm playerId={hub.player.id} period={current} />
+            </details>
+            <ButtonLink href={tabHref(hub.player.id, "medical", "season")} variant="secondary" className="h-10 px-3">View medical history</ButtonLink>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="rounded-md border-l-4 border-green-500 bg-slate-50 p-4">
+            <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+              <span className="h-2.5 w-2.5 rounded-full bg-green-600" />
+              Available
+            </p>
+            <p className="mt-2 text-sm text-slate-600">No active injury or sickness period is recorded.</p>
+          </div>
+          <details className="rounded-md bg-board-paper px-3 py-2">
+            <summary className="cursor-pointer text-sm font-bold text-board-navy">Add injury or sickness</summary>
+            <MedicalQuickForm playerId={hub.player.id} compact />
+          </details>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function AnalyticsMetricGrid({ hub, period }: { hub: PlayerHubData; period: AnalyticsPeriod }) {
+  const summary = hub.analytics.summary;
+  const records = summary.records;
+  const latestRatings = records.map((entry) => entry.overallRating).filter((rating): rating is number => typeof rating === "number").slice(0, 5);
+  return (
+    <section className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <AnalyticsMetricCard
+          href={tabHref(hub.player.id, "analytics", period)}
+          label="Average rating"
+          value={formatRating(summary.averageRating)}
+          detail={`${summary.rated} rated training${summary.rated === 1 ? "" : "s"}`}
+          tone={ratingTone(summary.averageRating)}
+          icon={<Activity className="h-4 w-4" />}
+        />
+        <AnalyticsMetricCard
+          href={tabHref(hub.player.id, "analytics", period)}
+          label="Trend"
+          value={trendValue(summary.trend.value)}
+          detail={summary.trend.label === "No trend" ? "No trend yet" : summary.trend.label}
+          tone={trendTone(summary.trend.value)}
+          icon={trendIcon(summary.trend.value)}
+        />
+        <AnalyticsMetricCard
+          href={tabHref(hub.player.id, "attendance", period)}
+          label="Attendance"
+          value={formatPercent(summary.attendanceRate)}
+          detail={`${summary.attended} of ${summary.trainings} attended`}
+          tone={attendanceTone(summary.attendanceRate)}
+          icon={<CalendarDays className="h-4 w-4" />}
+        >
+          <AttendanceSegmentBar present={summary.attendanceDistribution.present} late={summary.attendanceDistribution.late} absent={summary.absent} />
+        </AnalyticsMetricCard>
+        <AnalyticsMetricCard
+          href={tabHref(hub.player.id, "attendance", period)}
+          label="Reliability"
+          value={summary.reliabilityPenalty.toFixed(1)}
+          detail={`${summary.attendanceDistribution.lateCancellation} late cancellation${summary.attendanceDistribution.lateCancellation === 1 ? "" : "s"}`}
+          tone={reliabilityTone(summary.reliabilityPenalty)}
+          icon={<ShieldAlert className="h-4 w-4" />}
+        />
+      </div>
+      <div className="grid gap-3 rounded-lg border border-board-line bg-white p-4 shadow-soft sm:grid-cols-3">
+        <Mini label="Rated trainings" value={String(summary.rated)} />
+        <Mini label="Evidence base" value={summary.evidenceBase.label} />
+        <Mini label="Last rating" value={summary.latestRating ? String(summary.latestRating) : "No rating"} />
+      </div>
+      {latestRatings.length ? (
+        <div className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent ratings</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {latestRatings.map((rating, index) => <RatingChip key={`${rating}-${index}`} rating={rating} />)}
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -443,6 +560,75 @@ function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; m
   );
 }
 
+function MedicalTab({ hub, medicalError }: { hub: PlayerHubData; medicalError?: string }) {
+  const active = hub.medicalPeriods.filter((period) => period.status === "active");
+  const review = active.filter(medicalReviewNeeded);
+  const history = hub.medicalPeriods.filter((period) => period.status !== "active");
+  const current = hub.currentMedical;
+  const overlapping = active.length > 1;
+  return (
+    <div className="space-y-6">
+      <Card title="Current availability" icon={<Stethoscope className="h-5 w-5" />}>
+        {medicalError ? <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{medicalError}</p> : null}
+        {current ? (
+          <div className={cn("rounded-md border-l-4 bg-slate-50 p-4", current.type === "injured" ? "border-red-400" : "border-amber-400")}>
+            <p className="text-sm font-bold uppercase tracking-wide text-slate-500">{medicalLabel(current)}</p>
+            <p className="mt-2 text-xl font-bold text-board-navy">{current.description}</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Mini label="From" value={formatEventDate(current.startDate)} />
+              <Mini label="Expected return" value={current.expectedReturnDate ? formatEventDate(current.expectedReturnDate) : "Not set"} />
+              <Mini label="Actual return" value={current.actualReturnDate ? formatEventDate(current.actualReturnDate) : "Not entered"} />
+              <Mini label="Status" value={current.status} />
+            </div>
+            {medicalReviewNeeded(current) ? <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">Return status needs review.</p> : null}
+            {overlapping ? <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">Multiple active medical records overlap. The latest applicable start date determines attendance prefill.</p> : null}
+            <details className="mt-4 rounded-md bg-white p-3">
+              <summary className="cursor-pointer text-sm font-bold text-board-navy">Mark as returned</summary>
+              <MarkReturnedForm playerId={hub.player.id} period={current} />
+            </details>
+          </div>
+        ) : (
+          <div className="rounded-md border-l-4 border-green-500 bg-slate-50 p-4">
+            <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Available</p>
+            <p className="mt-2 text-sm text-slate-600">No active injury or sickness period is recorded.</p>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Add injury or sickness" icon={<ShieldAlert className="h-5 w-5" />}>
+        <MedicalQuickForm playerId={hub.player.id} />
+      </Card>
+
+      {review.length ? (
+        <Card title="Needs review" icon={<ShieldAlert className="h-5 w-5" />}>
+          <div className="space-y-3">{review.map((period) => <MedicalRecordCard key={period.id} playerId={hub.player.id} period={period} />)}</div>
+        </Card>
+      ) : null}
+
+      {active.length ? (
+        <Card title="Active medical records" icon={<Stethoscope className="h-5 w-5" />}>
+          <div className="space-y-3">{active.map((period) => <MedicalRecordCard key={period.id} playerId={hub.player.id} period={period} />)}</div>
+        </Card>
+      ) : null}
+
+      <Card title="Medical history" icon={<ClipboardList className="h-5 w-5" />}>
+        <div className="space-y-3">
+          {history.length ? history.map((period) => <MedicalRecordCard key={period.id} playerId={hub.player.id} period={period} />) : <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No completed or cancelled medical records yet.</p>}
+        </div>
+      </Card>
+
+      <Card title="Medical information" icon={<FileText className="h-5 w-5" />}>
+        <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">Private medical background. This is not shown in squad overviews, training plans or standard reports.</p>
+        <DetailGrid>
+          <DetailRow label="Allergies" value={hub.player.allergies} />
+          <DetailRow label="Medication" value={hub.player.medication} />
+          <DetailRow label="Private medical notes" value={hub.player.medicalNotes} />
+        </DetailGrid>
+      </Card>
+    </div>
+  );
+}
+
 function CoachAssessmentPanel({ playerId, period, currentAssessment, assessmentHistory }: { playerId: string; period: AnalyticsPeriod; currentAssessment?: PlayerHubData["analytics"]["summary"]["assessment"]; assessmentHistory: PlayerHubData["analytics"]["assessmentHistory"] }) {
   return (
     <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
@@ -596,6 +782,135 @@ function MedicalSection({ playerId, player, periods, error }: { playerId: string
   );
 }
 
+function MedicalQuickForm({ playerId, compact = false }: { playerId: string; compact?: boolean }) {
+  return (
+    <form action={createPlayerMedicalPeriod} className={cn("mt-3 grid gap-3", compact ? "sm:grid-cols-2" : "md:grid-cols-2")}>
+      <input type="hidden" name="playerId" value={playerId} />
+      <input type="hidden" name="status" value="active" />
+      <FieldLabel label="Type">
+        <select name="type" className={fieldClass()}>
+          <option value="injured">Injured</option>
+          <option value="sick">Sick</option>
+        </select>
+      </FieldLabel>
+      <FieldLabel label="From">
+        <input name="startDate" required type="date" defaultValue={new Date().toISOString().slice(0, 10)} className={fieldClass()} />
+      </FieldLabel>
+      <FieldLabel label="Expected return">
+        <input name="expectedReturnDate" type="date" className={fieldClass()} />
+      </FieldLabel>
+      <FieldLabel label="Description">
+        <input name="description" required placeholder="Ankle sprain, flu..." className={fieldClass()} />
+      </FieldLabel>
+      <FieldLabel label="Notes" wide>
+        <textarea name="notes" rows={compact ? 2 : 3} className={textareaClass()} />
+      </FieldLabel>
+      <div className={compact ? "sm:col-span-2" : "md:col-span-2"}>
+        <Button type="submit" variant="secondary">Save medical period</Button>
+      </div>
+    </form>
+  );
+}
+
+function MarkReturnedForm({ playerId, period }: { playerId: string; period: PlayerMedicalPeriod }) {
+  return (
+    <form action={updatePlayerMedicalPeriodStatus} className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+      <input type="hidden" name="playerId" value={playerId} />
+      <input type="hidden" name="periodId" value={period.id} />
+      <input type="hidden" name="status" value="completed" />
+      <FieldLabel label="Actual return date">
+        <input name="actualReturnDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} className={fieldClass()} />
+      </FieldLabel>
+      <div className="flex items-end">
+        <Button type="submit" variant="secondary" className="h-11">Mark returned</Button>
+      </div>
+    </form>
+  );
+}
+
+function MedicalUpdateForm({ playerId, period, compact = false }: { playerId: string; period: PlayerMedicalPeriod; compact?: boolean }) {
+  return (
+    <form action={updatePlayerMedicalPeriodDetails} className={cn("mt-3 grid gap-2", compact ? "sm:grid-cols-2" : "")}>
+      <input type="hidden" name="playerId" value={playerId} />
+      <input type="hidden" name="periodId" value={period.id} />
+      <input type="hidden" name="returnTo" value={`/squad/players/${playerId}?tab=medical`} />
+      <FieldLabel label="Description" wide={compact}>
+        <input name="description" required defaultValue={period.description} className={fieldClass()} />
+      </FieldLabel>
+      <FieldLabel label="Expected return">
+        <input name="expectedReturnDate" type="date" defaultValue={period.expectedReturnDate ?? ""} className={fieldClass()} />
+      </FieldLabel>
+      <FieldLabel label="Notes" wide>
+        <textarea name="notes" rows={2} defaultValue={period.notes ?? ""} className={textareaClass()} />
+      </FieldLabel>
+      <div className={compact ? "sm:col-span-2" : ""}>
+        <Button type="submit" variant="secondary" className="h-10">Save update</Button>
+      </div>
+    </form>
+  );
+}
+
+function MedicalRecordCard({ playerId, period }: { playerId: string; period: PlayerMedicalPeriod }) {
+  return (
+    <article className={cn("rounded-md border p-3 text-sm", period.status === "active" ? "border-board-line bg-slate-50" : "border-board-line bg-white")}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="font-bold text-board-navy">{medicalLabel(period)} · {period.description}</p>
+          <p className="mt-1 text-slate-600">
+            From {formatEventDate(period.startDate)}
+            {" · "}
+            Expected return {period.expectedReturnDate ? formatEventDate(period.expectedReturnDate) : "not set"}
+            {" · "}
+            Actual return {period.actualReturnDate ? formatEventDate(period.actualReturnDate) : "not entered"}
+          </p>
+          <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">Status: {period.status}</p>
+          {medicalReviewNeeded(period) ? <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800">Return status needs review</p> : null}
+          {period.notes ? <p className="mt-2 whitespace-pre-wrap text-slate-700">{period.notes}</p> : null}
+        </div>
+        {period.status === "active" ? (
+          <div className="space-y-2">
+            <details className="rounded-md bg-board-paper p-2">
+              <summary className="cursor-pointer text-xs font-bold uppercase text-board-navy">Update</summary>
+              <MedicalUpdateForm playerId={playerId} period={period} />
+            </details>
+            <details className="rounded-md bg-board-paper p-2">
+              <summary className="cursor-pointer text-xs font-bold uppercase text-board-navy">Mark returned</summary>
+              <MarkReturnedForm playerId={playerId} period={period} />
+            </details>
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function AnalyticsMetricCard({ href, label, value, detail, tone, icon, children }: { href: string; label: string; value: string; detail: string; tone: MetricTone; icon?: ReactNode; children?: ReactNode }) {
+  return (
+    <Link href={href} className={cn("block rounded-lg border bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-md", toneBorder(tone))}>
+      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">{icon}{label}</p>
+      <p className={cn("mt-2 text-3xl font-bold", toneText(tone))}>{value}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-600">{detail}</p>
+      {children ? <div className="mt-3">{children}</div> : null}
+    </Link>
+  );
+}
+
+function AttendanceSegmentBar({ present, late, absent }: { present: number; late: number; absent: number }) {
+  const total = present + late + absent;
+  if (!total) return <p className="text-xs text-slate-500">No attendance data</p>;
+  return (
+    <div aria-label={`${present} present, ${late} late, ${absent} absent`} className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+      <span className="bg-green-500" style={{ width: `${(present / total) * 100}%` }} />
+      <span className="bg-amber-400" style={{ width: `${(late / total) * 100}%` }} />
+      <span className="bg-red-400" style={{ width: `${(absent / total) * 100}%` }} />
+    </div>
+  );
+}
+
+function RatingChip({ rating }: { rating: number }) {
+  return <span className={cn("inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm font-bold", ratingToneClass(rating))}>{rating}</span>;
+}
+
 function PeriodControls({ playerId, tab, period, customFrom, customTo }: { playerId: string; tab: PlayerHubTab; period: AnalyticsPeriod; customFrom?: string; customTo?: string }) {
   return (
     <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
@@ -635,7 +950,13 @@ function AttendanceEntryCard({ entry }: { entry: PlayerAnalyticsRecord }) {
             {entry.lateMinutes ? ` · Late: ${entry.lateMinutes} min` : ""}
             {` · Malus: ${reliabilityMalus(entry)}`}
           </p>
-          {entry.medicalAvailability ? <p className="mt-1 text-xs font-bold text-red-700">Medical status: {entry.medicalAvailability.label}{entry.medicalAvailability.until ? ` until ${formatEventDate(entry.medicalAvailability.until)}` : ""}</p> : null}
+          {entry.medicalAvailability ? (
+            <p className="mt-1 text-xs font-bold text-red-700">
+              Medical status: {entry.medicalAvailability.label}
+              {entry.medicalAvailability.until ? ` until ${formatEventDate(entry.medicalAvailability.until)}` : ""}
+              {entry.medicalAvailability.needsReview ? " · Return needs review" : ""}
+            </p>
+          ) : null}
         </div>
         {entry.sensitiveNote ? <Badge tone="red">Private note</Badge> : null}
       </div>
@@ -704,6 +1025,15 @@ function Stat({ label, value, icon }: { label: string; value: string; icon?: Rea
     <div className="rounded-md bg-slate-50 p-3">
       <p className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500">{icon}{label}</p>
       <p className="mt-1 text-xl font-bold text-board-navy">{value}</p>
+    </div>
+  );
+}
+
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-slate-50 p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-bold text-board-navy">{value}</p>
     </div>
   );
 }
@@ -780,4 +1110,72 @@ function filterAttendanceRecords(records: PlayerAnalyticsRecord[], filter: Atten
   if (filter === "private") return records.filter((entry) => entry.finalStatus === "P" || entry.plannedReason === "P");
   if (filter === "cancelled") return records.filter((entry) => entry.finalStatus === "S" || entry.plannedReason === "S");
   return records.filter((entry) => entry.finalStatus === "U" || entry.plannedReason === "U");
+}
+
+type MetricTone = "positive" | "warning" | "negative" | "neutral";
+
+function ratingTone(value: number | null): MetricTone {
+  if (value === null) return "neutral";
+  if (value >= 4) return "positive";
+  if (value >= 3) return "neutral";
+  if (value >= 2) return "warning";
+  return "negative";
+}
+
+function trendTone(value: number | null): MetricTone {
+  if (value === null) return "neutral";
+  if (value >= 0.3) return "positive";
+  if (value <= -0.3) return "negative";
+  return "neutral";
+}
+
+function attendanceTone(value: number | null): MetricTone {
+  if (value === null) return "neutral";
+  if (value >= 0.85) return "positive";
+  if (value >= 0.7) return "warning";
+  return "negative";
+}
+
+function reliabilityTone(value: number): MetricTone {
+  if (value === 0) return "positive";
+  if (value >= -2) return "warning";
+  return "negative";
+}
+
+function trendValue(value: number | null) {
+  if (value === null) return "No trend";
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}`;
+}
+
+function trendIcon(value: number | null) {
+  if (value === null) return <Minus className="h-4 w-4" />;
+  if (value >= 0.3) return <TrendingUp className="h-4 w-4" />;
+  if (value <= -0.3) return <TrendingDown className="h-4 w-4" />;
+  return <Minus className="h-4 w-4" />;
+}
+
+function toneBorder(tone: MetricTone) {
+  if (tone === "positive") return "border-green-200";
+  if (tone === "warning") return "border-amber-200";
+  if (tone === "negative") return "border-red-200";
+  return "border-board-line";
+}
+
+function toneText(tone: MetricTone) {
+  if (tone === "positive") return "text-green-700";
+  if (tone === "warning") return "text-amber-700";
+  if (tone === "negative") return "text-red-700";
+  return "text-board-navy";
+}
+
+function ratingToneClass(rating: number) {
+  if (rating >= 5) return "bg-green-100 text-green-800";
+  if (rating >= 4) return "bg-green-50 text-green-700";
+  if (rating === 3) return "bg-slate-100 text-slate-700";
+  if (rating === 2) return "bg-amber-50 text-amber-700";
+  return "bg-red-50 text-red-700";
+}
+
+function medicalReviewNeeded(period: PlayerMedicalPeriod) {
+  return period.status === "active" && Boolean(period.expectedReturnDate) && !period.actualReturnDate && (period.expectedReturnDate ?? "") < new Date().toISOString().slice(0, 10);
 }

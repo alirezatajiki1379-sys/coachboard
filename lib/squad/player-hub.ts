@@ -32,7 +32,7 @@ import type { Database } from "@/types/database";
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type AssessmentRow = Database["public"]["Tables"]["player_coach_assessments"]["Row"];
 
-export type PlayerHubTab = "overview" | "analytics" | "development" | "history" | "attendance" | "notes" | "details";
+export type PlayerHubTab = "overview" | "analytics" | "development" | "history" | "attendance" | "medical" | "notes" | "details";
 export type PlayerTimelineFilter = "all" | "trainings" | "ratings" | "attendance" | "development" | "observations" | "medical" | "coach";
 
 export type PlayerTimelineEvent = {
@@ -68,7 +68,7 @@ export type PlayerHubData = {
 
 export function parsePlayerHubTab(value?: string | string[]): PlayerHubTab {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === "analytics" || raw === "development" || raw === "history" || raw === "attendance" || raw === "notes" || raw === "details"
+  return raw === "analytics" || raw === "development" || raw === "history" || raw === "attendance" || raw === "medical" || raw === "notes" || raw === "details"
     ? raw
     : "overview";
 }
@@ -140,7 +140,7 @@ export async function getPlayerHubData(
 }
 
 export function currentMedicalPeriod(periods: PlayerMedicalPeriod[], date = new Date().toISOString().slice(0, 10)) {
-  return periods.find((period) => isMedicalPeriodActiveOnDate(period, date));
+  return latestApplicableMedicalPeriod(periods, date);
 }
 
 export function isMedicalPeriodActiveOnDate(period: PlayerMedicalPeriod, date: string) {
@@ -157,6 +157,16 @@ export function medicalReasonForType(type: PlayerMedicalPeriodType) {
 
 export function medicalLabel(period: PlayerMedicalPeriod) {
   return period.type === "injured" ? "Injured" : "Sick";
+}
+
+export function latestApplicableMedicalPeriod(periods: PlayerMedicalPeriod[], date: string) {
+  return periods
+    .filter((period) => isMedicalPeriodActiveOnDate(period, date))
+    .sort((a, b) => b.startDate.localeCompare(a.startDate) || b.updatedAt.localeCompare(a.updatedAt))[0];
+}
+
+export function medicalNeedsReview(period: PlayerMedicalPeriod, date = new Date().toISOString().slice(0, 10)) {
+  return period.status === "active" && Boolean(period.expectedReturnDate) && !period.actualReturnDate && (period.expectedReturnDate ?? "") < date;
 }
 
 function buildPlayerTimeline(

@@ -9,7 +9,7 @@ import {
 import type { SquadPlayerRow } from "@/lib/squad/mappers";
 import type { SquadTrainingEvent, SquadTrainingEventDetail } from "@/types/domain";
 import type { PlayerMedicalPeriod } from "@/types/domain";
-import { isMedicalPeriodActiveOnDate, medicalLabel, medicalReasonForType } from "@/lib/squad/player-hub";
+import { isMedicalPeriodActiveOnDate, latestApplicableMedicalPeriod, medicalLabel, medicalNeedsReview, medicalReasonForType } from "@/lib/squad/player-hub";
 import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -118,9 +118,15 @@ async function getMedicalByPlayer(db: SupabaseClient, userId: string, eventDate:
     .lte("start_date", eventDate)
     .or(`end_date.is.null,end_date.gte.${eventDate}`);
   if (error) return result;
+  const byPlayer = new Map<string, PlayerMedicalPeriod[]>();
   for (const row of (data ?? []) as PlayerMedicalPeriodRow[]) {
     const period = mapPlayerMedicalPeriodRow(row);
-    if (isMedicalPeriodActiveOnDate(period, eventDate) && !result.has(period.playerId)) result.set(period.playerId, period);
+    if (!isMedicalPeriodActiveOnDate(period, eventDate)) continue;
+    byPlayer.set(period.playerId, [...(byPlayer.get(period.playerId) ?? []), period]);
+  }
+  for (const [playerId, periods] of byPlayer) {
+    const latest = latestApplicableMedicalPeriod(periods, eventDate);
+    if (latest) result.set(playerId, latest);
   }
   return result;
 }
@@ -133,10 +139,12 @@ function applyMedicalPrefill<T extends ReturnType<typeof mapAttendanceRow>>(entr
     return entry;
   }
   const availability = {
+    periodId: medical.id,
     type: medical.type,
     label: medicalLabel(medical),
     until: medical.actualReturnDate ?? medical.expectedReturnDate ?? medical.endDate,
-    description: medical.description
+    description: medical.description,
+    needsReview: medicalNeedsReview(medical)
   };
   if (entry.finalStatus || entry.plannedStatusSource === "manual") return { ...entry, medicalAvailability: availability };
   return {

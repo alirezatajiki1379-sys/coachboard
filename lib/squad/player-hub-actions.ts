@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isMedicalPeriodActiveOnDate, medicalReasonForType } from "@/lib/squad/player-hub";
+import { latestApplicableMedicalPeriod, medicalReasonForType } from "@/lib/squad/player-hub";
 import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 import { createClient } from "@/lib/supabase/server";
-import type { PlayerMedicalPeriod } from "@/types/domain";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -116,9 +115,6 @@ export async function createPlayerMedicalPeriod(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   const type = formString(formData, "type") === "sick" ? "sick" : "injured";
   const status = statusValue(formString(formData, "status"));
-  if (status === "active" && await hasActiveMedicalOverlap(db, user.id, playerId, startDate, endDate)) {
-    redirect(playerPathWithError(playerId, "This player already has an active medical period that overlaps these dates."));
-  }
   const { error } = await db.from("player_medical_periods").insert({
     user_id: user.id,
     player_id: playerId,
@@ -136,7 +132,7 @@ export async function createPlayerMedicalPeriod(formData: FormData) {
   revalidatePlayer(playerId);
   revalidatePath("/squad/attendance");
   revalidatePath("/trainings");
-  redirect(playerPath(playerId, "details"));
+  redirect(formString(formData, "returnTo") || playerPath(playerId, "details"));
 }
 
 export async function updatePlayerMedicalPeriodStatus(formData: FormData) {
@@ -163,7 +159,47 @@ export async function updatePlayerMedicalPeriodStatus(formData: FormData) {
   revalidatePlayer(playerId);
   revalidatePath("/squad/attendance");
   revalidatePath("/trainings");
-  redirect(playerPath(playerId, "details"));
+  redirect(formString(formData, "returnTo") || playerPath(playerId, "medical"));
+}
+
+export async function updatePlayerMedicalPeriodDetails(formData: FormData) {
+  const playerId = formString(formData, "playerId");
+  const periodId = formString(formData, "periodId");
+  const description = formString(formData, "description");
+  const expectedReturnDate = formString(formData, "expectedReturnDate");
+  const notes = formString(formData, "notes");
+  if (!playerId || !periodId || !description) redirect(playerPathWithError(playerId, "Description is required."));
+  if (description.length > 160) redirect(playerPathWithError(playerId, "Keep the injury or sickness description under 160 characters."));
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { data: existing } = await db
+    .from("player_medical_periods")
+    .select("start_date")
+    .eq("id", periodId)
+    .eq("player_id", playerId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (existing?.start_date && expectedReturnDate && expectedReturnDate < existing.start_date) {
+    redirect(playerPathWithError(playerId, "Expected return cannot be before the start date."));
+  }
+
+  const { error } = await db
+    .from("player_medical_periods")
+    .update({
+      expected_return_date: optional(expectedReturnDate),
+      description,
+      notes: optional(notes)
+    })
+    .eq("id", periodId)
+    .eq("player_id", playerId)
+    .eq("user_id", user.id);
+  if (error) redirect(playerPathWithError(playerId, "Medical period could not be updated. Please try again."));
+  await syncAutomaticMedicalAttendance(db, user.id, playerId);
+  revalidatePlayer(playerId);
+  revalidatePath("/squad/attendance");
+  revalidatePath("/trainings");
+  redirect(formString(formData, "returnTo") || playerPath(playerId, "medical"));
 }
 
 function relationshipValue(value: string) {
@@ -176,21 +212,6 @@ function statusValue(value: string) {
 
 function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-async function hasActiveMedicalOverlap(db: SupabaseClient, userId: string, playerId: string, startDate: string, endDate: string) {
-  const { data, error } = await db
-    .from("player_medical_periods")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("player_id", playerId)
-    .eq("status", "active");
-  if (error) return false;
-  const newEnd = endDate || "9999-12-31";
-  return ((data ?? []) as PlayerMedicalPeriodRow[]).map(mapPlayerMedicalPeriodRow).some((period) => {
-    const existingEnd = period.actualReturnDate ?? period.endDate ?? "9999-12-31";
-    return startDate <= existingEnd && period.startDate <= newEnd;
-  });
 }
 
 async function syncAutomaticMedicalAttendance(db: SupabaseClient, userId: string, playerId: string) {
@@ -218,7 +239,7 @@ async function syncAutomaticMedicalAttendance(db: SupabaseClient, userId: string
   }).map((record) => {
     const event = Array.isArray(record.squad_training_events) ? record.squad_training_events[0] : record.squad_training_events;
     const eventDate = event?.date ?? "";
-    const activeMedical = medicalPeriods.find((period: PlayerMedicalPeriod) => isMedicalPeriodActiveOnDate(period, eventDate));
+    const activeMedical = latestApplicableMedicalPeriod(medicalPeriods, eventDate);
     return db
       .from("squad_attendance_records")
       .update(activeMedical ? {

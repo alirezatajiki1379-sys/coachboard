@@ -115,7 +115,7 @@ export default async function CheckInPage({ params, searchParams }: CheckInPageP
       <section className="space-y-3">
         {event.attendance.length ? (
           visibleEntries.length ? (
-            visibleEntries.map((entry) => <CheckInRow key={entry.id} entry={entry} eventId={event.id} />)
+            visibleEntries.map((entry) => <CheckInRow key={entry.id} entry={entry} eventId={event.id} eventDate={event.date} />)
           ) : (
             <p className="rounded-lg border border-dashed border-board-line bg-white p-5 text-center text-sm font-semibold text-slate-500 shadow-soft">
               No players match this filter.

@@ -14,6 +14,7 @@ import {
   updateFinalAttendance,
   updatePlannedAttendance
 } from "@/lib/squad/attendance-actions";
+import { updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { attendanceReasonLabels } from "@/lib/squad/attendance-utils";
 import type { PlayerDevelopmentGoal, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus } from "@/types/domain";
@@ -85,12 +86,15 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
         </form>
       ) : null}
       {entry.medicalAvailability ? (
-        <p className="inline-flex items-center gap-2 rounded-md bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
-          <Stethoscope className="h-3.5 w-3.5" />
-          Medical status: {entry.medicalAvailability.label}
-          {entry.medicalAvailability.until ? ` until ${entry.medicalAvailability.until}` : " until further notice"}
-          {entry.plannedStatusSource === "manual" ? " · Attendance override active" : ""}
-        </p>
+        <div className="inline-flex flex-wrap items-center gap-2 rounded-md bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
+          <span className="inline-flex items-center gap-2">
+            <Stethoscope className="h-3.5 w-3.5" />
+            Medical status: {entry.medicalAvailability.label}
+            {entry.medicalAvailability.until ? ` until ${entry.medicalAvailability.until}` : " until further notice"}
+          </span>
+          {entry.medicalAvailability.needsReview ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Return needs review</span> : null}
+          {entry.plannedStatusSource === "manual" ? <span>Attendance override active</span> : null}
+        </div>
       ) : null}
     </div>
   );
@@ -130,7 +134,7 @@ export function MarkAllExpectedButton({ eventId }: { eventId: string }) {
   );
 }
 
-export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; eventId: string }) {
+export function CheckInRow({ entry, eventId, eventDate }: { entry: SquadAttendanceEntry; eventId: string; eventDate: string }) {
   const isLate = entry.finalStatus === "Z";
   const isAbsent = Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z");
   const statusTone = entry.finalStatus
@@ -153,7 +157,12 @@ export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; ev
               {entry.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Trial player</span> : null}
               <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Planned: {plannedStatusLabel(entry.plannedStatus)}</span>
               <span className={`rounded-full px-2 py-1 ${statusTone}`}>Actual: {finalStatusLabel(entry.finalStatus)}</span>
-              {entry.medicalAvailability ? <span className="rounded-full bg-red-50 px-2 py-1 text-red-700">{entry.medicalAvailability.label}</span> : null}
+              {entry.medicalAvailability ? (
+                <span className="rounded-full bg-red-50 px-2 py-1 text-red-700">
+                  {entry.medicalAvailability.label}
+                  {entry.medicalAvailability.needsReview ? " · review" : ""}
+                </span>
+              ) : null}
             </div>
             {entry.coachNote ? <p className="mt-2 text-sm text-slate-600">{entry.coachNote}</p> : null}
           </div>
@@ -193,6 +202,25 @@ export function CheckInRow({ entry, eventId }: { entry: SquadAttendanceEntry; ev
             </label>
             <Button type="submit" variant="secondary" className="h-10">Save absence</Button>
           </form>
+        ) : null}
+        {entry.medicalAvailability?.periodId && (entry.finalStatus === "present" || entry.finalStatus === "Z") ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+            <p className="text-sm font-bold text-amber-900">This player still has an active medical absence.</p>
+            <p className="mt-1 text-sm text-amber-800">Mark as returned, or keep the medical status active.</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <form action={updatePlayerMedicalPeriodStatus} className="flex flex-col gap-2 sm:flex-row">
+                <input type="hidden" name="playerId" value={entry.playerId} />
+                <input type="hidden" name="periodId" value={entry.medicalAvailability.periodId} />
+                <input type="hidden" name="status" value="completed" />
+                <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
+                <input name="actualReturnDate" type="date" defaultValue={eventDate} className="h-10 rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+                <Button type="submit" variant="secondary" className="h-10">Mark returned</Button>
+              </form>
+              <span className="inline-flex h-10 items-center rounded-md bg-white px-3 text-sm font-semibold text-amber-800 ring-1 ring-amber-200">
+                Keep medical status active
+              </span>
+            </div>
+          </div>
         ) : null}
       </div>
     </article>

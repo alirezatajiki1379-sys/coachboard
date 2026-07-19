@@ -121,6 +121,7 @@ export default async function TrainingEventPage({ params }: EventPageProps) {
                     <p className="mt-1 text-xs font-bold text-red-700">
                       Medical status: {entry.medicalAvailability.label}
                       {entry.medicalAvailability.until ? ` until ${formatEventDate(entry.medicalAvailability.until)}` : " until further notice"}
+                      {entry.medicalAvailability.needsReview ? " · Return needs review" : ""}
                       {entry.plannedStatusSource === "manual" ? " · Manual attendance override" : ""}
                     </p>
                   ) : null}
