@@ -944,6 +944,35 @@ create table if not exists public.player_observations (
 
 
 -- =========================================================
+-- 15B. COACH WORKSPACE VIEWS
+-- =========================================================
+
+create table if not exists public.coach_workspace_views (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+
+  name text not null,
+  description text,
+  kind text not null default 'saved'
+    check (kind in ('system', 'saved')),
+  system_view_id text,
+  configuration jsonb not null default '{}'::jsonb,
+  display_order integer not null default 0
+    check (display_order >= 0),
+  is_default boolean not null default false,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint coach_workspace_views_kind_shape_check
+    check (
+      (kind = 'saved' and system_view_id is null)
+      or (kind = 'system' and system_view_id is not null)
+    )
+);
+
+
+-- =========================================================
 -- 16. INDEXES
 -- =========================================================
 
@@ -1131,6 +1160,34 @@ on public.player_observations (
   event_id
 );
 
+create index if not exists coach_workspace_views_user_order_idx
+on public.coach_workspace_views (
+  user_id,
+  kind,
+  display_order,
+  created_at
+);
+
+create unique index if not exists coach_workspace_views_user_system_unique_idx
+on public.coach_workspace_views (
+  user_id,
+  system_view_id
+)
+where kind = 'system';
+
+create unique index if not exists coach_workspace_views_user_saved_name_unique_idx
+on public.coach_workspace_views (
+  user_id,
+  lower(name)
+)
+where kind = 'saved';
+
+create unique index if not exists coach_workspace_views_user_default_unique_idx
+on public.coach_workspace_views (
+  user_id
+)
+where is_default;
+
 
 -- =========================================================
 -- 17. UPDATED_AT TRIGGERS
@@ -1281,6 +1338,14 @@ before update on public.player_observations
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_coach_workspace_views_updated_at
+on public.coach_workspace_views;
+
+create trigger set_coach_workspace_views_updated_at
+before update on public.coach_workspace_views
+for each row
+execute function public.set_updated_at();
+
 
 -- Auth profile trigger
 
@@ -1349,6 +1414,9 @@ alter table public.player_goal_actions
 enable row level security;
 
 alter table public.player_observations
+enable row level security;
+
+alter table public.coach_workspace_views
 enable row level security;
 
 
@@ -1758,6 +1826,22 @@ with check (
       and squad_training_events.user_id = auth.uid()
     )
   )
+);
+
+
+-- COACH WORKSPACE VIEWS
+
+drop policy if exists "coach workspace views are owned by the user"
+on public.coach_workspace_views;
+
+create policy "coach workspace views are owned by the user"
+on public.coach_workspace_views
+for all
+using (
+  auth.uid() = user_id
+)
+with check (
+  auth.uid() = user_id
 );
 
 

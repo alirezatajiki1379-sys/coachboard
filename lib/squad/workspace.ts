@@ -26,6 +26,18 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type GoalRow = Database["public"]["Tables"]["player_development_goals"]["Row"];
 type ObservationRow = Database["public"]["Tables"]["player_observations"]["Row"];
 type AssessmentRow = Database["public"]["Tables"]["player_coach_assessments"]["Row"];
+type WorkspaceViewRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  kind: "system" | "saved";
+  system_view_id: string | null;
+  configuration: unknown;
+  display_order: number | null;
+  is_default: boolean | null;
+  updated_at: string;
+};
 
 export type WorkspaceView =
   | "all"
@@ -59,6 +71,9 @@ export type WorkspaceSortKey =
 
 export type WorkspaceState = {
   view: WorkspaceView;
+  savedView?: string;
+  customize: boolean;
+  hasExplicitState: boolean;
   players: WorkspacePlayersFilter;
   position?: string;
   availability: WorkspaceAvailabilityFilter;
@@ -74,6 +89,108 @@ export type WorkspaceState = {
   ratingStatus?: string;
   customFrom?: string;
   customTo?: string;
+};
+
+export type WorkspaceColumnCategory = "Player" | "Squad" | "Availability" | "Performance" | "Attendance" | "Development" | "Review" | "Observation" | "Trial";
+export type WorkspaceColumnId =
+  | "player"
+  | "position"
+  | "secondaryPositions"
+  | "age"
+  | "dateOfBirth"
+  | "strongFoot"
+  | "jerseyNumber"
+  | "club"
+  | "playerType"
+  | "captainStatus"
+  | "joinedDate"
+  | "archivedStatus"
+  | "availability"
+  | "expectedReturn"
+  | "medicalReview"
+  | "attendance"
+  | "attendedTrainings"
+  | "relevantTrainings"
+  | "lastTraining"
+  | "reliability"
+  | "penalisedLateness"
+  | "lateCancellations"
+  | "average"
+  | "latestRating"
+  | "trend"
+  | "ratedTrainings"
+  | "evidence"
+  | "recentRatings"
+  | "activeGoals"
+  | "goalPriority"
+  | "review"
+  | "coachAssessment"
+  | "lastObservation"
+  | "observationAge"
+  | "trialDuration"
+  | "trialTrainings"
+  | "trialRatedTrainings"
+  | "trialDecision";
+
+export type WorkspaceMetricId =
+  | "average"
+  | "trend"
+  | "attendance"
+  | "reliability"
+  | "latestRating"
+  | "ratedTrainings"
+  | "evidence"
+  | "activeGoals"
+  | "goalPriority"
+  | "review"
+  | "coachAssessment"
+  | "lastObservation"
+  | "expectedReturn"
+  | "trialDuration";
+
+export type WorkspaceGroupMode = "none" | "positionGroup" | "playerType";
+export type WorkspaceDensity = "compact" | "comfortable";
+export type WorkspaceInspectorMode = "open" | "collapsed";
+
+export type WorkspaceConfiguration = {
+  version: 1;
+  visibleColumns: WorkspaceColumnId[];
+  columnOrder: WorkspaceColumnId[];
+  mobileMetrics: WorkspaceMetricId[];
+  filters: Partial<Pick<WorkspaceState, "players" | "position" | "availability" | "period" | "sort" | "direction" | "coachAssessment" | "developmentStatus" | "reviewStatus" | "evidenceBase" | "ratingStatus" | "customFrom" | "customTo">> & { search?: string };
+  quickViewId?: WorkspaceView | null;
+  groupMode: WorkspaceGroupMode;
+  density: WorkspaceDensity;
+  inspectorMode: WorkspaceInspectorMode;
+  showAttentionIndicators: boolean;
+};
+
+export type WorkspaceColumnDefinition = {
+  id: WorkspaceColumnId;
+  label: string;
+  description: string;
+  category: WorkspaceColumnCategory;
+  required?: boolean;
+  sortable?: WorkspaceSortKey;
+  desktopOnly?: boolean;
+};
+
+export type WorkspaceMetricDefinition = {
+  id: WorkspaceMetricId;
+  label: string;
+  description: string;
+};
+
+export type WorkspaceSavedView = {
+  id: string;
+  name: string;
+  description?: string;
+  kind: "system" | "saved";
+  systemViewId?: WorkspaceView;
+  configuration: WorkspaceConfiguration;
+  displayOrder: number;
+  isDefault: boolean;
+  updatedAt: string;
 };
 
 export type AttentionIndicator = {
@@ -95,6 +212,10 @@ export type WorkspacePlayerSummary = {
 
 export type WorkspaceData = {
   state: WorkspaceState;
+  configuration: WorkspaceConfiguration;
+  savedViews: WorkspaceSavedView[];
+  systemOverride?: WorkspaceSavedView;
+  activeSavedView?: WorkspaceSavedView;
   players: WorkspacePlayerSummary[];
   allPlayers: WorkspacePlayerSummary[];
   positions: string[];
@@ -140,6 +261,88 @@ export const quickViews: Array<{ id: WorkspaceView; label: string; description: 
   { id: "reviews-due", label: "Reviews Due", description: "Overdue, today and this week.", defaultSort: "reviewDate", defaultDirection: "asc" }
 ];
 
+export const workspaceColumns: WorkspaceColumnDefinition[] = [
+  { id: "player", label: "Player", description: "Player identity and roster type.", category: "Player", required: true, sortable: "name" },
+  { id: "position", label: "Position", description: "Primary position.", category: "Player", sortable: "position" },
+  { id: "secondaryPositions", label: "Secondary positions", description: "Optional secondary roles.", category: "Player" },
+  { id: "age", label: "Age", description: "Calculated from date of birth.", category: "Player", sortable: "age" },
+  { id: "dateOfBirth", label: "Birthdate", description: "Player birthdate.", category: "Player" },
+  { id: "strongFoot", label: "Dominant foot", description: "Strong foot.", category: "Player" },
+  { id: "jerseyNumber", label: "Jersey", description: "Jersey number.", category: "Squad" },
+  { id: "club", label: "Club", description: "Current or previous club.", category: "Squad" },
+  { id: "playerType", label: "Player type", description: "Roster or Trial Player.", category: "Squad" },
+  { id: "captainStatus", label: "Captain", description: "Captain status where available.", category: "Squad" },
+  { id: "joinedDate", label: "Joined", description: "Joined date.", category: "Squad" },
+  { id: "archivedStatus", label: "Archived", description: "Archived player status.", category: "Squad" },
+  { id: "availability", label: "Availability", description: "Current operational medical availability.", category: "Availability", sortable: "availability" },
+  { id: "expectedReturn", label: "Expected return", description: "Expected medical return date only.", category: "Availability" },
+  { id: "medicalReview", label: "Medical review", description: "Medical return review status.", category: "Availability" },
+  { id: "attendance", label: "Attendance", description: "Attendance percentage in the selected period.", category: "Attendance", sortable: "attendance" },
+  { id: "attendedTrainings", label: "Attended", description: "Attended trainings in period.", category: "Attendance" },
+  { id: "relevantTrainings", label: "Relevant trainings", description: "Trainings considered for attendance.", category: "Attendance" },
+  { id: "lastTraining", label: "Last training", description: "Most recent training in period.", category: "Attendance", sortable: "lastTraining" },
+  { id: "reliability", label: "Reliability", description: "Reliability penalty.", category: "Attendance", sortable: "reliability" },
+  { id: "penalisedLateness", label: "Penalised late", description: "Penalised late arrivals.", category: "Attendance" },
+  { id: "lateCancellations", label: "Late cancellations", description: "Late cancellations.", category: "Attendance" },
+  { id: "average", label: "Average", description: "Average rating in period.", category: "Performance", sortable: "average" },
+  { id: "latestRating", label: "Latest rating", description: "Latest rating in period.", category: "Performance", sortable: "latestRating" },
+  { id: "trend", label: "Trend", description: "Latest trend in period.", category: "Performance", sortable: "trend" },
+  { id: "ratedTrainings", label: "Rated trainings", description: "Number of rated trainings.", category: "Performance" },
+  { id: "evidence", label: "Evidence", description: "Evidence base.", category: "Performance" },
+  { id: "recentRatings", label: "Recent ratings", description: "Latest rating values.", category: "Performance" },
+  { id: "activeGoals", label: "Active goals", description: "Active development goal count.", category: "Development", sortable: "activeGoals" },
+  { id: "goalPriority", label: "Goal priority", description: "Highest active goal priority.", category: "Development", sortable: "goalPriority" },
+  { id: "review", label: "Review", description: "Next or overdue review.", category: "Review", sortable: "reviewDate" },
+  { id: "coachAssessment", label: "Coach assessment", description: "Manual coach assessment.", category: "Review", sortable: "coachAssessment" },
+  { id: "lastObservation", label: "Last observation", description: "Most recent observation date.", category: "Observation", sortable: "lastObservation" },
+  { id: "observationAge", label: "Observation age", description: "Days since latest observation.", category: "Observation" },
+  { id: "trialDuration", label: "Trial duration", description: "Days since trial started.", category: "Trial" },
+  { id: "trialTrainings", label: "Trial attended", description: "Trial attended trainings.", category: "Trial" },
+  { id: "trialRatedTrainings", label: "Trial rated", description: "Trial rated trainings.", category: "Trial" },
+  { id: "trialDecision", label: "Trial decision", description: "Current trial assessment.", category: "Trial" }
+];
+
+export const workspaceMobileMetrics: WorkspaceMetricDefinition[] = [
+  { id: "average", label: "Average", description: "Average rating." },
+  { id: "trend", label: "Trend", description: "Rating trend." },
+  { id: "attendance", label: "Attendance", description: "Attendance percentage." },
+  { id: "reliability", label: "Reliability", description: "Reliability penalty." },
+  { id: "latestRating", label: "Latest rating", description: "Latest rating." },
+  { id: "ratedTrainings", label: "Rated trainings", description: "Rated training count." },
+  { id: "evidence", label: "Evidence", description: "Evidence base." },
+  { id: "activeGoals", label: "Active goals", description: "Active development goals." },
+  { id: "goalPriority", label: "Goal priority", description: "Highest goal priority." },
+  { id: "review", label: "Review", description: "Review status." },
+  { id: "coachAssessment", label: "Coach assessment", description: "Manual assessment." },
+  { id: "lastObservation", label: "Last observation", description: "Latest observation." },
+  { id: "expectedReturn", label: "Expected return", description: "Medical expected return." },
+  { id: "trialDuration", label: "Trial duration", description: "Trial duration." }
+];
+
+const defaultColumnsByView: Record<WorkspaceView, WorkspaceColumnId[]> = {
+  all: ["player", "position", "age", "availability", "attendance", "average", "trend", "activeGoals", "review"],
+  "by-position": ["player", "position", "age", "availability", "attendance", "average", "activeGoals"],
+  "needs-attention": ["player", "position", "availability", "attendance", "trend", "lastObservation", "review"],
+  development: ["player", "position", "activeGoals", "goalPriority", "review", "coachAssessment", "lastObservation", "average"],
+  performance: ["player", "position", "average", "trend", "latestRating", "ratedTrainings", "evidence", "attendance"],
+  attendance: ["player", "position", "availability", "attendance", "attendedTrainings", "reliability", "penalisedLateness", "lastTraining"],
+  unavailable: ["player", "position", "availability", "expectedReturn", "medicalReview", "lastTraining"],
+  "trial-players": ["player", "position", "trialDuration", "trialTrainings", "average", "evidence", "coachAssessment", "review"],
+  "reviews-due": ["player", "position", "review", "activeGoals", "goalPriority", "coachAssessment", "lastObservation"]
+};
+
+const defaultMobileMetricsByView: Record<WorkspaceView, WorkspaceMetricId[]> = {
+  all: ["attendance", "average", "trend", "review"],
+  "by-position": ["attendance", "average", "activeGoals", "review"],
+  "needs-attention": ["attendance", "trend", "lastObservation", "review"],
+  development: ["activeGoals", "goalPriority", "review", "coachAssessment"],
+  performance: ["average", "trend", "latestRating", "evidence"],
+  attendance: ["attendance", "reliability", "lastObservation", "expectedReturn"],
+  unavailable: ["expectedReturn", "lastObservation", "attendance", "review"],
+  "trial-players": ["trialDuration", "attendance", "average", "coachAssessment"],
+  "reviews-due": ["review", "activeGoals", "goalPriority", "lastObservation"]
+};
+
 export function parseWorkspaceState(searchParams: Record<string, string | string[] | undefined>): WorkspaceState {
   const view = workspaceView(one(searchParams.view));
   const viewConfig = quickViews.find((item) => item.id === view) ?? quickViews[0];
@@ -148,6 +351,9 @@ export function parseWorkspaceState(searchParams: Record<string, string | string
   const period = analyticsPeriod(one(searchParams.period));
   return {
     view,
+    savedView: one(searchParams.savedView) || undefined,
+    customize: one(searchParams.customize) === "true",
+    hasExplicitState: Object.keys(searchParams).some((key) => searchParams[key] !== undefined),
     players: playersFilter(one(searchParams.players), view),
     position: one(searchParams.position) || undefined,
     availability: availabilityFilter(one(searchParams.availability), view),
@@ -172,14 +378,27 @@ export async function getCoachWorkspaceData(
   state: WorkspaceState
 ): Promise<WorkspaceData> {
   const db = supabase as unknown as SupabaseClient;
+  const savedViews = await listWorkspaceViews(db, userId);
+  const defaultView = savedViews.find((view) => view.isDefault);
+  const requestedSavedView = state.savedView ? savedViews.find((view) => view.id === state.savedView && view.kind === "saved") : undefined;
+  const defaultSavedView = !state.hasExplicitState && defaultView?.kind === "saved" ? defaultView : undefined;
+  const defaultSystemView = !state.hasExplicitState && defaultView?.kind === "system" ? defaultView : undefined;
+  const activeSavedView = requestedSavedView ?? defaultSavedView;
+  const baseView = activeSavedView?.configuration.quickViewId ?? defaultSystemView?.systemViewId ?? state.view;
+  const systemOverride = savedViews.find((view) => view.kind === "system" && view.systemViewId === baseView);
+  const configuration = normalizeWorkspaceConfiguration(
+    activeSavedView?.configuration ?? systemOverride?.configuration ?? defaultWorkspaceConfiguration(baseView),
+    baseView
+  );
+  const effectiveState = applyConfigurationToState({ ...state, view: baseView, savedView: activeSavedView?.id }, configuration);
   const analyticsFilters = {
-    period: state.period,
+    period: effectiveState.period,
     playerType: "all" as const,
     ratedOnly: false,
     sort: "name" as const,
     direction: "asc" as const,
-    customFrom: state.customFrom,
-    customTo: state.customTo
+    customFrom: effectiveState.customFrom,
+    customTo: effectiveState.customTo
   };
   const [{ summaries, positions, seasonSettings }, archivedPlayers, records, assessments, goalsByPlayer, observationsByPlayer, medicalByPlayer] = await Promise.all([
     getSquadAnalyticsOverview(supabase, userId, analyticsFilters),
@@ -195,12 +414,12 @@ export async function getCoachWorkspaceData(
   const activeSummaries = summaries.map((summary) => {
     const assessment = assessmentByPlayer.get(summary.player.id);
     return assessment && assessment.id !== summary.assessment?.id
-      ? createPlayerAnalyticsSummary(summary.player, records, state.period, assessment, seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, state.customFrom, state.customTo)
+      ? createPlayerAnalyticsSummary(summary.player, records, effectiveState.period, assessment, seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, effectiveState.customFrom, effectiveState.customTo)
       : summary;
   });
 
   const archivedSummaries = archivedPlayers.map((player) =>
-    createPlayerAnalyticsSummary(player, records, state.period, assessmentByPlayer.get(player.id), seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, state.customFrom, state.customTo)
+    createPlayerAnalyticsSummary(player, records, effectiveState.period, assessmentByPlayer.get(player.id), seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, effectiveState.customFrom, effectiveState.customTo)
   );
   const allSummaries = [...activeSummaries, ...archivedSummaries];
   const allPlayers = allSummaries.map((summary) => {
@@ -220,17 +439,21 @@ export async function getCoachWorkspaceData(
     };
   });
 
-  const filtered = sortWorkspacePlayers(filterWorkspacePlayers(allPlayers, state), state.sort, state.direction);
-  const selected = filtered.find((item) => item.analytics.player.id === state.selectedPlayer) ?? filtered[0];
+  const filtered = sortWorkspacePlayers(filterWorkspacePlayers(allPlayers, effectiveState), effectiveState.sort, effectiveState.direction);
+  const selected = filtered.find((item) => item.analytics.player.id === effectiveState.selectedPlayer) ?? filtered[0];
   const active = allPlayers.filter((item) => !item.analytics.player.archivedAt);
   return {
-    state,
+    state: effectiveState,
+    configuration,
+    savedViews,
+    systemOverride,
+    activeSavedView,
     players: filtered,
     allPlayers,
     positions,
     selected,
-    periodLabel: analyticsPeriodLabels[state.period],
-    periodRangeLabel: periodRangeLabel(activeSummaries, state),
+    periodLabel: analyticsPeriodLabels[effectiveState.period],
+    periodRangeLabel: periodRangeLabel(activeSummaries, effectiveState),
     counts: {
       active: active.length,
       roster: active.filter((item) => item.analytics.player.playerType === "roster").length,
@@ -241,6 +464,70 @@ export async function getCoachWorkspaceData(
       reviewsDue: active.filter((item) => item.review.rank <= 2).length
     }
   };
+}
+
+export function defaultWorkspaceConfiguration(view: WorkspaceView): WorkspaceConfiguration {
+  const viewConfig = quickViews.find((item) => item.id === view) ?? quickViews[0];
+  return {
+    version: 1,
+    visibleColumns: defaultColumnsByView[view],
+    columnOrder: workspaceColumns.map((column) => column.id),
+    mobileMetrics: defaultMobileMetricsByView[view],
+    filters: {
+      players: playersFilter(undefined, view),
+      availability: availabilityFilter(undefined, view),
+      period: "season",
+      sort: viewConfig.defaultSort,
+      direction: viewConfig.defaultDirection
+    },
+    quickViewId: view,
+    groupMode: view === "by-position" ? "positionGroup" : "none",
+    density: "compact",
+    inspectorMode: "open",
+    showAttentionIndicators: true
+  };
+}
+
+export function normalizeWorkspaceConfiguration(input: unknown, view: WorkspaceView): WorkspaceConfiguration {
+  const fallback = defaultWorkspaceConfiguration(view);
+  const raw = isRecord(input) ? input : {};
+  const visibleColumns = normalizeColumnList(raw.visibleColumns, fallback.visibleColumns);
+  const columnOrder = normalizeColumnList(raw.columnOrder, fallback.columnOrder);
+  const mobileMetrics = normalizeMetricList(raw.mobileMetrics, fallback.mobileMetrics);
+  return {
+    version: 1,
+    visibleColumns,
+    columnOrder,
+    mobileMetrics,
+    filters: isRecord(raw.filters) ? normalizeConfigFilters(raw.filters, fallback.filters) : fallback.filters,
+    quickViewId: workspaceView(typeof raw.quickViewId === "string" ? raw.quickViewId : view),
+    groupMode: raw.groupMode === "playerType" || raw.groupMode === "positionGroup" || raw.groupMode === "none" ? raw.groupMode : fallback.groupMode,
+    density: raw.density === "comfortable" ? "comfortable" : "compact",
+    inspectorMode: raw.inspectorMode === "collapsed" ? "collapsed" : "open",
+    showAttentionIndicators: typeof raw.showAttentionIndicators === "boolean" ? raw.showAttentionIndicators : true
+  };
+}
+
+export function configurationFromState(state: WorkspaceState, current: WorkspaceConfiguration): WorkspaceConfiguration {
+  return normalizeWorkspaceConfiguration({
+    ...current,
+    filters: {
+      players: state.players,
+      position: state.position,
+      availability: state.availability,
+      period: state.period,
+      sort: state.sort,
+      direction: state.direction,
+      coachAssessment: state.coachAssessment,
+      developmentStatus: state.developmentStatus,
+      reviewStatus: state.reviewStatus,
+      evidenceBase: state.evidenceBase,
+      ratingStatus: state.ratingStatus,
+      customFrom: state.customFrom,
+      customTo: state.customTo
+    },
+    quickViewId: state.view
+  }, state.view);
 }
 
 export function visibleAttention(indicators: AttentionIndicator[]) {
@@ -255,6 +542,8 @@ export function workspaceHref(state: WorkspaceState, patch: Partial<WorkspaceSta
   const params = new URLSearchParams();
   const next = { ...state, ...patch };
   if (next.view && next.view !== "all") params.set("view", next.view);
+  if (next.savedView) params.set("savedView", next.savedView);
+  if (next.customize) params.set("customize", "true");
   if (next.players && next.players !== playersFilter(undefined, next.view)) params.set("players", next.players);
   if (next.position) params.set("position", next.position);
   if (next.availability && next.availability !== availabilityFilter(undefined, next.view)) params.set("availability", next.availability);
@@ -437,6 +726,65 @@ function workspaceSort(value?: string): WorkspaceSortKey | undefined {
   return allowed.includes(value as WorkspaceSortKey) ? value as WorkspaceSortKey : undefined;
 }
 
+function normalizeColumnList(value: unknown, fallback: WorkspaceColumnId[]) {
+  const allowed = new Set(workspaceColumns.map((column) => column.id));
+  const values = Array.isArray(value) ? value : fallback;
+  const clean = Array.from(new Set(values.filter((item): item is WorkspaceColumnId => typeof item === "string" && allowed.has(item as WorkspaceColumnId)) as WorkspaceColumnId[]));
+  if (!clean.includes("player")) clean.unshift("player");
+  return clean.length ? clean : fallback;
+}
+
+function normalizeMetricList(value: unknown, fallback: WorkspaceMetricId[]) {
+  const allowed = new Set(workspaceMobileMetrics.map((metric) => metric.id));
+  const values = Array.isArray(value) ? value : fallback;
+  const clean = Array.from(new Set(values.filter((item): item is WorkspaceMetricId => typeof item === "string" && allowed.has(item as WorkspaceMetricId)) as WorkspaceMetricId[]));
+  return (clean.length ? clean : fallback).slice(0, 4);
+}
+
+function normalizeConfigFilters(raw: Record<string, unknown>, fallback: WorkspaceConfiguration["filters"]): WorkspaceConfiguration["filters"] {
+  return {
+    players: playersFilter(typeof raw.players === "string" ? raw.players : undefined, "all"),
+    position: typeof raw.position === "string" && raw.position ? raw.position : undefined,
+    availability: availabilityFilter(typeof raw.availability === "string" ? raw.availability : undefined, "all"),
+    period: analyticsPeriod(typeof raw.period === "string" ? raw.period : undefined),
+    sort: workspaceSort(typeof raw.sort === "string" ? raw.sort : undefined) ?? fallback.sort,
+    direction: directionValue(typeof raw.direction === "string" ? raw.direction : undefined) ?? fallback.direction,
+    coachAssessment: typeof raw.coachAssessment === "string" && raw.coachAssessment ? raw.coachAssessment : undefined,
+    developmentStatus: typeof raw.developmentStatus === "string" && raw.developmentStatus ? raw.developmentStatus : undefined,
+    reviewStatus: typeof raw.reviewStatus === "string" && raw.reviewStatus ? raw.reviewStatus : undefined,
+    evidenceBase: typeof raw.evidenceBase === "string" && raw.evidenceBase ? raw.evidenceBase : undefined,
+    ratingStatus: typeof raw.ratingStatus === "string" && raw.ratingStatus ? raw.ratingStatus : undefined,
+    customFrom: normalizeDateParam(typeof raw.customFrom === "string" ? raw.customFrom : undefined),
+    customTo: normalizeDateParam(typeof raw.customTo === "string" ? raw.customTo : undefined),
+    search: typeof raw.search === "string" ? raw.search : undefined
+  };
+}
+
+function applyConfigurationToState(state: WorkspaceState, configuration: WorkspaceConfiguration): WorkspaceState {
+  const filters = configuration.filters;
+  return {
+    ...state,
+    players: state.hasExplicitState ? state.players : filters.players ?? state.players,
+    position: state.position ?? filters.position,
+    availability: state.hasExplicitState ? state.availability : filters.availability ?? state.availability,
+    period: state.hasExplicitState ? state.period : filters.period ?? state.period,
+    sort: state.hasExplicitState ? state.sort : filters.sort ?? state.sort,
+    direction: state.hasExplicitState ? state.direction : filters.direction ?? state.direction,
+    coachAssessment: state.coachAssessment ?? filters.coachAssessment,
+    developmentStatus: state.developmentStatus ?? filters.developmentStatus,
+    reviewStatus: state.reviewStatus ?? filters.reviewStatus,
+    evidenceBase: state.evidenceBase ?? filters.evidenceBase,
+    ratingStatus: state.ratingStatus ?? filters.ratingStatus,
+    customFrom: state.customFrom ?? filters.customFrom,
+    customTo: state.customTo ?? filters.customTo,
+    search: state.search || filters.search || ""
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 function analyticsPeriod(value?: string): AnalyticsPeriod {
   return value === "last5" || value === "last10" || value === "30d" || value === "90d" || value === "all" || value === "custom" ? value : "season";
 }
@@ -465,6 +813,35 @@ async function listWorkspaceRecords(db: SupabaseClient, userId: string): Promise
   return ((data ?? []) as Array<SquadAttendanceRow & { squad_training_events?: SquadTrainingEventRow | null }>)
     .filter((row) => row.squad_training_events && !row.squad_training_events.deleted_at)
     .map((row) => ({ ...mapAttendanceRow(row), event: row.squad_training_events ? mapTrainingEventRow(row.squad_training_events) : undefined }));
+}
+
+async function listWorkspaceViews(db: SupabaseClient, userId: string): Promise<WorkspaceSavedView[]> {
+  try {
+    const { data, error } = await db
+      .from("coach_workspace_views")
+      .select("*")
+      .eq("user_id", userId)
+      .order("display_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (error) return [];
+    return ((data ?? []) as WorkspaceViewRow[]).map((row) => {
+      const systemViewId = workspaceView(row.system_view_id ?? undefined);
+      const kind = row.kind === "system" ? "system" : "saved";
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description ?? undefined,
+        kind,
+        systemViewId: kind === "system" ? systemViewId : undefined,
+        configuration: normalizeWorkspaceConfiguration(row.configuration, systemViewId),
+        displayOrder: row.display_order ?? 0,
+        isDefault: Boolean(row.is_default),
+        updatedAt: row.updated_at
+      };
+    });
+  } catch {
+    return [];
+  }
 }
 
 async function listArchivedPlayers(db: SupabaseClient, userId: string) {

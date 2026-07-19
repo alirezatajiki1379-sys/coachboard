@@ -604,6 +604,36 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["player_header_preferences"]["Insert"]>;
         Relationships: [];
       };
+      coach_workspace_views: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          description: string | null;
+          kind: "system" | "saved";
+          system_view_id: string | null;
+          configuration: Json;
+          display_order: number;
+          is_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          description?: string | null;
+          kind?: "system" | "saved";
+          system_view_id?: string | null;
+          configuration?: Json;
+          display_order?: number;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["coach_workspace_views"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
