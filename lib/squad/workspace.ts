@@ -83,6 +83,7 @@ export type WorkspaceState = {
   direction: AnalyticsSortDirection;
   search: string;
   selectedPlayer?: string;
+  importBatch?: string;
   coachAssessment?: string;
   developmentStatus?: string;
   reviewStatus?: string;
@@ -356,6 +357,7 @@ export function parseWorkspaceState(searchParams: Record<string, string | string
     direction,
     search: one(searchParams.search) ?? "",
     selectedPlayer: one(searchParams.selectedPlayer) || undefined,
+    importBatch: one(searchParams.importBatch) || undefined,
     coachAssessment: one(searchParams.coachAssessment) || undefined,
     developmentStatus: one(searchParams.developmentStatus) || undefined,
     reviewStatus: one(searchParams.reviewStatus) || undefined,
@@ -569,6 +571,7 @@ export function workspaceHref(state: WorkspaceState, patch: Partial<WorkspaceSta
   if (next.direction) params.set("direction", next.direction);
   if (next.search) params.set("search", next.search);
   if (next.selectedPlayer) params.set("selectedPlayer", next.selectedPlayer);
+  if (next.importBatch) params.set("importBatch", next.importBatch);
   if (next.coachAssessment) params.set("coachAssessment", next.coachAssessment);
   if (next.developmentStatus) params.set("developmentStatus", next.developmentStatus);
   if (next.reviewStatus) params.set("reviewStatus", next.reviewStatus);
@@ -619,6 +622,7 @@ function filterWorkspacePlayers(players: WorkspacePlayerSummary[], state: Worksp
     if (state.reviewStatus === "week" && item.review.rank !== 3) return false;
     if (state.reviewStatus === "upcoming" && item.review.rank !== 4) return false;
     if (state.reviewStatus === "none" && item.review.dueDate) return false;
+    if (state.importBatch && player.importBatchId !== state.importBatch) return false;
     if (state.evidenceBase && item.analytics.evidenceBase.label !== state.evidenceBase) return false;
     if (state.ratingStatus === "rated" && item.analytics.rated === 0) return false;
     if (state.ratingStatus === "unrated" && item.analytics.rated > 0) return false;

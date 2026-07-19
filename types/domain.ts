@@ -191,6 +191,8 @@ export type SquadPlayer = {
   club?: string;
   originalClub?: string;
   clubTrainingSchedule?: string;
+  externalPlayerId?: string;
+  trialStartDate?: string;
   playerEmail?: string;
   parentGuardianName?: string;
   parentPhone?: string;
@@ -198,6 +200,7 @@ export type SquadPlayer = {
   parentEmail?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
+  emergencyContactRelationship?: string;
   topSize?: string;
   jacketSize?: string;
   trouserSize?: string;
@@ -226,6 +229,7 @@ export type SquadPlayer = {
   onboardingSource?: string;
   onboardingSubmittedAt?: string;
   onboardingImportBatch?: string;
+  importBatchId?: string;
   onboardingOriginalAnswers?: Record<string, unknown>;
   onboardingNormalizedValues?: Record<string, unknown>;
   onboardingWarnings: string[];

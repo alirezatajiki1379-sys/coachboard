@@ -48,6 +48,8 @@ export function PlayerForm({ action, mode, player }: PlayerFormProps) {
           />
           <TextInput name="club" label="Club" defaultValue={values.club} error={fieldErrors.club} />
           <TextInput name="originalClub" label="Original imported club" defaultValue={values.originalClub} error={fieldErrors.originalClub} />
+          <TextInput name="externalPlayerId" label="External player ID" defaultValue={values.externalPlayerId} error={fieldErrors.externalPlayerId} />
+          <TextInput name="trialStartDate" label="Trial start date" type="date" defaultValue={values.trialStartDate} error={fieldErrors.trialStartDate} />
           <TextInput name="preferredPositions" label="Player-preferred positions" defaultValue={values.preferredPositions} error={fieldErrors.preferredPositions} />
           <TextInput name="originalPreferredPositions" label="Original preferred positions" defaultValue={values.originalPreferredPositions} error={fieldErrors.originalPreferredPositions} />
           <TextInput name="originalStrongFoot" label="Original dominant foot" defaultValue={values.originalStrongFoot} error={fieldErrors.originalStrongFoot} />
@@ -76,6 +78,7 @@ export function PlayerForm({ action, mode, player }: PlayerFormProps) {
           <TextInput name="parentEmail" label="Parent email" type="email" defaultValue={values.parentEmail} error={fieldErrors.parentEmail} />
           <TextInput name="emergencyContactName" label="Emergency contact name" defaultValue={values.emergencyContactName} error={fieldErrors.emergencyContactName} />
           <TextInput name="emergencyContactPhone" label="Emergency contact phone" defaultValue={values.emergencyContactPhone} error={fieldErrors.emergencyContactPhone} />
+          <TextInput name="emergencyContactRelationship" label="Emergency relationship" defaultValue={values.emergencyContactRelationship} error={fieldErrors.emergencyContactRelationship} />
         </div>
       </section>
 
@@ -167,6 +170,8 @@ function getInitialValues(player?: SquadPlayer): SquadPlayerFormValues {
     club: player?.club ?? "",
     originalClub: player?.originalClub ?? "",
     clubTrainingSchedule: player?.clubTrainingSchedule ?? "",
+    externalPlayerId: player?.externalPlayerId ?? "",
+    trialStartDate: player?.trialStartDate ?? "",
     playerEmail: player?.playerEmail ?? "",
     parentGuardianName: player?.parentGuardianName ?? "",
     parentPhone: player?.parentPhone ?? "",
@@ -174,6 +179,7 @@ function getInitialValues(player?: SquadPlayer): SquadPlayerFormValues {
     parentEmail: player?.parentEmail ?? "",
     emergencyContactName: player?.emergencyContactName ?? "",
     emergencyContactPhone: player?.emergencyContactPhone ?? "",
+    emergencyContactRelationship: player?.emergencyContactRelationship ?? "",
     topSize: player?.topSize ?? "",
     jacketSize: player?.jacketSize ?? "",
     trouserSize: player?.trouserSize ?? "",

@@ -6,6 +6,7 @@ import {
   BarChart3,
   CalendarDays,
   Eye,
+  FileSpreadsheet,
   Plus,
   Search,
   Stethoscope,
@@ -90,6 +91,10 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
           <ButtonLink href="/squad/players/new" className="justify-center">
             <Plus className="h-4 w-4" />
             Add player
+          </ButtonLink>
+          <ButtonLink href="/squad/import" variant="secondary" className="justify-center">
+            <FileSpreadsheet className="h-4 w-4" />
+            Import players
           </ButtonLink>
         </div>
       </section>
@@ -686,12 +691,17 @@ function WorkspaceEmpty({ data }: { data: WorkspaceData }) {
     unavailable: "All active players are currently available.",
     "needs-attention": "No players currently match the selected attention criteria."
   };
-  const message = data.allPlayers.length ? messages[data.state.view] ?? "No players match your search and filters." : "No active players in the squad. Add a player to start building the Coach Workspace.";
+  const message = data.allPlayers.length ? messages[data.state.view] ?? "No players match your search and filters." : "No players in the squad yet. Add one player manually or import an entire squad from Excel, CSV or a copied table.";
   return (
     <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
       <h2 className="text-lg font-bold text-board-navy">Nothing to show</h2>
       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">{message}</p>
-      {!data.allPlayers.length ? <ButtonLink href="/squad/players/new" className="mt-5">Add player</ButtonLink> : null}
+      {!data.allPlayers.length ? (
+        <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+          <ButtonLink href="/squad/players/new">Add player manually</ButtonLink>
+          <ButtonLink href="/squad/import" variant="secondary">Import players</ButtonLink>
+        </div>
+      ) : null}
     </div>
   );
 }

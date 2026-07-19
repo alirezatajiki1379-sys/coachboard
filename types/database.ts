@@ -248,6 +248,8 @@ export type Database = {
           club: string | null;
           original_club: string | null;
           club_training_schedule: string | null;
+          external_player_id: string | null;
+          trial_start_date: string | null;
           player_email: string | null;
           parent_guardian_name: string | null;
           parent_phone: string | null;
@@ -255,6 +257,7 @@ export type Database = {
           parent_email: string | null;
           emergency_contact_name: string | null;
           emergency_contact_phone: string | null;
+          emergency_contact_relationship: string | null;
           top_size: string | null;
           jacket_size: string | null;
           trouser_size: string | null;
@@ -283,6 +286,7 @@ export type Database = {
           onboarding_source: string | null;
           onboarding_submitted_at: string | null;
           onboarding_import_batch: string | null;
+          import_batch_id: string | null;
           onboarding_original_answers: Json | null;
           onboarding_normalized_values: Json | null;
           onboarding_warnings: string[] | null;
@@ -305,6 +309,8 @@ export type Database = {
           club?: string | null;
           original_club?: string | null;
           club_training_schedule?: string | null;
+          external_player_id?: string | null;
+          trial_start_date?: string | null;
           player_email?: string | null;
           parent_guardian_name?: string | null;
           parent_phone?: string | null;
@@ -312,6 +318,7 @@ export type Database = {
           parent_email?: string | null;
           emergency_contact_name?: string | null;
           emergency_contact_phone?: string | null;
+          emergency_contact_relationship?: string | null;
           top_size?: string | null;
           jacket_size?: string | null;
           trouser_size?: string | null;
@@ -340,6 +347,7 @@ export type Database = {
           onboarding_source?: string | null;
           onboarding_submitted_at?: string | null;
           onboarding_import_batch?: string | null;
+          import_batch_id?: string | null;
           onboarding_original_answers?: Json | null;
           onboarding_normalized_values?: Json | null;
           onboarding_warnings?: string[] | null;
@@ -350,6 +358,82 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["squad_players"]["Insert"]>;
+        Relationships: [];
+      };
+      player_import_batches: {
+        Row: {
+          id: string;
+          user_id: string;
+          source_type: "xlsx" | "csv" | "paste" | "template";
+          source_name: string | null;
+          source_sheet: string | null;
+          import_mode: "add_new" | "add_update" | "update_only";
+          total_rows: number;
+          created_count: number;
+          updated_count: number;
+          skipped_count: number;
+          failed_count: number;
+          warning_count: number;
+          status: "draft" | "processing" | "completed" | "completed_with_errors" | "failed" | "rolled_back" | "partially_rolled_back";
+          created_at: string;
+          completed_at: string | null;
+          rolled_back_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          source_type?: "xlsx" | "csv" | "paste" | "template";
+          source_name?: string | null;
+          source_sheet?: string | null;
+          import_mode?: "add_new" | "add_update" | "update_only";
+          total_rows?: number;
+          created_count?: number;
+          updated_count?: number;
+          skipped_count?: number;
+          failed_count?: number;
+          warning_count?: number;
+          status?: "draft" | "processing" | "completed" | "completed_with_errors" | "failed" | "rolled_back" | "partially_rolled_back";
+          created_at?: string;
+          completed_at?: string | null;
+          rolled_back_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_import_batches"]["Insert"]>;
+        Relationships: [];
+      };
+      player_import_rows: {
+        Row: {
+          id: string;
+          user_id: string;
+          import_batch_id: string;
+          row_number: number;
+          result_status: "created" | "updated" | "skipped" | "failed" | "rolled_back" | "rollback_blocked";
+          player_id: string | null;
+          matched_player_id: string | null;
+          operation: "create" | "update" | "fill_missing" | "skip";
+          error_code: string | null;
+          warning_codes: string[] | null;
+          original_row: Json | null;
+          applied_changes: Json | null;
+          previous_values: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          import_batch_id: string;
+          row_number: number;
+          result_status?: "created" | "updated" | "skipped" | "failed" | "rolled_back" | "rollback_blocked";
+          player_id?: string | null;
+          matched_player_id?: string | null;
+          operation?: "create" | "update" | "fill_missing" | "skip";
+          error_code?: string | null;
+          warning_codes?: string[] | null;
+          original_row?: Json | null;
+          applied_changes?: Json | null;
+          previous_values?: Json | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_import_rows"]["Insert"]>;
         Relationships: [];
       };
       squad_training_events: {

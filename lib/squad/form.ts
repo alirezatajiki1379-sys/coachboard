@@ -10,6 +10,8 @@ export type SquadPlayerFormField =
   | "club"
   | "originalClub"
   | "clubTrainingSchedule"
+  | "externalPlayerId"
+  | "trialStartDate"
   | "playerEmail"
   | "parentGuardianName"
   | "parentPhone"
@@ -17,6 +19,7 @@ export type SquadPlayerFormField =
   | "parentEmail"
   | "emergencyContactName"
   | "emergencyContactPhone"
+  | "emergencyContactRelationship"
   | "topSize"
   | "jacketSize"
   | "trouserSize"
@@ -92,6 +95,8 @@ export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFo
     club: text(formData, "club"),
     originalClub: text(formData, "originalClub"),
     clubTrainingSchedule: text(formData, "clubTrainingSchedule"),
+    externalPlayerId: text(formData, "externalPlayerId"),
+    trialStartDate: text(formData, "trialStartDate"),
     playerEmail: text(formData, "playerEmail"),
     parentGuardianName: text(formData, "parentGuardianName"),
     parentPhone: text(formData, "parentPhone"),
@@ -99,6 +104,7 @@ export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFo
     parentEmail: text(formData, "parentEmail"),
     emergencyContactName: text(formData, "emergencyContactName"),
     emergencyContactPhone: text(formData, "emergencyContactPhone"),
+    emergencyContactRelationship: text(formData, "emergencyContactRelationship"),
     topSize: text(formData, "topSize"),
     jacketSize: text(formData, "jacketSize"),
     trouserSize: text(formData, "trouserSize"),
@@ -166,6 +172,8 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       club: optionalText(values.club),
       original_club: optionalText(values.originalClub),
       club_training_schedule: optionalText(values.clubTrainingSchedule),
+      external_player_id: optionalText(values.externalPlayerId),
+      trial_start_date: optionalText(values.trialStartDate),
       player_email: optionalText(values.playerEmail),
       parent_guardian_name: optionalText(values.parentGuardianName),
       parent_phone: optionalText(values.parentPhone),
@@ -173,6 +181,7 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       parent_email: optionalText(values.parentEmail),
       emergency_contact_name: optionalText(values.emergencyContactName),
       emergency_contact_phone: optionalText(values.emergencyContactPhone),
+      emergency_contact_relationship: optionalText(values.emergencyContactRelationship),
       top_size: optionalText(values.topSize),
       jacket_size: optionalText(values.jacketSize),
       trouser_size: optionalText(values.trouserSize),

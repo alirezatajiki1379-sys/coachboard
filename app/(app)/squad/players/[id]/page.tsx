@@ -582,6 +582,8 @@ function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; m
             <DetailRow label="Availability" value={hub.currentMedical ? medicalLabel(hub.currentMedical) : "Available"} />
             <DetailRow label="Current development focus" value={player.workOn || player.developmentGoal} />
             <DetailRow label="Player type" value={player.playerType === "trial" ? "Trial Player" : "Roster"} />
+            <DetailRow label="External player ID" value={player.externalPlayerId} />
+            <DetailRow label="Trial start date" value={player.trialStartDate ? formatEventDate(player.trialStartDate) : undefined} />
           </DetailGrid>
         </Card>
         <Card title="Football profile" icon={<Footprints className="h-5 w-5" />}>
@@ -611,6 +613,7 @@ function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; m
             <DetailRow label="Parent / guardian phone" value={player.parentPhone} href={player.parentPhone ? `tel:${player.parentPhone}` : undefined} />
             <DetailRow label="Parent / guardian email" value={player.parentEmail} href={player.parentEmail ? `mailto:${player.parentEmail}` : undefined} />
             <DetailRow label="Emergency contact" value={player.emergencyContactName} />
+            <DetailRow label="Emergency relationship" value={player.emergencyContactRelationship} />
             <DetailRow label="Emergency phone" value={player.emergencyContactPhone} href={player.emergencyContactPhone ? `tel:${player.emergencyContactPhone}` : undefined} />
           </DetailGrid>
           <ContactSection playerId={player.id} contacts={hub.contacts} error={contactError} />
