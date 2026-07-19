@@ -176,26 +176,26 @@ export default async function DashboardPage() {
         <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Target className="h-5 w-5" />Development</h2>
-            <ButtonLink href="/squad/development" variant="ghost" className="h-9 px-3">
-              Open
+            <ButtonLink href="/squad?view=reviews-due" variant="ghost" className="h-9 px-3">
+              Open reviews
             </ButtonLink>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-md bg-slate-50 p-3">
+            <Link href="/squad?view=reviews-due" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
               <p className="text-xs font-bold uppercase text-slate-500">Review</p>
               <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.playersNeedingReview}</p>
               <p className="mt-1 text-xs text-slate-500">players need review</p>
-            </div>
-            <div className="rounded-md bg-slate-50 p-3">
+            </Link>
+            <Link href="/squad?view=development&developmentStatus=high-priority" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
               <p className="text-xs font-bold uppercase text-slate-500">High priority</p>
               <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.activeHighPriorityGoals}</p>
               <p className="mt-1 text-xs text-slate-500">active goals</p>
-            </div>
-            <div className="rounded-md bg-slate-50 p-3">
+            </Link>
+            <Link href="/squad?view=development&sort=lastObservation&direction=asc" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
               <p className="text-xs font-bold uppercase text-slate-500">This week</p>
               <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.observationsThisWeek}</p>
               <p className="mt-1 text-xs text-slate-500">observations</p>
-            </div>
+            </Link>
           </div>
         </div>
 
