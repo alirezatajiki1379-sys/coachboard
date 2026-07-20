@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { PlayerForm } from "@/components/squad/player-form";
 import { updateSquadPlayer } from "@/lib/squad/actions";
+import { listTrainingEvents } from "@/lib/squad/attendance-queries";
 import { getSquadPlayer } from "@/lib/squad/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,6 +22,7 @@ export default async function EditPlayerPage({ params }: EditPlayerPageProps) {
 
   const player = await getSquadPlayer(supabase, user.id, id);
   if (!player) notFound();
+  const trainingDates = (await listTrainingEvents(supabase, user.id)).map((event) => event.date);
 
   return (
     <div className="space-y-6">
@@ -33,7 +35,7 @@ export default async function EditPlayerPage({ params }: EditPlayerPageProps) {
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Edit {player.firstName}</h1>
         <p className="mt-2 text-slate-600">Keep player details and development notes current.</p>
       </div>
-      <PlayerForm action={updateSquadPlayer} mode="edit" player={player} />
+      <PlayerForm action={updateSquadPlayer} mode="edit" player={player} trainingDates={trainingDates} />
     </div>
   );
 }

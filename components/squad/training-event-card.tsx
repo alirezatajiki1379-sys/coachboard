@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, ClipboardList, Clock, MapPin, Target, UsersRound } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
+import { TrainingEventActions } from "@/components/squad/training-event-actions";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
 import { formatDateLabel, todayDateString, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingTimeRange, weekdayLabel } from "@/lib/trainings/utils";
 import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
@@ -58,6 +59,7 @@ export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/a
         <div className="relative z-10 flex flex-wrap gap-2">
           <ButtonLink href={detailHref} variant="secondary" className="h-9 px-3">Open</ButtonLink>
           <ButtonLink href={`${hrefBase}/${event.id}/check-in`} className="h-9 px-3">Check-in</ButtonLink>
+          <TrainingEventActions eventId={event.id} attendanceCount={attendance.length} compact />
         </div>
       </div>
     </article>

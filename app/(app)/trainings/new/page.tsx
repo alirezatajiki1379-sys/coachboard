@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { TrainingEventForm } from "@/components/squad/training-event-form";
-import { getLinkableTrainingSessions } from "@/lib/squad/attendance-queries";
+import { getLinkableTrainingSessions, listTrainingParticipantOptions } from "@/lib/squad/attendance-queries";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function NewTrainingPage() {
@@ -13,7 +13,10 @@ export default async function NewTrainingPage() {
 
   if (!user) redirect("/login");
 
-  const sessions = await getLinkableTrainingSessions(supabase, user.id);
+  const [sessions, participants] = await Promise.all([
+    getLinkableTrainingSessions(supabase, user.id),
+    listTrainingParticipantOptions(supabase, user.id)
+  ]);
 
   return (
     <div className="space-y-6">
@@ -26,7 +29,7 @@ export default async function NewTrainingPage() {
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Create training</h1>
         <p className="mt-2 text-slate-600">Create one appointment or a recurring set of independent trainings.</p>
       </div>
-      <TrainingEventForm sessions={sessions} />
+      <TrainingEventForm sessions={sessions} participants={participants} />
     </div>
   );
 }

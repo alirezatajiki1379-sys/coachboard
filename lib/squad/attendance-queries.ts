@@ -10,7 +10,7 @@ import type { SquadPlayerRow } from "@/lib/squad/mappers";
 import type { SquadTrainingEvent, SquadTrainingEventDetail } from "@/types/domain";
 import type { PlayerMedicalPeriod } from "@/types/domain";
 import { isMedicalPeriodActiveOnDate, latestApplicableMedicalPeriod, medicalLabel, medicalNeedsReview, medicalReasonForType } from "@/lib/squad/player-hub";
-import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
+import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -168,6 +168,22 @@ export async function getLinkableTrainingSessions(supabase: SupabaseServerClient
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as LinkedSessionRow[];
+}
+
+export async function listTrainingParticipantOptions(supabase: SupabaseServerClient, userId: string) {
+  const db = supabase as unknown as SupabaseClient;
+  const { data, error } = await db
+    .from("squad_players")
+    .select("*")
+    .eq("user_id", userId)
+    .is("archived_at", null)
+    .order("player_type", { ascending: true })
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as SquadPlayerRow[])
+    .filter((player) => player.player_type === "roster" || (player.player_type === "trial" && !player.converted_at))
+    .map(mapSquadPlayerRow);
 }
 
 export async function listAvailableTrialPlayers(

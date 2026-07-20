@@ -250,6 +250,9 @@ export type Database = {
           club_training_schedule: string | null;
           external_player_id: string | null;
           trial_start_date: string | null;
+          trial_duration_mode: "training_count" | "end_date" | null;
+          trial_training_limit: number | null;
+          trial_end_date: string | null;
           player_email: string | null;
           parent_guardian_name: string | null;
           parent_phone: string | null;
@@ -311,6 +314,9 @@ export type Database = {
           club_training_schedule?: string | null;
           external_player_id?: string | null;
           trial_start_date?: string | null;
+          trial_duration_mode?: "training_count" | "end_date" | null;
+          trial_training_limit?: number | null;
+          trial_end_date?: string | null;
           player_email?: string | null;
           parent_guardian_name?: string | null;
           parent_phone?: string | null;

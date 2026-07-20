@@ -12,14 +12,13 @@ type CheckInPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type CheckInFilter = "all" | "unresolved" | "present" | "late" | "absent" | "roster" | "trial";
+type CheckInFilter = "all" | "present" | "absent" | "late" | "roster" | "trial";
 
 const filterLabels: Record<CheckInFilter, string> = {
   all: "All",
-  unresolved: "Unresolved",
   present: "Present",
-  late: "Late",
   absent: "Absent",
+  late: "Late",
   roster: "Roster",
   trial: "Trial players"
 };
@@ -37,14 +36,11 @@ export default async function CheckInPage({ params, searchParams }: CheckInPageP
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
   const counts = attendanceCounts(event.attendance);
-  const unresolved = event.attendance.filter((entry) => !entry.finalStatus).length;
   const presentEntries = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
-  const hasStarted = event.attendance.some((entry) => entry.finalStatus);
   const rawFilter = Array.isArray(query.view) ? query.view[0] : query.view;
-  const selectedFilter = parseCheckInFilter(rawFilter, hasStarted && unresolved > 0 ? "unresolved" : "all");
+  const selectedFilter = parseCheckInFilter(rawFilter, "all");
   const visibleEntries = event.attendance.filter((entry) => {
-    if (selectedFilter === "unresolved") return !entry.finalStatus;
-    if (selectedFilter === "present") return entry.finalStatus === "present";
+    if (selectedFilter === "present") return entry.finalStatus === "present" || entry.finalStatus === "Z";
     if (selectedFilter === "late") return entry.finalStatus === "Z";
     if (selectedFilter === "absent") return Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z");
     if (selectedFilter === "roster") return entry.player?.playerType !== "trial";
@@ -80,11 +76,10 @@ export default async function CheckInPage({ params, searchParams }: CheckInPageP
           ) : null}
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <CheckInMetric label="Present" value={counts.present} tone="success" />
-          <CheckInMetric label="Late" value={counts.late} tone="warning" />
           <CheckInMetric label="Absent" value={counts.absent} tone="danger" />
-          <CheckInMetric label="Unresolved" value={unresolved} />
+          <CheckInMetric label="Late" value={counts.late} tone="warning" />
           <CheckInMetric label="Total" value={event.attendance.length} />
         </div>
         {presentEntries.length ? (
@@ -133,7 +128,7 @@ export default async function CheckInPage({ params, searchParams }: CheckInPageP
 }
 
 function parseCheckInFilter(value: string | undefined, fallback: CheckInFilter): CheckInFilter {
-  return value === "all" || value === "unresolved" || value === "present" || value === "late" || value === "absent" || value === "roster" || value === "trial"
+  return value === "all" || value === "present" || value === "late" || value === "absent" || value === "roster" || value === "trial"
     ? value
     : fallback;
 }

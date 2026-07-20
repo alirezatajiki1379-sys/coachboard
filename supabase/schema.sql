@@ -407,6 +407,9 @@ create table if not exists public.squad_players (
   club_training_schedule text,
   external_player_id text,
   trial_start_date date,
+  trial_duration_mode text,
+  trial_training_limit integer,
+  trial_end_date date,
   player_email text,
 
   parent_guardian_name text,
@@ -488,6 +491,9 @@ add column if not exists original_club text,
 add column if not exists club_training_schedule text,
 add column if not exists external_player_id text,
 add column if not exists trial_start_date date,
+add column if not exists trial_duration_mode text,
+add column if not exists trial_training_limit integer,
+add column if not exists trial_end_date date,
 add column if not exists player_email text,
 add column if not exists parent_guardian_name text,
 add column if not exists emergency_contact_name text,
@@ -541,6 +547,16 @@ alter table public.squad_players
 add constraint squad_players_player_type_check
 check (
   player_type in ('roster', 'trial')
+);
+
+alter table public.squad_players
+drop constraint if exists squad_players_trial_duration_mode_check;
+
+alter table public.squad_players
+add constraint squad_players_trial_duration_mode_check
+check (
+  trial_duration_mode is null
+  or trial_duration_mode in ('training_count', 'end_date')
 );
 
 alter table public.squad_players
@@ -1203,6 +1219,15 @@ on public.squad_players (
   player_type,
   archived_at
 );
+
+create index if not exists squad_players_user_id_trial_period_idx
+on public.squad_players (
+  user_id,
+  player_type,
+  trial_start_date,
+  trial_end_date
+)
+where player_type = 'trial';
 
 create index if not exists squad_players_user_id_import_batch_idx
 on public.squad_players (

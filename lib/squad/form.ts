@@ -11,7 +11,11 @@ export type SquadPlayerFormField =
   | "originalClub"
   | "clubTrainingSchedule"
   | "externalPlayerId"
+  | "playerType"
   | "trialStartDate"
+  | "trialDurationMode"
+  | "trialTrainingLimit"
+  | "trialEndDate"
   | "playerEmail"
   | "parentGuardianName"
   | "parentPhone"
@@ -96,7 +100,11 @@ export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFo
     originalClub: text(formData, "originalClub"),
     clubTrainingSchedule: text(formData, "clubTrainingSchedule"),
     externalPlayerId: text(formData, "externalPlayerId"),
+    playerType: text(formData, "playerType"),
     trialStartDate: text(formData, "trialStartDate"),
+    trialDurationMode: text(formData, "trialDurationMode"),
+    trialTrainingLimit: text(formData, "trialTrainingLimit"),
+    trialEndDate: text(formData, "trialEndDate"),
     playerEmail: text(formData, "playerEmail"),
     parentGuardianName: text(formData, "parentGuardianName"),
     parentPhone: text(formData, "parentPhone"),
@@ -146,6 +154,7 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
   if (!isEmail(values.playerEmail)) fieldErrors.playerEmail = "Enter a valid email address.";
   if (values.heightCm && (Number.parseInt(values.heightCm, 10) < 80 || Number.parseInt(values.heightCm, 10) > 230)) fieldErrors.heightCm = "Use a realistic height in cm.";
   if (values.weightKg && (Number.parseInt(values.weightKg, 10) < 20 || Number.parseInt(values.weightKg, 10) > 180)) fieldErrors.weightKg = "Use a realistic weight in kg.";
+  if (values.trialTrainingLimit && Number.parseInt(values.trialTrainingLimit, 10) < 1) fieldErrors.trialTrainingLimit = "Use at least 1 training.";
 
   const secondaryPositions = parseList(values.secondaryPositions).filter((position) => position !== values.position);
   const preferredPositions = parseList(values.preferredPositions);
@@ -173,7 +182,14 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       original_club: optionalText(values.originalClub),
       club_training_schedule: optionalText(values.clubTrainingSchedule),
       external_player_id: optionalText(values.externalPlayerId),
+      player_type: values.playerType === "trial" ? "trial" : "roster",
       trial_start_date: optionalText(values.trialStartDate),
+      trial_duration_mode:
+        values.playerType === "trial" && (values.trialDurationMode === "training_count" || values.trialDurationMode === "end_date")
+          ? values.trialDurationMode
+          : null,
+      trial_training_limit: values.playerType === "trial" && values.trialDurationMode === "training_count" ? optionalNumber(values.trialTrainingLimit) : null,
+      trial_end_date: values.playerType === "trial" && values.trialDurationMode === "end_date" ? optionalText(values.trialEndDate) : null,
       player_email: optionalText(values.playerEmail),
       parent_guardian_name: optionalText(values.parentGuardianName),
       parent_phone: optionalText(values.parentPhone),

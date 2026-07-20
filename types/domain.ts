@@ -193,6 +193,9 @@ export type SquadPlayer = {
   clubTrainingSchedule?: string;
   externalPlayerId?: string;
   trialStartDate?: string;
+  trialDurationMode?: "training_count" | "end_date";
+  trialTrainingLimit?: number;
+  trialEndDate?: string;
   playerEmail?: string;
   parentGuardianName?: string;
   parentPhone?: string;

@@ -54,6 +54,10 @@ function numberOrNull(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function selectedParticipantIds(formData: FormData) {
+  return Array.from(new Set(formData.getAll("participantIds").filter((value): value is string => typeof value === "string" && Boolean(value))));
+}
+
 function boundedRating(value: string) {
   const parsed = numberOrNull(value);
   return parsed && parsed >= 1 && parsed <= 5 ? parsed : null;
@@ -114,9 +118,57 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
 
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
+  if (data?.id) await syncTrainingParticipants(db, user.id, data.id, values.date, selectedParticipantIds(formData));
+
   revalidatePath("/trainings");
   revalidatePath("/squad/attendance");
   redirect(data?.id ? `/trainings/${data.id}` : "/trainings");
+}
+
+export async function updateTrainingEvent(_: TrainingEventActionState, formData: FormData): Promise<TrainingEventActionState> {
+  const eventId = formString(formData, "eventId");
+  const values = {
+    date: formString(formData, "date"),
+    startTime: formString(formData, "startTime"),
+    endTime: formString(formData, "endTime"),
+    label: formString(formData, "label"),
+    location: formString(formData, "location"),
+    focus: formString(formData, "focus"),
+    linkedTrainingSessionId: formString(formData, "linkedTrainingSessionId"),
+    generalNotes: formString(formData, "generalNotes")
+  };
+  const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
+  if (!eventId) return { error: "Missing training event.", values, submissionId: Date.now() };
+  if (!values.date) fieldErrors.date = "Choose the training date.";
+  if (!values.startTime) fieldErrors.startTime = "Add the start time.";
+  if (values.endTime && values.startTime && values.endTime < values.startTime) fieldErrors.startTime = "End time cannot be before the start time.";
+  if (Object.keys(fieldErrors).length) {
+    return { error: "Please fix the highlighted event details.", fieldErrors, values, submissionId: Date.now() };
+  }
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("squad_training_events")
+    .update({
+      date: values.date,
+      start_time: values.startTime,
+      end_time: optional(values.endTime),
+      label: optional(values.label),
+      location: optional(values.location),
+      focus: optional(values.focus),
+      season_label: seasonLabelForDate(values.date),
+      linked_training_session_id: optional(values.linkedTrainingSessionId),
+      general_notes: optional(values.generalNotes)
+    })
+    .eq("id", eventId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message, values, submissionId: Date.now() };
+
+  await syncTrainingParticipants(db, user.id, eventId, values.date, selectedParticipantIds(formData));
+  revalidateEvent(eventId);
+  revalidatePath("/trainings");
+  redirect(`/trainings/${eventId}`);
 }
 
 export async function createRecurringTrainingEvents(_: TrainingEventActionState, formData: FormData): Promise<TrainingEventActionState> {
@@ -160,11 +212,28 @@ export async function createRecurringTrainingEvents(_: TrainingEventActionState,
     status: "draft"
   }));
 
-  const { error } = await db.from("squad_training_events").insert(rows);
+  const { data: createdEvents, error } = await db.from("squad_training_events").insert(rows).select("id,date");
   if (error) return { error: error.message, values, submissionId: Date.now() };
+
+  const selectedIds = selectedParticipantIds(formData);
+  for (const event of (createdEvents ?? []) as Array<{ id: string; date: string }>) {
+    await syncTrainingParticipants(db, user.id, event.id, event.date, selectedIds, { removeUnselected: false });
+  }
 
   revalidatePath("/trainings");
   revalidatePath("/squad/attendance");
+  redirect("/trainings");
+}
+
+export async function deleteTrainingEvent(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db.from("squad_training_events").delete().eq("id", eventId).eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/trainings");
+  revalidatePath("/squad/attendance");
+  revalidatePath("/squad/ratings");
   redirect("/trainings");
 }
 
@@ -471,6 +540,73 @@ async function upsertAttendanceRecord(db: SupabaseClient, userId: string, eventI
       { onConflict: "event_id,player_id", ignoreDuplicates: true }
     );
   if (error) throw new Error(error.message);
+}
+
+async function syncTrainingParticipants(
+  db: SupabaseClient,
+  userId: string,
+  eventId: string,
+  eventDate: string,
+  playerIds: string[],
+  options: { removeUnselected?: boolean } = {}
+) {
+  const removeUnselected = options.removeUnselected ?? true;
+  const safePlayerIds = Array.from(new Set(playerIds));
+  if (safePlayerIds.length) {
+    const { data: players, error: playerError } = await db
+      .from("squad_players")
+      .select("id")
+      .eq("user_id", userId)
+      .is("archived_at", null)
+      .in("id", safePlayerIds);
+    if (playerError) throw new Error(playerError.message);
+
+    const validPlayerIds = ((players ?? []) as Array<{ id: string }>).map((player) => player.id);
+    const medicalByPlayer = await getMedicalByPlayer(db, userId, eventDate, validPlayerIds);
+    const rows = validPlayerIds.map((playerId) => {
+      const medical = medicalByPlayer.get(playerId);
+      return {
+        user_id: userId,
+        event_id: eventId,
+        player_id: playerId,
+        planned_status: medical ? "unavailable" : "expected",
+        planned_reason: medical ? medicalReasonForType(medical.type) : null,
+        planned_reason_note: medical?.description ?? null,
+        planned_status_source: medical ? "medical" : "default"
+      };
+    });
+    const { error } = await db.from("squad_attendance_records").upsert(rows, { onConflict: "event_id,player_id", ignoreDuplicates: true });
+    if (error) throw new Error(error.message);
+  }
+
+  if (!removeUnselected) return;
+  const { data: existing, error: existingError } = await db
+    .from("squad_attendance_records")
+    .select("id, player_id, final_status, overall_rating, rating_technique, rating_game_understanding, rating_intensity, rating_behavior, coach_note")
+    .eq("event_id", eventId)
+    .eq("user_id", userId);
+  if (existingError) throw new Error(existingError.message);
+  const selected = new Set(safePlayerIds);
+  const removableIds = ((existing ?? []) as Array<{
+    id: string;
+    player_id: string;
+    final_status: string | null;
+    overall_rating: number | null;
+    rating_technique: number | null;
+    rating_game_understanding: number | null;
+    rating_intensity: number | null;
+    rating_behavior: number | null;
+    coach_note: string | null;
+  }>)
+    .filter((record) => {
+      if (selected.has(record.player_id)) return false;
+      return !record.final_status && !record.overall_rating && !record.rating_technique && !record.rating_game_understanding && !record.rating_intensity && !record.rating_behavior && !record.coach_note;
+    })
+    .map((record) => record.id);
+  if (removableIds.length) {
+    const { error } = await db.from("squad_attendance_records").delete().eq("user_id", userId).in("id", removableIds);
+    if (error) throw new Error(error.message);
+  }
 }
 
 async function getMedicalByPlayer(db: SupabaseClient, userId: string, eventDate: string, playerIds: string[]) {

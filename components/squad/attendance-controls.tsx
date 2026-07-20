@@ -313,6 +313,18 @@ export function CompleteEventButton({ eventId }: { eventId: string }) {
 
 function FinalStatusButton({ entry, eventId, status, label, icon }: { entry: SquadAttendanceEntry; eventId: string; status: SquadFinalAttendanceStatus; label: string; icon: ReactNode }) {
   const active = entry.finalStatus === status;
+  const tone =
+    status === "present"
+      ? "bg-green-600 text-white hover:bg-green-700"
+      : status === "Z"
+        ? "bg-amber-500 text-white hover:bg-amber-600"
+        : "bg-red-600 text-white hover:bg-red-700";
+  const idle =
+    status === "present"
+      ? "bg-white text-green-700 ring-1 ring-green-200 hover:bg-green-50"
+      : status === "Z"
+        ? "bg-white text-amber-700 ring-1 ring-amber-200 hover:bg-amber-50"
+        : "bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50";
   return (
     <form action={updateFinalAttendance} className="flex-1 sm:flex-none">
       <input type="hidden" name="eventId" value={eventId} />
@@ -321,7 +333,8 @@ function FinalStatusButton({ entry, eventId, status, label, icon }: { entry: Squ
       <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
       <button
         type="submit"
-        className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition sm:w-auto ${active ? "bg-green-600 text-white hover:bg-green-700" : "bg-white text-board-navy ring-1 ring-board-line hover:bg-slate-50"}`}
+        aria-pressed={active}
+        className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition sm:w-auto ${active ? tone : idle}`}
       >
         {icon}
         {label}

@@ -109,3 +109,32 @@ export async function restoreSquadPlayer(formData: FormData) {
   revalidatePath(`/squad/players/${playerId}`);
   redirect("/squad");
 }
+
+export async function permanentlyDeleteSquadPlayer(formData: FormData) {
+  const playerId = formString(formData, "playerId");
+  const typedName = formString(formData, "confirmName").trim().toLowerCase();
+  const confirmed = formData.get("confirmDelete") === "on";
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+
+  const { data: player, error: playerError } = await db
+    .from("squad_players")
+    .select("id, first_name, last_name")
+    .eq("id", playerId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (playerError) throw new Error(playerError.message);
+  if (!player) redirect("/squad");
+
+  const fullName = [player.first_name, player.last_name].filter(Boolean).join(" ").trim();
+  if (!confirmed || typedName !== fullName.toLowerCase()) {
+    redirect(`/squad/players/${playerId}?tab=details&deleteError=confirm`);
+  }
+
+  await db.from("player_import_rows").update({ player_id: null, matched_player_id: null }).eq("user_id", user.id).or(`player_id.eq.${playerId},matched_player_id.eq.${playerId}`);
+  const { error } = await db.from("squad_players").delete().eq("id", playerId).eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/squad");
+  redirect("/squad");
+}

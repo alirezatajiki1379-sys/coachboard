@@ -3,37 +3,47 @@
 import { useActionState, useMemo, useState } from "react";
 import { CalendarPlus, Loader2 } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { createRecurringTrainingEvents, createTrainingEvent, type TrainingEventActionState } from "@/lib/squad/attendance-actions";
+import { createRecurringTrainingEvents, createTrainingEvent, updateTrainingEvent, type TrainingEventActionState } from "@/lib/squad/attendance-actions";
 import { generateRecurringTrainingDates } from "@/lib/trainings/utils";
+import type { SquadPlayer, SquadTrainingEventDetail } from "@/types/domain";
 
 type TrainingEventFormProps = {
   sessions: Array<{ id: string; title: string }>;
+  participants: SquadPlayer[];
+  event?: SquadTrainingEventDetail;
+  mode?: "create" | "edit";
 };
 
 const initialState: TrainingEventActionState = {};
 
-export function TrainingEventForm({ sessions }: TrainingEventFormProps) {
-  const [state, formAction, isPending] = useActionState(createTrainingEvent, initialState);
+export function TrainingEventForm({ sessions, participants, event, mode = "create" }: TrainingEventFormProps) {
+  const action = mode === "edit" ? updateTrainingEvent : createTrainingEvent;
+  const [state, formAction, isPending] = useActionState(action, initialState);
   const [recurringState, recurringAction, isRecurringPending] = useActionState(createRecurringTrainingEvents, initialState);
+  const selectedParticipants = useMemo(
+    () => new Set(mode === "edit" ? event?.attendance.map((entry) => entry.playerId) ?? [] : participants.map((player) => player.id)),
+    [event?.attendance, mode, participants]
+  );
   const values = useMemo(
     () =>
       state.values ?? {
-        date: "",
-        startTime: "",
-        endTime: "",
-        label: "",
-        location: "",
-        focus: "",
-        linkedTrainingSessionId: "",
-        generalNotes: ""
+        date: event?.date ?? "",
+        startTime: event?.startTime ?? "",
+        endTime: event?.endTime ?? "",
+        label: event?.label ?? "",
+        location: event?.location ?? "",
+        focus: event?.focus ?? "",
+        linkedTrainingSessionId: event?.linkedTrainingSessionId ?? "",
+        generalNotes: event?.generalNotes ?? ""
       },
-    [state.values]
+    [event, state.values]
   );
   const errors = state.fieldErrors ?? {};
 
   return (
     <div className="space-y-6">
       <form action={formAction} noValidate className="space-y-6">
+        {event ? <input type="hidden" name="eventId" value={event.id} /> : null}
         {state.error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {state.error}
@@ -72,20 +82,22 @@ export function TrainingEventForm({ sessions }: TrainingEventFormProps) {
           </div>
         </section>
 
+        <ParticipantSelector participants={participants} selected={selectedParticipants} />
+
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <ButtonLink href="/trainings" variant="secondary" className="justify-center">Cancel</ButtonLink>
           <Button type="submit" disabled={isPending} className="justify-center">
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
-            Create training
+            {mode === "edit" ? "Save training" : "Create training"}
           </Button>
         </div>
       </form>
-      <RecurringTrainingPanel state={recurringState} action={recurringAction} isPending={isRecurringPending} />
+      {mode === "create" ? <RecurringTrainingPanel state={recurringState} action={recurringAction} isPending={isRecurringPending} participants={participants} /> : null}
     </div>
   );
 }
 
-function RecurringTrainingPanel({ state, action, isPending }: { state: TrainingEventActionState; action: (formData: FormData) => void; isPending: boolean }) {
+function RecurringTrainingPanel({ state, action, isPending, participants }: { state: TrainingEventActionState; action: (formData: FormData) => void; isPending: boolean; participants: SquadPlayer[] }) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [intervalWeeks, setIntervalWeeks] = useState<"1" | "2">("1");
@@ -119,6 +131,7 @@ function RecurringTrainingPanel({ state, action, isPending }: { state: TrainingE
       <p className="mt-3 text-sm font-semibold text-slate-600">
         {preview.length ? `${preview.length} trainings will be created. ${preview[0]}${preview.length > 1 ? ` to ${preview[preview.length - 1]}` : ""}` : "Choose a first date and end date to preview the series."}
       </p>
+      <ParticipantSelector participants={participants} selected={new Set(participants.map((player) => player.id))} compact />
       <div className="mt-4 flex justify-end">
         <Button type="submit" disabled={isPending || !preview.length} className="justify-center">
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
@@ -126,6 +139,36 @@ function RecurringTrainingPanel({ state, action, isPending }: { state: TrainingE
         </Button>
       </div>
     </form>
+  );
+}
+
+function ParticipantSelector({ participants, selected, compact = false }: { participants: SquadPlayer[]; selected: Set<string>; compact?: boolean }) {
+  const rosterCount = participants.filter((player) => player.playerType === "roster").length;
+  const trialCount = participants.filter((player) => player.playerType === "trial").length;
+  return (
+    <section className={compact ? "mt-4 rounded-lg border border-board-line bg-board-paper p-4" : "rounded-lg border border-board-line bg-white p-5 shadow-soft"}>
+      <h2 className="text-lg font-bold text-board-navy">Participants</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Active squad players are selected by default. Add or remove players for this training only. {trialCount ? `${trialCount} trial player${trialCount === 1 ? "" : "s"} available.` : ""}
+      </p>
+      {participants.length ? (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {participants.map((player) => (
+            <label key={player.id} className="flex items-center gap-3 rounded-md border border-board-line bg-white px-3 py-2 text-sm font-semibold text-board-navy">
+              <input name="participantIds" type="checkbox" value={player.id} defaultChecked={selected.has(player.id)} className="h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
+              <span className="min-w-0 flex-1 truncate">
+                {[player.firstName, player.lastName].filter(Boolean).join(" ")}
+                {player.position ? <span className="font-medium text-slate-500"> · {player.position}</span> : null}
+              </span>
+              {player.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">Trial</span> : null}
+            </label>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No active players yet. Add players in Squad first, then come back to create attendance rows.</p>
+      )}
+      <p className="mt-3 text-xs font-semibold text-slate-500">{rosterCount} roster · {trialCount} trial</p>
+    </section>
   );
 }
 

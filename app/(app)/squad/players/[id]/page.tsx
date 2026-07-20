@@ -5,6 +5,7 @@ import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, ClipboardL
 import { Button, ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { PlayerDevelopmentSection } from "@/components/squad/player-development";
+import { permanentlyDeleteSquadPlayer } from "@/lib/squad/actions";
 import { createPlayerCoachAssessment } from "@/lib/squad/analytics-actions";
 import {
   analyticsPeriodLabels,
@@ -74,6 +75,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
   const attendanceFilter = parseAttendanceFilter(query.attendance);
   const medicalError = one(query.medicalError);
   const contactError = one(query.contactError);
+  const deleteError = one(query.deleteError);
   const returnTo = safeReturnPath(one(query.returnTo));
   const { period, customFrom, customTo } = parsePlayerHubPeriod(query);
   const supabase = await createClient();
@@ -105,7 +107,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
       {tab === "attendance" ? <AttendanceTab hub={hub} filter={attendanceFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "medical" ? <MedicalTab hub={hub} medicalError={medicalError} /> : null}
       {tab === "notes" ? <NotesTab hub={hub} /> : null}
-      {tab === "details" ? <DetailsTab hub={hub} medicalError={medicalError} contactError={contactError} /> : null}
+      {tab === "details" ? <DetailsTab hub={hub} medicalError={medicalError} contactError={contactError} deleteError={deleteError} /> : null}
     </div>
   );
 }
@@ -550,16 +552,9 @@ function NotesTab({ hub }: { hub: PlayerHubData }) {
   );
 }
 
-function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; medicalError?: string; contactError?: string }) {
+function DetailsTab({ hub, medicalError, contactError, deleteError }: { hub: PlayerHubData; medicalError?: string; contactError?: string; deleteError?: string }) {
   const player = hub.player;
   const hasEquipment = Boolean(player.topSize || player.jacketSize || player.trouserSize || player.shoeSize);
-  const hasRecommendation = Boolean(
-    player.recommendedPlayersRaw ||
-    player.recommendedPlayerName ||
-    player.recommendedPlayerBirthYear ||
-    player.recommendedPlayerPosition ||
-    player.recommendedPlayerClub
-  );
   const hasOnboarding = Boolean(
     player.onboardingSource ||
     player.onboardingSubmittedAt ||
@@ -584,6 +579,7 @@ function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; m
             <DetailRow label="Player type" value={player.playerType === "trial" ? "Trial Player" : "Roster"} />
             <DetailRow label="External player ID" value={player.externalPlayerId} />
             <DetailRow label="Trial start date" value={player.trialStartDate ? formatEventDate(player.trialStartDate) : undefined} />
+            <DetailRow label="Trial duration" value={trialDurationLabel(player)} />
           </DetailGrid>
         </Card>
         <Card title="Football profile" icon={<Footprints className="h-5 w-5" />}>
@@ -647,17 +643,6 @@ function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; m
           <ClubSchedule value={player.clubTrainingSchedule} />
         </Card>
       ) : null}
-      {hasRecommendation ? (
-        <Card title="Recommended players" icon={<UserRound className="h-5 w-5" />}>
-          <DetailGrid>
-            <DetailRow label="Name" value={player.recommendedPlayerName} />
-            <DetailRow label="Birth year" value={player.recommendedPlayerBirthYear} />
-            <DetailRow label="Position" value={player.recommendedPlayerPosition} />
-            <DetailRow label="Club" value={player.recommendedPlayerClub} />
-            <DetailRow label="Original answer" value={player.recommendedPlayersRaw} />
-          </DetailGrid>
-        </Card>
-      ) : null}
       {hasOnboarding ? (
         <Card title="Onboarding responses" icon={<ClipboardList className="h-5 w-5" />}>
           <div className="space-y-5">
@@ -672,9 +657,40 @@ function DetailsTab({ hub, medicalError, contactError }: { hub: PlayerHubData; m
           </div>
         </Card>
       ) : null}
+      <Card title="Danger zone" icon={<AlertTriangle className="h-5 w-5" />}>
+        <form action={permanentlyDeleteSquadPlayer} className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <input type="hidden" name="playerId" value={player.id} />
+          <h3 className="font-bold text-red-900">Delete player permanently</h3>
+          <p className="mt-2 text-sm text-red-800">
+            This removes the player profile and related attendance, ratings, medical periods, contacts, notes, development goals and observations. Trainings themselves stay in CoachBoard.
+          </p>
+          <p className="mt-2 text-sm font-semibold text-red-900">
+            Related data: {hub.lifetime.trainings} trainings · {hub.lifetime.ratings} ratings · {hub.medicalPeriods.length} medical periods · {hub.contacts.length} contacts.
+          </p>
+          {deleteError === "confirm" ? <p className="mt-3 rounded-md bg-white px-3 py-2 text-sm font-bold text-red-700">Confirm the checkbox and type the full player name exactly.</p> : null}
+          <label className="mt-4 flex items-start gap-2 text-sm font-semibold text-red-900">
+            <input name="confirmDelete" type="checkbox" className="mt-0.5 h-4 w-4" />
+            I understand this cannot be undone.
+          </label>
+          <label className="mt-3 block">
+            <span className="text-sm font-semibold text-red-900">Type full name to confirm: {playerFullName(player)}</span>
+            <input name="confirmName" className="mt-1 h-10 w-full rounded-md border border-red-200 bg-white px-3 text-sm outline-none focus:border-red-400 focus:ring-4 focus:ring-red-100" />
+          </label>
+          <Button type="submit" variant="danger" className="mt-3">Delete player permanently</Button>
+        </form>
+      </Card>
       <MedicalSection playerId={player.id} player={player} periods={hub.medicalPeriods} error={medicalError} />
     </div>
   );
+}
+
+function trialDurationLabel(player: SquadPlayer) {
+  if (player.playerType !== "trial") return undefined;
+  if (player.trialDurationMode === "training_count" && player.trialTrainingLimit) {
+    return `${player.trialTrainingLimit} training${player.trialTrainingLimit === 1 ? "" : "s"}`;
+  }
+  if (player.trialDurationMode === "end_date" && player.trialEndDate) return `Until ${formatEventDate(player.trialEndDate)}`;
+  return undefined;
 }
 
 function ClubSchedule({ value }: { value: string }) {

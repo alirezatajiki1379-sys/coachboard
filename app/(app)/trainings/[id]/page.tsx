@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarDays, ClipboardList, MapPin, Star, UsersRound } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { CompleteEventButton, MissingStatusesNotice } from "@/components/squad/attendance-controls";
+import { TrainingEventActions } from "@/components/squad/training-event-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
 import { createClient } from "@/lib/supabase/server";
@@ -49,6 +50,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
           <div className="flex flex-wrap gap-2">
             <ButtonLink href={`/trainings/${event.id}/check-in`} className="justify-center">Quick check-in</ButtonLink>
             <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="justify-center">Ratings</ButtonLink>
+            <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} />
             <CompleteEventButton eventId={event.id} />
           </div>
         </div>
