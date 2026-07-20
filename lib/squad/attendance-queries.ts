@@ -25,6 +25,10 @@ type SquadNameRow = {
   name?: string | null;
 };
 
+type CompactAttendanceRow = SquadAttendanceRow & {
+  squad_players?: Partial<SquadPlayerRow> | Partial<SquadPlayerRow>[] | null;
+};
+
 export async function listTrainingEvents(supabase: SupabaseServerClient, userId: string): Promise<SquadTrainingEvent[]> {
   const db = supabase as unknown as SupabaseClient;
   const { data, error } = await db
@@ -51,21 +55,87 @@ export async function listTrainingEventDetails(supabase: SupabaseServerClient, u
   const db = supabase as unknown as SupabaseClient;
   const { data, error } = await db
     .from("squad_attendance_records")
-    .select("*, squad_players(*)")
+    .select("id,user_id,event_id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,late_minutes,late_penalty_applied,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,rating_auto_suggestion,coach_note,sensitive_note,created_at,updated_at,squad_players(id,user_id,first_name,last_name,position,player_type,created_at,updated_at)")
     .eq("user_id", userId)
     .in("event_id", events.map((event) => event.id))
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
   const attendanceByEvent = new Map<string, ReturnType<typeof mapAttendanceRow>[]>();
-  for (const row of (data ?? []) as Array<
-    SquadAttendanceRow & {
-      squad_players?: SquadPlayerRow | null;
-    }
-  >) {
-    const mapped = mapAttendanceRow(row, row.squad_players ?? undefined);
+  for (const row of (data ?? []) as unknown as CompactAttendanceRow[]) {
+    const mapped = mapAttendanceRow(row, compactPlayerToRow(row.squad_players ?? undefined));
     attendanceByEvent.set(row.event_id, [...(attendanceByEvent.get(row.event_id) ?? []), mapped]);
   }
   return events.map((event) => ({ ...event, attendance: attendanceByEvent.get(event.id) ?? [] }));
+}
+
+function compactPlayerToRow(playerInput?: Partial<SquadPlayerRow> | Partial<SquadPlayerRow>[] | null): SquadPlayerRow | undefined {
+  const player = Array.isArray(playerInput) ? playerInput[0] : playerInput;
+  if (!player?.id || !player.user_id || !player.first_name) return undefined;
+  return {
+    id: player.id,
+    user_id: player.user_id,
+    squad_id: player.squad_id ?? null,
+    player_type: player.player_type ?? "roster",
+    first_name: player.first_name,
+    last_name: player.last_name ?? null,
+    date_of_birth: null,
+    position: player.position ?? null,
+    secondary_positions: [],
+    strong_foot: null,
+    club: null,
+    original_club: null,
+    club_training_schedule: null,
+    external_player_id: null,
+    trial_start_date: null,
+    trial_duration_mode: null,
+    trial_training_limit: null,
+    trial_end_date: null,
+    player_email: null,
+    parent_guardian_name: null,
+    parent_phone: null,
+    player_phone: null,
+    parent_email: null,
+    emergency_contact_name: null,
+    emergency_contact_phone: null,
+    emergency_contact_relationship: null,
+    top_size: null,
+    jacket_size: null,
+    trouser_size: null,
+    shoe_size: null,
+    preferred_positions: [],
+    original_preferred_positions: null,
+    original_strong_foot: null,
+    height_cm: null,
+    weight_kg: null,
+    jersey_number: null,
+    captain_status: null,
+    joined_date: null,
+    allergies: null,
+    medication: null,
+    medical_notes: null,
+    hobbies: null,
+    development_goal: null,
+    work_on: null,
+    coach_expectations: null,
+    onboarding_comments: null,
+    recommended_players_raw: null,
+    recommended_player_name: null,
+    recommended_player_birth_year: null,
+    recommended_player_position: null,
+    recommended_player_club: null,
+    onboarding_source: null,
+    onboarding_submitted_at: null,
+    onboarding_import_batch: null,
+    import_batch_id: null,
+    onboarding_original_answers: null,
+    onboarding_normalized_values: null,
+    onboarding_warnings: [],
+    notes: null,
+    converted_at: null,
+    archived_at: null,
+    created_at: player.created_at ?? "",
+    updated_at: player.updated_at ?? ""
+  };
 }
 
 export async function getTrainingEventDetail(

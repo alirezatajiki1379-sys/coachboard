@@ -7,6 +7,31 @@ import type { DrillEditorState } from "@/types/editor";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
+const drillLibraryColumns = [
+  "id",
+  "user_id",
+  "title",
+  "short_description",
+  "age_groups",
+  "main_focus",
+  "sub_focus",
+  "training_blocks",
+  "drill_type",
+  "duration_minutes",
+  "min_players",
+  "max_players",
+  "materials",
+  "pitch_area",
+  "difficulty_level",
+  "intensity_level",
+  "is_favorite",
+  "tags",
+  "archived_at",
+  "deleted_at",
+  "created_at",
+  "updated_at"
+].join(",");
+
 export type DrillFilters = {
   view: "active" | "archived" | "trash";
   search?: string;
@@ -55,7 +80,7 @@ export async function listUserDrills(
   userId: string,
   filters: DrillFilters
 ): Promise<Array<Drill & { graphic?: DrillEditorState }>> {
-  let query = supabase.from("drills").select("*").eq("user_id", userId).order("updated_at", {
+  let query = supabase.from("drills").select(drillLibraryColumns).eq("user_id", userId).order("updated_at", {
     ascending: false
   });
 
@@ -82,8 +107,8 @@ export async function listUserDrills(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  const rows = (data ?? []) as DrillRow[];
-  const drills = rows.map(mapDrillRow);
+  const rows = (data ?? []) as Partial<DrillRow>[];
+  const drills = rows.map(mapDrillListRow);
   const graphics = await getGraphicsByDrillId(supabase, userId, drills.map((drill) => drill.id));
   const drillsWithGraphics = drills.map((drill) => ({ ...drill, graphic: graphics.get(drill.id) }));
 
@@ -95,6 +120,38 @@ export async function listUserDrills(
       [item.type, item.color, item.label].filter(Boolean).join(" ").toLowerCase().includes(material)
     )
   );
+}
+
+function mapDrillListRow(row: Partial<DrillRow>): Drill {
+  return mapDrillRow({
+    id: row.id ?? "",
+    user_id: row.user_id ?? "",
+    title: row.title ?? "",
+    short_description: row.short_description ?? null,
+    organization: null,
+    coaching_points: null,
+    variations: null,
+    easier_version: null,
+    harder_version: null,
+    age_groups: row.age_groups ?? [],
+    main_focus: row.main_focus ?? "Technical",
+    sub_focus: row.sub_focus ?? null,
+    training_blocks: row.training_blocks ?? [],
+    drill_type: row.drill_type ?? "Exercise",
+    duration_minutes: row.duration_minutes ?? 0,
+    min_players: row.min_players ?? 0,
+    max_players: row.max_players ?? 0,
+    materials: row.materials ?? [],
+    pitch_area: row.pitch_area ?? null,
+    difficulty_level: row.difficulty_level ?? 3,
+    intensity_level: row.intensity_level ?? 3,
+    is_favorite: row.is_favorite ?? false,
+    tags: row.tags ?? [],
+    archived_at: row.archived_at ?? null,
+    deleted_at: row.deleted_at ?? null,
+    created_at: row.created_at ?? "",
+    updated_at: row.updated_at ?? ""
+  });
 }
 
 async function getGraphicsByDrillId(supabase: SupabaseServerClient, userId: string, drillIds: string[]) {
