@@ -30,8 +30,9 @@ export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/a
             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><CalendarDays className="h-3.5 w-3.5" />{formatDateLabel(event.date)}</span>
             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><Clock className="h-3.5 w-3.5" />{trainingTimeRange(event)}</span>
             {event.location ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><MapPin className="h-3.5 w-3.5" />{event.location}</span> : null}
-            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-3.5 w-3.5" />Squad: {event.squadName ?? "Active Squad"}</span>
+            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-3.5 w-3.5" />Team: {event.squadName ?? "Active Team"}</span>
             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-3.5 w-3.5" />{attendance.length} total</span>
+            {event.deletedAt ? <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">In Trash</span> : null}
           </div>
           <TrainingStatusSummary
             isPast={isPast}
@@ -58,9 +59,9 @@ export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/a
           </div>
         </Link>
         <div className="relative z-10 flex flex-wrap gap-2">
-          <ButtonLink href={detailHref} variant="secondary" className="h-9 px-3">Open</ButtonLink>
-          <ButtonLink href={`${hrefBase}/${event.id}/check-in`} className="h-9 px-3">Check-in</ButtonLink>
-          <TrainingEventActions eventId={event.id} attendanceCount={attendance.length} compact />
+          {!event.deletedAt ? <ButtonLink href={detailHref} variant="secondary" className="h-9 px-3">Open</ButtonLink> : null}
+          {!event.deletedAt ? <ButtonLink href={`${hrefBase}/${event.id}/check-in`} className="h-9 px-3">Check-in</ButtonLink> : null}
+          <TrainingEventActions eventId={event.id} attendanceCount={attendance.length} compact isTrash={Boolean(event.deletedAt)} />
         </div>
       </div>
     </article>

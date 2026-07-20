@@ -25,6 +25,9 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
     () => new Set(mode === "edit" ? event?.attendance.map((entry) => entry.playerId) ?? [] : participants.map((player) => player.id)),
     [event?.attendance, mode, participants]
   );
+  const activeTeam = squads.find((squad) => squad.isActive) ?? squads[0];
+  const eventTeam = event?.squadId ? squads.find((squad) => squad.id === event.squadId) : undefined;
+  const assignedTeam = eventTeam ?? activeTeam;
   const values = useMemo(
     () =>
       state.values ?? {
@@ -35,10 +38,10 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
         location: event?.location ?? "",
         focus: event?.focus ?? "",
         linkedTrainingSessionId: event?.linkedTrainingSessionId ?? "",
-        squadId: event?.squadId ?? squads.find((squad) => squad.isActive)?.id ?? squads[0]?.id ?? "",
+        squadId: event?.squadId ?? activeTeam?.id ?? "",
         generalNotes: event?.generalNotes ?? ""
       },
-    [event, squads, state.values]
+    [activeTeam?.id, event, state.values]
   );
   const errors = state.fieldErrors ?? {};
 
@@ -62,17 +65,12 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
             <TextInput name="label" label="Title / label" defaultValue={values.label} error={errors.label} placeholder="e.g. Tuesday U11 training" />
             <TextInput name="location" label="Location" defaultValue={values.location} placeholder="e.g. Main pitch" />
             <TextInput name="focus" label="Focus" defaultValue={values.focus} placeholder="e.g. Offensive 1v1" />
-            <label className="block md:col-span-2">
-              <span className="text-sm font-medium text-slate-700">Assigned squad<RequiredMark /></span>
-              <select name="squadId" defaultValue={values.squadId} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                {squads.map((squad) => (
-                  <option key={squad.id} value={squad.id}>
-                    {squad.name}{squad.isActive ? " (Active Squad)" : ""}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-slate-500">The assigned squad defines the main team for this concrete training. Participants below are saved as a session snapshot.</p>
-            </label>
+            <input type="hidden" name="squadId" value={values.squadId} />
+            <div className="rounded-md border border-board-line bg-board-paper px-3 py-2 md:col-span-2">
+              <p className="text-sm font-medium text-slate-700">Team</p>
+              <p className="mt-1 text-base font-bold text-board-navy">{assignedTeam?.name ?? "Active Team"}</p>
+              <p className="mt-1 text-xs text-slate-500">Trainings automatically use the active Team roster. Participants below are saved as a training snapshot.</p>
+            </div>
             <label className="block md:col-span-2">
               <span className="text-sm font-medium text-slate-700">Training plan</span>
               <select name="linkedTrainingSessionId" defaultValue={values.linkedTrainingSessionId} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
@@ -105,12 +103,12 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
           </Button>
         </div>
       </form>
-      {mode === "create" ? <RecurringTrainingPanel state={recurringState} action={recurringAction} isPending={isRecurringPending} participants={participants} squads={squads} /> : null}
+      {mode === "create" ? <RecurringTrainingPanel state={recurringState} action={recurringAction} isPending={isRecurringPending} participants={participants} activeTeam={activeTeam} /> : null}
     </div>
   );
 }
 
-function RecurringTrainingPanel({ state, action, isPending, participants, squads }: { state: TrainingEventActionState; action: (formData: FormData) => void; isPending: boolean; participants: SquadPlayer[]; squads: Squad[] }) {
+function RecurringTrainingPanel({ state, action, isPending, participants, activeTeam }: { state: TrainingEventActionState; action: (formData: FormData) => void; isPending: boolean; participants: SquadPlayer[]; activeTeam?: Squad }) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [intervalWeeks, setIntervalWeeks] = useState<"1" | "2">("1");
@@ -129,16 +127,12 @@ function RecurringTrainingPanel({ state, action, isPending, participants, squads
         <TextInput name="label" label="Title / label" defaultValue={state.values?.label ?? ""} placeholder="e.g. U11 team training" />
         <TextInput name="location" label="Location" defaultValue={state.values?.location ?? ""} placeholder="e.g. Main pitch" />
         <TextInput name="focus" label="Focus" defaultValue={state.values?.focus ?? ""} placeholder="e.g. Finishing" />
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Assigned squad</span>
-          <select name="squadId" defaultValue={state.values?.squadId ?? squads.find((squad) => squad.isActive)?.id ?? squads[0]?.id ?? ""} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-            {squads.map((squad) => (
-              <option key={squad.id} value={squad.id}>
-                {squad.name}{squad.isActive ? " (Active Squad)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <input type="hidden" name="squadId" value={state.values?.squadId ?? activeTeam?.id ?? ""} />
+        <div className="rounded-md border border-board-line bg-white px-3 py-2">
+          <p className="text-sm font-medium text-slate-700">Team</p>
+          <p className="mt-1 text-sm font-bold text-board-navy">{activeTeam?.name ?? "Active Team"}</p>
+          <p className="mt-1 text-xs text-slate-500">The recurring series uses this Team roster snapshot.</p>
+        </div>
         <label className="block">
           <span className="text-sm font-medium text-slate-700">Repeat</span>
           <select name="intervalWeeks" value={intervalWeeks} onChange={(event) => setIntervalWeeks(event.target.value as "1" | "2")} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
@@ -172,7 +166,7 @@ function ParticipantSelector({ participants, selected, compact = false }: { part
     <section className={compact ? "mt-4 rounded-lg border border-board-line bg-board-paper p-4" : "rounded-lg border border-board-line bg-white p-5 shadow-soft"}>
       <h2 className="text-lg font-bold text-board-navy">Participants</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Active squad players are selected by default. Add or remove players for this training only. {trialCount ? `${trialCount} trial player${trialCount === 1 ? "" : "s"} available.` : ""}
+        Active Team players are selected by default. Add or remove players for this training only. {trialCount ? `${trialCount} trial player${trialCount === 1 ? "" : "s"} available.` : ""}
       </p>
       {participants.length ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -188,7 +182,7 @@ function ParticipantSelector({ participants, selected, compact = false }: { part
           ))}
         </div>
       ) : (
-        <p className="mt-4 rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No active players yet. Add players in Squad first, then come back to create attendance rows.</p>
+        <p className="mt-4 rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No active players yet. Add players to this Team first, then come back to create attendance rows.</p>
       )}
       <p className="mt-3 text-xs font-semibold text-slate-500">{rosterCount} roster · {trialCount} trial</p>
     </section>

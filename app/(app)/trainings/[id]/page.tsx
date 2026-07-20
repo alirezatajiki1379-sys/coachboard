@@ -42,17 +42,18 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
             <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{trainingDisplayTitle(event)}</h1>
             <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-slate-600">
               <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><CalendarDays className="h-4 w-4" />{event.date} · {trainingTimeRange(event)}</span>
-              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-4 w-4" />Squad: {event.squadName ?? "Active Squad"}</span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-4 w-4" />Team: {event.squadName ?? "Active Team"}</span>
+              {event.deletedAt ? <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">In Trash</span> : null}
               {event.location ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><MapPin className="h-4 w-4" />{event.location}</span> : null}
               {event.focus ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><Star className="h-4 w-4" />{event.focus}</span> : null}
             </div>
             {event.generalNotes ? <p className="mt-3 whitespace-pre-line text-sm text-slate-600">{event.generalNotes}</p> : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            <ButtonLink href={`/trainings/${event.id}/check-in`} className="justify-center">Quick check-in</ButtonLink>
-            <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="justify-center">Ratings</ButtonLink>
-            <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} />
-            <CompleteEventButton eventId={event.id} />
+            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/check-in`} className="justify-center">Quick check-in</ButtonLink> : null}
+            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="justify-center">Ratings</ButtonLink> : null}
+            <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} isTrash={Boolean(event.deletedAt)} />
+            {!event.deletedAt ? <CompleteEventButton eventId={event.id} /> : null}
           </div>
         </div>
       </section>

@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Settings, UsersRound } from "lucide-react";
+import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Settings, Shield, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/layout/logout-button";
+import { TeamSwitcher } from "@/components/layout/team-switcher";
 import { en } from "@/lib/i18n/en";
+import type { Squad } from "@/types/domain";
 
 const navItems = [
   { href: "/dashboard", label: en.nav.dashboard, icon: LayoutDashboard },
+  { href: "/teams", label: "Teams", icon: Shield },
   { href: "/trainings", label: en.nav.trainings, icon: CalendarDays },
   { href: "/sessions", label: en.nav.trainingPlans, icon: ClipboardList },
   { href: "/drills", label: en.nav.drills, icon: Dumbbell },
@@ -17,9 +20,10 @@ const navItems = [
 type AppShellProps = {
   children: React.ReactNode;
   coachName?: string | null;
+  teams?: Squad[];
 };
 
-export function AppShell({ children, coachName }: AppShellProps) {
+export function AppShell({ children, coachName, teams = [] }: AppShellProps) {
   return (
     <div className="min-h-screen bg-board-paper [--app-mobile-header-height:7.25rem] [--app-sidebar-width:18rem] [--page-section-gap:1.5rem]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden border-r border-board-line bg-board-navy text-white lg:flex lg:w-72 lg:flex-col">
@@ -31,6 +35,9 @@ export function AppShell({ children, coachName }: AppShellProps) {
             <p className="text-lg font-bold">{en.appName}</p>
             <p className="text-xs text-slate-300">Training planner</p>
           </div>
+        </div>
+        <div className="px-3 pb-4">
+          <TeamSwitcher teams={teams} />
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {navItems.map((item) => {
@@ -64,6 +71,11 @@ export function AppShell({ children, coachName }: AppShellProps) {
               {en.appName}
             </Link>
             <LogoutButton />
+          </div>
+          <div className="px-3 pb-3">
+            <div className="rounded-lg bg-board-navy p-2">
+              <TeamSwitcher teams={teams} />
+            </div>
           </div>
           <nav className="flex gap-1 overflow-x-auto px-3 pb-3">
             {navItems.map((item) => {

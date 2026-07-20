@@ -125,7 +125,7 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
 
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
-  if (data?.id) await syncTrainingParticipants(db, user.id, data.id, values.date, selectedParticipantIds(formData));
+  if (data?.id) await syncTrainingParticipants(db, user.id, data.id, values.date, selectedParticipantIds(formData), { squadId });
   if (data?.id && values.linkedTrainingSessionId) await createSessionPlanSnapshot(db, user.id, data.id, values.linkedTrainingSessionId);
 
   revalidatePath("/trainings");
@@ -177,7 +177,7 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
     .eq("user_id", user.id);
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
-  await syncTrainingParticipants(db, user.id, eventId, values.date, selectedParticipantIds(formData));
+  await syncTrainingParticipants(db, user.id, eventId, values.date, selectedParticipantIds(formData), { squadId });
   if (values.linkedTrainingSessionId) await createSessionPlanSnapshot(db, user.id, eventId, values.linkedTrainingSessionId);
   revalidateEvent(eventId);
   revalidatePath("/trainings");
@@ -233,7 +233,7 @@ export async function createRecurringTrainingEvents(_: TrainingEventActionState,
 
   const selectedIds = selectedParticipantIds(formData);
   for (const event of (createdEvents ?? []) as Array<{ id: string; date: string }>) {
-    await syncTrainingParticipants(db, user.id, event.id, event.date, selectedIds, { removeUnselected: false });
+    await syncTrainingParticipants(db, user.id, event.id, event.date, selectedIds, { removeUnselected: false, squadId });
   }
 
   revalidatePath("/trainings");
@@ -245,7 +245,7 @@ export async function deleteTrainingEvent(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  const { error } = await db.from("squad_training_events").delete().eq("id", eventId).eq("user_id", user.id);
+  const { error } = await db.from("squad_training_events").update({ deleted_at: new Date().toISOString() }).eq("id", eventId).eq("user_id", user.id);
   if (error) throw new Error(error.message);
   revalidatePath("/trainings");
   revalidatePath("/squad/attendance");
@@ -253,21 +253,43 @@ export async function deleteTrainingEvent(formData: FormData) {
   redirect("/trainings");
 }
 
+export async function restoreTrainingEvent(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db.from("squad_training_events").update({ deleted_at: null }).eq("id", eventId).eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/trainings");
+  redirect("/trainings?view=trash");
+}
+
+export async function permanentlyDeleteTrainingEvent(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const confirmation = formString(formData, "confirmPermanent");
+  if (confirmation !== "DELETE") redirect("/trainings?view=trash");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db.from("squad_training_events").delete().eq("id", eventId).eq("user_id", user.id).not("deleted_at", "is", null);
+  if (error) throw new Error(error.message);
+  revalidatePath("/trainings");
+  redirect("/trainings?view=trash");
+}
+
 export async function addSquadPlayersToEvent(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  const [{ data: players, error: playersError }, { data: event, error: eventError }] = await Promise.all([
-    db
+  const { data: event, error: eventError } = await db.from("squad_training_events").select("date,squad_id").eq("id", eventId).eq("user_id", user.id).maybeSingle();
+  if (eventError) throw new Error(eventError.message);
+  let playersQuery = db
     .from("squad_players")
     .select("id")
     .eq("user_id", user.id)
     .eq("player_type", "roster")
-      .is("archived_at", null),
-    db.from("squad_training_events").select("date").eq("id", eventId).eq("user_id", user.id).maybeSingle()
-  ]);
+    .is("archived_at", null);
+  if (event?.squad_id) playersQuery = playersQuery.eq("squad_id", event.squad_id);
+  const { data: players, error: playersError } = await playersQuery;
   if (playersError) throw new Error(playersError.message);
-  if (eventError) throw new Error(eventError.message);
 
   const playerIds = ((players ?? []) as { id: string }[]).map((player) => player.id);
   const medicalByPlayer = await getMedicalByPlayer(db, user.id, event?.date ?? "", playerIds);
@@ -302,10 +324,18 @@ export async function addTrialPlayerToEvent(formData: FormData) {
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const { data: event, error: eventError } = await db
+    .from("squad_training_events")
+    .select("squad_id")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (eventError) throw new Error(eventError.message);
   const { data: player, error: playerError } = await db
     .from("squad_players")
     .insert({
       user_id: user.id,
+      squad_id: event?.squad_id ?? null,
       player_type: "trial",
       first_name: displayName,
       player_phone: optional(formString(formData, "contact")),
@@ -327,6 +357,13 @@ export async function addExistingTrialPlayerToEvent(formData: FormData) {
   if (!playerId) redirect(eventPath(eventId));
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const { data: event, error: eventError } = await db
+    .from("squad_training_events")
+    .select("squad_id")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (eventError) throw new Error(eventError.message);
   const { data: player, error: playerError } = await db
     .from("squad_players")
     .select("id")
@@ -336,7 +373,17 @@ export async function addExistingTrialPlayerToEvent(formData: FormData) {
     .is("converted_at", null)
     .maybeSingle();
   if (playerError) throw new Error(playerError.message);
-  if (player) await upsertAttendanceRecord(db, user.id, eventId, player.id);
+  if (player && event?.squad_id) {
+    const { data: sameTeamPlayer, error: sameTeamError } = await db
+      .from("squad_players")
+      .select("id")
+      .eq("id", player.id)
+      .eq("user_id", user.id)
+      .eq("squad_id", event.squad_id)
+      .maybeSingle();
+    if (sameTeamError) throw new Error(sameTeamError.message);
+    if (sameTeamPlayer) await upsertAttendanceRecord(db, user.id, eventId, sameTeamPlayer.id);
+  }
 
   await markEventPrepared(db, user.id, eventId);
   revalidateEvent(eventId);
@@ -564,17 +611,19 @@ async function syncTrainingParticipants(
   eventId: string,
   eventDate: string,
   playerIds: string[],
-  options: { removeUnselected?: boolean } = {}
+  options: { removeUnselected?: boolean; squadId?: string } = {}
 ) {
   const removeUnselected = options.removeUnselected ?? true;
   const safePlayerIds = Array.from(new Set(playerIds));
   if (safePlayerIds.length) {
-    const { data: players, error: playerError } = await db
+    let playerQuery = db
       .from("squad_players")
       .select("id")
       .eq("user_id", userId)
       .is("archived_at", null)
       .in("id", safePlayerIds);
+    if (options.squadId) playerQuery = playerQuery.eq("squad_id", options.squadId);
+    const { data: players, error: playerError } = await playerQuery;
     if (playerError) throw new Error(playerError.message);
 
     const validPlayerIds = ((players ?? []) as Array<{ id: string }>).map((player) => player.id);

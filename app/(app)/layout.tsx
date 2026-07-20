@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
+import { listSquads } from "@/lib/squad/squads";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -18,12 +19,15 @@ export default async function ProtectedLayout({ children }: { children: React.Re
     redirect("/login");
   }
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  const [{ data: profileData }, teams] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle(),
+    listSquads(supabase, user.id)
+  ]);
   const profile = profileData as ProfileName | null;
 
-  return <AppShell coachName={profile?.display_name ?? user.email}>{children}</AppShell>;
+  return <AppShell coachName={profile?.display_name ?? user.email} teams={teams}>{children}</AppShell>;
 }

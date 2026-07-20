@@ -5,6 +5,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { TrainingEventCard } from "@/components/squad/training-event-card";
 import { createClient } from "@/lib/supabase/server";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
+import { ensureActiveSquad } from "@/lib/squad/squads";
 import { filterTrainings, parseTrainingFilter, sortTrainings, type TrainingFilter } from "@/lib/trainings/utils";
 
 type TrainingsPageProps = {
@@ -17,7 +18,8 @@ const filters: Array<{ id: TrainingFilter; label: string }> = [
   { id: "past", label: "Past" },
   { id: "rating_open", label: "Rating open" },
   { id: "completed", label: "Completed" },
-  { id: "draft", label: "Draft" }
+  { id: "draft", label: "Draft" },
+  { id: "trash", label: "Trash" }
 ];
 
 export default async function TrainingsPage({ searchParams }: TrainingsPageProps) {
@@ -30,14 +32,23 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
 
   if (!user) redirect("/login");
 
-  const events = sortTrainings(filterTrainings(await listTrainingEventDetails(supabase, user.id), filter));
+  const activeTeam = await ensureActiveSquad(supabase, user.id);
+  const allEvents = await listTrainingEventDetails(supabase, user.id, {
+    squadId: activeTeam.id,
+    onlyDeleted: filter === "trash"
+  });
+  const events = sortTrainings(filterTrainings(allEvents, filter));
+  const upcomingCount = filterTrainings(allEvents, "upcoming").length;
+  const pastCount = filterTrainings(allEvents, "past").length;
+  const completedCount = filterTrainings(allEvents, "completed").length;
+  const needsRatingsCount = filterTrainings(allEvents, "rating_open").length;
 
   return (
     <PageContainer width="wide">
       <PageHeader
         eyebrow="Trainings"
         title="Training calendar"
-        description="Concrete training appointments with availability, check-in, ratings, trial players, and an optional training plan."
+        description={`Team: ${activeTeam.name}. Concrete training appointments with availability, check-in, ratings, trial players, and an optional training plan.`}
         actions={(
           <ButtonLink href="/trainings/new" className="justify-center">
           <CalendarPlus className="h-4 w-4" />
@@ -45,6 +56,15 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
           </ButtonLink>
         )}
       />
+
+      {filter !== "trash" ? (
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Upcoming" value={upcomingCount} />
+          <Metric label="Past" value={pastCount} />
+          <Metric label="Completed" value={completedCount} />
+          <Metric label="Needs ratings" value={needsRatingsCount} />
+        </section>
+      ) : null}
 
       <PageTabs label="Training filters">
         {filters.map((item) => (
@@ -65,7 +85,7 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
             <h2 className="text-lg font-bold text-board-navy">No trainings found</h2>
-            <p className="mt-2 text-sm text-slate-600">Create a single training or plan a weekly series to start your calendar.</p>
+            <p className="mt-2 text-sm text-slate-600">{filter === "trash" ? "Training Trash is empty for this Team." : "No trainings scheduled for this Team. Create the first Training or switch to another Team."}</p>
             <ButtonLink href="/trainings/new" className="mt-5">
               Create training
             </ButtonLink>
@@ -73,5 +93,14 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
         )}
       </section>
     </PageContainer>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-board-navy">{value}</p>
+    </div>
   );
 }

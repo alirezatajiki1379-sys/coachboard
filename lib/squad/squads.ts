@@ -77,3 +77,16 @@ export async function listSquads(db: DatabaseClient, userId: string): Promise<Sq
   const rows = ((data ?? []) as SquadRow[]).map(mapSquadRow);
   return rows.some((squad) => squad.id === active.id) ? rows : [active, ...rows];
 }
+
+export async function listAllTeams(db: DatabaseClient, userId: string): Promise<Squad[]> {
+  const dynamicDb = db as unknown as SupabaseClient;
+  const { data, error } = await dynamicDb
+    .from("squads")
+    .select("*")
+    .eq("user_id", userId)
+    .order("archived_at", { ascending: true, nullsFirst: true })
+    .order("is_active", { ascending: false })
+    .order("name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as SquadRow[]).map(mapSquadRow);
+}

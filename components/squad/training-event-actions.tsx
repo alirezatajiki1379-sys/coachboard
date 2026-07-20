@@ -1,10 +1,42 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { RotateCcw, Trash2 } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { deleteTrainingEvent } from "@/lib/squad/attendance-actions";
+import { deleteTrainingEvent, permanentlyDeleteTrainingEvent, restoreTrainingEvent } from "@/lib/squad/attendance-actions";
 
-export function TrainingEventActions({ eventId, attendanceCount = 0, compact = false }: { eventId: string; attendanceCount?: number; compact?: boolean }) {
+export function TrainingEventActions({ eventId, attendanceCount = 0, compact = false, isTrash = false }: { eventId: string; attendanceCount?: number; compact?: boolean; isTrash?: boolean }) {
+  if (isTrash) {
+    return (
+      <div className="relative z-10 flex flex-wrap gap-2">
+        <form action={restoreTrainingEvent}>
+          <input type="hidden" name="eventId" value={eventId} />
+          <Button type="submit" variant="secondary" className={compact ? "h-9 px-3" : "justify-center"}>
+            <RotateCcw className="h-4 w-4" />
+            Restore
+          </Button>
+        </form>
+        <form action={permanentlyDeleteTrainingEvent}>
+          <input type="hidden" name="eventId" value={eventId} />
+          <input type="hidden" name="confirmPermanent" value="DELETE" />
+          <Button
+            type="submit"
+            variant="danger"
+            className={compact ? "h-9 px-3" : "justify-center"}
+            onClick={(event) => {
+              const warning = attendanceCount
+                ? `Permanently delete this training and ${attendanceCount} participant record${attendanceCount === 1 ? "" : "s"}? This cannot be undone.`
+                : "Permanently delete this training? This cannot be undone.";
+              if (!window.confirm(warning)) event.preventDefault();
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete permanently
+          </Button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="relative z-10 flex flex-wrap gap-2">
       <ButtonLink href={`/trainings/${eventId}/edit`} variant="secondary" className={compact ? "h-9 px-3" : "justify-center"}>
@@ -18,13 +50,13 @@ export function TrainingEventActions({ eventId, attendanceCount = 0, compact = f
           className={compact ? "h-9 px-3" : "justify-center"}
           onClick={(event) => {
             const warning = attendanceCount
-              ? `Delete this training? This removes ${attendanceCount} participant record${attendanceCount === 1 ? "" : "s"}, including attendance, ratings and notes for this training only. This cannot be undone.`
-              : "Delete this training? This cannot be undone.";
+              ? `Move this training to Trash? ${attendanceCount} participant record${attendanceCount === 1 ? "" : "s"} will be preserved and can be restored with the training.`
+              : "Move this training to Trash? You can restore it later.";
             if (!window.confirm(warning)) event.preventDefault();
           }}
         >
           <Trash2 className="h-4 w-4" />
-          Delete
+          Move to Trash
         </Button>
       </form>
     </div>

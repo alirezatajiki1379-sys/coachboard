@@ -1,7 +1,7 @@
 import type { SquadTrainingEventDetail } from "@/types/domain";
 import { getFinalAttendanceSummary, getPlannedAttendanceSummary } from "@/lib/squad/attendance-utils";
 
-export type TrainingFilter = "all" | "upcoming" | "past" | "rating_open" | "completed" | "draft";
+export type TrainingFilter = "all" | "upcoming" | "past" | "rating_open" | "completed" | "draft" | "trash";
 
 export type RecurringTrainingInput = {
   startDate: string;
@@ -72,12 +72,13 @@ export function filterTrainings(events: SquadTrainingEventDetail[], filter: Trai
   }
   if (filter === "completed") return events.filter((event) => event.status === "completed");
   if (filter === "draft") return events.filter((event) => event.status === "draft");
+  if (filter === "trash") return events.filter((event) => event.deletedAt);
   return events;
 }
 
 export function parseTrainingFilter(value?: string | string[]): TrainingFilter {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === "upcoming" || raw === "past" || raw === "rating_open" || raw === "completed" || raw === "draft" ? raw : "all";
+  return raw === "upcoming" || raw === "past" || raw === "rating_open" || raw === "completed" || raw === "draft" || raw === "trash" ? raw : "all";
 }
 
 export function generateRecurringTrainingDates(input: RecurringTrainingInput) {

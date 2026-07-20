@@ -29,16 +29,28 @@ type CompactAttendanceRow = SquadAttendanceRow & {
   squad_players?: Partial<SquadPlayerRow> | Partial<SquadPlayerRow>[] | null;
 };
 
-export async function listTrainingEvents(supabase: SupabaseServerClient, userId: string): Promise<SquadTrainingEvent[]> {
+type TrainingEventListOptions = {
+  squadId?: string;
+  includeDeleted?: boolean;
+  onlyDeleted?: boolean;
+};
+
+export async function listTrainingEvents(supabase: SupabaseServerClient, userId: string, options: TrainingEventListOptions = {}): Promise<SquadTrainingEvent[]> {
+  const activeSquad = options.squadId ? undefined : await ensureActiveSquad(supabase, userId);
+  const squadId = options.squadId ?? activeSquad?.id;
   const db = supabase as unknown as SupabaseClient;
-  const { data, error } = await db
+  let query = db
     .from("squad_training_events")
     .select("*, training_sessions(id, title, duration_target_minutes), squads(name)")
     .eq("user_id", userId)
     .is("archived_at", null)
-    .is("deleted_at", null)
     .order("date", { ascending: false })
     .order("start_time", { ascending: false });
+  if (squadId) query = query.eq("squad_id", squadId);
+  if (options.onlyDeleted) query = query.not("deleted_at", "is", null);
+  else if (!options.includeDeleted) query = query.is("deleted_at", null);
+
+  const { data, error } = await query;
 
   if (error) throw new Error(error.message);
   return ((data ?? []) as Array<SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null; squads?: SquadNameRow | null }>).map((row) =>
@@ -49,8 +61,8 @@ export async function listTrainingEvents(supabase: SupabaseServerClient, userId:
   );
 }
 
-export async function listTrainingEventDetails(supabase: SupabaseServerClient, userId: string): Promise<SquadTrainingEventDetail[]> {
-  const events = await listTrainingEvents(supabase, userId);
+export async function listTrainingEventDetails(supabase: SupabaseServerClient, userId: string, options: TrainingEventListOptions = {}): Promise<SquadTrainingEventDetail[]> {
+  const events = await listTrainingEvents(supabase, userId, options);
   if (!events.length) return [];
   const db = supabase as unknown as SupabaseClient;
   const { data, error } = await db
@@ -260,7 +272,7 @@ export async function listTrainingParticipantOptions(supabase: SupabaseServerCli
   if (error) throw new Error(error.message);
   const targetSquadId = squadId ?? activeSquad?.id;
   return ((data ?? []) as SquadPlayerRow[])
-    .filter((player) => !targetSquadId || !player.squad_id || player.squad_id === targetSquadId)
+    .filter((player) => !targetSquadId || player.squad_id === targetSquadId)
     .filter((player) => player.player_type === "roster" || (player.player_type === "trial" && !player.converted_at))
     .map(mapSquadPlayerRow);
 }
@@ -278,8 +290,15 @@ export async function listAvailableTrialPlayers(
     .eq("event_id", eventId);
   if (existingError) throw new Error(existingError.message);
   const existingIds = new Set((existing ?? []).map((row: { player_id: string }) => row.player_id));
+  const { data: event, error: eventError } = await db
+    .from("squad_training_events")
+    .select("squad_id")
+    .eq("id", eventId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (eventError) throw new Error(eventError.message);
 
-  const { data, error } = await db
+  let query = db
     .from("squad_players")
     .select("*")
     .eq("user_id", userId)
@@ -287,6 +306,8 @@ export async function listAvailableTrialPlayers(
     .is("converted_at", null)
     .is("archived_at", null)
     .order("updated_at", { ascending: false });
+  if (event?.squad_id) query = query.eq("squad_id", event.squad_id);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
 
   return ((data ?? []) as SquadPlayerRow[]).filter((player) => !existingIds.has(player.id));

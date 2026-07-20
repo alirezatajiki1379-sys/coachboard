@@ -19,14 +19,14 @@ export default async function EditTrainingPage({ params }: EditTrainingPageProps
 
   if (!user) redirect("/login");
 
-  const [event, sessions, squads, participants] = await Promise.all([
+  const [event, sessions, squads] = await Promise.all([
     getTrainingEventDetail(supabase, user.id, id),
     getLinkableTrainingSessions(supabase, user.id),
-    listSquads(supabase, user.id),
-    listTrainingParticipantOptions(supabase, user.id)
+    listSquads(supabase, user.id)
   ]);
 
   if (!event) notFound();
+  const participants = await listTrainingParticipantOptions(supabase, user.id, event.squadId);
 
   return (
     <div className="space-y-6">

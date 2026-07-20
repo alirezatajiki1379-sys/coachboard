@@ -20,6 +20,7 @@ import { mapGoalRow, mapObservationRow } from "@/lib/squad/development";
 import { calculateAge } from "@/lib/squad/format";
 import { latestApplicableMedicalPeriod, medicalLabel, medicalNeedsReview } from "@/lib/squad/player-hub";
 import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodRow, type SquadPlayerRow } from "@/lib/squad/mappers";
+import { ensureActiveSquad } from "@/lib/squad/squads";
 import type { Database } from "@/types/database";
 import type { PlayerCoachAssessment, PlayerDevelopmentGoal, PlayerMedicalPeriod, PlayerObservation } from "@/types/domain";
 
@@ -376,6 +377,7 @@ export async function getCoachWorkspaceData(
 ): Promise<WorkspaceData> {
   const includeAttention = options.includeAttention ?? true;
   const db = supabase as unknown as SupabaseClient;
+  const activeTeam = await ensureActiveSquad(supabase, userId);
   const savedViews = await listWorkspaceViews(db, userId);
   const defaultView = savedViews.find((view) => view.isDefault);
   const requestedSavedView = state.savedView ? savedViews.find((view) => view.id === state.savedView && view.kind === "saved") : undefined;
@@ -410,14 +412,15 @@ export async function getCoachWorkspaceData(
   ]);
 
   const assessmentByPlayer = new Map(assessments.map((assessment) => [assessment.playerId, assessment]));
-  const activeSummaries = summaries.map((summary) => {
+  const teamSummaries = summaries.filter((summary) => summary.player.squadId === activeTeam.id);
+  const activeSummaries = teamSummaries.map((summary) => {
     const assessment = assessmentByPlayer.get(summary.player.id);
     return assessment && assessment.id !== summary.assessment?.id
       ? createPlayerAnalyticsSummary(summary.player, records, effectiveState.period, assessment, seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, effectiveState.customFrom, effectiveState.customTo)
       : summary;
   });
 
-  const archivedSummaries = archivedPlayers.map((player) =>
+  const archivedSummaries = archivedPlayers.filter((player) => player.squadId === activeTeam.id).map((player) =>
     createPlayerAnalyticsSummary(player, records, effectiveState.period, assessmentByPlayer.get(player.id), seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, effectiveState.customFrom, effectiveState.customTo)
   );
   const allSummaries = [...activeSummaries, ...archivedSummaries];
