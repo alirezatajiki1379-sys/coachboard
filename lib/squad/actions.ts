@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { parseSquadPlayerForm, toSquadPlayerUpdate, type SquadPlayerFormField, type SquadPlayerFormValues } from "@/lib/squad/form";
+import { ensureActiveSquad } from "@/lib/squad/squads";
 
 export type SquadPlayerActionState = {
   error?: string;
@@ -41,9 +42,10 @@ export async function createSquadPlayer(_: SquadPlayerActionState, formData: For
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const activeSquad = await ensureActiveSquad(supabase, user.id);
   const { data, error } = await db
     .from("squad_players")
-    .insert({ ...parsed.data, user_id: user.id })
+    .insert({ ...parsed.data, user_id: user.id, squad_id: activeSquad.id })
     .select("id")
     .single();
 

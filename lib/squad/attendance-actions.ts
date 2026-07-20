@@ -8,6 +8,9 @@ import { calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
 import { isMedicalPeriodActiveOnDate, medicalReasonForType } from "@/lib/squad/player-hub";
 import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 import { generateRecurringTrainingDates, seasonLabelForDate } from "@/lib/trainings/utils";
+import { ensureActiveSquad } from "@/lib/squad/squads";
+
+type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 export type TrainingEventActionState = {
   error?: string;
@@ -20,6 +23,7 @@ export type TrainingEventActionState = {
     location: string;
     focus: string;
     linkedTrainingSessionId: string;
+    squadId: string;
     generalNotes: string;
   };
   submissionId?: number;
@@ -85,6 +89,7 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
     location: formString(formData, "location"),
     focus: formString(formData, "focus"),
     linkedTrainingSessionId: formString(formData, "linkedTrainingSessionId"),
+    squadId: formString(formData, "squadId"),
     generalNotes: formString(formData, "generalNotes")
   };
   const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
@@ -98,10 +103,12 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const squadId = await resolveOwnedSquadId(supabase, user.id, values.squadId);
   const { data, error } = await db
     .from("squad_training_events")
     .insert({
       user_id: user.id,
+      squad_id: squadId,
       date: values.date,
       start_time: values.startTime,
       end_time: optional(values.endTime),
@@ -119,6 +126,7 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
   if (data?.id) await syncTrainingParticipants(db, user.id, data.id, values.date, selectedParticipantIds(formData));
+  if (data?.id && values.linkedTrainingSessionId) await createSessionPlanSnapshot(db, user.id, data.id, values.linkedTrainingSessionId);
 
   revalidatePath("/trainings");
   revalidatePath("/squad/attendance");
@@ -135,6 +143,7 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
     location: formString(formData, "location"),
     focus: formString(formData, "focus"),
     linkedTrainingSessionId: formString(formData, "linkedTrainingSessionId"),
+    squadId: formString(formData, "squadId"),
     generalNotes: formString(formData, "generalNotes")
   };
   const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
@@ -148,9 +157,12 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const squadId = await resolveOwnedSquadId(supabase, user.id, values.squadId);
   const { error } = await db
     .from("squad_training_events")
     .update({
+      squad_id: squadId,
+      squad_assignment_needs_review: false,
       date: values.date,
       start_time: values.startTime,
       end_time: optional(values.endTime),
@@ -166,6 +178,7 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
   await syncTrainingParticipants(db, user.id, eventId, values.date, selectedParticipantIds(formData));
+  if (values.linkedTrainingSessionId) await createSessionPlanSnapshot(db, user.id, eventId, values.linkedTrainingSessionId);
   revalidateEvent(eventId);
   revalidatePath("/trainings");
   redirect(`/trainings/${eventId}`);
@@ -180,6 +193,7 @@ export async function createRecurringTrainingEvents(_: TrainingEventActionState,
     location: formString(formData, "location"),
     focus: formString(formData, "focus"),
     linkedTrainingSessionId: "",
+    squadId: formString(formData, "squadId"),
     generalNotes: formString(formData, "generalNotes")
   };
   const endDate = formString(formData, "endDate");
@@ -199,8 +213,10 @@ export async function createRecurringTrainingEvents(_: TrainingEventActionState,
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const squadId = await resolveOwnedSquadId(supabase, user.id, values.squadId);
   const rows = dates.map((date) => ({
     user_id: user.id,
+    squad_id: squadId,
     date,
     start_time: values.startTime,
     end_time: optional(values.endTime),
@@ -605,6 +621,149 @@ async function syncTrainingParticipants(
     .map((record) => record.id);
   if (removableIds.length) {
     const { error } = await db.from("squad_attendance_records").delete().eq("user_id", userId).in("id", removableIds);
+    if (error) throw new Error(error.message);
+  }
+}
+
+async function resolveOwnedSquadId(db: DatabaseClient, userId: string, submittedSquadId: string) {
+  if (submittedSquadId) {
+    const { data, error } = await db.from("squads").select("id").eq("id", submittedSquadId).eq("user_id", userId).is("archived_at", null).maybeSingle();
+    if (error) throw new Error(error.message);
+    const squad = data as { id?: string } | null;
+    if (squad?.id) return squad.id;
+  }
+  const activeSquad = await ensureActiveSquad(db, userId);
+  return activeSquad.id;
+}
+
+async function createSessionPlanSnapshot(db: SupabaseClient, userId: string, eventId: string, sourceTrainingSessionId: string) {
+  const { data: sourcePlan, error: sourcePlanError } = await db
+    .from("training_sessions")
+    .select("*")
+    .eq("id", sourceTrainingSessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (sourcePlanError) throw new Error(sourcePlanError.message);
+  if (!sourcePlan) return;
+
+  const { data: existingPlan } = await db
+    .from("training_session_plan_instances")
+    .select("id, source_training_session_id")
+    .eq("event_id", eventId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (existingPlan?.source_training_session_id === sourceTrainingSessionId) return;
+
+  await db.from("training_session_drill_instances").delete().eq("event_id", eventId).eq("user_id", userId);
+  await db.from("training_session_plan_instances").delete().eq("event_id", eventId).eq("user_id", userId);
+
+  const { data: planInstance, error: planInstanceError } = await db
+    .from("training_session_plan_instances")
+    .insert({
+      user_id: userId,
+      event_id: eventId,
+      source_training_session_id: sourceTrainingSessionId,
+      source_updated_at: sourcePlan.updated_at,
+      title: sourcePlan.title,
+      snapshot_json: {
+        title: sourcePlan.title,
+        date: sourcePlan.session_date,
+        startTime: sourcePlan.start_time,
+        teamAgeGroup: sourcePlan.team_age_group,
+        mainFocus: sourcePlan.main_focus,
+        secondaryFocus: sourcePlan.secondary_focus,
+        targetDurationMinutes: sourcePlan.duration_target_minutes,
+        location: sourcePlan.location,
+        notes: sourcePlan.notes,
+        playerGroups: sourcePlan.player_groups
+      }
+    })
+    .select("id")
+    .single();
+  if (planInstanceError) throw new Error(planInstanceError.message);
+
+  const { data: sourceDrills, error: sourceDrillsError } = await db
+    .from("training_session_drills")
+    .select("*, drills(*, drill_graphics(canvas_json))")
+    .eq("session_id", sourceTrainingSessionId)
+    .eq("user_id", userId)
+    .order("order_index", { ascending: true });
+  if (sourceDrillsError) throw new Error(sourceDrillsError.message);
+
+  const rows = ((sourceDrills ?? []) as Array<{
+    id: string;
+    drill_id: string;
+    block: string;
+    order_index: number;
+    planned_duration_minutes: number;
+    coach_notes: string | null;
+    timing_mode: string;
+    simultaneous_group: string | null;
+    participating_groups: string[] | null;
+    starting_group: string | null;
+    drills?: {
+      id: string;
+      title: string;
+      short_description: string | null;
+      organization: string | null;
+      coaching_points: string | null;
+      variations: string | null;
+      easier_version: string | null;
+      harder_version: string | null;
+      duration_minutes: number;
+      min_players: number;
+      max_players: number;
+      materials: unknown;
+      updated_at: string;
+      drill_graphics?: Array<{ canvas_json: unknown }> | { canvas_json: unknown } | null;
+    } | null;
+  }>).map((row) => {
+    const drill = row.drills;
+    const graphics = Array.isArray(drill?.drill_graphics) ? drill?.drill_graphics[0]?.canvas_json : drill?.drill_graphics?.canvas_json;
+    return {
+      user_id: userId,
+      event_id: eventId,
+      plan_instance_id: planInstance.id,
+      source_training_session_drill_id: row.id,
+      source_drill_id: row.drill_id,
+      source_drill_updated_at: drill?.updated_at ?? null,
+      title: drill?.title ?? "Session drill",
+      block: row.block,
+      order_index: row.order_index,
+      planned_duration_minutes: row.planned_duration_minutes,
+      snapshot_json: {
+        sessionDrill: {
+          block: row.block,
+          orderIndex: row.order_index,
+          plannedDurationMinutes: row.planned_duration_minutes,
+          coachNotes: row.coach_notes,
+          timingMode: row.timing_mode,
+          stationSet: row.simultaneous_group,
+          participatingGroups: row.participating_groups,
+          startingGroup: row.starting_group
+        },
+        sourceDrill: drill
+          ? {
+              title: drill.title,
+              shortDescription: drill.short_description,
+              organization: drill.organization,
+              coachingPoints: drill.coaching_points,
+              variations: drill.variations,
+              easierVersion: drill.easier_version,
+              harderVersion: drill.harder_version,
+              durationMinutes: drill.duration_minutes,
+              minPlayers: drill.min_players,
+              maxPlayers: drill.max_players,
+              materials: drill.materials,
+              graphic: graphics
+            }
+          : null
+      }
+    };
+  });
+
+  if (rows.length) {
+    const { error } = await db.from("training_session_drill_instances").insert(rows);
     if (error) throw new Error(error.message);
   }
 }

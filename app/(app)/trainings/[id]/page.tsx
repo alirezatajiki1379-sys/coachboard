@@ -42,6 +42,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
             <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{trainingDisplayTitle(event)}</h1>
             <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-slate-600">
               <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><CalendarDays className="h-4 w-4" />{event.date} · {trainingTimeRange(event)}</span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-4 w-4" />Squad: {event.squadName ?? "Active Squad"}</span>
               {event.location ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><MapPin className="h-4 w-4" />{event.location}</span> : null}
               {event.focus ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><Star className="h-4 w-4" />{event.focus}</span> : null}
             </div>
@@ -86,6 +87,11 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
 
       <Panel title="Training plan" icon={<ClipboardList className="h-5 w-5" />}>
         <p className="text-sm font-semibold text-board-navy">{trainingPlanStatus(event)}</p>
+        {event.linkedTrainingSessionId ? (
+          <p className="mt-2 rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800">
+            Based on template. This training uses a session snapshot, so session edits do not overwrite the original plan.
+          </p>
+        ) : null}
         {event.linkedTrainingSessionId ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <ButtonLink href={`/sessions/${event.linkedTrainingSessionId}`} variant="secondary" className="h-9 px-3">Open plan</ButtonLink>

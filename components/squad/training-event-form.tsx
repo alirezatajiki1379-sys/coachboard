@@ -5,10 +5,11 @@ import { CalendarPlus, Loader2 } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { createRecurringTrainingEvents, createTrainingEvent, updateTrainingEvent, type TrainingEventActionState } from "@/lib/squad/attendance-actions";
 import { generateRecurringTrainingDates } from "@/lib/trainings/utils";
-import type { SquadPlayer, SquadTrainingEventDetail } from "@/types/domain";
+import type { Squad, SquadPlayer, SquadTrainingEventDetail } from "@/types/domain";
 
 type TrainingEventFormProps = {
   sessions: Array<{ id: string; title: string }>;
+  squads: Squad[];
   participants: SquadPlayer[];
   event?: SquadTrainingEventDetail;
   mode?: "create" | "edit";
@@ -16,7 +17,7 @@ type TrainingEventFormProps = {
 
 const initialState: TrainingEventActionState = {};
 
-export function TrainingEventForm({ sessions, participants, event, mode = "create" }: TrainingEventFormProps) {
+export function TrainingEventForm({ sessions, squads, participants, event, mode = "create" }: TrainingEventFormProps) {
   const action = mode === "edit" ? updateTrainingEvent : createTrainingEvent;
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [recurringState, recurringAction, isRecurringPending] = useActionState(createRecurringTrainingEvents, initialState);
@@ -34,9 +35,10 @@ export function TrainingEventForm({ sessions, participants, event, mode = "creat
         location: event?.location ?? "",
         focus: event?.focus ?? "",
         linkedTrainingSessionId: event?.linkedTrainingSessionId ?? "",
+        squadId: event?.squadId ?? squads.find((squad) => squad.isActive)?.id ?? squads[0]?.id ?? "",
         generalNotes: event?.generalNotes ?? ""
       },
-    [event, state.values]
+    [event, squads, state.values]
   );
   const errors = state.fieldErrors ?? {};
 
@@ -60,6 +62,17 @@ export function TrainingEventForm({ sessions, participants, event, mode = "creat
             <TextInput name="label" label="Title / label" defaultValue={values.label} error={errors.label} placeholder="e.g. Tuesday U11 training" />
             <TextInput name="location" label="Location" defaultValue={values.location} placeholder="e.g. Main pitch" />
             <TextInput name="focus" label="Focus" defaultValue={values.focus} placeholder="e.g. Offensive 1v1" />
+            <label className="block md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">Assigned squad<RequiredMark /></span>
+              <select name="squadId" defaultValue={values.squadId} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+                {squads.map((squad) => (
+                  <option key={squad.id} value={squad.id}>
+                    {squad.name}{squad.isActive ? " (Active Squad)" : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">The assigned squad defines the main team for this concrete training. Participants below are saved as a session snapshot.</p>
+            </label>
             <label className="block md:col-span-2">
               <span className="text-sm font-medium text-slate-700">Training plan</span>
               <select name="linkedTrainingSessionId" defaultValue={values.linkedTrainingSessionId} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
@@ -92,12 +105,12 @@ export function TrainingEventForm({ sessions, participants, event, mode = "creat
           </Button>
         </div>
       </form>
-      {mode === "create" ? <RecurringTrainingPanel state={recurringState} action={recurringAction} isPending={isRecurringPending} participants={participants} /> : null}
+      {mode === "create" ? <RecurringTrainingPanel state={recurringState} action={recurringAction} isPending={isRecurringPending} participants={participants} squads={squads} /> : null}
     </div>
   );
 }
 
-function RecurringTrainingPanel({ state, action, isPending, participants }: { state: TrainingEventActionState; action: (formData: FormData) => void; isPending: boolean; participants: SquadPlayer[] }) {
+function RecurringTrainingPanel({ state, action, isPending, participants, squads }: { state: TrainingEventActionState; action: (formData: FormData) => void; isPending: boolean; participants: SquadPlayer[]; squads: Squad[] }) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [intervalWeeks, setIntervalWeeks] = useState<"1" | "2">("1");
@@ -116,6 +129,16 @@ function RecurringTrainingPanel({ state, action, isPending, participants }: { st
         <TextInput name="label" label="Title / label" defaultValue={state.values?.label ?? ""} placeholder="e.g. U11 team training" />
         <TextInput name="location" label="Location" defaultValue={state.values?.location ?? ""} placeholder="e.g. Main pitch" />
         <TextInput name="focus" label="Focus" defaultValue={state.values?.focus ?? ""} placeholder="e.g. Finishing" />
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">Assigned squad</span>
+          <select name="squadId" defaultValue={state.values?.squadId ?? squads.find((squad) => squad.isActive)?.id ?? squads[0]?.id ?? ""} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+            {squads.map((squad) => (
+              <option key={squad.id} value={squad.id}>
+                {squad.name}{squad.isActive ? " (Active Squad)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="block">
           <span className="text-sm font-medium text-slate-700">Repeat</span>
           <select name="intervalWeeks" value={intervalWeeks} onChange={(event) => setIntervalWeeks(event.target.value as "1" | "2")} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">

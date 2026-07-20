@@ -234,10 +234,33 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["training_session_drills"]["Row"]>;
         Relationships: [];
       };
+      squads: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          is_active: boolean;
+          archived_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          is_active?: boolean;
+          archived_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["squads"]["Insert"]>;
+        Relationships: [];
+      };
       squad_players: {
         Row: {
           id: string;
           user_id: string;
+          squad_id: string | null;
           player_type: "roster" | "trial";
           first_name: string;
           last_name: string | null;
@@ -302,6 +325,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
+          squad_id?: string | null;
           player_type?: "roster" | "trial";
           first_name: string;
           last_name?: string | null;
@@ -446,6 +470,8 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
+          squad_id: string | null;
+          squad_assignment_needs_review: boolean;
           date: string;
           start_time: string;
           end_time: string | null;
@@ -465,6 +491,8 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
+          squad_id?: string | null;
+          squad_assignment_needs_review?: boolean;
           date: string;
           start_time: string;
           end_time?: string | null;
@@ -482,6 +510,51 @@ export type Database = {
           deleted_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["squad_training_events"]["Insert"]>;
+        Relationships: [];
+      };
+      training_session_plan_instances: {
+        Row: {
+          id: string;
+          user_id: string;
+          event_id: string;
+          source_training_session_id: string | null;
+          source_updated_at: string | null;
+          title: string;
+          snapshot_json: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["training_session_plan_instances"]["Row"]> & {
+          user_id: string;
+          event_id: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["training_session_plan_instances"]["Row"]>;
+        Relationships: [];
+      };
+      training_session_drill_instances: {
+        Row: {
+          id: string;
+          user_id: string;
+          event_id: string;
+          plan_instance_id: string | null;
+          source_training_session_drill_id: string | null;
+          source_drill_id: string | null;
+          source_drill_updated_at: string | null;
+          title: string;
+          block: string | null;
+          order_index: number;
+          planned_duration_minutes: number | null;
+          snapshot_json: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["training_session_drill_instances"]["Row"]> & {
+          user_id: string;
+          event_id: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["training_session_drill_instances"]["Row"]>;
         Relationships: [];
       };
       squad_attendance_records: {

@@ -5,10 +5,13 @@ import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
 export type SquadTrainingEventRow = Database["public"]["Tables"]["squad_training_events"]["Row"];
 export type SquadAttendanceRow = Database["public"]["Tables"]["squad_attendance_records"]["Row"];
 
-export function mapTrainingEventRow(row: SquadTrainingEventRow, linkedTitle?: string): SquadTrainingEvent {
+export function mapTrainingEventRow(row: SquadTrainingEventRow, linkedTitle?: string, squadName?: string): SquadTrainingEvent {
   return {
     id: row.id,
     userId: row.user_id,
+    squadId: row.squad_id ?? undefined,
+    squadName,
+    squadNeedsReview: row.squad_assignment_needs_review,
     date: row.date,
     startTime: row.start_time.slice(0, 5),
     endTime: row.end_time?.slice(0, 5) ?? undefined,

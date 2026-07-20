@@ -181,6 +181,7 @@ export type TrainingSession = {
 export type SquadPlayer = {
   id: string;
   userId: string;
+  squadId?: string;
   playerType: "roster" | "trial";
   firstName: string;
   lastName?: string;
@@ -238,6 +239,16 @@ export type SquadPlayer = {
   onboardingWarnings: string[];
   notes?: string;
   convertedAt?: string;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Squad = {
+  id: string;
+  userId: string;
+  name: string;
+  isActive: boolean;
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -339,6 +350,9 @@ export type SquadAttendanceEntry = {
 export type SquadTrainingEvent = {
   id: string;
   userId: string;
+  squadId?: string;
+  squadName?: string;
+  squadNeedsReview?: boolean;
   date: string;
   startTime: string;
   endTime?: string;

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { TrainingEventForm } from "@/components/squad/training-event-form";
 import { getLinkableTrainingSessions, getTrainingEventDetail, listTrainingParticipantOptions } from "@/lib/squad/attendance-queries";
+import { listSquads } from "@/lib/squad/squads";
 import { createClient } from "@/lib/supabase/server";
 
 type EditTrainingPageProps = {
@@ -18,9 +19,10 @@ export default async function EditTrainingPage({ params }: EditTrainingPageProps
 
   if (!user) redirect("/login");
 
-  const [event, sessions, participants] = await Promise.all([
+  const [event, sessions, squads, participants] = await Promise.all([
     getTrainingEventDetail(supabase, user.id, id),
     getLinkableTrainingSessions(supabase, user.id),
+    listSquads(supabase, user.id),
     listTrainingParticipantOptions(supabase, user.id)
   ]);
 
@@ -37,7 +39,7 @@ export default async function EditTrainingPage({ params }: EditTrainingPageProps
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Edit training</h1>
         <p className="mt-2 text-slate-600">Adjust appointment details and participants without changing recorded attendance history.</p>
       </div>
-      <TrainingEventForm sessions={sessions} participants={participants} event={event} mode="edit" />
+      <TrainingEventForm sessions={sessions} squads={squads} participants={participants} event={event} mode="edit" />
     </div>
   );
 }

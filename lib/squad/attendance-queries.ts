@@ -11,6 +11,7 @@ import type { SquadTrainingEvent, SquadTrainingEventDetail } from "@/types/domai
 import type { PlayerMedicalPeriod } from "@/types/domain";
 import { isMedicalPeriodActiveOnDate, latestApplicableMedicalPeriod, medicalLabel, medicalNeedsReview, medicalReasonForType } from "@/lib/squad/player-hub";
 import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
+import { ensureActiveSquad } from "@/lib/squad/squads";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -20,11 +21,15 @@ type LinkedSessionRow = {
   duration_target_minutes?: number | null;
 };
 
+type SquadNameRow = {
+  name?: string | null;
+};
+
 export async function listTrainingEvents(supabase: SupabaseServerClient, userId: string): Promise<SquadTrainingEvent[]> {
   const db = supabase as unknown as SupabaseClient;
   const { data, error } = await db
     .from("squad_training_events")
-    .select("*, training_sessions(id, title, duration_target_minutes)")
+    .select("*, training_sessions(id, title, duration_target_minutes), squads(name)")
     .eq("user_id", userId)
     .is("archived_at", null)
     .is("deleted_at", null)
@@ -32,9 +37,9 @@ export async function listTrainingEvents(supabase: SupabaseServerClient, userId:
     .order("start_time", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return ((data ?? []) as Array<SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }>).map((row) =>
+  return ((data ?? []) as Array<SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null; squads?: SquadNameRow | null }>).map((row) =>
     {
-      const mapped = mapTrainingEventRow(row, row.training_sessions?.title);
+      const mapped = mapTrainingEventRow(row, row.training_sessions?.title, row.squads?.name ?? undefined);
       return { ...mapped, linkedTrainingSessionDuration: row.training_sessions?.duration_target_minutes ?? undefined };
     }
   );
@@ -71,7 +76,7 @@ export async function getTrainingEventDetail(
   const db = supabase as unknown as SupabaseClient;
   const { data: eventData, error } = await db
     .from("squad_training_events")
-    .select("*, training_sessions(id, title, duration_target_minutes)")
+    .select("*, training_sessions(id, title, duration_target_minutes), squads(name)")
     .eq("user_id", userId)
     .eq("id", eventId)
     .maybeSingle();
@@ -99,7 +104,8 @@ export async function getTrainingEventDetail(
 
   const event = mapTrainingEventRow(
     eventData as SquadTrainingEventRow,
-    (eventData as SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }).training_sessions?.title
+    (eventData as SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }).training_sessions?.title,
+    (eventData as SquadTrainingEventRow & { squads?: SquadNameRow | null }).squads?.name ?? undefined
   );
 
   const linked = (eventData as SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }).training_sessions;
@@ -170,8 +176,9 @@ export async function getLinkableTrainingSessions(supabase: SupabaseServerClient
   return (data ?? []) as LinkedSessionRow[];
 }
 
-export async function listTrainingParticipantOptions(supabase: SupabaseServerClient, userId: string) {
+export async function listTrainingParticipantOptions(supabase: SupabaseServerClient, userId: string, squadId?: string) {
   const db = supabase as unknown as SupabaseClient;
+  const activeSquad = squadId ? undefined : await ensureActiveSquad(supabase, userId);
   const { data, error } = await db
     .from("squad_players")
     .select("*")
@@ -181,7 +188,9 @@ export async function listTrainingParticipantOptions(supabase: SupabaseServerCli
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
   if (error) throw new Error(error.message);
+  const targetSquadId = squadId ?? activeSquad?.id;
   return ((data ?? []) as SquadPlayerRow[])
+    .filter((player) => !targetSquadId || !player.squad_id || player.squad_id === targetSquadId)
     .filter((player) => player.player_type === "roster" || (player.player_type === "trial" && !player.converted_at))
     .map(mapSquadPlayerRow);
 }

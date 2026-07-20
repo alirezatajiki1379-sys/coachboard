@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { TrainingEventForm } from "@/components/squad/training-event-form";
 import { createClient } from "@/lib/supabase/server";
 import { getLinkableTrainingSessions, listTrainingParticipantOptions } from "@/lib/squad/attendance-queries";
+import { listSquads } from "@/lib/squad/squads";
 
 export default async function NewTrainingEventPage() {
   const supabase = await createClient();
@@ -13,8 +14,9 @@ export default async function NewTrainingEventPage() {
 
   if (!user) redirect("/login");
 
-  const [sessions, participants] = await Promise.all([
+  const [sessions, squads, participants] = await Promise.all([
     getLinkableTrainingSessions(supabase, user.id),
+    listSquads(supabase, user.id),
     listTrainingParticipantOptions(supabase, user.id)
   ]);
 
@@ -29,7 +31,7 @@ export default async function NewTrainingEventPage() {
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">New training</h1>
         <p className="mt-2 text-slate-600">Create the real appointment your players will attend.</p>
       </div>
-      <TrainingEventForm sessions={sessions} participants={participants} />
+      <TrainingEventForm sessions={sessions} squads={squads} participants={participants} />
     </div>
   );
 }
