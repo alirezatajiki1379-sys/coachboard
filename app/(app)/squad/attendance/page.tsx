@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
+import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
 import { TrainingEventCard } from "@/components/squad/training-event-card";
@@ -17,20 +18,18 @@ export default async function AttendancePage() {
   const events = await listTrainingEventDetails(supabase, user.id);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase text-board-green">Squad</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Trainings</h1>
-          <p className="mt-2 max-w-2xl text-slate-600">
-            Plan actual training appointments, prepare availability, and run quick mobile check-in.
-          </p>
-        </div>
-        <ButtonLink href="/trainings/new" className="justify-center">
+    <PageContainer width="wide">
+      <PageHeader
+        eyebrow="Squad"
+        title="Trainings"
+        description="Plan actual training appointments, prepare availability, and run quick mobile check-in."
+        actions={(
+          <ButtonLink href="/trainings/new" className="justify-center">
           <Plus className="h-4 w-4" />
           New training
-        </ButtonLink>
-      </div>
+          </ButtonLink>
+        )}
+      />
 
       <SquadNav />
 
@@ -47,6 +46,6 @@ export default async function AttendancePage() {
           </div>
         )}
       </section>
-    </div>
+    </PageContainer>
   );
 }

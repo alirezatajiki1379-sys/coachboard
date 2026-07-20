@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClipboardCheck, Search, Target } from "lucide-react";
+import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
 import {
@@ -38,12 +39,8 @@ export default async function SquadDevelopmentPage({ searchParams }: Development
   const { goals, stats } = await getDevelopmentOverview(supabase, user.id, filters);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold uppercase text-board-green">Squad</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Development</h1>
-        <p className="mt-2 max-w-3xl text-slate-600">Track player goals, actions, observations and review dates.</p>
-      </div>
+    <PageContainer width="wide">
+      <PageHeader eyebrow="Squad" title="Development" description="Track player goals, actions, observations and review dates." />
       <SquadNav />
 
       <section className="grid gap-3 md:grid-cols-3">
@@ -113,7 +110,7 @@ export default async function SquadDevelopmentPage({ searchParams }: Development
           </div>
         )}
       </section>
-    </div>
+    </PageContainer>
   );
 }
 

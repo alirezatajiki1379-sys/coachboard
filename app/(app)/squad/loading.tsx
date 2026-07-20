@@ -1,6 +1,8 @@
+import { PageContainer } from "@/components/layout/page";
+
 export default function SquadLoading() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading Coach Workspace">
+    <PageContainer width="wide" aria-busy="true" aria-label="Loading Coach Workspace">
       <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="h-4 w-20 animate-pulse rounded bg-green-100" />
@@ -43,6 +45,6 @@ export default function SquadLoading() {
           </div>
         </div>
       </section>
-    </div>
+    </PageContainer>
   );
 }

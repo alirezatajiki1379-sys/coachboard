@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
 import { eventTimeRange, eventTitle, formatEventDate } from "@/lib/squad/attendance-format";
@@ -16,12 +17,8 @@ export default async function RatingsPage() {
   const events = await listTrainingEvents(supabase, user.id);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold uppercase text-board-green">Squad</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Ratings</h1>
-        <p className="mt-2 text-slate-600">Choose a training to add optional performance ratings and notes.</p>
-      </div>
+    <PageContainer width="wide">
+      <PageHeader eyebrow="Squad" title="Ratings" description="Choose a training to add optional performance ratings and notes." />
       <SquadNav />
       <section className="space-y-3">
         {events.length ? (
@@ -44,6 +41,6 @@ export default async function RatingsPage() {
           </div>
         )}
       </section>
-    </div>
+    </PageContainer>
   );
 }

@@ -21,7 +21,7 @@ type AppShellProps = {
 
 export function AppShell({ children, coachName }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-board-paper">
+    <div className="min-h-screen bg-board-paper [--app-mobile-header-height:7.25rem] [--app-sidebar-width:18rem] [--page-section-gap:1.5rem]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden border-r border-board-line bg-board-navy text-white lg:flex lg:w-72 lg:flex-col">
         <div className="flex h-20 items-center gap-3 px-6">
           <div className="flex h-11 w-11 items-center justify-center rounded-md bg-board-green">
@@ -55,7 +55,7 @@ export function AppShell({ children, coachName }: AppShellProps) {
       </aside>
 
       <div className="min-w-0 lg:pl-72">
-        <header className="sticky top-0 z-10 border-b border-board-line bg-white/90 backdrop-blur lg:hidden">
+        <header className="sticky top-0 z-10 min-h-[var(--app-mobile-header-height)] border-b border-board-line bg-white/90 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between px-4 py-3">
             <Link href="/dashboard" className="flex items-center gap-2 font-bold text-board-navy">
               <span className="flex h-9 w-9 items-center justify-center rounded-md bg-board-green text-white">
@@ -81,7 +81,7 @@ export function AppShell({ children, coachName }: AppShellProps) {
             })}
           </nav>
         </header>
-        <main className="mx-auto w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6 lg:py-6">{children}</main>
+        <main className="app-main mx-auto w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6 lg:py-6">{children}</main>
       </div>
     </div>
   );

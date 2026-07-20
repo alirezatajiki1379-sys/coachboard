@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowDown, ArrowUp, Bell, Clock, Settings2 } from "lucide-react";
+import { PageContainer, PageHeader } from "@/components/layout/page";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { clearAttentionState, dismissAttentionItem, resetAttentionSettings, saveAttentionSettings, snoozeAttentionItem } from "@/lib/squad/attention-actions";
@@ -73,16 +74,13 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
   const returnTo = attentionHref(data.state, {});
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase text-board-green">Coach Intelligence</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Action Center</h1>
-          <p className="mt-2 max-w-3xl text-slate-600">
-            Rules-based coaching reminders from your squad data. Every item shows the evidence and the threshold behind it.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <PageContainer width="wide">
+      <PageHeader
+        eyebrow="Coach Intelligence"
+        title="Action Center"
+        description="Rules-based coaching reminders from your squad data. Every item shows the evidence and the threshold behind it."
+        actions={(
+          <>
           <ButtonLink href={attentionHref(data.state, {})} variant="secondary">
             <Clock className="h-4 w-4" />
             Refresh
@@ -91,8 +89,9 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
             <Settings2 className="h-4 w-4" />
             Settings
           </ButtonLink>
-        </div>
-      </section>
+          </>
+        )}
+      />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <SummaryCard label="Open items" value={data.summary.open} href={attentionHref(data.state, { status: "open", priority: "all", category: "all" })} />
@@ -116,7 +115,7 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
       </section>
 
       <AttentionSettings data={data} returnTo={returnTo} />
-    </div>
+    </PageContainer>
   );
 }
 

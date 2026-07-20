@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { CalendarPlus } from "lucide-react";
+import { PageContainer, PageHeader, PageTabs } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { TrainingEventCard } from "@/components/squad/training-event-card";
 import { createClient } from "@/lib/supabase/server";
@@ -32,22 +33,20 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
   const events = sortTrainings(filterTrainings(await listTrainingEventDetails(supabase, user.id), filter));
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase text-board-green">Trainings</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Training calendar</h1>
-          <p className="mt-2 max-w-2xl text-slate-600">
-            Concrete training appointments with availability, check-in, ratings, trial players, and an optional training plan.
-          </p>
-        </div>
-        <ButtonLink href="/trainings/new" className="justify-center">
+    <PageContainer width="wide">
+      <PageHeader
+        eyebrow="Trainings"
+        title="Training calendar"
+        description="Concrete training appointments with availability, check-in, ratings, trial players, and an optional training plan."
+        actions={(
+          <ButtonLink href="/trainings/new" className="justify-center">
           <CalendarPlus className="h-4 w-4" />
           Create training
-        </ButtonLink>
-      </div>
+          </ButtonLink>
+        )}
+      />
 
-      <nav className="flex gap-2 overflow-x-auto rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label="Training filters">
+      <PageTabs label="Training filters">
         {filters.map((item) => (
           <ButtonLink
             key={item.id}
@@ -58,7 +57,7 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
             {item.label}
           </ButtonLink>
         ))}
-      </nav>
+      </PageTabs>
 
       <section className={events.length ? "space-y-4" : ""}>
         {events.length ? (
@@ -73,6 +72,6 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
           </div>
         )}
       </section>
-    </div>
+    </PageContainer>
   );
 }

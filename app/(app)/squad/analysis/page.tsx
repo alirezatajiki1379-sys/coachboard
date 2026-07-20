@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { ArrowUpDown, CalendarCheck, Filter, Info, Minus, Printer, Star, TrendingDown, TrendingUp, UserCheck, Users } from "lucide-react";
+import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
 import {
@@ -68,20 +69,18 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
   const activeFilters = countActiveFilters(filters);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase text-board-green">Squad</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Analytics</h1>
-          <p className="mt-2 max-w-3xl text-slate-600">
-            Compare player availability, performance ratings, reliability and manual coach assessments without mixing observations with automatic decisions.
-          </p>
-        </div>
+    <PageContainer width="wide">
+      <PageHeader
+        eyebrow="Squad"
+        title="Analytics"
+        description="Compare player availability, performance ratings, reliability and manual coach assessments without mixing observations with automatic decisions."
+        actions={(
         <ButtonLink href="#analytics-help" variant="secondary" className="justify-center">
           <Info className="h-4 w-4" />
           How analytics are calculated
         </ButtonLink>
-      </div>
+        )}
+      />
 
       <SquadNav />
 
@@ -235,7 +234,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
           </div>
         </details>
       </section>
-    </div>
+    </PageContainer>
   );
 }
 

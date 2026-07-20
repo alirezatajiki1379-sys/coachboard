@@ -1,18 +1,5 @@
 import Link from "next/link";
-import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  BarChart3,
-  CalendarDays,
-  Eye,
-  FileSpreadsheet,
-  Plus,
-  Search,
-  Stethoscope,
-  Target,
-  UserRound
-} from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, CalendarDays, Eye, Search, Stethoscope, Target, UserRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import {
@@ -73,32 +60,6 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
 
   return (
     <div className="space-y-6">
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase text-board-green">Squad</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Coach Workspace</h1>
-          <p className="mt-2 max-w-3xl text-slate-600">
-            Review your squad, identify players who need attention and open the right Player Hub when deeper context is needed.
-          </p>
-          <p className="mt-3 text-sm font-semibold text-slate-700">
-            {data.counts.active} active players · {data.counts.roster} roster · {data.counts.trial} trial
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <ButtonLink href={workspaceHref(data.state, { customize: true })} variant="secondary" className="justify-center">
-            Customize columns
-          </ButtonLink>
-          <ButtonLink href="/squad/players/new" className="justify-center">
-            <Plus className="h-4 w-4" />
-            Add player
-          </ButtonLink>
-          <ButtonLink href="/squad/import" variant="secondary" className="justify-center">
-            <FileSpreadsheet className="h-4 w-4" />
-            Import players
-          </ButtonLink>
-        </div>
-      </section>
-
       <section className="rounded-lg border border-board-line bg-white p-3 shadow-soft">
         <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Coach Workspace quick views">
           {quickViews.map((item) => (

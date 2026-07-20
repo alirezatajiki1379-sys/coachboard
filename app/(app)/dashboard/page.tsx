@@ -1,6 +1,7 @@
 import { Bell, CalendarDays, CalendarPlus, ClipboardList, Dumbbell, LibraryBig, Shapes, Target } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { createClient } from "@/lib/supabase/server";
@@ -90,18 +91,13 @@ export default async function DashboardPage() {
   const topFocus = Object.entries(focusCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Add drills to learn";
 
   return (
-    <div className="space-y-8">
-      <section className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <p className="text-sm font-semibold uppercase text-board-green">Dashboard</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy sm:text-4xl">
-            Welcome back, Coach
-          </h1>
-          <p className="mt-2 max-w-2xl text-slate-600">
-            Plan concrete trainings, prepare attendance, rate players, and build reusable training plans.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
+    <PageContainer width="wide" className="space-y-8">
+      <PageHeader
+        eyebrow="Dashboard"
+        title="Welcome back, Coach"
+        description="Plan concrete trainings, prepare attendance, rate players, and build reusable training plans."
+        actions={(
+          <>
           <ButtonLink href="/drills/new">
             <Dumbbell className="h-4 w-4" />
             {en.actions.createDrill}
@@ -118,8 +114,9 @@ export default async function DashboardPage() {
             <CalendarDays className="h-4 w-4" />
             Training plans
           </ButtonLink>
-        </div>
-      </section>
+          </>
+        )}
+      />
 
       {nextTraining ? (
         <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
@@ -344,6 +341,6 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
-    </div>
+    </PageContainer>
   );
 }

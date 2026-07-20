@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageTabs } from "@/components/layout/page";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -11,7 +12,7 @@ const items = [
 
 export function SquadNav() {
   return (
-    <nav className="flex flex-wrap gap-2 rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label="Squad sections">
+    <PageTabs label="Squad sections" className="flex-wrap">
       {items.map((item) => (
         <Link
           key={item.href}
@@ -21,6 +22,6 @@ export function SquadNav() {
           {item.label}
         </Link>
       ))}
-    </nav>
+    </PageTabs>
   );
 }
