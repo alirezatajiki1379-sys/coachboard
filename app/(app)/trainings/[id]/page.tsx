@@ -43,6 +43,8 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
             <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-slate-600">
               <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><CalendarDays className="h-4 w-4" />{event.date} · {trainingTimeRange(event)}</span>
               <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-4 w-4" />Team: {event.squadName ?? "Active Team"}</span>
+              {event.recurrenceSeriesId ? <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">Recurring Training</span> : null}
+              {event.isSeriesException ? <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">Series exception</span> : null}
               {event.deletedAt ? <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">In Trash</span> : null}
               {event.location ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><MapPin className="h-4 w-4" />{event.location}</span> : null}
               {event.focus ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><Star className="h-4 w-4" />{event.focus}</span> : null}
@@ -52,7 +54,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
           <div className="flex flex-wrap gap-2">
             {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/check-in`} className="justify-center">Quick check-in</ButtonLink> : null}
             {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="justify-center">Ratings</ButtonLink> : null}
-            <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} isTrash={Boolean(event.deletedAt)} />
+            <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} isTrash={Boolean(event.deletedAt)} isRecurring={Boolean(event.recurrenceSeriesId)} />
             {!event.deletedAt ? <CompleteEventButton eventId={event.id} /> : null}
           </div>
         </div>

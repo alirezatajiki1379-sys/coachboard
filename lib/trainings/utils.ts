@@ -9,6 +9,15 @@ export type RecurringTrainingInput = {
   intervalWeeks: 1 | 2;
 };
 
+export type TrainingRecurrenceInput = {
+  startDate: string;
+  intervalWeeks: number;
+  weekdays: number[];
+  endMode: "date" | "occurrence_count";
+  endDate?: string;
+  occurrenceCount?: number;
+};
+
 export function seasonLabelForDate(date: string, startMonth = 7, startDay = 1) {
   const parsed = parseDateOnly(date);
   if (!parsed) return "";
@@ -94,6 +103,54 @@ export function generateRecurringTrainingDates(input: RecurringTrainingInput) {
     dates.push(new Date(time).toISOString().slice(0, 10));
   }
   return dates;
+}
+
+export function weekdayForDate(date: string) {
+  const parsed = parseDateOnly(date);
+  if (!parsed) return 1;
+  const day = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day)).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+export function generateTrainingRecurrenceDates(input: TrainingRecurrenceInput) {
+  const start = parseDateOnly(input.startDate);
+  if (!start) return [];
+  const intervalWeeks = Number.isFinite(input.intervalWeeks) && input.intervalWeeks > 0 ? Math.floor(input.intervalWeeks) : 1;
+  const weekdays = Array.from(new Set(input.weekdays.filter((day) => day >= 1 && day <= 7))).sort((a, b) => a - b);
+  if (!weekdays.length) return [];
+  const limit = input.endMode === "occurrence_count" ? Math.max(0, Math.floor(input.occurrenceCount ?? 0)) : 500;
+  if (input.endMode === "occurrence_count" && !limit) return [];
+  const end = input.endMode === "date" ? parseDateOnly(input.endDate ?? "") : null;
+  if (input.endMode === "date" && !end) return [];
+  const startDate = Date.UTC(start.year, start.month - 1, start.day);
+  const endDate = end ? Date.UTC(end.year, end.month - 1, end.day) : Number.POSITIVE_INFINITY;
+  if (endDate < startDate) return [];
+  const anchorWeekStart = startDate - (weekdayForDate(input.startDate) - 1) * 24 * 60 * 60 * 1000;
+  const dates: string[] = [];
+  const maxIterations = 800;
+  for (let weekIndex = 0; weekIndex < maxIterations; weekIndex += intervalWeeks) {
+    for (const weekday of weekdays) {
+      const time = anchorWeekStart + (weekIndex * 7 + weekday - 1) * 24 * 60 * 60 * 1000;
+      if (time < startDate) continue;
+      if (time > endDate) return dates;
+      dates.push(new Date(time).toISOString().slice(0, 10));
+      if (input.endMode === "occurrence_count" && dates.length >= limit) return dates;
+    }
+  }
+  return dates;
+}
+
+export function recurrenceSummary(input: TrainingRecurrenceInput, timeRange: string) {
+  const dates = generateTrainingRecurrenceDates(input);
+  if (!dates.length) return "Choose valid recurrence settings to preview the series.";
+  const weekdayNames = input.weekdays
+    .filter((day) => day >= 1 && day <= 7)
+    .sort((a, b) => a - b)
+    .map((day) => ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][day - 1]);
+  const dayText = weekdayNames.length === 1 ? weekdayNames[0] : `${weekdayNames.slice(0, -1).join(", ")} and ${weekdayNames.at(-1)}`;
+  const interval = input.intervalWeeks === 1 ? "every week" : `every ${input.intervalWeeks} weeks`;
+  const endText = input.endMode === "date" ? `until ${formatDateLabel(input.endDate ?? "")}` : `for ${input.occurrenceCount} sessions`;
+  return `Repeats ${interval} on ${dayText}, ${timeRange}, from ${formatDateLabel(input.startDate)} ${endText}. ${dates.length} Training Sessions will be created.`;
 }
 
 export function trainingSummaryCounts(event: SquadTrainingEventDetail) {

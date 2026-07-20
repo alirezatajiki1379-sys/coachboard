@@ -353,6 +353,11 @@ export type SquadTrainingEvent = {
   squadId?: string;
   squadName?: string;
   squadNeedsReview?: boolean;
+  recurrenceSeriesId?: string;
+  recurrenceSequence?: number;
+  isSeriesException: boolean;
+  exceptionType?: string;
+  recurrenceOriginalDate?: string;
   date: string;
   startTime: string;
   endTime?: string;

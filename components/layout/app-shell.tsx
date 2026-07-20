@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Settings, Shield, UsersRound } from "lucide-react";
+import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Settings, UsersRound } from "lucide-react";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { TeamSwitcher } from "@/components/layout/team-switcher";
 import { en } from "@/lib/i18n/en";
@@ -7,7 +7,6 @@ import type { Squad } from "@/types/domain";
 
 const navItems = [
   { href: "/dashboard", label: en.nav.dashboard, icon: LayoutDashboard },
-  { href: "/teams", label: "Teams", icon: Shield },
   { href: "/trainings", label: en.nav.trainings, icon: CalendarDays },
   { href: "/sessions", label: en.nav.trainingPlans, icon: ClipboardList },
   { href: "/drills", label: en.nav.drills, icon: Dumbbell },

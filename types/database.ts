@@ -466,12 +466,61 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["player_import_rows"]["Insert"]>;
         Relationships: [];
       };
+      training_recurrence_series: {
+        Row: {
+          id: string;
+          user_id: string;
+          squad_id: string | null;
+          title: string | null;
+          default_start_time: string;
+          default_end_time: string | null;
+          default_location: string | null;
+          default_focus: string | null;
+          frequency: "weekly";
+          interval_weeks: number;
+          weekdays: number[];
+          starts_on: string;
+          ends_on: string | null;
+          occurrence_limit: number | null;
+          end_mode: "date" | "occurrence_count";
+          status: "active" | "ended" | "paused";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          squad_id?: string | null;
+          title?: string | null;
+          default_start_time: string;
+          default_end_time?: string | null;
+          default_location?: string | null;
+          default_focus?: string | null;
+          frequency?: "weekly";
+          interval_weeks?: number;
+          weekdays?: number[];
+          starts_on: string;
+          ends_on?: string | null;
+          occurrence_limit?: number | null;
+          end_mode?: "date" | "occurrence_count";
+          status?: "active" | "ended" | "paused";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["training_recurrence_series"]["Insert"]>;
+        Relationships: [];
+      };
       squad_training_events: {
         Row: {
           id: string;
           user_id: string;
           squad_id: string | null;
           squad_assignment_needs_review: boolean;
+          recurrence_series_id: string | null;
+          recurrence_sequence: number | null;
+          is_series_exception: boolean;
+          exception_type: string | null;
+          recurrence_original_date: string | null;
           date: string;
           start_time: string;
           end_time: string | null;
@@ -493,6 +542,11 @@ export type Database = {
           user_id: string;
           squad_id?: string | null;
           squad_assignment_needs_review?: boolean;
+          recurrence_series_id?: string | null;
+          recurrence_sequence?: number | null;
+          is_series_exception?: boolean;
+          exception_type?: string | null;
+          recurrence_original_date?: string | null;
           date: string;
           start_time: string;
           end_time?: string | null;

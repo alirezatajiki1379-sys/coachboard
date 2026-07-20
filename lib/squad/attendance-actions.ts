@@ -7,14 +7,14 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
 import { isMedicalPeriodActiveOnDate, medicalReasonForType } from "@/lib/squad/player-hub";
 import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
-import { generateRecurringTrainingDates, seasonLabelForDate } from "@/lib/trainings/utils";
+import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, seasonLabelForDate, weekdayForDate } from "@/lib/trainings/utils";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 export type TrainingEventActionState = {
   error?: string;
-  fieldErrors?: Partial<Record<"date" | "startTime" | "endDate" | "label", string>>;
+  fieldErrors?: Partial<Record<"date" | "startTime" | "endDate" | "label" | "repeatWeekdays" | "repeatEndDate" | "repeatOccurrenceCount" | "repeatIntervalWeeks", string>>;
   values?: {
     date: string;
     startTime: string;
@@ -25,6 +25,14 @@ export type TrainingEventActionState = {
     linkedTrainingSessionId: string;
     squadId: string;
     generalNotes: string;
+    repeatMode?: string;
+    repeatIntervalWeeks?: string;
+    repeatWeekdays?: string[];
+    repeatEndMode?: string;
+    repeatEndDate?: string;
+    repeatOccurrenceCount?: string;
+    planApplyMode?: string;
+    editScope?: string;
   };
   submissionId?: number;
 };
@@ -62,6 +70,32 @@ function selectedParticipantIds(formData: FormData) {
   return Array.from(new Set(formData.getAll("participantIds").filter((value): value is string => typeof value === "string" && Boolean(value))));
 }
 
+function selectedValues(formData: FormData, key: string) {
+  return Array.from(new Set(formData.getAll(key).filter((value): value is string => typeof value === "string" && Boolean(value))));
+}
+
+function parseRecurrence(values: NonNullable<TrainingEventActionState["values"]>) {
+  const repeatMode = values.repeatMode === "weekly" || values.repeatMode === "two_weeks" || values.repeatMode === "custom" ? values.repeatMode : "none";
+  const intervalWeeks =
+    repeatMode === "two_weeks"
+      ? 2
+      : Math.max(1, Number.parseInt(values.repeatIntervalWeeks ?? "1", 10) || 1);
+  const weekdayFallback = values.date ? [weekdayForDate(values.date)] : [];
+  const weekdays = repeatMode === "none"
+    ? []
+    : (values.repeatWeekdays?.length ? values.repeatWeekdays : weekdayFallback.map(String))
+      .map((day) => Number.parseInt(day, 10))
+      .filter((day) => Number.isFinite(day) && day >= 1 && day <= 7);
+  const endMode = values.repeatEndMode === "occurrence_count" ? "occurrence_count" as const : "date" as const;
+  return {
+    enabled: repeatMode !== "none",
+    intervalWeeks,
+    weekdays: Array.from(new Set(weekdays)),
+    endMode,
+    occurrenceCount: Number.parseInt(values.repeatOccurrenceCount ?? "", 10) || 0
+  };
+}
+
 function boundedRating(value: string) {
   const parsed = numberOrNull(value);
   return parsed && parsed >= 1 && parsed <= 5 ? parsed : null;
@@ -90,12 +124,27 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
     focus: formString(formData, "focus"),
     linkedTrainingSessionId: formString(formData, "linkedTrainingSessionId"),
     squadId: formString(formData, "squadId"),
-    generalNotes: formString(formData, "generalNotes")
+    generalNotes: formString(formData, "generalNotes"),
+    repeatMode: formString(formData, "repeatMode") || "none",
+    repeatIntervalWeeks: formString(formData, "repeatIntervalWeeks") || "1",
+    repeatWeekdays: selectedValues(formData, "repeatWeekdays"),
+    repeatEndMode: formString(formData, "repeatEndMode") || "date",
+    repeatEndDate: formString(formData, "repeatEndDate"),
+    repeatOccurrenceCount: formString(formData, "repeatOccurrenceCount") || "10",
+    planApplyMode: formString(formData, "planApplyMode") || "none"
   };
   const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
   if (!values.date) fieldErrors.date = "Choose the training date.";
   if (!values.startTime) fieldErrors.startTime = "Add the start time.";
   if (values.endTime && values.startTime && values.endTime < values.startTime) fieldErrors.startTime = "End time cannot be before the start time.";
+  const recurrence = parseRecurrence(values);
+  if (recurrence.enabled) {
+    if (!recurrence.weekdays.length) fieldErrors.repeatWeekdays = "Choose at least one weekday.";
+    if (recurrence.intervalWeeks < 1) fieldErrors.repeatIntervalWeeks = "Repeat interval must be greater than zero.";
+    if (recurrence.endMode === "date" && !values.repeatEndDate) fieldErrors.repeatEndDate = "Choose an end date.";
+    if (recurrence.endMode === "date" && values.repeatEndDate && values.repeatEndDate < values.date) fieldErrors.repeatEndDate = "End date cannot be before the first training.";
+    if (recurrence.endMode === "occurrence_count" && (!recurrence.occurrenceCount || recurrence.occurrenceCount < 1)) fieldErrors.repeatOccurrenceCount = "Add a number greater than zero.";
+  }
 
   if (Object.keys(fieldErrors).length) {
     return { error: "Please fix the highlighted event details.", fieldErrors, values, submissionId: Date.now() };
@@ -104,6 +153,70 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
   const squadId = await resolveOwnedSquadId(supabase, user.id, values.squadId);
+  if (recurrence.enabled) {
+    const dates = generateTrainingRecurrenceDates({
+      startDate: values.date,
+      intervalWeeks: recurrence.intervalWeeks,
+      weekdays: recurrence.weekdays,
+      endMode: recurrence.endMode,
+      endDate: values.repeatEndDate,
+      occurrenceCount: recurrence.occurrenceCount
+    });
+    if (!dates.length) return { error: "The recurrence does not create any Training Sessions.", fieldErrors: { repeatEndDate: "Check the recurrence end condition." }, values, submissionId: Date.now() };
+
+    const { data: series, error: seriesError } = await db
+      .from("training_recurrence_series")
+      .insert({
+        user_id: user.id,
+        squad_id: squadId,
+        title: optional(values.label),
+        default_start_time: values.startTime,
+        default_end_time: optional(values.endTime),
+        default_location: optional(values.location),
+        default_focus: optional(values.focus),
+        frequency: "weekly",
+        interval_weeks: recurrence.intervalWeeks,
+        weekdays: recurrence.weekdays,
+        starts_on: values.date,
+        ends_on: recurrence.endMode === "date" ? optional(values.repeatEndDate) : null,
+        occurrence_limit: recurrence.endMode === "occurrence_count" ? recurrence.occurrenceCount : null,
+        end_mode: recurrence.endMode,
+        status: "active"
+      })
+      .select("id")
+      .single();
+    if (seriesError) return { error: seriesError.message, values, submissionId: Date.now() };
+
+    const rows = dates.map((date, index) => ({
+      user_id: user.id,
+      squad_id: squadId,
+      recurrence_series_id: series.id,
+      recurrence_sequence: index + 1,
+      is_series_exception: false,
+      date,
+      start_time: values.startTime,
+      end_time: optional(values.endTime),
+      label: optional(values.label),
+      location: optional(values.location),
+      focus: optional(values.focus),
+      season_label: seasonLabelForDate(date),
+      linked_training_session_id: values.planApplyMode === "all" || (values.planApplyMode === "first" && index === 0) ? optional(values.linkedTrainingSessionId) : null,
+      general_notes: optional(values.generalNotes),
+      status: "draft"
+    }));
+    const { data: createdEvents, error: createError } = await db.from("squad_training_events").insert(rows).select("id,date");
+    if (createError) return { error: createError.message, values, submissionId: Date.now() };
+    const selectedIds = selectedParticipantIds(formData);
+    for (const event of (createdEvents ?? []) as Array<{ id: string; date: string }>) {
+      await syncTrainingParticipants(db, user.id, event.id, event.date, selectedIds, { removeUnselected: false, squadId });
+      if (values.linkedTrainingSessionId && (values.planApplyMode === "all" || (values.planApplyMode === "first" && event.id === createdEvents?.[0]?.id))) {
+        await createSessionPlanSnapshot(db, user.id, event.id, values.linkedTrainingSessionId);
+      }
+    }
+    revalidatePath("/trainings");
+    revalidatePath("/squad/attendance");
+    redirect("/trainings");
+  }
   const { data, error } = await db
     .from("squad_training_events")
     .insert({
@@ -144,7 +257,8 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
     focus: formString(formData, "focus"),
     linkedTrainingSessionId: formString(formData, "linkedTrainingSessionId"),
     squadId: formString(formData, "squadId"),
-    generalNotes: formString(formData, "generalNotes")
+    generalNotes: formString(formData, "generalNotes"),
+    editScope: formString(formData, "editScope") || "single"
   };
   const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
   if (!eventId) return { error: "Missing training event.", values, submissionId: Date.now() };
@@ -157,6 +271,14 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const { data: originalEvent, error: originalError } = await db
+    .from("squad_training_events")
+    .select("id,date,recurrence_series_id")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (originalError) return { error: originalError.message, values, submissionId: Date.now() };
+  if (!originalEvent) return { error: "Training event not found.", values, submissionId: Date.now() };
   const squadId = await resolveOwnedSquadId(supabase, user.id, values.squadId);
   const { error } = await db
     .from("squad_training_events")
@@ -171,13 +293,59 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
       focus: optional(values.focus),
       season_label: seasonLabelForDate(values.date),
       linked_training_session_id: optional(values.linkedTrainingSessionId),
-      general_notes: optional(values.generalNotes)
+      general_notes: optional(values.generalNotes),
+      is_series_exception: originalEvent.recurrence_series_id ? values.editScope !== "future" : false,
+      exception_type: originalEvent.recurrence_series_id && values.editScope !== "future" ? "edited" : null,
+      recurrence_original_date: originalEvent.recurrence_series_id && values.editScope !== "future" && values.date !== originalEvent.date ? originalEvent.date : null
     })
     .eq("id", eventId)
     .eq("user_id", user.id);
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
   await syncTrainingParticipants(db, user.id, eventId, values.date, selectedParticipantIds(formData), { squadId });
+  if (originalEvent.recurrence_series_id && values.editScope === "future") {
+    const { data: futureEvents, error: futureError } = await db
+      .from("squad_training_events")
+      .select("id,date")
+      .eq("user_id", user.id)
+      .eq("recurrence_series_id", originalEvent.recurrence_series_id)
+      .gte("date", originalEvent.date)
+      .is("deleted_at", null)
+      .neq("status", "completed");
+    if (futureError) return { error: futureError.message, values, submissionId: Date.now() };
+    const futureIds = ((futureEvents ?? []) as Array<{ id: string; date: string }>).map((event) => event.id).filter((id) => id !== eventId);
+    if (futureIds.length) {
+      const { error: futureUpdateError } = await db
+        .from("squad_training_events")
+        .update({
+          start_time: values.startTime,
+          end_time: optional(values.endTime),
+          label: optional(values.label),
+          location: optional(values.location),
+          focus: optional(values.focus),
+          linked_training_session_id: optional(values.linkedTrainingSessionId),
+          general_notes: optional(values.generalNotes)
+        })
+        .eq("user_id", user.id)
+        .in("id", futureIds);
+      if (futureUpdateError) return { error: futureUpdateError.message, values, submissionId: Date.now() };
+      for (const futureEvent of (futureEvents ?? []) as Array<{ id: string; date: string }>) {
+        if (futureEvent.id === eventId) continue;
+        await syncTrainingParticipants(db, user.id, futureEvent.id, futureEvent.date, selectedParticipantIds(formData), { squadId });
+      }
+    }
+    await db
+      .from("training_recurrence_series")
+      .update({
+        title: optional(values.label),
+        default_start_time: values.startTime,
+        default_end_time: optional(values.endTime),
+        default_location: optional(values.location),
+        default_focus: optional(values.focus)
+      })
+      .eq("id", originalEvent.recurrence_series_id)
+      .eq("user_id", user.id);
+  }
   if (values.linkedTrainingSessionId) await createSessionPlanSnapshot(db, user.id, eventId, values.linkedTrainingSessionId);
   revalidateEvent(eventId);
   revalidatePath("/trainings");
@@ -243,9 +411,24 @@ export async function createRecurringTrainingEvents(_: TrainingEventActionState,
 
 export async function deleteTrainingEvent(formData: FormData) {
   const eventId = formString(formData, "eventId");
+  const deleteScope = formString(formData, "deleteScope");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  const { error } = await db.from("squad_training_events").update({ deleted_at: new Date().toISOString() }).eq("id", eventId).eq("user_id", user.id);
+  const { data: event, error: eventError } = await db
+    .from("squad_training_events")
+    .select("date,recurrence_series_id")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (eventError) throw new Error(eventError.message);
+  const deletedAt = new Date().toISOString();
+  let query = db.from("squad_training_events").update({ deleted_at: deletedAt }).eq("user_id", user.id);
+  if (deleteScope === "future" && event?.recurrence_series_id) {
+    query = query.eq("recurrence_series_id", event.recurrence_series_id).gte("date", event.date);
+  } else {
+    query = query.eq("id", eventId);
+  }
+  const { error } = await query;
   if (error) throw new Error(error.message);
   revalidatePath("/trainings");
   revalidatePath("/squad/attendance");

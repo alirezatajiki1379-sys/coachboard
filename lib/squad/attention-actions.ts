@@ -1,11 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   defaultAttentionPreferences,
   normalizeAttentionPreferences,
-  revalidateAttentionPaths,
   type AttentionPreferences,
   type AttentionType
 } from "@/lib/squad/attention";
@@ -38,6 +38,13 @@ async function requireUser() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   return { supabase: supabase as unknown as SupabaseClient, user };
+}
+
+function revalidateAttentionPaths(playerId?: string) {
+  revalidatePath("/actions");
+  revalidatePath("/dashboard");
+  revalidatePath("/squad");
+  if (playerId) revalidatePath(`/squad/players/${playerId}`);
 }
 
 export async function saveAttentionSettings(formData: FormData) {

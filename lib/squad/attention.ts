@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { revalidatePath } from "next/cache";
 import type { AnalyticsPeriod } from "@/lib/squad/analytics";
 import { formatEventDate } from "@/lib/squad/attendance-format";
 import type { WorkspacePlayerSummary } from "@/lib/squad/workspace";
@@ -569,13 +568,6 @@ export function attentionTone(priority: AttentionPriority): "green" | "amber" | 
   if (priority === "medium") return "amber";
   if (priority === "low") return "neutral";
   return "green";
-}
-
-export function revalidateAttentionPaths(playerId?: string) {
-  revalidatePath("/actions");
-  revalidatePath("/dashboard");
-  revalidatePath("/squad");
-  if (playerId) revalidatePath(`/squad/players/${playerId}`);
 }
 
 export function filterAttentionItems(items: AttentionItem[], state: AttentionCenterState) {

@@ -32,6 +32,7 @@ export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/a
             {event.location ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><MapPin className="h-3.5 w-3.5" />{event.location}</span> : null}
             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-3.5 w-3.5" />Team: {event.squadName ?? "Active Team"}</span>
             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><UsersRound className="h-3.5 w-3.5" />{attendance.length} total</span>
+            {event.recurrenceSeriesId ? <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">Recurring</span> : null}
             {event.deletedAt ? <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">In Trash</span> : null}
           </div>
           <TrainingStatusSummary
@@ -61,7 +62,7 @@ export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/a
         <div className="relative z-10 flex flex-wrap gap-2">
           {!event.deletedAt ? <ButtonLink href={detailHref} variant="secondary" className="h-9 px-3">Open</ButtonLink> : null}
           {!event.deletedAt ? <ButtonLink href={`${hrefBase}/${event.id}/check-in`} className="h-9 px-3">Check-in</ButtonLink> : null}
-          <TrainingEventActions eventId={event.id} attendanceCount={attendance.length} compact isTrash={Boolean(event.deletedAt)} />
+          <TrainingEventActions eventId={event.id} attendanceCount={attendance.length} compact isTrash={Boolean(event.deletedAt)} isRecurring={Boolean(event.recurrenceSeriesId)} />
         </div>
       </div>
     </article>

@@ -203,6 +203,61 @@ export async function moveWorkspaceSavedView(formData: FormData) {
   redirect(`/squad?savedView=${savedViewId}`);
 }
 
+export async function saveWorkspaceColumnOrder(input: {
+  view: WorkspaceView;
+  savedViewId?: string;
+  columnOrder: string[];
+}) {
+  const { supabase, user } = await requireUser();
+  const fallback = defaultWorkspaceConfiguration(input.view);
+  const allowed = new Set<string>(workspaceColumns.map((column) => column.id));
+  const requested = input.columnOrder.filter((id): id is WorkspaceConfiguration["columnOrder"][number] => allowed.has(id));
+  const locked = workspaceColumns.filter((column) => column.required).map((column) => column.id);
+  const rest = requested.filter((id) => !locked.includes(id));
+  const missing = workspaceColumns.map((column) => column.id).filter((id) => !locked.includes(id) && !rest.includes(id));
+  const columnOrder = [...locked, ...rest, ...missing] as WorkspaceConfiguration["columnOrder"];
+
+  if (input.savedViewId) {
+    const { data } = await supabase
+      .from("coach_workspace_views")
+      .select("*")
+      .eq("id", input.savedViewId)
+      .eq("user_id", user.id)
+      .eq("kind", "saved")
+      .maybeSingle();
+    if (!data) return { ok: false, error: "Saved view not found." };
+    const config = normalizeWorkspaceConfiguration(data.configuration, input.view);
+    const { error } = await supabase
+      .from("coach_workspace_views")
+      .update({ configuration: { ...config, columnOrder } })
+      .eq("id", input.savedViewId)
+      .eq("user_id", user.id)
+      .eq("kind", "saved");
+    if (error) return { ok: false, error: "The new column order could not be saved." };
+    revalidatePath("/squad");
+    return { ok: true };
+  }
+
+  const existing = await getSystemOverride(supabase, user.id, input.view);
+  const config = existing?.configuration ?? fallback;
+  const payload = {
+    user_id: user.id,
+    name: `System override: ${input.view}`,
+    kind: "system",
+    system_view_id: input.view,
+    configuration: { ...config, columnOrder },
+    display_order: 0,
+    is_default: existing?.isDefault ?? false
+  };
+  const query = existing
+    ? supabase.from("coach_workspace_views").update(payload).eq("id", existing.id).eq("user_id", user.id)
+    : supabase.from("coach_workspace_views").insert(payload);
+  const { error } = await query;
+  if (error) return { ok: false, error: "The new column order could not be saved." };
+  revalidatePath("/squad");
+  return { ok: true };
+}
+
 function parseConfigurationForm(formData: FormData, view: WorkspaceView, state: ReturnType<typeof parseWorkspaceState>): WorkspaceConfiguration {
   const current = configurationFromState(state, defaultWorkspaceConfiguration(view));
   const visibleColumns = workspaceColumns
