@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import type { DragEvent } from "react";
 import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, CalendarDays, Eye, GripVertical, Search, Stethoscope, Target, UserRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -66,6 +66,19 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   const [columnOrderMessage, setColumnOrderMessage] = useState("");
   const [isSavingColumnOrder, startColumnOrderSave] = useTransition();
   const columns = useMemo(() => visibleDesktopColumns(data, columnOrder), [data, columnOrder]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(data.selected?.analytics.player.id ?? data.players[0]?.analytics.player.id ?? null);
+  const selectedPlayer = useMemo(
+    () => data.players.find((player) => player.analytics.player.id === selectedPlayerId) ?? data.selected ?? data.players[0],
+    [data.players, data.selected, selectedPlayerId]
+  );
+
+  useEffect(() => {
+    if (!data.players.length) {
+      setSelectedPlayerId(null);
+      return;
+    }
+    setSelectedPlayerId((current) => data.players.some((player) => player.analytics.player.id === current) ? current : data.players[0].analytics.player.id);
+  }, [data.players]);
 
   function persistColumnOrder(nextOrder: typeof columnOrder, previousOrder: typeof columnOrder) {
     setColumnOrder(nextOrder);
@@ -130,13 +143,13 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
                   {grouped.map((group) => (
                     <section key={group.label} className="rounded-lg border border-board-line bg-white shadow-soft">
                       <h3 className="border-b border-board-line px-4 py-3 text-sm font-bold uppercase tracking-wide text-slate-500">{group.label}</h3>
-                      <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} />
+                      <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={setSelectedPlayerId} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} />
                     </section>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-lg border border-board-line bg-white shadow-soft">
-                  <WorkspaceTable data={data} players={data.players} columns={columns} columnOrder={columnOrder} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} />
+                  <WorkspaceTable data={data} players={data.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={setSelectedPlayerId} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} />
                 </div>
               )
             ) : (
@@ -145,13 +158,13 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
           </div>
 
           <div className="space-y-3 xl:hidden">
-            {data.players.length ? data.players.map((player) => <WorkspaceMobileCard key={player.analytics.player.id} data={data} player={player} />) : <WorkspaceEmpty data={data} />}
+            {data.players.length ? data.players.map((player) => <WorkspaceMobileCard key={player.analytics.player.id} data={data} player={player} selected={selectedPlayer?.analytics.player.id === player.analytics.player.id} onSelectPlayer={setSelectedPlayerId} />) : <WorkspaceEmpty data={data} />}
           </div>
         </div>
 
         {data.configuration.inspectorMode === "open" ? <aside className="hidden xl:block">
           <div className="sticky top-6">
-            <InspectorPanel player={data.selected} returnTo={workspaceHref(data.state, {})} />
+            <InspectorPanel player={selectedPlayer} returnTo={workspaceHref(data.state, { selectedPlayer: selectedPlayer?.analytics.player.id })} />
           </div>
         </aside> : null}
       </section>
@@ -567,6 +580,8 @@ function WorkspaceTable({
   players,
   columns,
   columnOrder,
+  selectedPlayerId,
+  onSelectPlayer,
   onColumnOrderChange,
   isSavingColumnOrder
 }: {
@@ -574,6 +589,8 @@ function WorkspaceTable({
   players: WorkspacePlayerSummary[];
   columns: WorkspaceColumnDefinition[];
   columnOrder: WorkspaceColumnDefinition["id"][];
+  selectedPlayerId?: string;
+  onSelectPlayer: (playerId: string) => void;
   onColumnOrderChange: (nextOrder: WorkspaceColumnDefinition["id"][], previousOrder: WorkspaceColumnDefinition["id"][]) => void;
   isSavingColumnOrder: boolean;
 }) {
@@ -621,41 +638,105 @@ function WorkspaceTable({
           </tr>
         </thead>
         <tbody>
-          {players.map((player) => <WorkspaceRow key={player.analytics.player.id} data={data} player={player} columns={columns} draggedColumn={draggedColumn} />)}
+          {players.map((player) => (
+            <WorkspaceRow
+              key={player.analytics.player.id}
+              data={data}
+              player={player}
+              columns={columns}
+              selected={selectedPlayerId === player.analytics.player.id}
+              draggedColumn={draggedColumn}
+              onSelectPlayer={onSelectPlayer}
+            />
+          ))}
         </tbody>
       </table>
     </div>
   );
 }
 
-function WorkspaceRow({ data, player, columns, draggedColumn }: { data: WorkspaceData; player: WorkspacePlayerSummary; columns: WorkspaceColumnDefinition[]; draggedColumn?: WorkspaceColumnDefinition["id"] | null }) {
+function WorkspaceRow({
+  data,
+  player,
+  columns,
+  selected,
+  draggedColumn,
+  onSelectPlayer
+}: {
+  data: WorkspaceData;
+  player: WorkspacePlayerSummary;
+  columns: WorkspaceColumnDefinition[];
+  selected: boolean;
+  draggedColumn?: WorkspaceColumnDefinition["id"] | null;
+  onSelectPlayer: (playerId: string) => void;
+}) {
   const summary = player.analytics;
-  const selected = data.selected?.analytics.player.id === summary.player.id;
   return (
-    <tr aria-selected={selected} className={cn("border-b border-board-line align-top last:border-b-0", selected ? "bg-green-50/60" : "hover:bg-slate-50")}>
+    <tr
+      aria-selected={selected}
+      tabIndex={0}
+      onClick={() => onSelectPlayer(summary.player.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelectPlayer(summary.player.id);
+        }
+      }}
+      className={cn(
+        "cursor-pointer border-b border-board-line align-top outline-none transition last:border-b-0 focus-visible:ring-2 focus-visible:ring-board-green/30",
+        selected ? "bg-green-50/80 shadow-[inset_4px_0_0_#16a34a]" : "hover:bg-slate-50"
+      )}
+    >
       {columns.map((column) => <td key={column.id} className={cn(cellClass(data, column.sortable), draggedColumn === column.id && "bg-green-50/70 outline outline-1 outline-board-green/20")}>{renderColumnCell(column.id, data, player)}</td>)}
       <td className="px-3 py-3">
-        <ButtonLink href={workspaceHref(data.state, { selectedPlayer: summary.player.id })} variant="secondary" className="h-8 px-2">Select</ButtonLink>
+        <Button type="button" variant="secondary" className="h-8 px-2" onClick={(event) => {
+          event.stopPropagation();
+          onSelectPlayer(summary.player.id);
+        }}>Select</Button>
       </td>
     </tr>
   );
 }
 
-function WorkspaceMobileCard({ data, player }: { data: WorkspaceData; player: WorkspacePlayerSummary }) {
+function WorkspaceMobileCard({ data, player, selected, onSelectPlayer }: { data: WorkspaceData; player: WorkspacePlayerSummary; selected: boolean; onSelectPlayer: (playerId: string) => void }) {
   const summary = player.analytics;
   const priority = data.configuration.mobileMetrics.map((metric) => mobileMetric(metric, player)).filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 4);
   return (
-    <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+    <article
+      role="button"
+      aria-pressed={selected}
+      tabIndex={0}
+      onClick={() => onSelectPlayer(summary.player.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelectPlayer(summary.player.id);
+        }
+      }}
+      className={cn(
+        "cursor-pointer rounded-lg border bg-white p-4 shadow-soft outline-none transition focus-visible:ring-2 focus-visible:ring-board-green/30",
+        selected ? "border-board-green bg-green-50/50" : "border-board-line"
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-board-navy">{playerName(summary.player)}</h2>
+          <h2 className="text-lg font-bold text-board-navy">
+            <Link
+              href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))}
+              aria-label={`Open ${playerName(summary.player)} profile`}
+              className="rounded underline-offset-4 hover:text-board-green hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-board-green/30"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {playerName(summary.player)}
+            </Link>
+          </h2>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge tone={summary.player.playerType === "trial" ? "amber" : "neutral"}>{summary.player.playerType === "trial" ? "Trial" : "Roster"}</Badge>
             <Badge>{summary.player.position ?? "No position"}</Badge>
             <StatusDot player={player} compact />
           </div>
         </div>
-        <Link href={playerHubHref(summary.player.id, workspaceHref(data.state, {}))} className="rounded-md bg-board-green px-3 py-2 text-sm font-bold text-white">Open</Link>
+        <Link href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))} onClick={(event) => event.stopPropagation()} className="rounded-md bg-board-green px-3 py-2 text-sm font-bold text-white">Open</Link>
       </div>
       {(data.configuration.showAttentionIndicators || data.state.view === "needs-attention") && player.attention.length ? (
         <div className="mt-3 flex flex-wrap gap-2">

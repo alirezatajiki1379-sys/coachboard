@@ -2,6 +2,7 @@
 
 import { Check, Clock3, HelpCircle, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { developmentCategoryLabel, developmentGoalCategories } from "@/config/development";
 import { createPlayerObservation } from "@/lib/squad/development-actions";
@@ -12,12 +13,16 @@ import {
   markAllExpected,
   updateAttendanceRating,
   updateFinalAttendance,
+  updateFinalAttendanceInline,
   updatePlannedAttendance
 } from "@/lib/squad/attendance-actions";
+import type { AttendanceMutationResult } from "@/lib/squad/attendance-actions";
 import { updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
+import { attendanceCounts } from "@/lib/squad/attendance-format";
 import { attendanceReasonLabels } from "@/lib/squad/attendance-utils";
-import type { PlayerDevelopmentGoal, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus } from "@/types/domain";
+import { cn } from "@/lib/utils";
+import type { PlayerDevelopmentGoal, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus, SquadTrainingEventDetail } from "@/types/domain";
 
 const plannedButtons: Array<{ status: SquadPlannedAttendanceStatus; label: string; icon: typeof Check; className: string }> = [
   { status: "expected", label: "Expected", icon: Check, className: "bg-green-600 text-white hover:bg-green-700" },
@@ -34,6 +39,89 @@ const absenceOptions: Array<{ status: SquadFinalAttendanceStatus; label: string 
   { status: "S", label: "Late cancellation" },
   { status: "U", label: "Unexcused" }
 ];
+
+type CheckInFilter = "all" | "present" | "absent" | "late" | "roster" | "trial";
+
+const checkInFilterLabels: Record<CheckInFilter, string> = {
+  all: "All",
+  present: "Present",
+  absent: "Absent",
+  late: "Late",
+  roster: "Roster",
+  trial: "Trial players"
+};
+
+export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTrainingEventDetail; initialFilter?: CheckInFilter }) {
+  const [entries, setEntries] = useState(event.attendance);
+  const [filter, setFilter] = useState<CheckInFilter>(initialFilter);
+  useEffect(() => setEntries(event.attendance), [event.attendance]);
+  const counts = attendanceCounts(entries);
+  const presentEntries = entries.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
+  const visibleEntries = entries.filter((entry) => {
+    if (filter === "present") return entry.finalStatus === "present" || entry.finalStatus === "Z";
+    if (filter === "late") return entry.finalStatus === "Z";
+    if (filter === "absent") return Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z");
+    if (filter === "roster") return entry.player?.playerType !== "trial";
+    if (filter === "trial") return entry.player?.playerType === "trial";
+    return true;
+  });
+
+  function updateEntry(nextEntry: SquadAttendanceEntry) {
+    setEntries((current) => current.map((entry) => entry.id === nextEntry.id ? nextEntry : entry));
+  }
+
+  return (
+    <>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <CheckInMetric label="Present" value={counts.present} tone="success" />
+        <CheckInMetric label="Absent" value={counts.absent} tone="danger" />
+        <CheckInMetric label="Late" value={counts.late} tone="warning" />
+        <CheckInMetric label="Total" value={entries.length} />
+      </div>
+      {presentEntries.length ? (
+        <p className="mt-3 text-xs font-semibold text-slate-500">
+          {counts.goalkeepersPresent} GK present · {counts.trialPlayersPresent} trial player{counts.trialPlayersPresent === 1 ? "" : "s"} present
+        </p>
+      ) : null}
+      {entries.length ? <div className="mt-4"><CheckInActions eventId={event.id} /></div> : null}
+
+      {entries.length ? (
+        <nav className="mt-5 flex gap-2 overflow-x-auto rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label="Check-in filters">
+          {(Object.keys(checkInFilterLabels) as CheckInFilter[]).map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setFilter(item)}
+              className={cn(
+                "shrink-0 rounded-md px-3 py-2 text-sm font-semibold transition",
+                filter === item ? "bg-board-green text-white" : "text-slate-600 hover:bg-slate-100 hover:text-board-navy"
+              )}
+            >
+              {checkInFilterLabels[item]}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+
+      <section className="mt-5 space-y-3">
+        {entries.length ? (
+          visibleEntries.length ? (
+            visibleEntries.map((entry) => <CheckInRow key={entry.id} entry={entry} eventId={event.id} eventDate={event.date} onEntryChange={updateEntry} />)
+          ) : (
+            <p className="rounded-lg border border-dashed border-board-line bg-white p-5 text-center text-sm font-semibold text-slate-500 shadow-soft">
+              No players match this filter.
+            </p>
+          )
+        ) : (
+          <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
+            <h2 className="font-bold text-board-navy">No players to check in</h2>
+            <p className="mt-2 text-sm text-slate-600">Go back to the event and add squad or trial players first.</p>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
 
 export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry: SquadAttendanceEntry; eventId: string; returnTo: string }) {
   return (
@@ -134,11 +222,19 @@ export function MarkAllExpectedButton({ eventId }: { eventId: string }) {
   );
 }
 
-export function CheckInRow({ entry, eventId, eventDate }: { entry: SquadAttendanceEntry; eventId: string; eventDate: string }) {
-  const isLate = entry.finalStatus === "Z";
-  const isAbsent = Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z");
-  const statusTone = entry.finalStatus
-    ? entry.finalStatus === "present" || entry.finalStatus === "Z"
+export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry: SquadAttendanceEntry; eventId: string; eventDate: string; onEntryChange?: (entry: SquadAttendanceEntry) => void }) {
+  const [currentEntry, setCurrentEntry] = useState(entry);
+  const [error, setError] = useState("");
+  useEffect(() => setCurrentEntry(entry), [entry]);
+  const entryWithState = currentEntry;
+  function handleEntryChange(nextEntry: SquadAttendanceEntry) {
+    setCurrentEntry(nextEntry);
+    onEntryChange?.(nextEntry);
+  }
+  const isLate = entryWithState.finalStatus === "Z";
+  const isAbsent = Boolean(entryWithState.finalStatus && entryWithState.finalStatus !== "present" && entryWithState.finalStatus !== "Z");
+  const statusTone = entryWithState.finalStatus
+    ? entryWithState.finalStatus === "present" || entryWithState.finalStatus === "Z"
       ? "bg-green-50 text-green-700"
       : "bg-red-50 text-red-700"
     : "bg-amber-50 text-amber-700";
@@ -149,41 +245,42 @@ export function CheckInRow({ entry, eventId, eventDate }: { entry: SquadAttendan
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-lg font-bold text-board-navy">
-              {attendanceDisplayName(entry)}
-              {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
+              {attendanceDisplayName(entryWithState)}
+              {entryWithState.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
-              {entry.player?.position ? <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entry.player.position}</span> : null}
-              {entry.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Trial player</span> : null}
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Planned: {plannedStatusLabel(entry.plannedStatus)}</span>
-              <span className={`rounded-full px-2 py-1 ${statusTone}`}>Actual: {finalStatusLabel(entry.finalStatus)}</span>
-              {entry.medicalAvailability ? (
+              {entryWithState.player?.position ? <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entryWithState.player.position}</span> : null}
+              {entryWithState.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Trial player</span> : null}
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Planned: {plannedStatusLabel(entryWithState.plannedStatus)}</span>
+              <span className={`rounded-full px-2 py-1 ${statusTone}`}>Actual: {finalStatusLabel(entryWithState.finalStatus)}</span>
+              {entryWithState.medicalAvailability ? (
                 <span className="rounded-full bg-red-50 px-2 py-1 text-red-700">
-                  {entry.medicalAvailability.label}
-                  {entry.medicalAvailability.needsReview ? " · review" : ""}
+                  {entryWithState.medicalAvailability.label}
+                  {entryWithState.medicalAvailability.needsReview ? " · review" : ""}
                 </span>
               ) : null}
             </div>
-            {entry.coachNote ? <p className="mt-2 text-sm text-slate-600">{entry.coachNote}</p> : null}
+            {entryWithState.coachNote ? <p className="mt-2 text-sm text-slate-600">{entryWithState.coachNote}</p> : null}
+            {error ? <p className="mt-2 text-sm font-semibold text-red-700" role="alert">{error}</p> : null}
           </div>
           <div className="flex w-full gap-2 sm:w-auto">
-            <FinalStatusButton entry={entry} eventId={eventId} status="present" label="Present" icon={<Check className="h-4 w-4" />} />
-            <FinalStatusButton entry={entry} eventId={eventId} status="Z" label="Late" icon={<Clock3 className="h-4 w-4" />} />
-            <FinalStatusButton entry={entry} eventId={eventId} status="absent" label="Absent" icon={<UserMinus className="h-4 w-4" />} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="present" label="Present" icon={<Check className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="Z" label="Late" icon={<Clock3 className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="absent" label="Absent" icon={<UserMinus className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
           </div>
         </div>
         {isLate ? (
           <form action={updateFinalAttendance} className="grid gap-2 rounded-md bg-amber-50 p-3 sm:grid-cols-[120px_150px_auto] sm:items-end">
             <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="attendanceId" value={entry.id} />
+            <input type="hidden" name="attendanceId" value={entryWithState.id} />
             <input type="hidden" name="finalStatus" value="Z" />
             <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
             <label>
               <span className="text-xs font-bold uppercase text-amber-700">Late minutes</span>
-              <input name="lateMinutes" type="number" min="0" defaultValue={entry.lateMinutes ?? ""} className="mt-1 h-10 w-full rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+              <input name="lateMinutes" type="number" min="0" defaultValue={entryWithState.lateMinutes ?? ""} className="mt-1 h-10 w-full rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
             </label>
             <label className="flex h-10 items-center gap-2 rounded-md border border-amber-200 bg-white px-3 text-sm font-semibold text-slate-600">
-              <input name="latePenaltyApplied" type="checkbox" defaultChecked={entry.latePenaltyApplied} className="h-4 w-4" />
+              <input name="latePenaltyApplied" type="checkbox" defaultChecked={entryWithState.latePenaltyApplied} className="h-4 w-4" />
               Reliability penalty
             </label>
             <Button type="submit" variant="secondary" className="h-10">Save late details</Button>
@@ -192,25 +289,25 @@ export function CheckInRow({ entry, eventId, eventDate }: { entry: SquadAttendan
         {isAbsent ? (
           <form action={updateFinalAttendance} className="grid gap-2 rounded-md bg-red-50 p-3 sm:grid-cols-[minmax(180px,1fr)_auto] sm:items-end">
             <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="attendanceId" value={entry.id} />
+            <input type="hidden" name="attendanceId" value={entryWithState.id} />
             <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
             <label>
               <span className="text-xs font-bold uppercase text-red-700">Optional absence reason</span>
-              <select name="finalStatus" defaultValue={entry.finalStatus ?? "absent"} className="mt-1 h-10 w-full rounded-md border border-red-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+              <select name="finalStatus" defaultValue={entryWithState.finalStatus ?? "absent"} className="mt-1 h-10 w-full rounded-md border border-red-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
                 {absenceOptions.map((option) => <option key={option.status} value={option.status}>{option.label}</option>)}
               </select>
             </label>
             <Button type="submit" variant="secondary" className="h-10">Save absence</Button>
           </form>
         ) : null}
-        {entry.medicalAvailability?.periodId && (entry.finalStatus === "present" || entry.finalStatus === "Z") ? (
+        {entryWithState.medicalAvailability?.periodId && (entryWithState.finalStatus === "present" || entryWithState.finalStatus === "Z") ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
             <p className="text-sm font-bold text-amber-900">This player still has an active medical absence.</p>
             <p className="mt-1 text-sm text-amber-800">Mark as returned, or keep the medical status active.</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <form action={updatePlayerMedicalPeriodStatus} className="flex flex-col gap-2 sm:flex-row">
-                <input type="hidden" name="playerId" value={entry.playerId} />
-                <input type="hidden" name="periodId" value={entry.medicalAvailability.periodId} />
+                <input type="hidden" name="playerId" value={entryWithState.playerId} />
+                <input type="hidden" name="periodId" value={entryWithState.medicalAvailability.periodId} />
                 <input type="hidden" name="status" value="completed" />
                 <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
                 <input name="actualReturnDate" type="date" defaultValue={eventDate} className="h-10 rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
@@ -311,8 +408,25 @@ export function CompleteEventButton({ eventId }: { eventId: string }) {
   );
 }
 
-function FinalStatusButton({ entry, eventId, status, label, icon }: { entry: SquadAttendanceEntry; eventId: string; status: SquadFinalAttendanceStatus; label: string; icon: ReactNode }) {
+function FinalStatusButton({
+  entry,
+  eventId,
+  status,
+  label,
+  icon,
+  onOptimisticEntry,
+  onError
+}: {
+  entry: SquadAttendanceEntry;
+  eventId: string;
+  status: SquadFinalAttendanceStatus;
+  label: string;
+  icon: ReactNode;
+  onOptimisticEntry: (entry: SquadAttendanceEntry) => void;
+  onError: (message: string) => void;
+}) {
   const active = entry.finalStatus === status;
+  const [isPending, startTransition] = useTransition();
   const tone =
     status === "present"
       ? "bg-green-600 text-white hover:bg-green-700"
@@ -325,21 +439,65 @@ function FinalStatusButton({ entry, eventId, status, label, icon }: { entry: Squ
       : status === "Z"
         ? "bg-white text-amber-700 ring-1 ring-amber-200 hover:bg-amber-50"
         : "bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50";
+  function updateStatus() {
+    if (isPending || active) return;
+    const previous = entry;
+    const optimistic: SquadAttendanceEntry = {
+      ...entry,
+      finalStatus: status,
+      lateMinutes: status === "Z" ? entry.lateMinutes : undefined,
+      latePenaltyApplied: status === "Z" ? entry.latePenaltyApplied : true
+    };
+    onError("");
+    onOptimisticEntry(optimistic);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set("eventId", eventId);
+      formData.set("attendanceId", entry.id);
+      formData.set("finalStatus", status);
+      if (status === "Z" && entry.latePenaltyApplied) formData.set("latePenaltyApplied", "on");
+      const result = await updateFinalAttendanceInline(formData) as AttendanceMutationResult;
+      if (!result.ok) {
+        onOptimisticEntry(previous);
+        onError(result.message || "Attendance could not be updated. The previous status was restored.");
+        return;
+      }
+      onOptimisticEntry({
+        ...optimistic,
+        finalStatus: result.status,
+        lateMinutes: result.lateMinutes ?? undefined,
+        latePenaltyApplied: result.latePenaltyApplied
+      });
+    });
+  }
+
   return (
-    <form action={updateFinalAttendance} className="flex-1 sm:flex-none">
-      <input type="hidden" name="eventId" value={eventId} />
-      <input type="hidden" name="attendanceId" value={entry.id} />
-      <input type="hidden" name="finalStatus" value={status} />
-      <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
-      <button
-        type="submit"
-        aria-pressed={active}
-        className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition sm:w-auto ${active ? tone : idle}`}
-      >
-        {icon}
-        {label}
-      </button>
-    </form>
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-busy={isPending}
+      disabled={isPending || active}
+      onClick={updateStatus}
+      className={`inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70 sm:flex-none sm:w-auto ${active ? tone : idle}`}
+    >
+      {icon}
+      {isPending ? "Saving..." : label}
+    </button>
+  );
+}
+
+function CheckInMetric({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "success" | "warning" | "danger" }) {
+  const styles = {
+    neutral: "bg-slate-50 text-board-navy",
+    success: "bg-green-50 text-green-700",
+    warning: "bg-amber-50 text-amber-700",
+    danger: "bg-red-50 text-red-700"
+  };
+  return (
+    <div className={`rounded-md px-3 py-3 ${styles[tone]}`}>
+      <p className="text-xs font-bold uppercase tracking-wide opacity-75">{label}</p>
+      <p className="mt-1 text-2xl font-bold">{value}</p>
+    </div>
   );
 }
 

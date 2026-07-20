@@ -41,6 +41,22 @@ const plannedStatuses = ["expected", "unavailable", "unclear"] as const;
 const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U"] as const;
 const finalStatuses = ["present", "absent", "Z", "V", "K", "E", "P", "S", "U"] as const;
 
+export type AttendanceMutationResult =
+  | {
+      ok: true;
+      attendanceId: string;
+      playerId: string;
+      status: (typeof finalStatuses)[number];
+      lateMinutes: number | null;
+      latePenaltyApplied: boolean;
+      updatedAt: string;
+    }
+  | {
+      ok: false;
+      code: string;
+      message: string;
+    };
+
 async function requireUser() {
   const supabase = await createClient();
   const {
@@ -644,6 +660,7 @@ export async function updateFinalAttendance(formData: FormData) {
   if (!finalStatuses.includes(finalStatus as (typeof finalStatuses)[number])) redirect(eventPath(eventId));
 
   const lateMinutes = finalStatus === "Z" ? numberOrNull(formString(formData, "lateMinutes")) : null;
+  const latePenaltyApplied = finalStatus === "Z" ? formData.get("latePenaltyApplied") === "on" : true;
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
   const { error } = await db
@@ -651,7 +668,7 @@ export async function updateFinalAttendance(formData: FormData) {
     .update({
       final_status: finalStatus,
       late_minutes: lateMinutes,
-      late_penalty_applied: finalStatus === "Z" ? formData.get("latePenaltyApplied") === "on" : true
+      late_penalty_applied: latePenaltyApplied
     })
     .eq("id", attendanceId)
     .eq("event_id", eventId)
@@ -661,6 +678,48 @@ export async function updateFinalAttendance(formData: FormData) {
   await markEventInProgress(db, user.id, eventId);
   revalidateEvent(eventId);
   redirect(formString(formData, "returnTo") || eventPath(eventId));
+}
+
+export async function updateFinalAttendanceInline(formData: FormData): Promise<AttendanceMutationResult> {
+  const eventId = formString(formData, "eventId");
+  const attendanceId = formString(formData, "attendanceId");
+  const finalStatus = formString(formData, "finalStatus");
+  if (!finalStatuses.includes(finalStatus as (typeof finalStatuses)[number])) {
+    return attendanceMutationError("invalid_status", "Attendance could not be updated.");
+  }
+
+  const lateMinutes = finalStatus === "Z" ? numberOrNull(formString(formData, "lateMinutes")) : null;
+  const latePenaltyApplied = finalStatus === "Z" ? formData.get("latePenaltyApplied") === "on" : true;
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const validation = await validateAttendanceMutation(db, user.id, eventId, attendanceId);
+  if (!validation.ok) return validation;
+
+  const { data, error } = await db
+    .from("squad_attendance_records")
+    .update({
+      final_status: finalStatus,
+      late_minutes: lateMinutes,
+      late_penalty_applied: latePenaltyApplied
+    })
+    .select("id, player_id, updated_at")
+    .eq("id", attendanceId)
+    .eq("event_id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error) return attendanceMutationError("database_error", "Attendance could not be updated.");
+  if (!data) return attendanceMutationError("not_found", "Attendance record not found.");
+
+  await markEventInProgress(db, user.id, eventId);
+  return {
+    ok: true,
+    attendanceId: data.id,
+    playerId: data.player_id,
+    status: finalStatus as (typeof finalStatuses)[number],
+    lateMinutes,
+    latePenaltyApplied,
+    updatedAt: data.updated_at
+  };
 }
 
 export async function markAllExpectedPresent(formData: FormData) {
@@ -1025,6 +1084,45 @@ async function markEventPrepared(db: SupabaseClient, userId: string, eventId: st
 
 async function markEventInProgress(db: SupabaseClient, userId: string, eventId: string) {
   await db.from("squad_training_events").update({ status: "in_progress" }).eq("id", eventId).eq("user_id", userId).neq("status", "completed");
+}
+
+function attendanceMutationError(code: string, message: string): AttendanceMutationResult {
+  return { ok: false, code, message };
+}
+
+async function validateAttendanceMutation(db: SupabaseClient, userId: string, eventId: string, attendanceId: string): Promise<{ ok: true } | AttendanceMutationResult> {
+  if (!eventId || !attendanceId) return attendanceMutationError("missing_input", "Attendance could not be updated.");
+  const { data: event, error: eventError } = await db
+    .from("squad_training_events")
+    .select("id, squad_id, deleted_at")
+    .eq("id", eventId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (eventError) return attendanceMutationError("event_error", "Training could not be checked.");
+  if (!event || event.deleted_at) return attendanceMutationError("event_not_found", "Training is no longer available.");
+
+  const { data: record, error: recordError } = await db
+    .from("squad_attendance_records")
+    .select("id, player_id")
+    .eq("id", attendanceId)
+    .eq("event_id", eventId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (recordError) return attendanceMutationError("record_error", "Attendance record could not be checked.");
+  if (!record) return attendanceMutationError("record_not_found", "Attendance record not found.");
+
+  const { data: player, error: playerError } = await db
+    .from("squad_players")
+    .select("id, squad_id")
+    .eq("id", record.player_id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (playerError) return attendanceMutationError("player_error", "Player could not be checked.");
+  if (!player) return attendanceMutationError("player_not_found", "Player not found.");
+  if (event.squad_id && player.squad_id !== event.squad_id) {
+    return attendanceMutationError("wrong_team", "Player does not belong to this Team.");
+  }
+  return { ok: true };
 }
 
 async function markEventRatingOpen(db: SupabaseClient, userId: string, eventId: string) {
