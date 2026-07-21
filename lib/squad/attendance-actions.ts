@@ -33,6 +33,7 @@ export type TrainingEventActionState = {
     repeatOccurrenceCount?: string;
     planApplyMode?: string;
     editScope?: string;
+    creationToken?: string;
   };
   submissionId?: number;
 };
@@ -158,7 +159,8 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
     repeatEndMode: formString(formData, "repeatEndMode") || "date",
     repeatEndDate: formString(formData, "repeatEndDate"),
     repeatOccurrenceCount: formString(formData, "repeatOccurrenceCount") || "10",
-    planApplyMode: formString(formData, "planApplyMode") || "none"
+    planApplyMode: formString(formData, "planApplyMode") || "none",
+    creationToken: formString(formData, "creationToken")
   };
   const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
   if (!values.date) fieldErrors.date = "Choose the training date.";
@@ -181,14 +183,14 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
   const db = supabase as unknown as SupabaseClient;
   const squadId = await resolveOwnedSquadId(supabase, user.id, values.squadId);
   if (recurrence.enabled) {
-    const dates = generateTrainingRecurrenceDates({
+    const dates = uniqueSortedDates(generateTrainingRecurrenceDates({
       startDate: values.date,
       intervalWeeks: recurrence.intervalWeeks,
       weekdays: recurrence.weekdays,
       endMode: recurrence.endMode,
       endDate: values.repeatEndDate,
       occurrenceCount: recurrence.occurrenceCount
-    });
+    }));
     if (!dates.length) return { error: "The recurrence does not create any Training Sessions.", fieldErrors: { repeatEndDate: "Check the recurrence end condition." }, values, submissionId: Date.now() };
     const excludedDates = new Set(selectedValues(formData, "excludeOccurrenceDate"));
     const keptDates = dates.filter((date) => !excludedDates.has(date));
@@ -218,11 +220,17 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
         ends_on: recurrence.endMode === "date" ? optional(values.repeatEndDate) : null,
         occurrence_limit: recurrence.endMode === "occurrence_count" ? recurrence.occurrenceCount : null,
         end_mode: recurrence.endMode,
+        creation_token: values.creationToken || null,
         status: "active"
       })
       .select("id")
       .single();
-    if (seriesError) return { error: seriesError.message, values, submissionId: Date.now() };
+    if (seriesError) {
+      const message = seriesError.message.includes("training_recurrence_series_user_squad_creation_token_unique")
+        ? "This recurring series was already created from this form. Refresh the Training overview before trying again."
+        : seriesError.message;
+      return { error: message, values, submissionId: Date.now() };
+    }
 
     const exclusionRows = dates
       .filter((date) => excludedDates.has(date))
@@ -258,12 +266,18 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
     const { data: createdEvents, error: createError } = await db.from("squad_training_events").insert(rows).select("id,date");
     if (createError) return { error: createError.message, values, submissionId: Date.now() };
     const selectedIds = selectedParticipantIds(formData);
-    for (const event of (createdEvents ?? []) as Array<{ id: string; date: string }>) {
-      await syncTrainingParticipants(db, user.id, event.id, event.date, selectedIds, { removeUnselected: false, squadId });
+    const createdEventRows = (createdEvents ?? []) as Array<{ id: string; date: string }>;
+    const integrityError = verifyCreatedEventDates(keptDates, createdEventRows);
+    if (integrityError) return { error: integrityError, values, submissionId: Date.now() };
+    const validParticipantIds = await validateSelectedParticipants(db, user.id, squadId, selectedIds);
+    for (const event of createdEventRows) {
+      await syncTrainingParticipants(db, user.id, event.id, event.date, validParticipantIds, { removeUnselected: false, squadId, alreadyValidated: true });
       if (values.linkedTrainingSessionId && (values.planApplyMode === "all" || (values.planApplyMode === "first" && event.id === createdEvents?.[0]?.id))) {
         await createSessionPlanSnapshot(db, user.id, event.id, values.linkedTrainingSessionId);
       }
     }
+    const participantIntegrityError = await verifyParticipantSnapshots(db, user.id, createdEventRows.map((event) => event.id), validParticipantIds.length);
+    if (participantIntegrityError) return { error: participantIntegrityError, values, submissionId: Date.now() };
     revalidatePath("/trainings");
     revalidatePath("/squad/attendance");
     redirect("/trainings");
@@ -1000,22 +1014,12 @@ async function syncTrainingParticipants(
   eventId: string,
   eventDate: string,
   playerIds: string[],
-  options: { removeUnselected?: boolean; squadId?: string } = {}
+  options: { removeUnselected?: boolean; squadId?: string; alreadyValidated?: boolean } = {}
 ) {
   const removeUnselected = options.removeUnselected ?? true;
   const safePlayerIds = Array.from(new Set(playerIds));
   if (safePlayerIds.length) {
-    let playerQuery = db
-      .from("squad_players")
-      .select("id")
-      .eq("user_id", userId)
-      .is("archived_at", null)
-      .in("id", safePlayerIds);
-    if (options.squadId) playerQuery = playerQuery.eq("squad_id", options.squadId);
-    const { data: players, error: playerError } = await playerQuery;
-    if (playerError) throw new Error(playerError.message);
-
-    const validPlayerIds = ((players ?? []) as Array<{ id: string }>).map((player) => player.id);
+    const validPlayerIds = options.alreadyValidated ? safePlayerIds : await validateSelectedParticipants(db, userId, options.squadId, safePlayerIds);
     const medicalByPlayer = await getMedicalByPlayer(db, userId, eventDate, validPlayerIds);
     const rows = validPlayerIds.map((playerId) => {
       const medical = medicalByPlayer.get(playerId);
@@ -1061,6 +1065,53 @@ async function syncTrainingParticipants(
     const { error } = await db.from("squad_attendance_records").delete().eq("user_id", userId).in("id", removableIds);
     if (error) throw new Error(error.message);
   }
+}
+
+async function validateSelectedParticipants(db: SupabaseClient, userId: string, squadId: string | undefined, playerIds: string[]) {
+  const safePlayerIds = Array.from(new Set(playerIds));
+  if (!safePlayerIds.length) return [];
+  let playerQuery = db
+    .from("squad_players")
+    .select("id")
+    .eq("user_id", userId)
+    .is("archived_at", null)
+    .in("id", safePlayerIds);
+  if (squadId) playerQuery = playerQuery.eq("squad_id", squadId);
+  const { data: players, error: playerError } = await playerQuery;
+  if (playerError) throw new Error(playerError.message);
+  const validPlayerIds = ((players ?? []) as Array<{ id: string }>).map((player) => player.id);
+  if (validPlayerIds.length !== safePlayerIds.length) throw new Error("Some selected players are no longer available for this Team.");
+  return validPlayerIds;
+}
+
+function uniqueSortedDates(dates: string[]) {
+  return Array.from(new Set(dates)).sort();
+}
+
+function verifyCreatedEventDates(expectedDates: string[], events: Array<{ id: string; date: string }>) {
+  const actualDates = uniqueSortedDates(events.map((event) => event.date));
+  const expected = uniqueSortedDates(expectedDates);
+  if (events.length !== expected.length) return `Series creation stopped because ${expected.length} unique Trainings were expected, but ${events.length} records were created.`;
+  if (actualDates.length !== events.length) return "Series creation stopped because duplicate Training dates were created.";
+  if (actualDates.join("|") !== expected.join("|")) return "Series creation stopped because persisted Training dates did not match the reviewed recurrence dates.";
+  return "";
+}
+
+async function verifyParticipantSnapshots(db: SupabaseClient, userId: string, eventIds: string[], expectedPerEvent: number) {
+  if (!eventIds.length || expectedPerEvent === 0) return "";
+  const expectedTotal = eventIds.length * expectedPerEvent;
+  const { data, error } = await db
+    .from("squad_attendance_records")
+    .select("event_id")
+    .eq("user_id", userId)
+    .in("event_id", eventIds)
+    .range(0, Math.max(expectedTotal + eventIds.length, 999));
+  if (error) return error.message;
+  const counts = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{ event_id: string }>) counts.set(row.event_id, (counts.get(row.event_id) ?? 0) + 1);
+  const missing = eventIds.filter((id) => (counts.get(id) ?? 0) !== expectedPerEvent);
+  if (missing.length) return `Participant snapshot verification failed for ${missing.length} Training${missing.length === 1 ? "" : "s"}. The series needs review before use.`;
+  return "";
 }
 
 async function resolveOwnedSquadId(db: DatabaseClient, userId: string, submittedSquadId: string) {

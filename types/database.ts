@@ -562,6 +562,7 @@ export type Database = {
           ends_on: string | null;
           occurrence_limit: number | null;
           end_mode: "date" | "occurrence_count";
+          creation_token: string | null;
           status: "active" | "ended" | "paused";
           created_at: string;
           updated_at: string;
@@ -582,6 +583,7 @@ export type Database = {
           ends_on?: string | null;
           occurrence_limit?: number | null;
           end_mode?: "date" | "occurrence_count";
+          creation_token?: string | null;
           status?: "active" | "ended" | "paused";
           created_at?: string;
           updated_at?: string;

@@ -28,6 +28,10 @@ const initialState: TrainingEventActionState = {};
 export function TrainingEventForm({ sessions, squads, participants, event, mode = "create", calendarContext }: TrainingEventFormProps) {
   const action = mode === "edit" ? updateTrainingEvent : createTrainingEvent;
   const [state, formAction, isPending] = useActionState(action, initialState);
+  const [creationToken] = useState(() => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+    return `series-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  });
   const selectedParticipants = useMemo(
     () => new Set(mode === "edit" ? event?.attendance.map((entry) => entry.playerId) ?? [] : participants.map((player) => player.id)),
     [event?.attendance, mode, participants]
@@ -118,6 +122,7 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
     <div className="space-y-6">
       <form action={formAction} noValidate className="space-y-6">
         {event ? <input type="hidden" name="eventId" value={event.id} /> : null}
+        <input type="hidden" name="creationToken" value={creationToken} />
         {state.error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {state.error}
