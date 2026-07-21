@@ -25,7 +25,7 @@ export default async function TrainingDrillCreatePage({ params, searchParams }: 
   if (!user) redirect("/login");
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
-  const returnTo = `/trainings/${event.id}`;
+  const returnTo = `/trainings/${event.id}/plan`;
   const action = mode === "reusable" ? createReusableTrainingDrill : createSessionOnlyTrainingDrill;
 
   return (
@@ -37,16 +37,16 @@ export default async function TrainingDrillCreatePage({ params, searchParams }: 
       <div>
         <p className="text-sm font-semibold uppercase text-board-green">Create Drill</p>
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">
-          {mode === "reusable" ? "Create reusable Drill and add it" : "Create Drill for this Training"}
+          {mode === "reusable" ? "Create reusable Drill and add it" : "Create Drill for this Training Plan"}
         </h1>
         <p className="mt-2 text-slate-600">
           {mode === "reusable"
-            ? "This creates a normal Drill Library template, then inserts a session copy into this Training."
-            : "This creates a session-only Drill instance. It will not appear in the shared Drill Library."}
+            ? "This creates a normal Drill Library template, then inserts an isolated session copy into this Plan."
+            : "This creates a session-only Drill instance inside the current Plan. It will not appear in the shared Drill Library."}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link href={`/trainings/${event.id}/drills/new?mode=session`} className={`rounded-md px-3 py-2 text-sm font-bold ${mode === "session" ? "bg-board-green text-white" : "bg-white text-board-navy ring-1 ring-board-line"}`}>
-            Create for this Training only
+            Create for this Session Plan only
           </Link>
           <Link href={`/trainings/${event.id}/drills/new?mode=reusable`} className={`rounded-md px-3 py-2 text-sm font-bold ${mode === "reusable" ? "bg-board-green text-white" : "bg-white text-board-navy ring-1 ring-board-line"}`}>
             Create reusable Drill Template
@@ -62,7 +62,7 @@ export default async function TrainingDrillCreatePage({ params, searchParams }: 
         hiddenFields={{ trainingEventId: event.id }}
         contextBanner={(
           <section className="rounded-lg border border-board-line bg-board-paper p-4">
-            <p className="text-sm font-bold text-board-navy">Creating a Drill for</p>
+            <p className="text-sm font-bold text-board-navy">Creating a Drill inside this Plan</p>
             <h2 className="mt-1 text-xl font-bold text-board-navy">{trainingDisplayTitle(event)}</h2>
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
               <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1"><CalendarDays className="h-3.5 w-3.5" />{formatDateLabel(event.date)} · {trainingTimeRange(event)}</span>

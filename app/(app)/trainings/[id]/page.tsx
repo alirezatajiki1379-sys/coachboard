@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { CompleteEventButton, MissingStatusesNotice } from "@/components/squad/attendance-controls";
 import { TrainingEventActions } from "@/components/squad/training-event-actions";
 import { addCustomNameToTrainingGroup, addPlayersToTrainingGroup, createTrainingGroup, deleteTrainingGroup, removeTrainingGroupMember } from "@/lib/squad/training-group-actions";
+import { applyTrainingPlanTemplate, createBlankSessionPlan } from "@/lib/squad/training-plan-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
 import { createClient } from "@/lib/supabase/server";
@@ -27,8 +28,10 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
 
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
-  const [planDrills, trainingGroups] = await Promise.all([
+  const [planInstance, planDrills, planTemplates, trainingGroups] = await Promise.all([
+    loadPlanInstance(supabase, user.id, event.id),
     loadTrainingDrillInstances(supabase, user.id, event.id),
+    loadPlanTemplates(supabase, user.id),
     loadTrainingGroups(supabase, user.id, event.id)
   ]);
   const { plannedAttendance, finalAttendance } = trainingSummaryCounts(event);
@@ -101,6 +104,11 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
             Based on template. This training uses a session snapshot, so session edits do not overwrite the original plan.
           </p>
         ) : null}
+        {planInstance ? (
+          <div className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">
+            Session Plan: {planInstance.title}
+          </div>
+        ) : null}
         {planDrills.length ? (
           <div className="mt-4 space-y-2">
             {planDrills.map((drill) => (
@@ -120,25 +128,47 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
           </div>
         ) : (
           <div className="mt-4 rounded-lg border border-dashed border-board-line bg-board-paper p-5">
-            <h3 className="text-lg font-bold text-board-navy">No Drills added yet</h3>
-            <p className="mt-1 text-sm text-slate-600">Add a Drill from your Library or create one directly for this Training.</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <ButtonLink href="/drills" variant="secondary" className="h-9 px-3">Add from Library</ButtonLink>
-              <ButtonLink href={`/trainings/${event.id}/drills/new?mode=session`} className="h-9 px-3">
-                <Plus className="h-4 w-4" />
-                Create Drill
-              </ButtonLink>
-            </div>
+            <h3 className="text-lg font-bold text-board-navy">No Training Plan added yet</h3>
+            <p className="mt-1 text-sm text-slate-600">Choose an existing Template or build a Plan for this Session.</p>
+            <form action={createBlankSessionPlan} className="mt-4 inline-flex">
+              <input type="hidden" name="eventId" value={event.id} />
+              <Button type="submit" className="h-9 px-3">Create Plan for this Session</Button>
+            </form>
+            <details className="mt-3 rounded-md border border-board-line bg-white p-3">
+              <summary className="cursor-pointer list-none text-sm font-bold text-board-navy">Choose Training Plan Template</summary>
+              {planTemplates.length ? (
+                <form action={applyTrainingPlanTemplate} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input type="hidden" name="eventId" value={event.id} />
+                  <select name="templateId" required className="h-10 min-w-0 flex-1 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+                    {planTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.title} · {template.durationTargetMinutes ?? template.drillDurationMinutes} min · {template.drillCount} Drills
+                      </option>
+                    ))}
+                  </select>
+                  <Button type="submit" variant="secondary" className="h-10 px-3">Use Template</Button>
+                </form>
+              ) : (
+                <p className="mt-3 text-sm text-slate-600">No reusable Training Plan Templates yet. Create one in Training Plans first.</p>
+              )}
+            </details>
           </div>
         )}
         {planDrills.length ? (
           <div className="mt-4 flex flex-wrap gap-2">
-            <ButtonLink href="/drills" variant="secondary" className="h-9 px-3">Choose from Drill Library</ButtonLink>
-            <ButtonLink href={`/trainings/${event.id}/drills/new?mode=session`} className="h-9 px-3">
-              <Plus className="h-4 w-4" />
-              Create Drill
-            </ButtonLink>
-            <ButtonLink href={`/trainings/${event.id}/drills/new?mode=reusable`} variant="ghost" className="h-9 px-3">Create reusable Drill</ButtonLink>
+            <ButtonLink href={`/trainings/${event.id}/plan`} className="h-9 px-3">Edit Session Plan</ButtonLink>
+            <details className="rounded-md border border-board-line bg-white px-3 py-2 text-sm font-bold text-board-navy">
+              <summary className="cursor-pointer list-none">Change Training Plan Template</summary>
+              {planTemplates.length ? (
+                <form action={applyTrainingPlanTemplate} className="mt-3 flex flex-col gap-2">
+                  <input type="hidden" name="eventId" value={event.id} />
+                  <select name="templateId" required className="h-10 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+                    {planTemplates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
+                  </select>
+                  <Button type="submit" variant="secondary" className="h-10 px-3">Replace current Plan</Button>
+                </form>
+              ) : <p className="mt-2 text-xs font-semibold text-slate-500">No templates available.</p>}
+            </details>
           </div>
         ) : null}
         {event.linkedTrainingSessionId ? (
@@ -154,9 +184,11 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
         )}
       </Panel>
 
-      <Panel title="Training groups" icon={<UsersRound className="h-5 w-5" />}>
-        <TrainingGroupsPanel eventId={event.id} attendance={event.attendance} groups={trainingGroups} />
-      </Panel>
+      <div id="training-groups">
+        <Panel title="Training groups" icon={<UsersRound className="h-5 w-5" />}>
+          <TrainingGroupsPanel eventId={event.id} attendance={event.attendance} groups={trainingGroups} />
+        </Panel>
+      </div>
 
       <Panel title="Player records">
         <div className="space-y-3">
@@ -198,6 +230,21 @@ type TrainingDrillInstance = {
   plannedDurationMinutes?: number;
 };
 
+type TrainingPlanInstance = {
+  id: string;
+  title: string;
+  sourceTrainingSessionId?: string;
+};
+
+type TrainingPlanTemplate = {
+  id: string;
+  title: string;
+  durationTargetMinutes?: number;
+  drillDurationMinutes: number;
+  drillCount: number;
+  updatedAt: string;
+};
+
 type TrainingGroupMember = {
   id: string;
   playerId?: string;
@@ -210,6 +257,23 @@ type TrainingGroup = {
   groupType: "exclusive" | "label";
   members: TrainingGroupMember[];
 };
+
+async function loadPlanInstance(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string): Promise<TrainingPlanInstance | null> {
+  const { data, error } = await supabase
+    .from("training_session_plan_instances")
+    .select("id,title,source_training_session_id")
+    .eq("user_id", userId)
+    .eq("event_id", eventId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = data as { id: string; title: string; source_training_session_id: string | null } | null;
+  if (!row) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    sourceTrainingSessionId: row.source_training_session_id ?? undefined
+  };
+}
 
 async function loadTrainingDrillInstances(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string): Promise<TrainingDrillInstance[]> {
   const { data, error } = await supabase
@@ -233,6 +297,32 @@ async function loadTrainingDrillInstances(supabase: Awaited<ReturnType<typeof cr
     block: row.block ?? undefined,
     orderIndex: row.order_index,
     plannedDurationMinutes: row.planned_duration_minutes ?? undefined
+  }));
+}
+
+async function loadPlanTemplates(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<TrainingPlanTemplate[]> {
+  const { data, error } = await supabase
+    .from("training_sessions")
+    .select("id,title,duration_target_minutes,updated_at,training_session_drills(id,planned_duration_minutes)")
+    .eq("user_id", userId)
+    .is("archived_at", null)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<{
+    id: string;
+    title: string;
+    duration_target_minutes: number | null;
+    updated_at: string;
+    training_session_drills?: Array<{ id: string; planned_duration_minutes: number | null }> | null;
+  }>).map((row) => ({
+    id: row.id,
+    title: row.title,
+    durationTargetMinutes: row.duration_target_minutes ?? undefined,
+    drillDurationMinutes: (row.training_session_drills ?? []).reduce((sum, drill) => sum + (drill.planned_duration_minutes ?? 0), 0),
+    drillCount: row.training_session_drills?.length ?? 0,
+    updatedAt: row.updated_at
   }));
 }
 
