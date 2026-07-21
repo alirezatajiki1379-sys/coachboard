@@ -31,6 +31,13 @@ test("combined position values preserve canonical order", () => {
   assert.deepEqual(normalizePositions("Rechts Flügel / ZOM"), { values: ["RW", "CAM"], warnings: [] });
 });
 
+test("German midfield aliases with role-number notes normalize like the base alias", () => {
+  assert.deepEqual(normalizePositions("ZOM (10er)"), { values: ["CAM"], warnings: [] });
+  assert.deepEqual(normalizePositions("ZM (8er)"), { values: ["CM"], warnings: [] });
+  assert.deepEqual(normalizePositions("ZDM (6er)"), { values: ["CDM"], warnings: [] });
+  assert.deepEqual(normalizePositions("ZOM (10er) / ZM (8er)"), { values: ["CAM", "CM"], warnings: [] });
+});
+
 test("new canonical codes belong to the correct position families", () => {
   assert.equal(getPositionFamily("CAM"), "midfield");
   assert.equal(getPositionFamily("CDM"), "midfield");

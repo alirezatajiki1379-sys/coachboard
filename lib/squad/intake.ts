@@ -115,7 +115,7 @@ export function normalizePositions(raw: string): NormalizedListResult {
   const warnings: string[] = [];
   const values = splitValues(raw)
     .map((value) => {
-      const normalized = positionAliases[normalizeKey(value)];
+      const normalized = lookupPositionAlias(value);
       if (!normalized) warnings.push(`Unknown position: ${value}`);
       return normalized;
     })
@@ -163,6 +163,15 @@ function normalizeKey(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ");
+}
+
+function lookupPositionAlias(value: string) {
+  const key = normalizeKey(value);
+  return (
+    positionAliases[key] ??
+    positionAliases[key.replace(/\s*\([^)]*\)\s*$/g, "").trim()] ??
+    positionAliases[key.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim()]
+  );
 }
 
 function formatPhone(value: string) {
