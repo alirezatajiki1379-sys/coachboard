@@ -1,4 +1,5 @@
 import type { SquadAttendanceEntry, SquadAttendanceReason, SquadFinalAttendanceStatus } from "@/types/domain";
+import { isGoalkeeperPosition } from "@/lib/squad/positions";
 
 export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
   V: "Injured",
@@ -9,12 +10,6 @@ export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
   Z: "Late",
   U: "Unexcused"
 };
-
-export function isGoalkeeperPosition(position?: string) {
-  if (!position) return false;
-  const normalized = position.trim().toLowerCase();
-  return ["goalkeeper", "keeper", "gk", "torwart", "tw"].includes(normalized);
-}
 
 export function isExpectedFromPlannedStatus(entry: Pick<SquadAttendanceEntry, "plannedStatus">) {
   return !entry.plannedStatus || entry.plannedStatus === "expected";

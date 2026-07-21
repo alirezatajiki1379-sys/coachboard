@@ -79,6 +79,41 @@ export async function addPlayersToTrainingGroup(formData: FormData) {
   redirect(`/trainings/${eventId}`);
 }
 
+export async function addPlayersToTrainingGroupInline(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const groupId = formString(formData, "groupId");
+  const playerIds = selectedValues(formData, "playerIds");
+  if (!eventId || !groupId || !playerIds.length) return { ok: false, message: "Choose a group and at least one Player." };
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  await assertOwnedGroup(db, user.id, eventId, groupId);
+  const validPlayerIds = await validateEventPlayers(db, user.id, eventId, playerIds);
+  const { data: existingMembers, error: existingError } = await db
+    .from("training_event_group_members")
+    .select("player_id")
+    .eq("group_id", groupId)
+    .eq("user_id", user.id)
+    .in("player_id", validPlayerIds);
+  if (existingError) throw new Error(existingError.message);
+  const existingPlayerIds = new Set(
+    ((existingMembers ?? []) as Array<{ player_id: string | null }>).map((member) => member.player_id).filter(Boolean) as string[]
+  );
+  const newPlayerIds = validPlayerIds.filter((playerId) => !existingPlayerIds.has(playerId));
+  if (!newPlayerIds.length) return { ok: true, message: "Selected Players are already in this group." };
+  const { count } = await db.from("training_event_group_members").select("id", { count: "exact", head: true }).eq("group_id", groupId).eq("user_id", user.id);
+  const rows = newPlayerIds.map((playerId, index) => ({
+    user_id: user.id,
+    group_id: groupId,
+    player_id: playerId,
+    custom_name: null,
+    sort_order: (count ?? 0) + index
+  }));
+  const { error } = await db.from("training_event_group_members").insert(rows);
+  if (error) throw new Error(error.message);
+  revalidateTraining(eventId);
+  return { ok: true, message: `${newPlayerIds.length} Player${newPlayerIds.length === 1 ? "" : "s"} added.` };
+}
+
 export async function addCustomNameToTrainingGroup(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const groupId = formString(formData, "groupId");

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarDays, Plus, UsersRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { SessionPlayerBoard, type SessionBoardGroup, type SessionBoardPlayer } from "@/components/squad/session-player-board";
 import {
   addExistingDrillsToSessionPlan,
   createBlankSessionPlan,
@@ -10,10 +11,9 @@ import {
   updateSessionPlanDrill
 } from "@/lib/squad/training-plan-actions";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
-import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { createClient } from "@/lib/supabase/server";
+import { getPositionFamily } from "@/lib/squad/positions";
 import { formatDateLabel, trainingTimeRange } from "@/lib/trainings/utils";
-import type { SquadAttendanceEntry } from "@/types/domain";
 
 const phaseOptions = ["Arrival / Activation", "Warm-up", "Main Part", "Game Form", "Cool-down"];
 
@@ -33,14 +33,14 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
   if (!user) redirect("/login");
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
-  const [plan, planDrills, libraryDrills] = await Promise.all([
+  const [plan, planDrills, libraryDrills, trainingGroups] = await Promise.all([
     loadPlanInstance(supabase, user.id, event.id),
     loadPlanDrills(supabase, user.id, event.id),
-    loadLibraryDrills(supabase, user.id, drillSearch)
+    loadLibraryDrills(supabase, user.id, drillSearch),
+    loadTrainingGroups(supabase, user.id, event.id)
   ]);
+  const boardPlayers = toBoardPlayers(event.attendance);
   const expected = event.attendance.length;
-  const presentLate = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z").length;
-  const absent = event.attendance.filter((entry) => entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z").length;
   const plannedDuration = planDrills.reduce((sum, drill) => sum + (drill.plannedDurationMinutes ?? 0), 0);
   const scheduledDuration = scheduledDurationMinutes(event.startTime, event.endTime);
   const drillsByPhase = groupDrillsByPhase(planDrills);
@@ -103,7 +103,7 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                     </div>
                     <div className="mt-3 space-y-3">
                       {drills.map((drill, index) => (
-                        <PlanDrillCard key={drill.id} eventId={event.id} drill={drill} index={index} isFirst={index === 0} isLast={index === drills.length - 1} />
+                        <PlanDrillCard key={drill.id} eventId={event.id} drill={drill} index={index} isFirst={index === 0} isLast={index === drills.length - 1} players={boardPlayers} />
                       ))}
                     </div>
                   </section>
@@ -114,7 +114,7 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                   <h3 className="font-bold text-board-navy">Other phases</h3>
                   <div className="mt-3 space-y-3">
                     {planDrills.filter((drill) => !phaseOptions.includes(drill.phase)).map((drill, index) => (
-                      <PlanDrillCard key={drill.id} eventId={event.id} drill={drill} index={index} isFirst={index === 0} isLast={index === planDrills.length - 1} />
+                      <PlanDrillCard key={drill.id} eventId={event.id} drill={drill} index={index} isFirst={index === 0} isLast={index === planDrills.length - 1} players={boardPlayers} />
                     ))}
                   </div>
                 </section>
@@ -176,33 +176,13 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
             </div>
           </section>
 
-          <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Session Players</h2>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <Metric label="Expected" value={String(expected)} />
-              <Metric label="Present + late" value={String(presentLate)} />
-              <Metric label="Absent" value={String(absent)} />
-              <Metric label="Trial" value={String(event.attendance.filter((entry) => entry.player?.playerType === "trial").length)} />
-            </div>
-            {expected ? (
-              <div className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto pr-1">
-                {event.attendance.map((entry) => (
-                  <ParticipantRow key={entry.id} entry={entry} />
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-md border border-dashed border-board-line p-4">
-                <p className="text-sm font-semibold text-slate-600">0 expected Players.</p>
-                <ButtonLink href={`/trainings/${event.id}/edit`} variant="secondary" className="mt-3 h-9 px-3">Edit Training participants</ButtonLink>
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Groups</h2>
-            <p className="mt-1 text-sm text-slate-600">Groups belong to this Training and stay available across the Session Plan.</p>
-            <ButtonLink href={`/trainings/${event.id}#training-groups`} variant="secondary" className="mt-3 justify-center">Manage Training groups</ButtonLink>
-          </section>
+          <SessionPlayerBoard eventId={event.id} players={boardPlayers} groups={trainingGroups} />
+          {!expected ? (
+            <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+              <p className="text-sm font-semibold text-slate-600">0 expected Players.</p>
+              <ButtonLink href={`/trainings/${event.id}/edit`} variant="secondary" className="mt-3 h-9 px-3">Edit Training participants</ButtonLink>
+            </section>
+          ) : null}
         </aside>
       </section>
     </div>
@@ -230,6 +210,13 @@ type LibraryDrill = {
   durationMinutes: number;
   minPlayers: number;
   maxPlayers: number;
+};
+
+type TrainingGroupMemberRow = {
+  id: string;
+  group_id: string;
+  player_id: string | null;
+  custom_name: string | null;
 };
 
 async function loadPlanInstance(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string): Promise<PlanInstance | null> {
@@ -291,6 +278,38 @@ async function loadLibraryDrills(supabase: Awaited<ReturnType<typeof createClien
   }));
 }
 
+async function loadTrainingGroups(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string): Promise<SessionBoardGroup[]> {
+  const { data: groups, error: groupError } = await supabase
+    .from("training_event_groups")
+    .select("id,name,group_type,sort_order")
+    .eq("user_id", userId)
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: true });
+  if (groupError) throw new Error(groupError.message);
+  const groupRows = (groups ?? []) as Array<{ id: string; name: string; group_type: "exclusive" | "label"; sort_order: number }>;
+  if (!groupRows.length) return [];
+  const { data: members, error: memberError } = await supabase
+    .from("training_event_group_members")
+    .select("id,group_id,player_id,custom_name,sort_order")
+    .eq("user_id", userId)
+    .in("group_id", groupRows.map((group) => group.id))
+    .order("sort_order", { ascending: true });
+  if (memberError) throw new Error(memberError.message);
+  const membersByGroup = new Map<string, SessionBoardGroup["members"]>();
+  for (const member of (members ?? []) as TrainingGroupMemberRow[]) {
+    membersByGroup.set(member.group_id, [
+      ...(membersByGroup.get(member.group_id) ?? []),
+      { id: member.id, playerId: member.player_id ?? undefined, customName: member.custom_name ?? undefined }
+    ]);
+  }
+  return groupRows.map((group) => ({
+    id: group.id,
+    name: group.name,
+    groupType: group.group_type,
+    members: membersByGroup.get(group.id) ?? []
+  }));
+}
+
 function groupDrillsByPhase(drills: PlanDrill[]) {
   const map = new Map<string, PlanDrill[]>();
   for (const phase of phaseOptions) map.set(phase, []);
@@ -300,7 +319,8 @@ function groupDrillsByPhase(drills: PlanDrill[]) {
   return map;
 }
 
-function PlanDrillCard({ eventId, drill, index, isFirst, isLast }: { eventId: string; drill: PlanDrill; index: number; isFirst: boolean; isLast: boolean }) {
+function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { eventId: string; drill: PlanDrill; index: number; isFirst: boolean; isLast: boolean; players: SessionBoardPlayer[] }) {
+  const composition = getPlayerComposition(players);
   return (
     <article className="rounded-md border border-board-line bg-white p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -308,8 +328,16 @@ function PlanDrillCard({ eventId, drill, index, isFirst, isLast }: { eventId: st
           <p className="text-xs font-bold uppercase text-slate-500">#{index + 1}</p>
           <h4 className="font-bold text-board-navy">{drill.title}</h4>
           <p className="mt-1 text-xs font-semibold text-slate-500">
-            {drill.plannedDurationMinutes ?? 0} min · Assigned: all expected Players
+            {drill.plannedDurationMinutes ?? 0} min · All expected Players · {players.length} assigned
           </p>
+          {players.length ? (
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              {composition.goalkeeper} GK · {composition.defensive} DEF · {composition.midfield} MID · {composition.attacking} ATT
+            </p>
+          ) : null}
+          {drill.sourceDrillId ? (
+            <p className="mt-1 text-xs font-semibold text-slate-500">Recommended: source Drill range stays separate from assigned Session Players.</p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <form action={moveSessionPlanDrill}>
@@ -351,27 +379,35 @@ function PlanDrillCard({ eventId, drill, index, isFirst, isLast }: { eventId: st
   );
 }
 
-function ParticipantRow({ entry }: { entry: SquadAttendanceEntry }) {
-  return (
-    <div className="rounded-md border border-board-line bg-board-paper p-3">
-      <p className="font-bold text-board-navy">{attendanceDisplayName(entry)}</p>
-      <p className="mt-1 text-xs font-semibold text-slate-500">
-        {entry.player?.position ?? "Position open"} · {entry.player?.playerType === "trial" ? "Trial Player" : "Roster Player"}
-      </p>
-      <p className="mt-1 text-xs font-semibold text-slate-500">
-        Planned: {entry.plannedStatus ? plannedStatusLabel(entry.plannedStatus) : "Expected"} · Actual: {entry.finalStatus ? finalStatusLabel(entry.finalStatus) : "Open"}
-      </p>
-    </div>
-  );
+function toBoardPlayers(entries: Array<{ player?: SessionBoardPlayerSource; plannedStatus?: SessionBoardPlayer["plannedStatus"]; finalStatus?: SessionBoardPlayer["finalStatus"] }>): SessionBoardPlayer[] {
+  return entries.filter((entry) => entry.player).map((entry) => ({
+    id: entry.player?.id ?? "",
+    name: [entry.player?.firstName, entry.player?.lastName].filter(Boolean).join(" "),
+    position: entry.player?.position,
+    secondaryPositions: entry.player?.secondaryPositions ?? [],
+    playerType: entry.player?.playerType ?? "roster",
+    plannedStatus: entry.plannedStatus,
+    finalStatus: entry.finalStatus
+  }));
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-board-line bg-board-paper p-3">
-      <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-bold text-board-navy">{value}</p>
-    </div>
-  );
+type SessionBoardPlayerSource = {
+  id: string;
+  firstName: string;
+  lastName?: string;
+  position?: string;
+  secondaryPositions: string[];
+  playerType: "roster" | "trial";
+};
+
+function getPlayerComposition(players: SessionBoardPlayer[]) {
+  return {
+    goalkeeper: players.filter((player) => getPositionFamily(player.position) === "goalkeeper").length,
+    defensive: players.filter((player) => getPositionFamily(player.position) === "defensive").length,
+    midfield: players.filter((player) => getPositionFamily(player.position) === "midfield").length,
+    attacking: players.filter((player) => getPositionFamily(player.position) === "attacking").length,
+    unassigned: players.filter((player) => getPositionFamily(player.position) === "unassigned").length
+  };
 }
 
 function scheduledDurationMinutes(startTime: string, endTime?: string) {
