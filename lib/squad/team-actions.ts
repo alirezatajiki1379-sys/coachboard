@@ -80,6 +80,7 @@ export async function createTeam(formData: FormData) {
 
 export async function updateTeamCalendarSettings(formData: FormData) {
   const teamId = formString(formData, "teamId");
+  const returnTo = formString(formData, "returnTo") || "/teams";
   const countryCode = formString(formData, "countryCode") || "DE";
   const federalStateCode = formString(formData, "federalStateCode");
   const city = formString(formData, "city");
@@ -105,7 +106,8 @@ export async function updateTeamCalendarSettings(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidateTeamScopedPages();
   revalidatePath("/teams");
-  redirect("/teams");
+  revalidatePath(`/teams/${teamId}/settings`);
+  redirect(returnTo);
 }
 
 export async function createTeamCalendarExclusion(formData: FormData) {
@@ -150,6 +152,7 @@ function preference<T extends string>(value: string, allowed: T[], fallback: T):
 export async function renameTeam(formData: FormData) {
   const teamId = formString(formData, "teamId");
   const name = formString(formData, "name");
+  const returnTo = formString(formData, "returnTo") || "/teams";
   if (!teamId || !name) redirect("/teams?error=name");
 
   const { supabase, user } = await requireUser();
@@ -159,7 +162,8 @@ export async function renameTeam(formData: FormData) {
 
   revalidateTeamScopedPages();
   revalidatePath("/teams");
-  redirect("/teams");
+  revalidatePath(`/teams/${teamId}/settings`);
+  redirect(returnTo);
 }
 
 export async function archiveTeam(formData: FormData) {

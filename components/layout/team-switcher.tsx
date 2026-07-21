@@ -31,20 +31,20 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
   }
 
   return (
-    <details className="group rounded-lg border border-white/10 bg-white/5 p-3 text-white">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-board-green/40">
-        <span className="min-w-0">
-          <span className="block text-xs font-semibold uppercase text-slate-300">Active team</span>
-          <span className="block truncate text-sm font-bold text-white" title={activeTeam.name}>{activeTeam.name}</span>
-        </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-slate-300 transition group-open:rotate-180" />
-      </summary>
+    <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-white">
+      <span className="block text-xs font-semibold uppercase text-slate-300">Active team</span>
+      <div className="mt-1 flex items-center gap-2">
+        <details className="group min-w-0 flex-1">
+          <summary className="flex h-9 cursor-pointer list-none items-center justify-between gap-2 rounded-md px-2 outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-board-green/40">
+            <span className="min-w-0 truncate text-sm font-bold text-white" title={activeTeam.name}>{activeTeam.name}</span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-slate-300 transition group-open:rotate-180" />
+          </summary>
       <div className="mt-3 space-y-2">
         <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Switch team</p>
         {teams.map((team) => (
           <form key={team.id} action={switchTeam}>
             <input type="hidden" name="teamId" value={team.id} />
-            <input type="hidden" name="returnTo" value={switchReturnTo} />
+            <input type="hidden" name="returnTo" value={switchReturnTo.replace("__TEAM_ID__", team.id)} />
             <Button
               type="submit"
               variant={team.id === activeTeam.id ? "primary" : "ghost"}
@@ -105,13 +105,32 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
             <Settings className="h-4 w-4" />
             Manage teams
           </ButtonLink>
+          <ButtonLink href={`/teams/${activeTeam.id}/settings`} variant="ghost" className="h-9 w-full justify-start px-3 text-xs text-slate-200 hover:bg-white/10 hover:text-white">
+            <Settings className="h-4 w-4" />
+            Team settings
+          </ButtonLink>
         </div>
       </div>
-    </details>
+        </details>
+        <ButtonLink
+          href={`/teams/${activeTeam.id}/settings`}
+          variant="ghost"
+          className="h-9 w-9 shrink-0 px-0 text-slate-200 hover:bg-white/10 hover:text-white"
+          aria-label={`Open settings for ${activeTeam.name}`}
+          title="Team settings"
+        >
+          <Settings className="h-4 w-4" />
+        </ButtonLink>
+      </div>
+    </div>
   );
 }
 
 function teamSwitchReturnTo(pathname: string, searchParams: ReturnType<typeof useSearchParams>, fallback: string) {
+  if (/^\/teams\/[^/]+\/settings/.test(pathname)) {
+    const query = searchParams.toString();
+    return `/teams/__TEAM_ID__/settings${query ? `?${query}` : ""}`;
+  }
   if (pathname.startsWith("/squad/players/")) return "/squad";
   if (pathname.startsWith("/squad/attendance/")) return "/squad/attendance";
   if (pathname.startsWith("/trainings/")) return "/trainings";

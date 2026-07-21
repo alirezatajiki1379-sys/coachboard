@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { Archive, CalendarOff, MapPin, Plus, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import {
   archiveTeam,
   createTeam,
@@ -69,7 +69,7 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
         <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Plus className="h-5 w-5" />Create new team</h2>
         <p className="mt-1 text-sm text-slate-500">Create a separate workspace for another team. CoachBoard creates the roster context automatically.</p>
         <form action={createTeam} className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_220px_auto]">
-          <input type="hidden" name="returnTo" value="/dashboard" />
+          <input type="hidden" name="returnTo" value="/squad" />
           <input type="hidden" name="countryCode" value="DE" />
           <label className="min-w-0 flex-1">
             <span className="text-sm font-medium text-slate-700">Team name</span>
@@ -131,6 +131,9 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
                         </Button>
                       </form>
                     ) : null}
+                    <ButtonLink href={`/teams/${team.id}/settings`} variant="secondary" className="w-full sm:w-auto">
+                      Team settings
+                    </ButtonLink>
                     <form action={renameTeam} className="flex min-w-0 gap-2">
                       <input type="hidden" name="teamId" value={team.id} />
                       <input name="name" defaultValue={team.name} className="h-10 min-w-0 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
