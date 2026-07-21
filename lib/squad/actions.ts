@@ -104,12 +104,89 @@ export async function restoreSquadPlayer(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   await db
     .from("squad_players")
-    .update({ archived_at: null })
+    .update({ archived_at: null, deleted_at: null })
     .eq("id", playerId)
     .eq("user_id", user.id);
   revalidatePath("/squad");
   revalidatePath(`/squad/players/${playerId}`);
   redirect("/squad");
+}
+
+type SquadBulkActionResult = {
+  ok: boolean;
+  message: string;
+};
+
+function selectedPlayerIds(formData: FormData) {
+  return Array.from(new Set(formData.getAll("playerIds").filter((value): value is string => typeof value === "string" && value.trim().length > 0)));
+}
+
+async function updateSelectedPlayers(formData: FormData, values: Record<string, string | null>): Promise<SquadBulkActionResult> {
+  const playerIds = selectedPlayerIds(formData);
+  if (!playerIds.length) return { ok: false, message: "Select at least one player first." };
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const activeSquad = await ensureActiveSquad(supabase, user.id);
+  const { error } = await db
+    .from("squad_players")
+    .update(values)
+    .eq("user_id", user.id)
+    .eq("squad_id", activeSquad.id)
+    .in("id", playerIds);
+
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/squad");
+  for (const playerId of playerIds) revalidatePath(`/squad/players/${playerId}`);
+  return { ok: true, message: `${playerIds.length} player${playerIds.length === 1 ? "" : "s"} updated.` };
+}
+
+export async function bulkArchiveSquadPlayers(_: SquadBulkActionResult, formData: FormData): Promise<SquadBulkActionResult> {
+  return updateSelectedPlayers(formData, { archived_at: new Date().toISOString(), deleted_at: null });
+}
+
+export async function bulkTrashSquadPlayers(_: SquadBulkActionResult, formData: FormData): Promise<SquadBulkActionResult> {
+  return updateSelectedPlayers(formData, { deleted_at: new Date().toISOString(), archived_at: null });
+}
+
+export async function bulkRestoreSquadPlayers(_: SquadBulkActionResult, formData: FormData): Promise<SquadBulkActionResult> {
+  return updateSelectedPlayers(formData, { archived_at: null, deleted_at: null });
+}
+
+export async function bulkPermanentlyDeleteSquadPlayers(_: SquadBulkActionResult, formData: FormData): Promise<SquadBulkActionResult> {
+  const playerIds = selectedPlayerIds(formData);
+  if (!playerIds.length) return { ok: false, message: "Select at least one player first." };
+  const expectedConfirmation = `DELETE ${playerIds.length} PLAYERS`;
+  if (formString(formData, "confirmation") !== expectedConfirmation) {
+    return { ok: false, message: `Type ${expectedConfirmation} to delete permanently.` };
+  }
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const activeSquad = await ensureActiveSquad(supabase, user.id);
+
+  const { count: referencedCount, error: referenceError } = await db
+    .from("squad_attendance_records")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .in("player_id", playerIds);
+  if (referenceError) return { ok: false, message: referenceError.message };
+  if ((referencedCount ?? 0) > 0) {
+    return { ok: false, message: "One or more selected players have attendance history. Restore/archive them instead of deleting permanently." };
+  }
+
+  await db.from("player_import_rows").update({ player_id: null, matched_player_id: null }).eq("user_id", user.id).or(playerIds.map((id) => `player_id.eq.${id},matched_player_id.eq.${id}`).join(","));
+  const { error } = await db
+    .from("squad_players")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("squad_id", activeSquad.id)
+    .not("deleted_at", "is", null)
+    .in("id", playerIds);
+
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/squad");
+  return { ok: true, message: `${playerIds.length} player${playerIds.length === 1 ? "" : "s"} deleted permanently.` };
 }
 
 export async function permanentlyDeleteSquadPlayer(formData: FormData) {

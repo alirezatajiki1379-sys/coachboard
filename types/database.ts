@@ -398,6 +398,7 @@ export type Database = {
           notes: string | null;
           converted_at: string | null;
           archived_at: string | null;
+          deleted_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -463,6 +464,7 @@ export type Database = {
           notes?: string | null;
           converted_at?: string | null;
           archived_at?: string | null;
+          deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };

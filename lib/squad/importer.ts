@@ -156,9 +156,9 @@ const mappingAliases: Array<{ field: ImportFieldKey; aliases: string[]; confiden
   { field: "shoeSize", aliases: ["schuhgroesse", "schuhgröße", "shoe size"] },
   { field: "club", aliases: ["verein", "aktueller verein", "club", "current club", "team"] },
   { field: "clubTrainingSchedule", aliases: ["trainingszeiten (verein)", "trainingszeiten", "club training schedule"] },
-  { field: "preferredPositions", aliases: ["bevorzugte positionen", "preferred positions"] },
-  { field: "position", aliases: ["primary position", "coach-assigned primary position"] },
-  { field: "secondaryPositions", aliases: ["secondary positions", "coach-assigned secondary positions"] },
+  { field: "preferredPositions", aliases: ["bevorzugte position", "bevorzugte positionen", "positionen", "playing position", "preferred position", "preferred positions", "wunschposition"] },
+  { field: "position", aliases: ["hauptposition", "position", "primary position", "coach-assigned primary position"] },
+  { field: "secondaryPositions", aliases: ["nebenpositionen", "secondary positions", "coach-assigned secondary positions"] },
   { field: "strongFoot", aliases: ["rechtsfuss oder linksfuss?", "rechtsfuß oder linksfuß?", "starker fuss", "starker fuß", "dominant foot", "preferred foot", "fuss", "fuß"] },
   { field: "hobbies", aliases: ["was sind deine anderen hobbys oder interessen (ausser fussball)?", "was sind deine anderen hobbys oder interessen (außer fußball)?", "hobbies", "hobbies and interests"] },
   { field: "developmentGoal", aliases: ["was ist dein groesstes ziel als fussball spieler?", "was ist dein größtes ziel als fußball spieler?", "biggest football goal"] },
@@ -214,6 +214,7 @@ export function buildReviewedRows(
     });
 
     applyFullName(values);
+    applyPositionFallback(values);
     const firstName = valueOf(values.firstName);
     const lastName = valueOf(values.lastName);
     const dateOfBirth = valueOf(values.dateOfBirth);
@@ -266,7 +267,7 @@ export function normalizeFieldValue(field: ImportFieldKey, rawValue: string): { 
   }
   if (field === "position") {
     const positions = normalizePositions(raw);
-    return { value: positions.values[0] ?? raw, warnings: positions.values.length ? [] : positions.warnings };
+    return { value: positions.values[0] ?? "", warnings: positions.warnings };
   }
   if (field === "strongFoot") {
     const foot = normalizeDominantFoot(raw);
@@ -336,6 +337,27 @@ function applyFullName(values: Partial<Record<ImportFieldKey, ImportRowValue>>) 
   values.firstName = { original: values.fullName.original, normalized: parts[0], warnings: [] };
   if (parts.length > 1) {
     values.lastName = { original: values.fullName.original, normalized: parts.slice(1).join(" "), warnings: ["Full name was split automatically. Please review."] };
+  }
+}
+
+function applyPositionFallback(values: Partial<Record<ImportFieldKey, ImportRowValue>>) {
+  if (values.position) return;
+  const preferred = valueOf(values.preferredPositions);
+  if (!preferred) return;
+  const positions = preferred.split(",").map((item) => item.trim()).filter(Boolean);
+  if (!positions.length) return;
+  values.position = {
+    original: values.preferredPositions?.original ?? preferred,
+    normalized: positions[0],
+    warnings: ["Primary position was derived from the first preferred position."]
+  };
+  const remaining = positions.slice(1);
+  if (remaining.length && !valueOf(values.secondaryPositions)) {
+    values.secondaryPositions = {
+      original: values.preferredPositions?.original ?? preferred,
+      normalized: remaining.join(", "),
+      warnings: ["Secondary positions were derived from additional preferred positions."]
+    };
   }
 }
 

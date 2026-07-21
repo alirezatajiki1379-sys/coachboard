@@ -50,6 +50,7 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
   const warningCount = rows.reduce((sum, row) => sum + row.warnings.length, 0);
   const errorCount = rows.filter((row) => row.errors.length && !row.excluded).length;
   const duplicateCount = rows.filter((row) => row.duplicateSignals.length && !row.excluded).length;
+  const positionSummary = summarizePositions(rows);
 
   function loadSheet(nextSheets: ParsedSheet[], nextSourceType: ImportSourceType, nextName: string) {
     setSheets(nextSheets);
@@ -191,6 +192,7 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
       {step === 4 ? (
         <Panel title="Review data" action={<Button onClick={() => setStep(5)}>Resolve duplicates</Button>}>
           <Summary created={readyCount} warnings={warningCount} errors={errorCount} duplicates={duplicateCount} />
+          <PositionSummary summary={positionSummary} />
           <ReviewRows rows={rows} onRowsChange={setRows} />
         </Panel>
       ) : null}
@@ -210,6 +212,7 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
             <Metric label="Warnings" value={String(warningCount)} />
             <Metric label="Errors" value={String(errorCount)} />
           </div>
+          <PositionSummary summary={positionSummary} />
           <label className="mt-5 block">
             <span className="text-sm font-bold text-slate-700">Import mode</span>
             <select value={importMode} onChange={(event) => setImportMode(event.target.value as ImportMode)} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy md:max-w-sm">
@@ -230,6 +233,7 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
             <Metric label="Failed" value={String(result.summary?.failed ?? 0)} />
             <Metric label="Warnings" value={String(result.summary?.warnings ?? 0)} />
           </div>
+          <PositionSummary summary={positionSummary} />
           <div className="mt-5 flex flex-wrap gap-2">
             <Button onClick={() => window.location.reload()} variant="secondary">Import another file</Button>
             {result.batchId ? <UndoButton batchId={result.batchId} /> : null}
@@ -405,6 +409,52 @@ function SheetPreview({ sheet }: { sheet: ParsedSheet }) {
 
 function Summary({ created, warnings, errors, duplicates }: { created: number; warnings: number; errors: number; duplicates: number }) {
   return <div className="grid gap-3 md:grid-cols-4"><Metric label="Ready operations" value={String(created)} /><Metric label="Warnings" value={String(warnings)} /><Metric label="Errors" value={String(errors)} /><Metric label="Possible duplicates" value={String(duplicates)} /></div>;
+}
+
+type PositionImportSummary = {
+  total: number;
+  recognized: number;
+  withSecondary: number;
+  needsReview: number;
+  missing: number;
+};
+
+function summarizePositions(rows: ReviewedImportRow[]): PositionImportSummary {
+  const active = rows.filter((row) => !row.excluded);
+  return {
+    total: active.length,
+    recognized: active.filter((row) => Boolean(row.values.position?.normalized)).length,
+    withSecondary: active.filter((row) => Boolean(row.values.secondaryPositions?.normalized)).length,
+    needsReview: active.filter((row) => row.warnings.some((warning) => warning.toLowerCase().includes("unknown position"))).length,
+    missing: active.filter((row) => !row.values.position?.normalized).length
+  };
+}
+
+function PositionSummary({ summary }: { summary: PositionImportSummary }) {
+  return (
+    <section className="mt-4 rounded-lg border border-board-line bg-board-paper p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="font-bold text-board-navy">Positions</h3>
+          <p className="mt-1 text-sm text-slate-600">
+            {summary.total} Players total · {summary.recognized} with primary position · {summary.withSecondary} with secondary positions
+          </p>
+        </div>
+        {summary.needsReview || summary.missing ? (
+          <div className="rounded-md bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+            {summary.needsReview} need review · {summary.missing} missing
+          </div>
+        ) : (
+          <div className="rounded-md bg-green-50 px-3 py-2 text-sm font-bold text-green-800">All recognized</div>
+        )}
+      </div>
+      {summary.needsReview ? (
+        <p className="mt-2 text-sm font-semibold text-amber-800">
+          Some position values could not be recognized. Review those rows before importing, or continue knowing those positions will stay empty.
+        </p>
+      ) : null}
+    </section>
+  );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

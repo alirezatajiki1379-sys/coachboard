@@ -27,7 +27,7 @@ export async function listSquadPlayers(
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
 
-  query = view === "archived" ? query.not("archived_at", "is", null) : query.is("archived_at", null);
+  query = view === "archived" ? query.not("archived_at", "is", null).is("deleted_at", null) : query.is("archived_at", null).is("deleted_at", null);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);

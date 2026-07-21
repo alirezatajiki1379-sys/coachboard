@@ -79,6 +79,7 @@ export function mapSquadPlayerRow(row: SquadPlayerRow): SquadPlayer {
     notes: optional(row.notes),
     convertedAt: optional(row.converted_at),
     archivedAt: optional(row.archived_at),
+    deletedAt: optional(row.deleted_at),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

@@ -240,6 +240,7 @@ export type SquadPlayer = {
   notes?: string;
   convertedAt?: string;
   archivedAt?: string;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };

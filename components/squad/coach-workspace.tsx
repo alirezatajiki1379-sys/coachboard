@@ -3,9 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { DragEvent } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, CalendarDays, Eye, GripVertical, Search, Stethoscope, Target, UserRound } from "lucide-react";
+import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, UserRound, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import {
+  bulkArchiveSquadPlayers,
+  bulkPermanentlyDeleteSquadPlayers,
+  bulkRestoreSquadPlayers,
+  bulkTrashSquadPlayers
+} from "@/lib/squad/actions";
 import {
   createWorkspaceSavedView,
   deleteWorkspaceSavedView,
@@ -64,8 +70,16 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   const grouped = groupWorkspacePlayers(data);
   const [columnOrder, setColumnOrder] = useState(data.configuration.columnOrder);
   const [columnOrderMessage, setColumnOrderMessage] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [emailComposerOpen, setEmailComposerOpen] = useState(false);
+  const [isBulkPending, startBulkTransition] = useTransition();
   const [isSavingColumnOrder, startColumnOrderSave] = useTransition();
   const columns = useMemo(() => visibleDesktopColumns(data, columnOrder), [data, columnOrder]);
+  const visiblePlayerIds = useMemo(() => data.players.map((player) => player.analytics.player.id), [data.players]);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedPlayers = useMemo(() => data.players.filter((player) => selectedIdSet.has(player.analytics.player.id)), [data.players, selectedIdSet]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(data.selected?.analytics.player.id ?? data.players[0]?.analytics.player.id ?? null);
   const selectedPlayer = useMemo(
     () => data.players.find((player) => player.analytics.player.id === selectedPlayerId) ?? data.selected ?? data.players[0],
@@ -75,9 +89,11 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   useEffect(() => {
     if (!data.players.length) {
       setSelectedPlayerId(null);
+      setSelectedIds([]);
       return;
     }
     setSelectedPlayerId((current) => data.players.some((player) => player.analytics.player.id === current) ? current : data.players[0].analytics.player.id);
+    setSelectedIds((current) => current.filter((id) => data.players.some((player) => player.analytics.player.id === id)));
   }, [data.players]);
 
   function persistColumnOrder(nextOrder: typeof columnOrder, previousOrder: typeof columnOrder) {
@@ -95,6 +111,39 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
         return;
       }
       setColumnOrderMessage("Column order saved.");
+    });
+  }
+
+  function toggleSelectedPlayer(playerId: string) {
+    setSelectedIds((current) => current.includes(playerId) ? current.filter((id) => id !== playerId) : [...current, playerId]);
+  }
+
+  function selectAllVisible() {
+    setSelectedIds(visiblePlayerIds);
+  }
+
+  function runBulkAction(action: "archive" | "trash" | "restore" | "permanent") {
+    setBulkMessage("");
+    if (!selectedIds.length) {
+      setBulkMessage("Select at least one player first.");
+      return;
+    }
+    const confirmation = action === "permanent" ? window.prompt(`Type DELETE ${selectedIds.length} PLAYERS to permanently delete the selected players.`) : "";
+    if (action === "permanent" && confirmation === null) return;
+    const formData = new FormData();
+    selectedIds.forEach((id) => formData.append("playerIds", id));
+    if (confirmation) formData.set("confirmation", confirmation);
+    startBulkTransition(async () => {
+      const initial = { ok: false, message: "" };
+      const result = action === "archive"
+        ? await bulkArchiveSquadPlayers(initial, formData)
+        : action === "restore"
+          ? await bulkRestoreSquadPlayers(initial, formData)
+          : action === "permanent"
+            ? await bulkPermanentlyDeleteSquadPlayers(initial, formData)
+            : await bulkTrashSquadPlayers(initial, formData);
+      setBulkMessage(result.message);
+      if (result.ok) setSelectedIds([]);
     });
   }
 
@@ -133,8 +182,57 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
               <h2 className="text-lg font-bold text-board-navy">{view.label}</h2>
               <p className="text-sm text-slate-600">{data.periodLabel} · {data.periodRangeLabel}</p>
             </div>
-            <p className="rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{data.players.length} shown</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{data.players.length} shown</p>
+              <Button type="button" variant={selectionMode ? "secondary" : "ghost"} className="h-9 px-3" onClick={() => {
+                setSelectionMode((current) => !current);
+                setBulkMessage("");
+              }}>
+                <CheckSquare className="h-4 w-4" />
+                {selectionMode ? "Selection on" : "Select"}
+              </Button>
+            </div>
           </div>
+
+          {selectionMode ? (
+            <section className="rounded-lg border border-board-line bg-white p-3 shadow-soft">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <p className="text-sm font-bold text-board-navy">{selectedIds.length} selected</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" className="h-9 px-3" onClick={selectAllVisible} disabled={!visiblePlayerIds.length || isBulkPending}>Select visible</Button>
+                  <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => setSelectedIds([])} disabled={!selectedIds.length || isBulkPending}>Clear</Button>
+                  <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => setEmailComposerOpen(true)} disabled={!selectedIds.length || isBulkPending}>
+                    <Mail className="h-4 w-4" />
+                    Email
+                  </Button>
+                  {data.state.players === "trash" ? (
+                    <>
+                      <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => runBulkAction("restore")} disabled={!selectedIds.length || isBulkPending}>
+                        <RotateCcw className="h-4 w-4" />
+                        Restore
+                      </Button>
+                      <Button type="button" variant="danger" className="h-9 px-3" onClick={() => runBulkAction("permanent")} disabled={!selectedIds.length || isBulkPending}>
+                        <Trash2 className="h-4 w-4" />
+                        Delete permanently
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => runBulkAction("archive")} disabled={!selectedIds.length || isBulkPending}>
+                        <Archive className="h-4 w-4" />
+                        Archive
+                      </Button>
+                      <Button type="button" variant="danger" className="h-9 px-3" onClick={() => runBulkAction("trash")} disabled={!selectedIds.length || isBulkPending}>
+                        <Trash2 className="h-4 w-4" />
+                        Move to Trash
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+              {bulkMessage ? <p className="mt-2 text-sm font-semibold text-slate-600">{bulkMessage}</p> : null}
+            </section>
+          ) : null}
 
           <div className="hidden xl:block">
             {data.players.length ? (
@@ -143,13 +241,13 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
                   {grouped.map((group) => (
                     <section key={group.label} className="rounded-lg border border-board-line bg-white shadow-soft">
                       <h3 className="border-b border-board-line px-4 py-3 text-sm font-bold uppercase tracking-wide text-slate-500">{group.label}</h3>
-                      <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={setSelectedPlayerId} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} />
+                      <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={setSelectedPlayerId} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} />
                     </section>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-lg border border-board-line bg-white shadow-soft">
-                  <WorkspaceTable data={data} players={data.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={setSelectedPlayerId} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} />
+                  <WorkspaceTable data={data} players={data.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={setSelectedPlayerId} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} />
                 </div>
               )
             ) : (
@@ -158,7 +256,7 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
           </div>
 
           <div className="space-y-3 xl:hidden">
-            {data.players.length ? data.players.map((player) => <WorkspaceMobileCard key={player.analytics.player.id} data={data} player={player} selected={selectedPlayer?.analytics.player.id === player.analytics.player.id} onSelectPlayer={setSelectedPlayerId} />) : <WorkspaceEmpty data={data} />}
+            {data.players.length ? data.players.map((player) => <WorkspaceMobileCard key={player.analytics.player.id} data={data} player={player} selected={selectedPlayer?.analytics.player.id === player.analytics.player.id} onSelectPlayer={setSelectedPlayerId} selectionMode={selectionMode} checked={selectedIdSet.has(player.analytics.player.id)} onToggleSelected={toggleSelectedPlayer} />) : <WorkspaceEmpty data={data} />}
           </div>
         </div>
 
@@ -170,8 +268,130 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
       </section>
       <p className="sr-only" aria-live="polite">{columnOrderMessage}</p>
       {columnOrderMessage ? <p className="text-xs font-semibold text-slate-500 xl:block hidden">{columnOrderMessage}</p> : null}
+      {emailComposerOpen ? <EmailDraftDialog players={selectedPlayers} onClose={() => setEmailComposerOpen(false)} /> : null}
     </div>
   );
+}
+
+type EmailRecipientMode = "players" | "parents" | "both";
+
+function EmailDraftDialog({ players, onClose }: { players: WorkspacePlayerSummary[]; onClose: () => void }) {
+  const [mode, setMode] = useState<EmailRecipientMode>("parents");
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [copied, setCopied] = useState("");
+  const draft = useMemo(() => buildEmailDraft(players, mode, subject, message), [players, mode, subject, message]);
+
+  async function copyText(label: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(`${label} copied.`);
+    } catch {
+      setCopied("Copy failed. Select and copy the text manually.");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-board-navy/40 p-4" role="dialog" aria-modal="true" aria-labelledby="email-draft-title">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="email-draft-title" className="text-lg font-bold text-board-navy">Prepare group email</h2>
+            <p className="mt-1 text-sm text-slate-600">Creates a BCC email draft. CoachBoard does not send the email.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Close email draft">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4">
+          <Field label="Recipients">
+            <select value={mode} onChange={(event) => setMode(event.target.value as EmailRecipientMode)} className={fieldClass()}>
+              <option value="parents">Parent emails</option>
+              <option value="players">Player emails</option>
+              <option value="both">Parents and players</option>
+            </select>
+          </Field>
+          <Field label="Subject">
+            <input value={subject} onChange={(event) => setSubject(event.target.value)} className={fieldClass()} placeholder="Training information" />
+          </Field>
+          <Field label="Message">
+            <textarea value={message} onChange={(event) => setMessage(event.target.value)} className={cn(fieldClass(), "min-h-32 py-3")} placeholder="Write your message..." />
+          </Field>
+        </div>
+
+        <div className="mt-4 rounded-md bg-board-paper p-3">
+          <p className="text-sm font-bold text-board-navy">{draft.validEmails.length} valid email{draft.validEmails.length === 1 ? "" : "s"}</p>
+          {draft.missing.length ? <p className="mt-1 text-sm text-amber-700">{draft.missing.length} selected player{draft.missing.length === 1 ? "" : "s"} missing the selected email type.</p> : null}
+          {draft.invalid.length ? <p className="mt-1 text-sm text-red-700">{draft.invalid.length} invalid email{draft.invalid.length === 1 ? "" : "s"} ignored.</p> : null}
+          {draft.validEmails.length ? (
+            <div className="mt-3 max-h-28 overflow-y-auto rounded border border-board-line bg-white p-2 text-xs text-slate-600">
+              {draft.validEmails.join(", ")}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <ButtonLink href={draft.mailto} className={cn("h-9 px-3", !draft.validEmails.length && "pointer-events-none opacity-50")}>
+            <Mail className="h-4 w-4" />
+            Open email app
+          </ButtonLink>
+          <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => copyText("BCC", draft.validEmails.join(", "))} disabled={!draft.validEmails.length}>
+            <Copy className="h-4 w-4" />
+            Copy BCC
+          </Button>
+          <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => copyText("Subject", subject)} disabled={!subject.trim()}>Copy subject</Button>
+          <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => copyText("Message", message)} disabled={!message.trim()}>Copy message</Button>
+          <Button type="button" variant="ghost" className="h-9 px-3" onClick={onClose}>Close</Button>
+        </div>
+        {copied ? <p className="mt-2 text-sm font-semibold text-slate-600" aria-live="polite">{copied}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function buildEmailDraft(players: WorkspacePlayerSummary[], mode: EmailRecipientMode, subject: string, message: string) {
+  const validEmails: string[] = [];
+  const seen = new Set<string>();
+  const invalid: string[] = [];
+  const missing: string[] = [];
+  for (const player of players) {
+    const person = player.analytics.player;
+    const rawEmails = [
+      ...(mode === "players" || mode === "both" ? [person.playerEmail] : []),
+      ...(mode === "parents" || mode === "both" ? [person.parentEmail] : [])
+    ].filter((email): email is string => Boolean(email?.trim()));
+    if (!rawEmails.length) {
+      missing.push(playerName(person));
+      continue;
+    }
+    for (const rawEmail of rawEmails) {
+      const email = rawEmail.trim();
+      const key = email.toLowerCase();
+      if (!isValidEmail(email)) {
+        invalid.push(`${playerName(person)}: ${email}`);
+        continue;
+      }
+      if (!seen.has(key)) {
+        seen.add(key);
+        validEmails.push(email);
+      }
+    }
+  }
+  const params = new URLSearchParams();
+  if (validEmails.length) params.set("bcc", validEmails.join(","));
+  if (subject.trim()) params.set("subject", subject.trim());
+  if (message.trim()) params.set("body", message.trim());
+  return {
+    validEmails,
+    invalid,
+    missing,
+    mailto: `mailto:?${params.toString()}`
+  };
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function WorkspaceFilters({ data }: { data: WorkspaceData }) {
@@ -186,6 +406,7 @@ function WorkspaceFilters({ data }: { data: WorkspaceData }) {
             <option value="roster">Roster players</option>
             <option value="trial">Trial players</option>
             <option value="archived">Archived players</option>
+            <option value="trash">Player Trash</option>
           </select>
         </Field>
         <Field label="Position">
@@ -583,7 +804,10 @@ function WorkspaceTable({
   selectedPlayerId,
   onSelectPlayer,
   onColumnOrderChange,
-  isSavingColumnOrder
+  isSavingColumnOrder,
+  selectionMode,
+  selectedIds,
+  onToggleSelected
 }: {
   data: WorkspaceData;
   players: WorkspacePlayerSummary[];
@@ -593,6 +817,9 @@ function WorkspaceTable({
   onSelectPlayer: (playerId: string) => void;
   onColumnOrderChange: (nextOrder: WorkspaceColumnDefinition["id"][], previousOrder: WorkspaceColumnDefinition["id"][]) => void;
   isSavingColumnOrder: boolean;
+  selectionMode: boolean;
+  selectedIds: Set<string>;
+  onToggleSelected: (playerId: string) => void;
 }) {
   const [draggedColumn, setDraggedColumn] = useState<WorkspaceColumnDefinition["id"] | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: WorkspaceColumnDefinition["id"]; side: "before" | "after" } | null>(null);
@@ -613,6 +840,7 @@ function WorkspaceTable({
       <table className="min-w-[900px] w-full border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-board-line bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            {selectionMode ? <th className="w-12 px-3 py-3">Select</th> : null}
             {columns.map((column) => (
               <WorkspaceHeaderCell
                 key={column.id}
@@ -647,6 +875,9 @@ function WorkspaceTable({
               selected={selectedPlayerId === player.analytics.player.id}
               draggedColumn={draggedColumn}
               onSelectPlayer={onSelectPlayer}
+              selectionMode={selectionMode}
+              checked={selectedIds.has(player.analytics.player.id)}
+              onToggleSelected={onToggleSelected}
             />
           ))}
         </tbody>
@@ -661,7 +892,10 @@ function WorkspaceRow({
   columns,
   selected,
   draggedColumn,
-  onSelectPlayer
+  onSelectPlayer,
+  selectionMode,
+  checked,
+  onToggleSelected
 }: {
   data: WorkspaceData;
   player: WorkspacePlayerSummary;
@@ -669,6 +903,9 @@ function WorkspaceRow({
   selected: boolean;
   draggedColumn?: WorkspaceColumnDefinition["id"] | null;
   onSelectPlayer: (playerId: string) => void;
+  selectionMode: boolean;
+  checked: boolean;
+  onToggleSelected: (playerId: string) => void;
 }) {
   const summary = player.analytics;
   return (
@@ -687,6 +924,18 @@ function WorkspaceRow({
         selected ? "bg-green-50/80 shadow-[inset_4px_0_0_#16a34a]" : "hover:bg-slate-50"
       )}
     >
+      {selectionMode ? (
+        <td className="px-3 py-3">
+          <input
+            type="checkbox"
+            checked={checked}
+            aria-label={`Select ${playerName(summary.player)}`}
+            className="h-4 w-4 rounded border-board-line text-board-green"
+            onClick={(event) => event.stopPropagation()}
+            onChange={() => onToggleSelected(summary.player.id)}
+          />
+        </td>
+      ) : null}
       {columns.map((column) => <td key={column.id} className={cn(cellClass(data, column.sortable), draggedColumn === column.id && "bg-green-50/70 outline outline-1 outline-board-green/20")}>{renderColumnCell(column.id, data, player)}</td>)}
       <td className="px-3 py-3">
         <Button type="button" variant="secondary" className="h-8 px-2" onClick={(event) => {
@@ -698,7 +947,23 @@ function WorkspaceRow({
   );
 }
 
-function WorkspaceMobileCard({ data, player, selected, onSelectPlayer }: { data: WorkspaceData; player: WorkspacePlayerSummary; selected: boolean; onSelectPlayer: (playerId: string) => void }) {
+function WorkspaceMobileCard({
+  data,
+  player,
+  selected,
+  onSelectPlayer,
+  selectionMode,
+  checked,
+  onToggleSelected
+}: {
+  data: WorkspaceData;
+  player: WorkspacePlayerSummary;
+  selected: boolean;
+  onSelectPlayer: (playerId: string) => void;
+  selectionMode: boolean;
+  checked: boolean;
+  onToggleSelected: (playerId: string) => void;
+}) {
   const summary = player.analytics;
   const priority = data.configuration.mobileMetrics.map((metric) => mobileMetric(metric, player)).filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 4);
   return (
@@ -720,6 +985,12 @@ function WorkspaceMobileCard({ data, player, selected, onSelectPlayer }: { data:
     >
       <div className="flex items-start justify-between gap-3">
         <div>
+          {selectionMode ? (
+            <label className="mb-3 flex items-center gap-2 text-sm font-bold text-board-navy" onClick={(event) => event.stopPropagation()}>
+              <input type="checkbox" checked={checked} className="h-4 w-4 rounded border-board-line text-board-green" onChange={() => onToggleSelected(summary.player.id)} />
+              Select player
+            </label>
+          ) : null}
           <h2 className="text-lg font-bold text-board-navy">
             <Link
               href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))}

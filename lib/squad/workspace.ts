@@ -52,7 +52,7 @@ export type WorkspaceView =
   | "trial-players"
   | "reviews-due";
 
-export type WorkspacePlayersFilter = "active" | "roster" | "trial" | "archived";
+export type WorkspacePlayersFilter = "active" | "roster" | "trial" | "archived" | "trash";
 export type WorkspaceAvailabilityFilter = "all" | "available" | "injured" | "sick" | "medical-review";
 export type WorkspaceSortKey =
   | "name"
@@ -400,9 +400,9 @@ export async function getCoachWorkspaceData(
     customFrom: effectiveState.customFrom,
     customTo: effectiveState.customTo
   };
-  const [{ summaries, positions, seasonSettings }, archivedPlayers, records, assessments, goalsByPlayer, observationsByPlayer, medicalByPlayer, attentionPreferences] = await Promise.all([
+  const [{ summaries, positions, seasonSettings }, inactivePlayers, records, assessments, goalsByPlayer, observationsByPlayer, medicalByPlayer, attentionPreferences] = await Promise.all([
     getSquadAnalyticsOverview(supabase, userId, analyticsFilters),
-    listArchivedPlayers(db, userId),
+    listInactivePlayers(db, userId),
     listWorkspaceRecords(db, userId),
     listLatestAssessments(db, userId),
     listActiveGoals(db, userId),
@@ -420,7 +420,7 @@ export async function getCoachWorkspaceData(
       : summary;
   });
 
-  const archivedSummaries = archivedPlayers.filter((player) => player.squadId === activeTeam.id).map((player) =>
+  const archivedSummaries = inactivePlayers.filter((player) => player.squadId === activeTeam.id).map((player) =>
     createPlayerAnalyticsSummary(player, records, effectiveState.period, assessmentByPlayer.get(player.id), seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, effectiveState.customFrom, effectiveState.customTo)
   );
   const allSummaries = [...activeSummaries, ...archivedSummaries];
@@ -463,7 +463,7 @@ export async function getCoachWorkspaceData(
 
   const filtered = sortWorkspacePlayers(filterWorkspacePlayers(allPlayers, effectiveState), effectiveState.sort, effectiveState.direction);
   const selected = filtered.find((item) => item.analytics.player.id === effectiveState.selectedPlayer) ?? filtered[0];
-  const active = allPlayers.filter((item) => !item.analytics.player.archivedAt);
+  const active = allPlayers.filter((item) => !item.analytics.player.archivedAt && !item.analytics.player.deletedAt);
   return {
     state: effectiveState,
     configuration,
@@ -480,7 +480,7 @@ export async function getCoachWorkspaceData(
       active: active.length,
       roster: active.filter((item) => item.analytics.player.playerType === "roster").length,
       trial: active.filter((item) => item.analytics.player.playerType === "trial").length,
-      archived: allPlayers.filter((item) => item.analytics.player.archivedAt).length,
+      archived: allPlayers.filter((item) => item.analytics.player.archivedAt && !item.analytics.player.deletedAt).length,
       unavailable: active.filter((item) => item.currentMedical).length,
       needsAttention: active.filter((item) => item.attention.length).length,
       reviewsDue: active.filter((item) => item.review.rank <= 2).length
@@ -601,8 +601,10 @@ function filterWorkspacePlayers(players: WorkspacePlayerSummary[], state: Worksp
   const weekEnd = addDays(today, 7);
   return players.filter((item) => {
     const player = item.analytics.player;
-    if (state.players !== "archived" && player.archivedAt) return false;
-    if (state.players === "archived" && !player.archivedAt) return false;
+    if (state.players !== "trash" && player.deletedAt) return false;
+    if (state.players === "trash" && !player.deletedAt) return false;
+    if (state.players !== "archived" && player.archivedAt && !player.deletedAt) return false;
+    if (state.players === "archived" && (!player.archivedAt || player.deletedAt)) return false;
     if (state.players === "roster" && player.playerType !== "roster") return false;
     if (state.players === "trial" && player.playerType !== "trial") return false;
     if (state.view === "trial-players" && player.playerType !== "trial") return false;
@@ -709,7 +711,7 @@ function availabilityFilter(value: string | undefined, view: WorkspaceView): Wor
 }
 
 function playersFilter(value: string | undefined, view: WorkspaceView): WorkspacePlayersFilter {
-  if (value === "roster" || value === "trial" || value === "archived") return value;
+  if (value === "roster" || value === "trial" || value === "archived" || value === "trash") return value;
   if (view === "trial-players") return "trial";
   return "active";
 }
@@ -841,8 +843,12 @@ async function listWorkspaceViews(db: SupabaseClient, userId: string): Promise<W
   }
 }
 
-async function listArchivedPlayers(db: SupabaseClient, userId: string) {
-  const { data, error } = await db.from("squad_players").select("*").eq("user_id", userId).not("archived_at", "is", null);
+async function listInactivePlayers(db: SupabaseClient, userId: string) {
+  const { data, error } = await db
+    .from("squad_players")
+    .select("*")
+    .eq("user_id", userId)
+    .or("archived_at.not.is.null,deleted_at.not.is.null");
   if (error) return [];
   return ((data ?? []) as SquadPlayerRow[]).map(mapSquadPlayerRow);
 }

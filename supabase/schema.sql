@@ -586,6 +586,7 @@ create table if not exists public.squad_players (
 
   converted_at timestamptz,
   archived_at timestamptz,
+  deleted_at timestamptz,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -623,6 +624,9 @@ and squads.archived_at is null;
 
 alter table public.squad_players
 add column if not exists converted_at timestamptz;
+
+alter table public.squad_players
+add column if not exists deleted_at timestamptz;
 
 alter table public.squad_players
 alter column last_name drop not null;

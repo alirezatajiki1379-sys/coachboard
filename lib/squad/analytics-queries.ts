@@ -133,6 +133,7 @@ async function listAnalyticsPlayers(db: SupabaseClient, userId: string): Promise
     .select("*")
     .eq("user_id", userId)
     .is("archived_at", null)
+    .is("deleted_at", null)
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
   if (error) throw new Error(error.message);
