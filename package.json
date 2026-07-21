@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:recurrence": "node --experimental-strip-types scripts/recurrence-regression.mjs"
+    "test:recurrence": "node --experimental-strip-types scripts/recurrence-regression.mjs",
+    "test:positions": "node --experimental-strip-types scripts/position-normalization-regression.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

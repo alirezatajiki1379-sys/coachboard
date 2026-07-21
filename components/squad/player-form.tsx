@@ -86,7 +86,7 @@ export function PlayerForm({ action, mode, player, trainingDates = [] }: PlayerF
           />
           <TextInput name="joinedDate" label="Joined date" type="date" defaultValue={values.joinedDate} error={fieldErrors.joinedDate} />
         </div>
-        <p className="mt-3 text-xs text-slate-500">Separate secondary positions with commas, for example DM, AM. Optional fields are hidden in the Player Hub header unless enabled.</p>
+        <p className="mt-3 text-xs text-slate-500">Separate secondary positions with commas, for example CDM, CAM. Optional fields are hidden in the Player Hub header unless enabled.</p>
       </section>
 
       {playerType === "trial" ? (

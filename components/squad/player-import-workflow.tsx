@@ -18,6 +18,7 @@ import {
   type PlayerImportPayload,
   type ReviewedImportRow
 } from "@/lib/squad/importer";
+import { normalizePositions } from "@/lib/squad/intake";
 import type { SquadPlayer } from "@/types/domain";
 import { cn } from "@/lib/utils";
 
@@ -530,6 +531,11 @@ function PositionSummary({ summary, onReview }: { summary: PositionImportSummary
 }
 
 type PositionReviewFilter = "all" | "needs-review" | "partial" | "missing" | "resolved";
+type PositionReviewMessage = {
+  text: string;
+  tone: "green" | "amber" | "red";
+  previousRows?: ReviewedImportRow[];
+};
 
 function PositionReview({
   rows,
@@ -542,10 +548,12 @@ function PositionReview({
   summary: PositionImportSummary;
   onBack: () => void;
 }) {
-  const [filter, setFilter] = useState<PositionReviewFilter>("all");
+  const [filter, setFilter] = useState<PositionReviewFilter>("needs-review");
+  const [message, setMessage] = useState<PositionReviewMessage | null>(null);
   const visibleRows = rows.filter((row) => {
     const status = positionReviewStatus(row);
     if (filter === "all") return !row.excluded;
+    if (filter === "needs-review") return !row.excluded && (status === "needs-review" || status === "partial");
     if (filter === "resolved") return status === "recognized" || status === "intentionally-missing";
     return status === filter;
   });
@@ -557,19 +565,74 @@ function PositionReview({
     const status = positionReviewStatus(row);
     return !row.excluded && (status === "partial" || status === "needs-review");
   }).length;
+  const autoPlan = summarizeAutomaticResolution(rows);
+
+  function applyAutomaticDecisions(mode: "all" | "high-confidence") {
+    const plan = summarizeAutomaticResolution(rows);
+    const messageText = mode === "all"
+      ? `Let CoachBoard resolve ${plan.total} position records?\n\n${plan.resolvable} can be mapped with high confidence.\n${plan.missing} have no source position and will remain empty.\n${plan.ambiguous} ambiguous value${plan.ambiguous === 1 ? "" : "s"} will stay for manual review.`
+      : `Accept ${plan.resolvable} high-confidence position suggestion${plan.resolvable === 1 ? "" : "s"}? Ambiguous and missing values stay in the review queue.`;
+    if (!window.confirm(messageText)) return;
+    const previousRows = rows;
+    const nextRows = rows.map((row) => {
+      const decision = automaticPositionDecision(row);
+      if (decision.kind === "recognized") return updateRowPosition(row, decision.primary, decision.secondary.join(", "));
+      if (mode === "all" && decision.kind === "missing") return updateRowPosition(row, "", "", true);
+      return row;
+    });
+    const nextPlan = summarizeAutomaticResolution(nextRows);
+    onRowsChange(nextRows);
+    setFilter(nextPlan.ambiguous || (mode === "high-confidence" && nextPlan.missing) ? "needs-review" : "resolved");
+    setMessage({
+      tone: nextPlan.ambiguous ? "amber" : "green",
+      previousRows,
+      text: mode === "all"
+        ? `${plan.resolvable} positions resolved automatically. ${plan.missing} left empty because no source value was available. ${nextPlan.ambiguous} still require manual review.`
+        : `${plan.resolvable} high-confidence suggestions accepted. ${nextPlan.ambiguous} still require manual review.`
+    });
+  }
+
+  function resolveRows(nextRows: ReviewedImportRow[], text: string, previousRows: ReviewedImportRow[] = rows) {
+    onRowsChange(nextRows);
+    setMessage({ tone: "green", text, previousRows });
+  }
 
   return (
     <Panel title="Review player positions" action={<Button type="button" onClick={onBack}>Save position review</Button>}>
       <div className="rounded-lg border border-board-line bg-board-paper p-4">
         <p className="font-bold text-board-navy">{summary.needsReview + summary.partiallyRecognized} Players require attention</p>
         <p className="mt-1 text-sm text-slate-600">{reviewed} resolved · {required} still need review · {summary.missing} missing</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" onClick={() => applyAutomaticDecisions("all")} disabled={!autoPlan.total}>
+            Let CoachBoard decide
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => applyAutomaticDecisions("high-confidence")} disabled={!autoPlan.resolvable}>
+            Accept all high-confidence suggestions
+          </Button>
+          {message?.previousRows ? (
+            <Button type="button" variant="ghost" onClick={() => {
+              onRowsChange(message.previousRows ?? rows);
+              setMessage(null);
+            }}>
+              Undo
+            </Button>
+          ) : null}
+        </div>
+        <p className="mt-2 text-xs font-semibold text-slate-500">{autoPlan.resolvable} high-confidence · {autoPlan.missing} missing · {autoPlan.ambiguous} ambiguous</p>
+        {message ? (
+          <p className={cn(
+            "mt-3 rounded-md px-3 py-2 text-sm font-semibold",
+            message.tone === "green" && "bg-green-50 text-green-800",
+            message.tone === "amber" && "bg-amber-50 text-amber-800",
+            message.tone === "red" && "bg-red-50 text-red-700"
+          )} aria-live="polite">{message.text}</p>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Position review filters">
           {[
-            ["all", "All"],
             ["needs-review", "Needs review"],
-            ["partial", "Partially recognized"],
             ["missing", "Missing"],
-            ["resolved", "Resolved"]
+            ["resolved", "Resolved"],
+            ["all", "All"]
           ].map(([value, label]) => (
             <button key={value} type="button" onClick={() => setFilter(value as PositionReviewFilter)} className={cn("rounded-md px-3 py-2 text-sm font-bold", filter === value ? "bg-board-green text-white" : "bg-white text-slate-700 ring-1 ring-board-line")}>{label}</button>
           ))}
@@ -577,22 +640,39 @@ function PositionReview({
       </div>
       <div className="mt-4 space-y-3">
         {visibleRows.length ? visibleRows.map((row) => (
-          <PositionReviewRow key={row.rowNumber} row={row} rows={rows} onRowsChange={onRowsChange} />
+          <PositionReviewRow key={row.rowNumber} row={row} rows={rows} onRowsChange={onRowsChange} onResolved={resolveRows} />
         )) : <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No players in this position review filter.</p>}
       </div>
     </Panel>
   );
 }
 
-function PositionReviewRow({ row, rows, onRowsChange }: { row: ReviewedImportRow; rows: ReviewedImportRow[]; onRowsChange: (rows: ReviewedImportRow[]) => void }) {
+function PositionReviewRow({
+  row,
+  rows,
+  onRowsChange,
+  onResolved
+}: {
+  row: ReviewedImportRow;
+  rows: ReviewedImportRow[];
+  onRowsChange: (rows: ReviewedImportRow[]) => void;
+  onResolved: (rows: ReviewedImportRow[], text: string, previousRows?: ReviewedImportRow[]) => void;
+}) {
   const status = positionReviewStatus(row);
   const source = positionSourceValue(row);
   const sameSourceCount = source ? rows.filter((candidate) => positionSourceValue(candidate) === source && !candidate.excluded).length : 0;
   const player = `${row.values.firstName?.normalized ?? "Unnamed"} ${row.values.lastName?.normalized ?? ""}`.trim();
 
   function patchPosition(primary: string, secondary: string, leaveEmpty = false, applyAll = false) {
+    const previousRows = rows;
     const update = (candidate: ReviewedImportRow) => updateRowPosition(candidate, primary, secondary, leaveEmpty);
-    onRowsChange(rows.map((candidate) => applyAll && source ? (positionSourceValue(candidate) === source ? update(candidate) : candidate) : candidate.rowNumber === row.rowNumber ? update(candidate) : candidate));
+    const nextRows = rows.map((candidate) => applyAll && source ? (positionSourceValue(candidate) === source ? update(candidate) : candidate) : candidate.rowNumber === row.rowNumber ? update(candidate) : candidate);
+    onResolved(nextRows, applyAll && sameSourceCount > 1 ? `${sameSourceCount} matching position values resolved.` : `Position resolved for ${player || `row ${row.rowNumber}`}.`, previousRows);
+  }
+
+  function removePlayerFromImport() {
+    if (!window.confirm(`Remove ${player || `row ${row.rowNumber}`} from this import?`)) return;
+    onRowsChange(rows.map((candidate) => candidate.rowNumber === row.rowNumber ? { ...candidate, excluded: true, status: "excluded", operation: "skip" } : candidate));
   }
 
   return (
@@ -609,6 +689,7 @@ function PositionReviewRow({ row, rows, onRowsChange }: { row: ReviewedImportRow
           <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => patchPosition(row.values.position?.normalized ?? "", row.values.secondaryPositions?.normalized ?? "")}>Accept</Button>
           <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => patchPosition("", "", true)}>Leave without position</Button>
           {sameSourceCount > 1 ? <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => patchPosition(row.values.position?.normalized ?? "", row.values.secondaryPositions?.normalized ?? "", false, true)}>Apply to all {sameSourceCount}</Button> : null}
+          <Button type="button" variant="danger" className="h-9 px-3" onClick={removePlayerFromImport}>Remove Player from import</Button>
         </div>
       </div>
       {row.warnings.some(isPositionWarning) ? (
@@ -685,9 +766,9 @@ function positionGroups() {
     {
       label: "Midfield",
       options: [
-        { value: "DM", label: "Defensive Midfield" },
+        { value: "CDM", label: "Defensive Midfield" },
         { value: "CM", label: "Central Midfield" },
-        { value: "AM", label: "Attacking Midfield" },
+        { value: "CAM", label: "Attacking Midfield" },
         { value: "LM", label: "Left Midfield" },
         { value: "RM", label: "Right Midfield" }
       ]
@@ -756,6 +837,39 @@ function updateRowPosition(row: ReviewedImportRow, primary: string, secondary: s
     warnings,
     status: row.errors.length ? "error" : row.duplicateSignals.length ? "duplicate" : warnings.length ? "warning" : "ready"
   };
+}
+
+type AutomaticPositionDecision =
+  | { kind: "recognized"; primary: string; secondary: string[] }
+  | { kind: "missing" }
+  | { kind: "ambiguous" }
+  | { kind: "resolved" };
+
+function automaticPositionDecision(row: ReviewedImportRow): AutomaticPositionDecision {
+  const status = positionReviewStatus(row);
+  if (status === "recognized" || status === "intentionally-missing") return { kind: "resolved" };
+  const source = positionSourceValue(row).trim();
+  if (!source) return { kind: "missing" };
+  const normalized = normalizePositions(source);
+  if (normalized.values.length && !normalized.warnings.length) {
+    const [primary, ...secondary] = normalized.values;
+    return { kind: "recognized", primary, secondary };
+  }
+  return { kind: "ambiguous" };
+}
+
+function summarizeAutomaticResolution(rows: ReviewedImportRow[]) {
+  return rows.reduce(
+    (summary, row) => {
+      if (row.excluded) return summary;
+      const decision = automaticPositionDecision(row);
+      if (decision.kind === "recognized") return { ...summary, total: summary.total + 1, resolvable: summary.resolvable + 1 };
+      if (decision.kind === "missing") return { ...summary, total: summary.total + 1, missing: summary.missing + 1 };
+      if (decision.kind === "ambiguous") return { ...summary, total: summary.total + 1, ambiguous: summary.ambiguous + 1 };
+      return summary;
+    },
+    { total: 0, resolvable: 0, missing: 0, ambiguous: 0 }
+  );
 }
 
 function summarizeOperations(rows: ReviewedImportRow[], importMode: ImportMode): ImportPlanSummary {

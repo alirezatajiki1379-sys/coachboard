@@ -1,4 +1,5 @@
 import type { SquadPlayerInsert, SquadPlayerUpdate } from "@/lib/squad/mappers";
+import { normalizePositions } from "@/lib/squad/intake";
 
 export type SquadPlayerFormField =
   | "firstName"
@@ -88,6 +89,17 @@ function parseList(value: string) {
   return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean)));
 }
 
+function normalizePositionInput(value: string) {
+  if (!value) return "";
+  return normalizePositions(value).values[0] ?? value;
+}
+
+function normalizePositionListInput(value: string) {
+  if (!value) return [];
+  const normalized = normalizePositions(value).values;
+  return normalized.length ? normalized : parseList(value);
+}
+
 export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFormValues {
   return {
     firstName: text(formData, "firstName"),
@@ -156,8 +168,9 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
   if (values.weightKg && (Number.parseInt(values.weightKg, 10) < 20 || Number.parseInt(values.weightKg, 10) > 180)) fieldErrors.weightKg = "Use a realistic weight in kg.";
   if (values.trialTrainingLimit && Number.parseInt(values.trialTrainingLimit, 10) < 1) fieldErrors.trialTrainingLimit = "Use at least 1 training.";
 
-  const secondaryPositions = parseList(values.secondaryPositions).filter((position) => position !== values.position);
-  const preferredPositions = parseList(values.preferredPositions);
+  const primaryPosition = normalizePositionInput(values.position);
+  const secondaryPositions = normalizePositionListInput(values.secondaryPositions).filter((position) => position !== primaryPosition);
+  const preferredPositions = normalizePositionListInput(values.preferredPositions);
 
   const firstError = Object.values(fieldErrors)[0];
   if (firstError) {
@@ -175,7 +188,7 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       first_name: values.firstName,
       last_name: optionalText(values.lastName),
       date_of_birth: optionalText(values.dateOfBirth),
-      position: optionalText(values.position),
+      position: optionalText(primaryPosition),
       secondary_positions: secondaryPositions,
       strong_foot: optionalText(values.strongFoot),
       club: optionalText(values.club),
