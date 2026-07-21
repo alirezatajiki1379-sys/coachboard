@@ -29,6 +29,7 @@ const positionAliases: Record<string, string> = {
   "6er": "DM",
   sechser: "DM",
   zdm: "DM",
+  cdm: "DM",
   "defensive midfielder": "DM",
   "defensive midfield": "DM",
   "defensives mittelfeld": "DM",
@@ -43,16 +44,19 @@ const positionAliases: Record<string, string> = {
   "10er": "AM",
   zehner: "AM",
   zom: "AM",
+  om: "AM",
   "attacking midfielder": "AM",
   "attacking midfield": "AM",
   "offensives mittelfeld": "AM",
   cam: "AM",
   am: "AM",
   rf: "RW",
+  ra: "RW",
   "right winger": "RW",
   "right wing": "RW",
   rw: "RW",
   lf: "LW",
+  la: "LW",
   "left winger": "LW",
   "left wing": "LW",
   lw: "LW",
@@ -140,7 +144,7 @@ export function cleanInvisible(value: string) {
 
 function splitValues(value: string) {
   return value
-    .split(/[,;/\n]+/)
+    .split(/[,;/|\n]+/)
     .map((item) => item.trim())
     .filter(Boolean);
 }

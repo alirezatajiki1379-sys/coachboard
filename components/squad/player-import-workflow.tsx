@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, Download, FileSpreadsheet, Loader2, RotateCcw, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, Loader2, RotateCcw, Upload } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { confirmPlayerImport, undoPlayerImport, type PlayerImportActionState, type PlayerImportBatchSummary } from "@/lib/squad/import-actions";
 import {
@@ -32,6 +32,8 @@ const maxColumns = 100;
 
 export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportWorkflowProps) {
   const [step, setStep] = useState(1);
+  const [maxStep, setMaxStep] = useState(1);
+  const [positionReviewReturnStep, setPositionReviewReturnStep] = useState(4);
   const [sourceType, setSourceType] = useState<ImportSourceType>("paste");
   const [sourceName, setSourceName] = useState("");
   const [sheets, setSheets] = useState<ParsedSheet[]>([]);
@@ -46,11 +48,17 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
 
   const activeSheet = sheets[sheetIndex];
   const detected = useMemo(() => activeSheet ? detectTable(activeSheet.rows) : null, [activeSheet]);
-  const readyCount = rows.filter((row) => !row.excluded && !row.errors.length && row.operation !== "skip").length;
   const warningCount = rows.reduce((sum, row) => sum + row.warnings.length, 0);
   const errorCount = rows.filter((row) => row.errors.length && !row.excluded).length;
   const duplicateCount = rows.filter((row) => row.duplicateSignals.length && !row.excluded).length;
   const positionSummary = summarizePositions(rows);
+  const operationPlan = summarizeOperations(rows, importMode);
+  const importDisabledReason = importDisabledMessage(operationPlan, errorCount, positionSummary);
+
+  function goToStep(nextStep: number) {
+    setStep(nextStep);
+    setMaxStep((current) => Math.max(current, nextStep));
+  }
 
   function loadSheet(nextSheets: ParsedSheet[], nextSourceType: ImportSourceType, nextName: string) {
     setSheets(nextSheets);
@@ -59,7 +67,7 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
     setSourceName(nextName);
     setError("");
     setResult(null);
-    setStep(nextSheets.length > 1 ? 2 : 3);
+    goToStep(nextSheets.length > 1 ? 2 : 3);
     const table = detectTable(nextSheets[0].rows);
     setMappings(table.headers.map(suggestColumnMapping));
   }
@@ -67,14 +75,19 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
   function prepareMapping() {
     if (!detected) return;
     setMappings(detected.headers.map((header, index) => mappings[index] ?? suggestColumnMapping(header)));
-    setStep(3);
+    goToStep(3);
   }
 
   function prepareReview() {
     if (!detected) return;
     const reviewed = buildReviewedRows(detected.headers, detected.rows, mappings, existingPlayers);
     setRows(reviewed);
-    setStep(4);
+    goToStep(4);
+  }
+
+  function openPositionReview(returnStep = step) {
+    setPositionReviewReturnStep(returnStep);
+    goToStep(8);
   }
 
   function confirmImport() {
@@ -88,15 +101,21 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
     startTransition(async () => {
       const response = await confirmPlayerImport(payload);
       setResult(response);
-      if (response.ok) setStep(7);
+      if (response.ok) goToStep(7);
       else setError(response.error ?? "Import failed.");
     });
   }
 
   return (
     <div className="space-y-6">
-      <WorkflowSteps current={step} />
+      <WorkflowSteps current={step} maxStep={maxStep} onStepClick={goToStep} />
       {error ? <Alert message={error} /> : null}
+      {step > 1 && (step < 7 || step === 8) ? (
+        <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => goToStep(step === 8 ? positionReviewReturnStep : Math.max(1, step - 1))}>
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+      ) : null}
 
       {step === 1 ? (
         <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -190,29 +209,36 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
       ) : null}
 
       {step === 4 ? (
-        <Panel title="Review data" action={<Button onClick={() => setStep(5)}>Resolve duplicates</Button>}>
-          <Summary created={readyCount} warnings={warningCount} errors={errorCount} duplicates={duplicateCount} />
-          <PositionSummary summary={positionSummary} />
+        <Panel title="Review data" action={<Button onClick={() => goToStep(5)}>Resolve duplicates</Button>}>
+          <Summary operations={operationPlan} warnings={warningCount} errors={errorCount} duplicates={duplicateCount} />
+          <WarningSummary rows={rows} onReviewPositions={() => openPositionReview(4)} />
+          <PositionSummary summary={positionSummary} onReview={() => openPositionReview(4)} />
           <ReviewRows rows={rows} onRowsChange={setRows} />
         </Panel>
       ) : null}
 
       {step === 5 ? (
-        <Panel title="Resolve duplicates" action={<Button onClick={() => setStep(6)}>Confirm import</Button>}>
+        <Panel title="Resolve duplicates" action={<Button onClick={() => goToStep(6)}>Confirm import</Button>}>
           <p className="text-sm text-slate-600">Possible duplicates are never merged silently. Choose what should happen for each row.</p>
           <ReviewRows rows={rows} onRowsChange={setRows} duplicatesOnly />
         </Panel>
       ) : null}
 
       {step === 6 ? (
-        <Panel title="Ready to import" action={<Button onClick={confirmImport} disabled={isPending || !readyCount}>{isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import players</Button>}>
+        <Panel title="Ready to import" action={<Button onClick={confirmImport} disabled={isPending || Boolean(importDisabledReason)} title={importDisabledReason || undefined}>{isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import players</Button>}>
           <div className="grid gap-4 md:grid-cols-4">
             <Metric label="Rows found" value={String(rows.length)} />
-            <Metric label="Selected operations" value={String(readyCount)} />
+            <Metric label="Players to create" value={String(operationPlan.create)} />
+            <Metric label="Players to update" value={String(operationPlan.update)} />
+            <Metric label="Rows to skip" value={String(operationPlan.skip)} />
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
             <Metric label="Warnings" value={String(warningCount)} />
             <Metric label="Errors" value={String(errorCount)} />
           </div>
-          <PositionSummary summary={positionSummary} />
+          {importDisabledReason ? <Alert message={importDisabledReason} /> : null}
+          <WarningSummary rows={rows} onReviewPositions={() => openPositionReview(6)} />
+          <PositionSummary summary={positionSummary} onReview={() => openPositionReview(6)} />
           <label className="mt-5 block">
             <span className="text-sm font-bold text-slate-700">Import mode</span>
             <select value={importMode} onChange={(event) => setImportMode(event.target.value as ImportMode)} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy md:max-w-sm">
@@ -222,6 +248,10 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
             </select>
           </label>
         </Panel>
+      ) : null}
+
+      {step === 8 ? (
+        <PositionReview rows={rows} onRowsChange={setRows} summary={positionSummary} onBack={() => goToStep(positionReviewReturnStep)} />
       ) : null}
 
       {step === 7 && result?.ok ? (
@@ -244,15 +274,31 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
   );
 }
 
-function WorkflowSteps({ current }: { current: number }) {
+function WorkflowSteps({ current, maxStep, onStepClick }: { current: number; maxStep: number; onStepClick: (step: number) => void }) {
   const labels = ["Select source", "Select sheet", "Map columns", "Review data", "Resolve duplicates", "Confirm import", "View results"];
   return (
     <ol className="flex gap-2 overflow-x-auto rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label="Import progress">
-      {labels.map((label, index) => (
-        <li key={label} className={cn("min-w-fit rounded-md px-3 py-2 text-xs font-bold", current === index + 1 ? "bg-board-green text-white" : "bg-slate-50 text-slate-600")}>
-          {index + 1}. {label}
+      {labels.map((label, index) => {
+        const stepNumber = index + 1;
+        const completed = stepNumber < maxStep;
+        const clickable = stepNumber <= maxStep && stepNumber !== current;
+        return (
+        <li key={label} className="min-w-fit">
+          <button
+            type="button"
+            disabled={!clickable}
+            onClick={() => onStepClick(stepNumber)}
+            className={cn(
+              "inline-flex rounded-md px-3 py-2 text-xs font-bold transition disabled:cursor-default",
+              current === stepNumber ? "bg-board-green text-white" : completed ? "bg-green-50 text-green-800 hover:bg-green-100" : "bg-slate-50 text-slate-600"
+            )}
+            aria-current={current === stepNumber ? "step" : undefined}
+          >
+            {completed ? "✓ " : null}{stepNumber}. {label}
+          </button>
         </li>
-      ))}
+      );
+      })}
     </ol>
   );
 }
@@ -407,16 +453,27 @@ function SheetPreview({ sheet }: { sheet: ParsedSheet }) {
   );
 }
 
-function Summary({ created, warnings, errors, duplicates }: { created: number; warnings: number; errors: number; duplicates: number }) {
-  return <div className="grid gap-3 md:grid-cols-4"><Metric label="Ready operations" value={String(created)} /><Metric label="Warnings" value={String(warnings)} /><Metric label="Errors" value={String(errors)} /><Metric label="Possible duplicates" value={String(duplicates)} /></div>;
+function Summary({ operations, warnings, errors, duplicates }: { operations: ImportPlanSummary; warnings: number; errors: number; duplicates: number }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <Metric label="Create" value={String(operations.create)} />
+      <Metric label="Update" value={String(operations.update)} />
+      <Metric label="Skip" value={String(operations.skip)} />
+      <Metric label="Warnings" value={String(warnings)} />
+      <Metric label="Errors" value={String(errors)} />
+      <Metric label="Possible duplicates" value={String(duplicates)} />
+    </div>
+  );
 }
 
 type PositionImportSummary = {
   total: number;
   recognized: number;
   withSecondary: number;
+  partiallyRecognized: number;
   needsReview: number;
   missing: number;
+  intentionallyMissing: number;
 };
 
 function summarizePositions(rows: ReviewedImportRow[]): PositionImportSummary {
@@ -425,12 +482,15 @@ function summarizePositions(rows: ReviewedImportRow[]): PositionImportSummary {
     total: active.length,
     recognized: active.filter((row) => Boolean(row.values.position?.normalized)).length,
     withSecondary: active.filter((row) => Boolean(row.values.secondaryPositions?.normalized)).length,
-    needsReview: active.filter((row) => row.warnings.some((warning) => warning.toLowerCase().includes("unknown position"))).length,
-    missing: active.filter((row) => !row.values.position?.normalized).length
+    partiallyRecognized: active.filter((row) => positionReviewStatus(row) === "partial").length,
+    needsReview: active.filter((row) => positionReviewStatus(row) === "needs-review").length,
+    missing: active.filter((row) => positionReviewStatus(row) === "missing").length,
+    intentionallyMissing: active.filter((row) => positionReviewStatus(row) === "intentionally-missing").length
   };
 }
 
-function PositionSummary({ summary }: { summary: PositionImportSummary }) {
+function PositionSummary({ summary, onReview }: { summary: PositionImportSummary; onReview?: () => void }) {
+  const needsAttention = summary.needsReview + summary.partiallyRecognized;
   return (
     <section className="mt-4 rounded-lg border border-board-line bg-board-paper p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -439,19 +499,312 @@ function PositionSummary({ summary }: { summary: PositionImportSummary }) {
           <p className="mt-1 text-sm text-slate-600">
             {summary.total} Players total · {summary.recognized} with primary position · {summary.withSecondary} with secondary positions
           </p>
+          {summary.intentionallyMissing ? <p className="mt-1 text-sm text-slate-600">{summary.intentionallyMissing} intentionally left without position.</p> : null}
         </div>
-        {summary.needsReview || summary.missing ? (
-          <div className="rounded-md bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
-            {summary.needsReview} need review · {summary.missing} missing
-          </div>
+        {needsAttention || summary.missing ? (
+          <button
+            type="button"
+            onClick={onReview}
+            disabled={!onReview}
+            className="rounded-md bg-amber-50 px-3 py-2 text-left text-sm font-bold text-amber-800 transition enabled:hover:bg-amber-100 disabled:cursor-default"
+            aria-label={`Review positions for ${needsAttention} players and ${summary.missing} missing positions`}
+          >
+            {needsAttention} Players need position review<br />
+            {summary.missing} Players have no position
+            {onReview ? <span className="mt-2 block rounded bg-white px-2 py-1 text-center text-xs text-board-navy">Review positions</span> : null}
+          </button>
         ) : (
-          <div className="rounded-md bg-green-50 px-3 py-2 text-sm font-bold text-green-800">All recognized</div>
+          <div className="inline-flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm font-bold text-green-800">
+            <CheckCircle2 className="h-4 w-4" />
+            All resolved
+          </div>
         )}
       </div>
-      {summary.needsReview ? (
+      {needsAttention ? (
         <p className="mt-2 text-sm font-semibold text-amber-800">
-          Some position values could not be recognized. Review those rows before importing, or continue knowing those positions will stay empty.
+          Review ambiguous or unknown position values before importing. Missing positions can be assigned or intentionally left empty.
         </p>
+      ) : null}
+    </section>
+  );
+}
+
+type PositionReviewFilter = "all" | "needs-review" | "partial" | "missing" | "resolved";
+
+function PositionReview({
+  rows,
+  onRowsChange,
+  summary,
+  onBack
+}: {
+  rows: ReviewedImportRow[];
+  onRowsChange: (rows: ReviewedImportRow[]) => void;
+  summary: PositionImportSummary;
+  onBack: () => void;
+}) {
+  const [filter, setFilter] = useState<PositionReviewFilter>("all");
+  const visibleRows = rows.filter((row) => {
+    const status = positionReviewStatus(row);
+    if (filter === "all") return !row.excluded;
+    if (filter === "resolved") return status === "recognized" || status === "intentionally-missing";
+    return status === filter;
+  });
+  const reviewed = rows.filter((row) => {
+    const status = positionReviewStatus(row);
+    return !row.excluded && (status === "recognized" || status === "intentionally-missing");
+  }).length;
+  const required = rows.filter((row) => {
+    const status = positionReviewStatus(row);
+    return !row.excluded && (status === "partial" || status === "needs-review");
+  }).length;
+
+  return (
+    <Panel title="Review player positions" action={<Button type="button" onClick={onBack}>Save position review</Button>}>
+      <div className="rounded-lg border border-board-line bg-board-paper p-4">
+        <p className="font-bold text-board-navy">{summary.needsReview + summary.partiallyRecognized} Players require attention</p>
+        <p className="mt-1 text-sm text-slate-600">{reviewed} resolved · {required} still need review · {summary.missing} missing</p>
+        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Position review filters">
+          {[
+            ["all", "All"],
+            ["needs-review", "Needs review"],
+            ["partial", "Partially recognized"],
+            ["missing", "Missing"],
+            ["resolved", "Resolved"]
+          ].map(([value, label]) => (
+            <button key={value} type="button" onClick={() => setFilter(value as PositionReviewFilter)} className={cn("rounded-md px-3 py-2 text-sm font-bold", filter === value ? "bg-board-green text-white" : "bg-white text-slate-700 ring-1 ring-board-line")}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-4 space-y-3">
+        {visibleRows.length ? visibleRows.map((row) => (
+          <PositionReviewRow key={row.rowNumber} row={row} rows={rows} onRowsChange={onRowsChange} />
+        )) : <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No players in this position review filter.</p>}
+      </div>
+    </Panel>
+  );
+}
+
+function PositionReviewRow({ row, rows, onRowsChange }: { row: ReviewedImportRow; rows: ReviewedImportRow[]; onRowsChange: (rows: ReviewedImportRow[]) => void }) {
+  const status = positionReviewStatus(row);
+  const source = positionSourceValue(row);
+  const sameSourceCount = source ? rows.filter((candidate) => positionSourceValue(candidate) === source && !candidate.excluded).length : 0;
+  const player = `${row.values.firstName?.normalized ?? "Unnamed"} ${row.values.lastName?.normalized ?? ""}`.trim();
+
+  function patchPosition(primary: string, secondary: string, leaveEmpty = false, applyAll = false) {
+    const update = (candidate: ReviewedImportRow) => updateRowPosition(candidate, primary, secondary, leaveEmpty);
+    onRowsChange(rows.map((candidate) => applyAll && source ? (positionSourceValue(candidate) === source ? update(candidate) : candidate) : candidate.rowNumber === row.rowNumber ? update(candidate) : candidate));
+  }
+
+  return (
+    <article className={cn("rounded-lg border p-4", status === "needs-review" || status === "partial" ? "border-amber-200 bg-amber-50" : status === "missing" ? "border-slate-200 bg-slate-50" : "border-board-line bg-white")}>
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr_auto] lg:items-end">
+        <div>
+          <p className="font-bold text-board-navy">{player || `Row ${row.rowNumber}`}</p>
+          <p className="mt-1 text-sm text-slate-600">Source: {source || "No source position"}</p>
+          <StatusBadge value={positionStatusLabel(status)} tone={status === "recognized" || status === "intentionally-missing" ? "green" : status === "missing" ? "slate" : "amber"} />
+        </div>
+        <PositionSelect label="Primary position" value={row.values.position?.normalized ?? ""} onChange={(value) => patchPosition(value, row.values.secondaryPositions?.normalized ?? "")} />
+        <PositionMultiSelect label="Secondary positions" value={row.values.secondaryPositions?.normalized ?? ""} primary={row.values.position?.normalized ?? ""} onChange={(value) => patchPosition(row.values.position?.normalized ?? "", value)} />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => patchPosition(row.values.position?.normalized ?? "", row.values.secondaryPositions?.normalized ?? "")}>Accept</Button>
+          <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => patchPosition("", "", true)}>Leave without position</Button>
+          {sameSourceCount > 1 ? <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => patchPosition(row.values.position?.normalized ?? "", row.values.secondaryPositions?.normalized ?? "", false, true)}>Apply to all {sameSourceCount}</Button> : null}
+        </div>
+      </div>
+      {row.warnings.some(isPositionWarning) ? (
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-800">
+          {row.warnings.filter(isPositionWarning).map((warning) => <li key={warning}>{warning}</li>)}
+        </ul>
+      ) : null}
+    </article>
+  );
+}
+
+function PositionSelect({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-2 text-sm text-board-navy">
+        <option value="">No position</option>
+        {positionGroups().map((group) => (
+          <optgroup key={group.label} label={group.label}>
+            {group.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function PositionMultiSelect({ label, value, primary, onChange }: { label: string; value: string; primary: string; onChange: (value: string) => void }) {
+  const values = new Set(splitPositionList(value));
+  return (
+    <fieldset>
+      <legend className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</legend>
+      <div className="mt-1 max-h-32 overflow-y-auto rounded-md border border-board-line bg-white p-2">
+        {positionGroups().flatMap((group) => group.options).filter((option) => option.value !== primary).map((option) => (
+          <label key={option.value} className="flex items-center gap-2 py-1 text-sm text-board-navy">
+            <input
+              type="checkbox"
+              checked={values.has(option.value)}
+              onChange={(event) => {
+                const next = new Set(values);
+                if (event.target.checked) next.add(option.value);
+                else next.delete(option.value);
+                onChange(Array.from(next).join(", "));
+              }}
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+type PositionStatus = "recognized" | "partial" | "needs-review" | "missing" | "intentionally-missing";
+
+type ImportPlanSummary = {
+  create: number;
+  update: number;
+  skip: number;
+};
+
+function positionGroups() {
+  return [
+    { label: "Goalkeeper", options: [{ value: "GK", label: "Goalkeeper" }] },
+    {
+      label: "Defensive",
+      options: [
+        { value: "CB", label: "Centre Back" },
+        { value: "RB", label: "Right Back" },
+        { value: "LB", label: "Left Back" },
+        { value: "WB", label: "Wing Back" }
+      ]
+    },
+    {
+      label: "Midfield",
+      options: [
+        { value: "DM", label: "Defensive Midfield" },
+        { value: "CM", label: "Central Midfield" },
+        { value: "AM", label: "Attacking Midfield" },
+        { value: "LM", label: "Left Midfield" },
+        { value: "RM", label: "Right Midfield" }
+      ]
+    },
+    {
+      label: "Attacking",
+      options: [
+        { value: "LW", label: "Left Wing" },
+        { value: "RW", label: "Right Wing" },
+        { value: "ST", label: "Striker" },
+        { value: "CF", label: "Centre Forward" }
+      ]
+    }
+  ];
+}
+
+function splitPositionList(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function positionSourceValue(row: ReviewedImportRow) {
+  return row.values.position?.original || row.values.preferredPositions?.original || row.values.secondaryPositions?.original || "";
+}
+
+function positionReviewStatus(row: ReviewedImportRow): PositionStatus {
+  const source = positionSourceValue(row).trim();
+  const primary = row.values.position?.normalized?.trim();
+  if (row.values.position?.warnings?.includes("Intentionally left without position.")) return "intentionally-missing";
+  if (!source && !primary) return "missing";
+  if (!primary && source) return "needs-review";
+  if (row.warnings.some(isPositionWarning) || row.values.position?.warnings?.some(isPositionWarning) || row.values.secondaryPositions?.warnings?.some(isPositionWarning) || row.values.preferredPositions?.warnings?.some(isPositionWarning)) return "partial";
+  return "recognized";
+}
+
+function positionStatusLabel(status: PositionStatus) {
+  if (status === "partial") return "Partially recognized";
+  if (status === "needs-review") return "Needs review";
+  if (status === "missing") return "Missing";
+  if (status === "intentionally-missing") return "Left without position";
+  return "Recognized";
+}
+
+function isPositionWarning(warning: string) {
+  const lower = warning.toLowerCase();
+  return lower.includes("unknown position") || lower.includes("primary position missing");
+}
+
+function updateRowPosition(row: ReviewedImportRow, primary: string, secondary: string, leaveEmpty = false): ReviewedImportRow {
+  const source = positionSourceValue(row);
+  const cleanSecondary = splitPositionList(secondary).filter((position) => position !== primary).join(", ");
+  const values = { ...row.values };
+  values.position = {
+    original: values.position?.original ?? source,
+    normalized: leaveEmpty ? "" : primary,
+    warnings: leaveEmpty ? ["Intentionally left without position."] : []
+  };
+  values.secondaryPositions = {
+    original: values.secondaryPositions?.original ?? source,
+    normalized: leaveEmpty ? "" : cleanSecondary,
+    warnings: []
+  };
+  const warnings = row.warnings.filter((warning) => !isPositionWarning(warning));
+  return {
+    ...row,
+    values,
+    warnings,
+    status: row.errors.length ? "error" : row.duplicateSignals.length ? "duplicate" : warnings.length ? "warning" : "ready"
+  };
+}
+
+function summarizeOperations(rows: ReviewedImportRow[], importMode: ImportMode): ImportPlanSummary {
+  return rows.reduce<ImportPlanSummary>((summary, row) => {
+    if (row.excluded || row.errors.length || row.operation === "skip") return { ...summary, skip: summary.skip + 1 };
+    const hasMatch = Boolean(row.duplicatePlayerId || row.duplicateSignals.length);
+    if (row.operation === "create") {
+      if (importMode === "update_only" || hasMatch) return { ...summary, skip: summary.skip + 1 };
+      return { ...summary, create: summary.create + 1 };
+    }
+    if ((row.operation === "update" || row.operation === "fill_missing") && hasMatch) return { ...summary, update: summary.update + 1 };
+    return { ...summary, skip: summary.skip + 1 };
+  }, { create: 0, update: 0, skip: 0 });
+}
+
+function importDisabledMessage(plan: ImportPlanSummary, errorCount: number, summary: PositionImportSummary) {
+  if (errorCount) return "Fix blocking row errors before importing.";
+  if (!plan.create && !plan.update) return "No Players are currently selected for import. Review duplicate decisions or import operations.";
+  if (summary.needsReview || summary.partiallyRecognized) return "Review unresolved position values before importing.";
+  return "";
+}
+
+function WarningSummary({ rows, onReviewPositions }: { rows: ReviewedImportRow[]; onReviewPositions: () => void }) {
+  const positionWarnings = rows.reduce((sum, row) => sum + row.warnings.filter(isPositionWarning).length, 0);
+  const duplicateWarnings = rows.filter((row) => row.duplicateSignals.length && !row.excluded).length;
+  const optionalWarnings = rows.reduce((sum, row) => sum + row.warnings.filter((warning) => !isPositionWarning(warning)).length, 0);
+  if (!positionWarnings && !duplicateWarnings && !optionalWarnings) return null;
+  return (
+    <section className="mt-4 grid gap-3 md:grid-cols-3">
+      {positionWarnings ? (
+        <button type="button" onClick={onReviewPositions} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-left hover:bg-amber-100">
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Review recommended</p>
+          <p className="mt-1 font-bold text-board-navy">Positions</p>
+          <p className="text-sm text-amber-800">{positionWarnings} warning{positionWarnings === 1 ? "" : "s"}</p>
+        </button>
+      ) : null}
+      {duplicateWarnings ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Review recommended</p>
+          <p className="mt-1 font-bold text-board-navy">Possible duplicates</p>
+          <p className="text-sm text-amber-800">{duplicateWarnings} row{duplicateWarnings === 1 ? "" : "s"}</p>
+        </div>
+      ) : null}
+      {optionalWarnings ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Optional information</p>
+          <p className="mt-1 font-bold text-board-navy">Other fields</p>
+          <p className="text-sm text-slate-600">{optionalWarnings} warning{optionalWarnings === 1 ? "" : "s"}</p>
+        </div>
       ) : null}
     </section>
   );
