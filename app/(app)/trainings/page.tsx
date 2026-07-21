@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { CalendarPlus } from "lucide-react";
 import { PageContainer, PageHeader, PageTabs } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
-import { TrainingEventCard } from "@/components/squad/training-event-card";
+import { TrainingBulkManager } from "@/components/squad/training-bulk-manager";
 import { createClient } from "@/lib/supabase/server";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import { ensureActiveSquad } from "@/lib/squad/squads";
@@ -80,17 +80,13 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
       </PageTabs>
 
       <section className={events.length ? "space-y-4" : ""}>
-        {events.length ? (
-          events.map((event) => <TrainingEventCard key={event.id} event={event} attendance={event.attendance} hrefBase="/trainings" />)
-        ) : (
-          <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">No trainings found</h2>
-            <p className="mt-2 text-sm text-slate-600">{filter === "trash" ? "Training Trash is empty for this Team." : "No trainings scheduled for this Team. Create the first Training or switch to another Team."}</p>
-            <ButtonLink href="/trainings/new" className="mt-5">
-              Create training
-            </ButtonLink>
-          </div>
-        )}
+        <TrainingBulkManager
+          initialEvents={events}
+          activeTeamId={activeTeam.id}
+          activeTeamName={activeTeam.name}
+          filterLabel={filters.find((item) => item.id === filter)?.label ?? "Current filter"}
+          isTrash={filter === "trash"}
+        />
       </section>
     </PageContainer>
   );

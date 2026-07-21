@@ -249,6 +249,10 @@ export type Squad = {
   userId: string;
   name: string;
   isActive: boolean;
+  countryCode?: string;
+  federalStateCode?: string;
+  city?: string;
+  calendarPreferences?: Record<string, unknown>;
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { TrainingEventForm } from "@/components/squad/training-event-form";
 import { getLinkableTrainingSessions, getTrainingEventDetail, listTrainingParticipantOptions } from "@/lib/squad/attendance-queries";
+import { getTeamCalendarContext } from "@/lib/squad/regional-calendar-queries";
 import { listSquads } from "@/lib/squad/squads";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,7 +27,10 @@ export default async function EditTrainingPage({ params }: EditTrainingPageProps
   ]);
 
   if (!event) notFound();
-  const participants = await listTrainingParticipantOptions(supabase, user.id, event.squadId);
+  const [participants, calendarContext] = await Promise.all([
+    listTrainingParticipantOptions(supabase, user.id, event.squadId),
+    getTeamCalendarContext(supabase, user.id, event.squadId, addMonths(event.date, -3), addMonths(event.date, 12))
+  ]);
 
   return (
     <div className="space-y-6">
@@ -39,7 +43,13 @@ export default async function EditTrainingPage({ params }: EditTrainingPageProps
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Edit training</h1>
         <p className="mt-2 text-slate-600">Adjust appointment details and participants without changing recorded attendance history.</p>
       </div>
-      <TrainingEventForm sessions={sessions} squads={squads} participants={participants} event={event} mode="edit" />
+      <TrainingEventForm sessions={sessions} squads={squads} participants={participants} event={event} mode="edit" calendarContext={calendarContext} />
     </div>
   );
+}
+
+function addMonths(date: string, months: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCMonth(value.getUTCMonth() + months);
+  return value.toISOString().slice(0, 10);
 }

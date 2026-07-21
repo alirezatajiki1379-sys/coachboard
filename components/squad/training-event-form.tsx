@@ -1,10 +1,17 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
-import { CalendarPlus, Loader2 } from "lucide-react";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CalendarPlus, Loader2 } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { createTrainingEvent, updateTrainingEvent, type TrainingEventActionState } from "@/lib/squad/attendance-actions";
-import { recurrenceSummary, weekdayForDate } from "@/lib/trainings/utils";
+import {
+  findCalendarConflicts,
+  shouldExcludeByDefault,
+  summarizeCalendarConflicts,
+  type CalendarConflict,
+  type CalendarConflictContext
+} from "@/lib/squad/regional-calendar";
+import { generateTrainingRecurrenceDates, recurrenceSummary, weekdayForDate } from "@/lib/trainings/utils";
 import type { Squad, SquadPlayer, SquadTrainingEventDetail } from "@/types/domain";
 
 type TrainingEventFormProps = {
@@ -13,11 +20,12 @@ type TrainingEventFormProps = {
   participants: SquadPlayer[];
   event?: SquadTrainingEventDetail;
   mode?: "create" | "edit";
+  calendarContext?: CalendarConflictContext;
 };
 
 const initialState: TrainingEventActionState = {};
 
-export function TrainingEventForm({ sessions, squads, participants, event, mode = "create" }: TrainingEventFormProps) {
+export function TrainingEventForm({ sessions, squads, participants, event, mode = "create", calendarContext }: TrainingEventFormProps) {
   const action = mode === "edit" ? updateTrainingEvent : createTrainingEvent;
   const [state, formAction, isPending] = useActionState(action, initialState);
   const selectedParticipants = useMemo(
@@ -73,6 +81,38 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
     },
     endTimeValue ? `${startTimeValue}-${endTimeValue}` : startTimeValue
   );
+  const recurrenceDates = useMemo(() => {
+    if (repeatMode === "none") return [];
+    return generateTrainingRecurrenceDates({
+      startDate: dateValue,
+      intervalWeeks: repeatMode === "two_weeks" ? 2 : Math.max(1, Number.parseInt(repeatIntervalWeeks, 10) || 1),
+      weekdays: Array.from(repeatWeekdays).map((day) => Number.parseInt(day, 10)),
+      endMode: repeatEndMode === "occurrence_count" ? "occurrence_count" : "date",
+      endDate: repeatEndDate,
+      occurrenceCount: Number.parseInt(repeatOccurrenceCount, 10) || 0
+    });
+  }, [dateValue, repeatEndDate, repeatEndMode, repeatIntervalWeeks, repeatMode, repeatOccurrenceCount, repeatWeekdays]);
+  const recurrenceConflicts = useMemo(
+    () => summarizeCalendarConflicts(recurrenceDates, calendarContext),
+    [calendarContext, recurrenceDates]
+  );
+  const oneOffConflicts = useMemo(
+    () => repeatMode === "none" ? findCalendarConflicts(dateValue, calendarContext) : [],
+    [calendarContext, dateValue, repeatMode]
+  );
+  const defaultExcludedDates = useMemo(() => {
+    if (!calendarContext) return [];
+    const dates: string[] = [];
+    for (const [date, conflicts] of recurrenceConflicts.entries()) {
+      if (conflicts.some((conflict) => shouldExcludeByDefault(conflict, calendarContext))) dates.push(date);
+    }
+    return dates;
+  }, [calendarContext, recurrenceConflicts]);
+  const [excludedDates, setExcludedDates] = useState<Set<string>>(() => new Set(defaultExcludedDates));
+  useEffect(() => {
+    setExcludedDates(new Set(defaultExcludedDates));
+  }, [defaultExcludedDates]);
+  const createdDateCount = Math.max(0, recurrenceDates.length - excludedDates.size);
 
   return (
     <div className="space-y-6">
@@ -101,7 +141,10 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
             <div className="rounded-md border border-board-line bg-board-paper px-3 py-2 md:col-span-2">
               <p className="text-sm font-medium text-slate-700">Team</p>
               <p className="mt-1 text-base font-bold text-board-navy">{assignedTeam?.name ?? "Active Team"}</p>
-              <p className="mt-1 text-xs text-slate-500">Trainings automatically use the active Team roster. Participants below are saved as a training snapshot.</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Trainings automatically use the active Team roster. Participants below are saved as a training snapshot.
+                {calendarContext?.federalStateCode ? " Regional calendar checks are active." : " Add a Bundesland in Team settings to check holidays and school breaks."}
+              </p>
             </div>
             <label className="block md:col-span-2">
               <span className="text-sm font-medium text-slate-700">Training plan</span>
@@ -118,6 +161,7 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
                 <ButtonLink href="/sessions" variant="ghost" className="h-8 px-2 text-xs">Open training plans</ButtonLink>
               </div>
             </label>
+            {oneOffConflicts.length ? <CalendarWarning conflicts={oneOffConflicts} /> : null}
             <label className="block md:col-span-2">
               <span className="text-sm font-medium text-slate-700">General notes</span>
               <textarea name="generalNotes" defaultValue={values.generalNotes} rows={4} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
@@ -210,6 +254,21 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
                     </select>
                   </label>
                   <p className="rounded-md border border-board-line bg-board-paper p-3 text-sm font-semibold text-slate-700">{recurrencePreview}</p>
+                  {calendarContext ? (
+                    <CalendarConflictSelector
+                      conflictsByDate={recurrenceConflicts}
+                      excludedDates={excludedDates}
+                      defaultExcludedDates={defaultExcludedDates}
+                      setExcludedDates={setExcludedDates}
+                      createdDateCount={createdDateCount}
+                      totalDateCount={recurrenceDates.length}
+                      sourceLabel={calendarContext.sourceLabel}
+                    />
+                  ) : (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                      Add the Team Bundesland in Team settings to review public holidays and school breaks before generating recurring trainings.
+                    </p>
+                  )}
                 </>
               ) : null}
             </div>
@@ -237,6 +296,157 @@ const weekdayOptions = [
   { value: "6", short: "Sat" },
   { value: "7", short: "Sun" }
 ];
+
+function CalendarWarning({ conflicts }: { conflicts: CalendarConflict[] }) {
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 md:col-span-2">
+      <p className="flex items-center gap-2 text-sm font-bold text-amber-900">
+        <AlertTriangle className="h-4 w-4" />
+        Calendar note for this date
+      </p>
+      <ul className="mt-2 space-y-1 text-sm text-amber-900">
+        {conflicts.map((conflict) => (
+          <li key={`${conflict.date}-${conflict.event.id}`}>
+            {formatDate(conflict.date)}: {conflict.event.name} · {categoryLabel(conflict.event.category)}
+            {conflict.event.confidence === "suggested" ? " · suggestion, confirm locally" : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CalendarConflictSelector({
+  conflictsByDate,
+  excludedDates,
+  defaultExcludedDates,
+  setExcludedDates,
+  createdDateCount,
+  totalDateCount,
+  sourceLabel
+}: {
+  conflictsByDate: Map<string, CalendarConflict[]>;
+  excludedDates: Set<string>;
+  defaultExcludedDates: string[];
+  setExcludedDates: (value: Set<string>) => void;
+  createdDateCount: number;
+  totalDateCount: number;
+  sourceLabel: string;
+}) {
+  const rows = Array.from(conflictsByDate.entries()).sort(([a], [b]) => a.localeCompare(b));
+  if (!rows.length) {
+    return (
+      <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">
+        No regional calendar conflicts found for the generated dates. {sourceLabel}
+      </div>
+    );
+  }
+  const categoryCounts = countCategories(rows);
+  const datesForCategory = (category: string) =>
+    rows.filter(([, conflicts]) => conflicts.some((conflict) => conflict.event.category === category)).map(([date]) => date);
+  const excludeCategory = (category: string) => {
+    const next = new Set(excludedDates);
+    for (const date of datesForCategory(category)) next.add(date);
+    setExcludedDates(next);
+  };
+  const keepAll = () => setExcludedDates(new Set());
+  const resetToDefaults = () => setExcludedDates(new Set(defaultExcludedDates));
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+      <p className="flex items-center gap-2 text-sm font-bold text-amber-900">
+        <AlertTriangle className="h-4 w-4" />
+        Review trainingsfreie Tage
+      </p>
+      <p className="mt-1 text-xs text-amber-900">
+        {createdDateCount} of {totalDateCount} trainings will be created. Excluded dates are stored on the recurrence series. {sourceLabel}
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {calendarCategoryOrder.map((category) => categoryCounts.get(category) ? (
+          <button
+            key={category}
+            type="button"
+            onClick={() => excludeCategory(category)}
+            className="rounded-md border border-amber-200 bg-white px-3 py-2 text-left text-xs font-bold text-board-navy hover:border-board-green"
+          >
+            Exclude {categoryLabel(category)}
+            <span className="mt-1 block font-medium text-slate-500">{categoryCounts.get(category)} affected</span>
+          </button>
+        ) : null)}
+        <button type="button" onClick={keepAll} className="rounded-md border border-amber-200 bg-white px-3 py-2 text-left text-xs font-bold text-board-navy hover:border-board-green">
+          Keep all Sessions
+          <span className="mt-1 block font-medium text-slate-500">Create every date</span>
+        </button>
+        <button type="button" onClick={resetToDefaults} className="rounded-md border border-amber-200 bg-white px-3 py-2 text-left text-xs font-bold text-board-navy hover:border-board-green">
+          Reset to defaults
+          <span className="mt-1 block font-medium text-slate-500">Use Team suggestions</span>
+        </button>
+      </div>
+      <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+        {rows.map(([date, conflicts]) => {
+          const reasonLabel = conflicts.map((conflict) => conflict.event.name).join(", ");
+          const reasonType = conflicts[0]?.event.category ?? "team_custom_exclusion";
+          const checked = excludedDates.has(date);
+          return (
+            <label key={date} className="block rounded-md border border-amber-200 bg-white p-3 text-sm text-board-navy">
+              <span className="flex items-start gap-3">
+                <input
+                  name="excludeOccurrenceDate"
+                  value={date}
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => {
+                    const next = new Set(excludedDates);
+                    if (event.target.checked) next.add(date);
+                    else next.delete(date);
+                    setExcludedDates(next);
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green"
+                />
+                <span className="min-w-0">
+                  <span className="block font-bold">{formatDate(date)} · {checked ? "Exclude" : "Keep"}</span>
+                  <span className="mt-1 block text-xs text-slate-600">
+                    {conflicts.map((conflict) => (
+                      <span key={conflict.event.id} className="mr-2 inline-block">
+                        {conflict.event.name} ({categoryLabel(conflict.event.category)}
+                        {conflict.event.confidence === "suggested" ? ", suggested" : ""})
+                      </span>
+                    ))}
+                  </span>
+                </span>
+              </span>
+              <input type="hidden" name={`excludeOccurrenceReason:${date}`} value={reasonLabel} />
+              <input type="hidden" name={`excludeOccurrenceType:${date}`} value={reasonType} />
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const calendarCategoryOrder = ["public_holiday", "school_holiday", "local_customary_day", "movable_holiday", "team_custom_exclusion"];
+
+function countCategories(rows: Array<[string, CalendarConflict[]]>) {
+  const counts = new Map<string, number>();
+  for (const [, conflicts] of rows) {
+    const categories = new Set(conflicts.map((conflict) => conflict.event.category));
+    for (const category of categories) counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function categoryLabel(category: string) {
+  if (category === "public_holiday") return "public holiday";
+  if (category === "school_holiday") return "school holiday";
+  if (category === "movable_holiday") return "movable holiday";
+  if (category === "local_customary_day") return "local/customary day";
+  return "team exclusion";
+}
+
+function formatDate(date: string) {
+  const [year, month, day] = date.split("-");
+  return year && month && day ? `${day}.${month}.${year}` : date;
+}
 
 function ParticipantSelector({ participants, selected, compact = false }: { participants: SquadPlayer[]; selected: Set<string>; compact?: boolean }) {
   const rosterCount = participants.filter((player) => player.playerType === "roster").length;

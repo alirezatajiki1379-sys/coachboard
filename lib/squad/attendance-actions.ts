@@ -112,6 +112,17 @@ function parseRecurrence(values: NonNullable<TrainingEventActionState["values"]>
   };
 }
 
+export type BulkTrainingOperationResult =
+  | {
+      ok: true;
+      affectedIds: string[];
+      message: string;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
 function boundedRating(value: string) {
   const parsed = numberOrNull(value);
   return parsed && parsed >= 1 && parsed <= 5 ? parsed : null;
@@ -179,6 +190,16 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
       occurrenceCount: recurrence.occurrenceCount
     });
     if (!dates.length) return { error: "The recurrence does not create any Training Sessions.", fieldErrors: { repeatEndDate: "Check the recurrence end condition." }, values, submissionId: Date.now() };
+    const excludedDates = new Set(selectedValues(formData, "excludeOccurrenceDate"));
+    const keptDates = dates.filter((date) => !excludedDates.has(date));
+    if (!keptDates.length) {
+      return {
+        error: "All generated trainings are excluded. Keep at least one date or change the recurrence.",
+        fieldErrors: { repeatEndDate: "No trainings would be created." },
+        values,
+        submissionId: Date.now()
+      };
+    }
 
     const { data: series, error: seriesError } = await db
       .from("training_recurrence_series")
@@ -203,11 +224,25 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
       .single();
     if (seriesError) return { error: seriesError.message, values, submissionId: Date.now() };
 
-    const rows = dates.map((date, index) => ({
+    const exclusionRows = dates
+      .filter((date) => excludedDates.has(date))
+      .map((date) => ({
+        user_id: user.id,
+        series_id: series.id,
+        excluded_date: date,
+        reason_type: formString(formData, `excludeOccurrenceType:${date}`) || "calendar_conflict",
+        reason_label: formString(formData, `excludeOccurrenceReason:${date}`) || "Regional calendar conflict"
+      }));
+    if (exclusionRows.length) {
+      const { error: exclusionError } = await db.from("recurrence_series_exclusions").upsert(exclusionRows, { onConflict: "series_id,excluded_date" });
+      if (exclusionError) return { error: exclusionError.message, values, submissionId: Date.now() };
+    }
+
+    const rows = keptDates.map((date, keptIndex) => ({
       user_id: user.id,
       squad_id: squadId,
       recurrence_series_id: series.id,
-      recurrence_sequence: index + 1,
+      recurrence_sequence: dates.indexOf(date) + 1,
       is_series_exception: false,
       date,
       start_time: values.startTime,
@@ -216,7 +251,7 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
       location: optional(values.location),
       focus: optional(values.focus),
       season_label: seasonLabelForDate(date),
-      linked_training_session_id: values.planApplyMode === "all" || (values.planApplyMode === "first" && index === 0) ? optional(values.linkedTrainingSessionId) : null,
+      linked_training_session_id: values.planApplyMode === "all" || (values.planApplyMode === "first" && keptIndex === 0) ? optional(values.linkedTrainingSessionId) : null,
       general_notes: optional(values.generalNotes),
       status: "draft"
     }));
@@ -472,6 +507,118 @@ export async function permanentlyDeleteTrainingEvent(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidatePath("/trainings");
   redirect("/trainings?view=trash");
+}
+
+export async function bulkMoveTrainingsToTrash(input: { squadId: string; trainingIds: string[] }): Promise<BulkTrainingOperationResult> {
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const trainingIds = uniqueIds(input.trainingIds);
+  if (!input.squadId || !trainingIds.length) return { ok: false, message: "No Trainings selected." };
+  const owned = await validateTrainingIdsForTeam(db, user.id, input.squadId, trainingIds, { trashOnly: false });
+  if (!owned.ok) return owned;
+  const deletedAt = new Date().toISOString();
+  const { error } = await db
+    .from("squad_training_events")
+    .update({ deleted_at: deletedAt })
+    .eq("user_id", user.id)
+    .eq("squad_id", input.squadId)
+    .in("id", trainingIds)
+    .is("deleted_at", null);
+  if (error) return { ok: false, message: error.message };
+  revalidateTrainingLists();
+  return {
+    ok: true,
+    affectedIds: trainingIds,
+    message: `${trainingIds.length} Training${trainingIds.length === 1 ? "" : "s"} moved to Trash.`
+  };
+}
+
+export async function bulkRestoreTrainings(input: { squadId: string; trainingIds: string[] }): Promise<BulkTrainingOperationResult> {
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const trainingIds = uniqueIds(input.trainingIds);
+  if (!input.squadId || !trainingIds.length) return { ok: false, message: "No Trainings selected." };
+  const owned = await validateTrainingIdsForTeam(db, user.id, input.squadId, trainingIds, { trashOnly: true });
+  if (!owned.ok) return owned;
+  const { error } = await db
+    .from("squad_training_events")
+    .update({ deleted_at: null })
+    .eq("user_id", user.id)
+    .eq("squad_id", input.squadId)
+    .in("id", trainingIds)
+    .not("deleted_at", "is", null);
+  if (error) return { ok: false, message: error.message };
+  revalidateTrainingLists();
+  return {
+    ok: true,
+    affectedIds: trainingIds,
+    message: `${trainingIds.length} Training${trainingIds.length === 1 ? "" : "s"} restored.`
+  };
+}
+
+export async function bulkPermanentlyDeleteTrainings(input: { squadId: string; trainingIds: string[]; confirmation: string }): Promise<BulkTrainingOperationResult> {
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const trainingIds = uniqueIds(input.trainingIds);
+  const expectedConfirmation = `DELETE ${trainingIds.length} TRAININGS`;
+  if (input.confirmation !== expectedConfirmation) return { ok: false, message: `Type ${expectedConfirmation} to permanently delete.` };
+  if (!input.squadId || !trainingIds.length) return { ok: false, message: "No Trainings selected." };
+  const owned = await validateTrainingIdsForTeam(db, user.id, input.squadId, trainingIds, { trashOnly: true });
+  if (!owned.ok) return owned;
+  const { error } = await db
+    .from("squad_training_events")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("squad_id", input.squadId)
+    .in("id", trainingIds)
+    .not("deleted_at", "is", null);
+  if (error) return { ok: false, message: error.message };
+  revalidateTrainingLists();
+  return {
+    ok: true,
+    affectedIds: trainingIds,
+    message: `${trainingIds.length} Training${trainingIds.length === 1 ? "" : "s"} permanently deleted.`
+  };
+}
+
+function revalidateTrainingLists() {
+  revalidatePath("/trainings");
+  revalidatePath("/squad/attendance");
+  revalidatePath("/squad/ratings");
+  revalidatePath("/dashboard");
+}
+
+function uniqueIds(ids: string[]) {
+  return Array.from(new Set(ids.filter((id) => typeof id === "string" && id.length > 0)));
+}
+
+async function validateTrainingIdsForTeam(
+  db: SupabaseClient,
+  userId: string,
+  squadId: string,
+  ids: string[],
+  options: { trashOnly: boolean }
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { data: team, error: teamError } = await db
+    .from("squads")
+    .select("id")
+    .eq("id", squadId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (teamError) return { ok: false, message: teamError.message };
+  if (!team) return { ok: false, message: "Team not found or not owned by you." };
+  let query = db
+    .from("squad_training_events")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("squad_id", squadId)
+    .in("id", ids);
+  query = options.trashOnly ? query.not("deleted_at", "is", null) : query.is("deleted_at", null);
+  const { data, error } = await query;
+  if (error) return { ok: false, message: error.message };
+  const found = new Set(((data ?? []) as Array<{ id: string }>).map((row) => row.id));
+  if (found.size !== ids.length) return { ok: false, message: "Some selected Trainings are no longer available in this Team." };
+  return { ok: true };
 }
 
 export async function addSquadPlayersToEvent(formData: FormData) {

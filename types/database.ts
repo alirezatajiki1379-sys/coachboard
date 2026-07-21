@@ -240,6 +240,10 @@ export type Database = {
           user_id: string;
           name: string;
           is_active: boolean;
+          country_code: string | null;
+          federal_state_code: string | null;
+          city: string | null;
+          calendar_preferences: Json | null;
           archived_at: string | null;
           created_at: string;
           updated_at: string;
@@ -249,11 +253,86 @@ export type Database = {
           user_id: string;
           name: string;
           is_active?: boolean;
+          country_code?: string | null;
+          federal_state_code?: string | null;
+          city?: string | null;
+          calendar_preferences?: Json | null;
           archived_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["squads"]["Insert"]>;
+        Relationships: [];
+      };
+      regional_calendar_events: {
+        Row: {
+          id: string;
+          country_code: string;
+          federal_state_code: string | null;
+          name: string;
+          category: string;
+          starts_on: string;
+          ends_on: string;
+          source: string | null;
+          source_version: string | null;
+          verified_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["regional_calendar_events"]["Row"]> & {
+          country_code: string;
+          name: string;
+          category: string;
+          starts_on: string;
+          ends_on: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["regional_calendar_events"]["Insert"]>;
+        Relationships: [];
+      };
+      team_calendar_exclusions: {
+        Row: {
+          id: string;
+          user_id: string;
+          squad_id: string;
+          name: string;
+          category: string;
+          starts_on: string;
+          ends_on: string;
+          reason: string | null;
+          exclude_by_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["team_calendar_exclusions"]["Row"]> & {
+          user_id: string;
+          squad_id: string;
+          name: string;
+          category: string;
+          starts_on: string;
+          ends_on: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_calendar_exclusions"]["Insert"]>;
+        Relationships: [];
+      };
+      recurrence_series_exclusions: {
+        Row: {
+          id: string;
+          user_id: string;
+          series_id: string;
+          excluded_date: string;
+          reason_type: string;
+          reason_label: string;
+          source_calendar_event_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["recurrence_series_exclusions"]["Row"]> & {
+          user_id: string;
+          series_id: string;
+          excluded_date: string;
+          reason_type: string;
+          reason_label: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["recurrence_series_exclusions"]["Insert"]>;
         Relationships: [];
       };
       squad_players: {

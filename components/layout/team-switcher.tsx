@@ -4,6 +4,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, Plus, Settings } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { createTeam, switchTeam } from "@/lib/squad/team-actions";
+import { germanFederalStates } from "@/lib/squad/regional-calendar";
 import type { Squad } from "@/types/domain";
 
 type TeamSwitcherProps = {
@@ -63,12 +64,35 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
             </summary>
             <form action={createTeam} className="mt-2 space-y-2 rounded-md bg-black/15 p-2">
               <input type="hidden" name="returnTo" value="/squad" />
+              <input type="hidden" name="countryCode" value="DE" />
               <label className="block">
                 <span className="sr-only">Team name</span>
                 <input
                   name="name"
                   required
                   placeholder="Team name"
+                  className="h-9 w-full rounded-md border border-white/10 bg-white px-3 text-xs font-semibold text-board-navy outline-none focus:border-board-green focus:ring-2 focus:ring-board-green/30"
+                />
+              </label>
+              <label className="block">
+                <span className="sr-only">Bundesland</span>
+                <select
+                  name="federalStateCode"
+                  required
+                  defaultValue=""
+                  className="h-9 w-full rounded-md border border-white/10 bg-white px-3 text-xs font-semibold text-board-navy outline-none focus:border-board-green focus:ring-2 focus:ring-board-green/30"
+                >
+                  <option value="" disabled>Bundesland</option>
+                  {germanFederalStates.map((state) => (
+                    <option key={state.code} value={state.code}>{state.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="sr-only">City</span>
+                <input
+                  name="city"
+                  placeholder="City (optional)"
                   className="h-9 w-full rounded-md border border-white/10 bg-white px-3 text-xs font-semibold text-board-navy outline-none focus:border-board-green focus:ring-2 focus:ring-board-green/30"
                 />
               </label>

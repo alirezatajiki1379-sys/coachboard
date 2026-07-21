@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { TrainingEventForm } from "@/components/squad/training-event-form";
 import { getLinkableTrainingSessions, listTrainingParticipantOptions } from "@/lib/squad/attendance-queries";
+import { getTeamCalendarContext } from "@/lib/squad/regional-calendar-queries";
 import { listSquads } from "@/lib/squad/squads";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,6 +20,10 @@ export default async function NewTrainingPage() {
     listSquads(supabase, user.id),
     listTrainingParticipantOptions(supabase, user.id)
   ]);
+  const activeTeam = squads.find((squad) => squad.isActive) ?? squads[0];
+  const today = new Date();
+  const rangeStart = `${today.getUTCFullYear()}-01-01`;
+  const calendarContext = await getTeamCalendarContext(supabase, user.id, activeTeam?.id, rangeStart, addYears(rangeStart, 3));
 
   return (
     <div className="space-y-6">
@@ -31,7 +36,13 @@ export default async function NewTrainingPage() {
         <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Create training</h1>
         <p className="mt-2 text-slate-600">Create one appointment or a recurring set of independent trainings.</p>
       </div>
-      <TrainingEventForm sessions={sessions} squads={squads} participants={participants} />
+      <TrainingEventForm sessions={sessions} squads={squads} participants={participants} calendarContext={calendarContext} />
     </div>
   );
+}
+
+function addYears(date: string, years: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCFullYear(value.getUTCFullYear() + years);
+  return value.toISOString().slice(0, 10);
 }

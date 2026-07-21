@@ -7,6 +7,10 @@ type SquadRow = {
   user_id: string;
   name: string;
   is_active: boolean;
+  country_code: string | null;
+  federal_state_code: string | null;
+  city: string | null;
+  calendar_preferences: Record<string, unknown> | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -18,6 +22,10 @@ export function mapSquadRow(row: SquadRow): Squad {
     userId: row.user_id,
     name: row.name,
     isActive: row.is_active,
+    countryCode: row.country_code ?? undefined,
+    federalStateCode: row.federal_state_code ?? undefined,
+    city: row.city ?? undefined,
+    calendarPreferences: row.calendar_preferences ?? undefined,
     archivedAt: row.archived_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
