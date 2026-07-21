@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -9,16 +10,19 @@ import { useUnsavedChangesProtection } from "@/components/shared/use-unsaved-cha
 import { useLocalDraft } from "@/components/shared/local-draft";
 import { parseEditorJsonString } from "@/lib/drills/editor";
 import { detectMaterialsFromGraphic, materialCategoryLabel, materialDisplayGroups, materialLineLabel, materialsToJson, parseMaterials, serializeMaterials } from "@/lib/drills/materials";
-import type { createDrill, updateDrill } from "@/lib/drills/actions";
 import type { DrillActionState } from "@/lib/drills/actions";
 import { snapshotDrillFormValues, type DrillFormField, type DrillFormValues } from "@/lib/drills/form";
 import type { Drill, MaterialColor, MaterialItem, MaterialType } from "@/types/domain";
 
 type DrillFormProps = {
-  action: typeof createDrill | typeof updateDrill;
+  action: (state: DrillActionState, formData: FormData) => Promise<DrillActionState>;
   drill?: Drill;
   mode: "create" | "edit";
   graphicJson?: string;
+  defaultReturnTo?: string;
+  cancelHref?: string;
+  hiddenFields?: Record<string, string>;
+  contextBanner?: ReactNode;
 };
 
 const initialActionState: DrillActionState = {};
@@ -31,14 +35,14 @@ const materialVariantOptions: Partial<Record<MaterialType, string[]>> = {
   goals: ["normal goal", "youth goal"]
 };
 
-export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) {
+export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = "", cancelHref, hiddenFields, contextBanner }: DrillFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialActionState);
   const initialValues = useMemo(() => getInitialValues(drill, graphicJson), [drill, graphicJson]);
   const [values, setValues] = useState<DrillFormValues>(() => state.values ?? initialValues);
   const [formRevision, setFormRevision] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [returnTo, setReturnTo] = useState("");
+  const [returnTo, setReturnTo] = useState(defaultReturnTo);
   const formRef = useRef<HTMLFormElement>(null);
   const returnToInputRef = useRef<HTMLInputElement>(null);
   const fieldErrors = state.fieldErrors ?? {};
@@ -120,8 +124,10 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
     >
       {drill ? <input type="hidden" name="drillId" value={drill.id} /> : null}
       <input ref={returnToInputRef} type="hidden" name="returnTo" value={returnTo} readOnly />
+      {hiddenFields ? Object.entries(hiddenFields).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} readOnly />) : null}
       {unsavedChangesDialog}
       {recoveryDialog}
+      {contextBanner}
 
       <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <p className="text-sm text-slate-600">
@@ -253,7 +259,7 @@ export function DrillForm({ action, drill, mode, graphicJson }: DrillFormProps) 
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
         {autosaveIndicator}
-        <ButtonLink href={drill ? `/drills/${drill.id}` : "/drills"} variant="secondary" className="justify-center">
+        <ButtonLink href={cancelHref ?? (drill ? `/drills/${drill.id}` : "/drills")} variant="secondary" className="justify-center">
           Cancel
         </ButtonLink>
         <Button type="submit" disabled={isPending} className="justify-center">

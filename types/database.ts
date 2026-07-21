@@ -692,6 +692,42 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["training_session_drill_instances"]["Row"]>;
         Relationships: [];
       };
+      training_event_groups: {
+        Row: {
+          id: string;
+          user_id: string;
+          event_id: string;
+          name: string;
+          group_type: "exclusive" | "label";
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["training_event_groups"]["Row"]> & {
+          user_id: string;
+          event_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["training_event_groups"]["Insert"]>;
+        Relationships: [];
+      };
+      training_event_group_members: {
+        Row: {
+          id: string;
+          user_id: string;
+          group_id: string;
+          player_id: string | null;
+          custom_name: string | null;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["training_event_group_members"]["Row"]> & {
+          user_id: string;
+          group_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["training_event_group_members"]["Insert"]>;
+        Relationships: [];
+      };
       squad_attendance_records: {
         Row: {
           id: string;
