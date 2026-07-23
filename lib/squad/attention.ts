@@ -58,6 +58,8 @@ export type AttentionItem = {
   snoozeable: boolean;
   snoozedUntil?: string | null;
   dismissedAt?: string | null;
+  dismissedReason?: "dismissed" | "not_relevant" | null;
+  resolvedAt?: string | null;
 };
 
 export type AttentionPreferences = {
@@ -78,10 +80,12 @@ export type AttentionState = {
   attentionType: AttentionType;
   snoozedUntil?: string | null;
   dismissedAt?: string | null;
+  dismissedReason?: "dismissed" | "not_relevant" | null;
+  resolvedAt?: string | null;
 };
 
 export type AttentionCenterState = {
-  priority: "all" | AttentionPriority;
+  priority: "all" | "high-priority" | AttentionPriority;
   category: "all" | AttentionCategory;
   playerType: "all" | "roster" | "trial";
   status: "open" | "snoozed" | "dismissed";
@@ -126,6 +130,8 @@ type AttentionStateRow = {
   attention_type: string;
   snoozed_until: string | null;
   dismissed_at: string | null;
+  dismissal_reason?: string | null;
+  resolved_at?: string | null;
 };
 
 export const attentionCategories: Array<{ id: AttentionCategory; label: string }> = [
@@ -140,6 +146,16 @@ export const attentionCategories: Array<{ id: AttentionCategory; label: string }
 ];
 
 export const attentionPriorityLabels: Record<AttentionPriority, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+  info: "Information"
+};
+
+export const attentionPriorityFilterLabels: Record<AttentionCenterState["priority"], string> = {
+  all: "All priorities",
+  "high-priority": "High Priority",
   critical: "Critical",
   high: "High",
   medium: "Medium",
@@ -311,17 +327,17 @@ export function getPlayerAttentionItems(player: WorkspacePlayerSummary, preferen
     });
   }
 
-  if (summary.attendanceRate !== null && summary.attendanceRate * 100 < preferences.lowAttendancePercent && summary.trainings >= 3) {
+  if (summary.player.playerType === "roster" && summary.attendanceRate !== null && summary.attendanceRate * 100 < preferences.lowAttendancePercent && summary.trainings >= 3) {
     push({
       type: "low-attendance",
       category: "attendance",
       priority: summary.attendanceRate * 100 < 60 ? "high" : "medium",
       title: "Low attendance",
-      explanation: `Attendance is ${Math.round(summary.attendanceRate * 100)}% in the selected period.`,
+      explanation: `Attendance is ${Math.round(summary.attendanceRate * 100)}% in the selected period based on completed trainings with recorded attendance.`,
       evidence: evidence([
         ["Attendance", `${Math.round(summary.attendanceRate * 100)}%`],
         ["Attended", summary.attended],
-        ["Relevant trainings", summary.trainings],
+        ["Eligible completed trainings", summary.trainings],
         ["Threshold", `${preferences.lowAttendancePercent}%`]
       ]),
       thresholdLabel: `Below ${preferences.lowAttendancePercent}% in ${context.periodLabel}.`,
@@ -574,10 +590,12 @@ export function filterAttentionItems(items: AttentionItem[], state: AttentionCen
   return items.filter((item) => {
     const snoozed = isSnoozed(item);
     const dismissed = Boolean(item.dismissedAt);
-    if (state.status === "open" && (snoozed || dismissed)) return false;
+    const resolved = Boolean(item.resolvedAt);
+    if (state.status === "open" && (snoozed || dismissed || resolved)) return false;
     if (state.status === "snoozed" && !snoozed) return false;
     if (state.status === "dismissed" && !dismissed) return false;
-    if (state.priority !== "all" && item.priority !== state.priority) return false;
+    if (state.priority === "high-priority" && item.priority !== "critical" && item.priority !== "high") return false;
+    if (state.priority !== "all" && state.priority !== "high-priority" && item.priority !== state.priority) return false;
     if (state.category !== "all" && item.category !== state.category) return false;
     if (state.playerType !== "all" && item.playerType !== state.playerType) return false;
     if (state.position && item.playerPosition !== state.position) return false;
@@ -609,12 +627,18 @@ export function applyAttentionStates(items: AttentionItem[], states: Map<string,
   return items.map((item) => {
     const state = states.get(item.key);
     if (!state) return item;
-    return { ...item, snoozedUntil: state.snoozedUntil, dismissedAt: item.dismissible ? state.dismissedAt : null };
+    return {
+      ...item,
+      snoozedUntil: state.snoozedUntil,
+      dismissedAt: state.dismissedAt,
+      dismissedReason: state.dismissedReason,
+      resolvedAt: state.resolvedAt
+    };
   });
 }
 
 export function attentionSummary(items: AttentionItem[]) {
-  const openItems = items.filter((item) => !item.dismissedAt && !isSnoozed(item));
+  const openItems = items.filter((item) => !item.dismissedAt && !item.resolvedAt && !isSnoozed(item));
   return {
     open: openItems.length,
     snoozed: items.filter(isSnoozed).length,
@@ -645,7 +669,9 @@ export async function listAttentionStates(db: SupabaseClient, userId: string) {
         playerId: row.player_id,
         attentionType: row.attention_type as AttentionType,
         snoozedUntil: row.snoozed_until,
-        dismissedAt: row.dismissed_at
+        dismissedAt: row.dismissed_at,
+        dismissedReason: row.dismissal_reason === "not_relevant" ? "not_relevant" : row.dismissal_reason === "dismissed" ? "dismissed" : null,
+        resolvedAt: row.resolved_at ?? null
       });
     }
   } catch {
@@ -679,6 +705,7 @@ function nullableDate(value?: string) {
 }
 
 function priorityValue(value?: string): AttentionCenterState["priority"] {
+  if (value === "high-priority") return "high-priority";
   return value === "critical" || value === "high" || value === "medium" || value === "low" || value === "info" ? value : "all";
 }
 

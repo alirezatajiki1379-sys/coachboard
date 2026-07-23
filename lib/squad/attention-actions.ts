@@ -88,7 +88,9 @@ export async function snoozeAttentionItem(formData: FormData) {
     player_id: playerId,
     attention_type: attentionType,
     snoozed_until: until,
-    dismissed_at: null
+    dismissed_at: null,
+    dismissal_reason: null,
+    resolved_at: null
   }, { onConflict: "user_id,attention_key" });
   revalidateAttentionPaths(playerId);
   redirect(returnTo);
@@ -100,16 +102,39 @@ export async function dismissAttentionItem(formData: FormData) {
   const key = formString(formData, "attentionKey");
   const playerId = formString(formData, "playerId");
   const attentionType = formString(formData, "attentionType");
+  const reason = formString(formData, "reason");
   if (!key || !playerId || !attentionType) redirect(returnTo);
+  const resolved = reason === "resolved";
   await supabase.from("coach_attention_states").upsert({
     user_id: user.id,
     attention_key: key,
     player_id: playerId,
     attention_type: attentionType,
     snoozed_until: null,
-    dismissed_at: new Date().toISOString()
+    dismissed_at: resolved ? null : new Date().toISOString(),
+    dismissal_reason: reason === "not_relevant" ? "not_relevant" : resolved ? null : "dismissed",
+    resolved_at: resolved ? new Date().toISOString() : null
   }, { onConflict: "user_id,attention_key" });
   revalidateAttentionPaths(playerId);
+  redirect(returnTo);
+}
+
+export async function disableAttentionRule(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const returnTo = formString(formData, "returnTo") || "/actions";
+  const attentionType = formString(formData, "attentionType") as AttentionType;
+  if (!optionalRules.includes(attentionType)) redirect(returnTo);
+  const { data } = await supabase.from("coach_attention_preferences").select("preferences").eq("user_id", user.id).maybeSingle();
+  const preferences = normalizeAttentionPreferences(data?.preferences);
+  const nextPreferences: AttentionPreferences = {
+    ...preferences,
+    enabledRules: {
+      ...preferences.enabledRules,
+      [attentionType]: false
+    }
+  };
+  await supabase.from("coach_attention_preferences").upsert({ user_id: user.id, preferences: nextPreferences }, { onConflict: "user_id" });
+  revalidateAttentionPaths();
   redirect(returnTo);
 }
 

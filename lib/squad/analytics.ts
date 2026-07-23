@@ -163,9 +163,10 @@ export function calculatePerformanceTrend(values: number[]): PerformanceTrend {
 }
 
 export function calculateAttendanceRate(records: PlayerAnalyticsRecord[]) {
-  if (!records.length) return null;
-  const attended = records.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
-  return attended / records.length;
+  const recorded = records.filter(hasRecordedAttendance);
+  if (!recorded.length) return null;
+  const attended = recorded.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
+  return attended / recorded.length;
 }
 
 export function calculateAttendanceDistribution(records: PlayerAnalyticsRecord[]): AttendanceDistribution {
@@ -270,8 +271,9 @@ export function createPlayerAnalyticsSummary(
     customTo
   );
   const ratings = records.map((record) => record.overallRating).filter(isRating);
-  const attendanceDistribution = calculateAttendanceDistribution(records);
-  const reliability = calculateReliabilitySummary(records);
+  const attendanceRecords = records.filter(hasRecordedAttendance);
+  const attendanceDistribution = calculateAttendanceDistribution(attendanceRecords);
+  const reliability = calculateReliabilitySummary(attendanceRecords);
   const categorySummaries = calculateCategorySummary(records);
   const interpretableCategories = categorySummaries.filter((category) => category.count >= 3 && category.average !== null);
   const highestRatedArea = interpretableCategories.length
@@ -283,17 +285,17 @@ export function createPlayerAnalyticsSummary(
 
   const averageRating = calculateAverageRating(ratings);
   const trend = calculatePerformanceTrend(ratings);
-  const attended = records.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
+  const attended = attendanceRecords.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
   const latestRating = ratings[0];
   const evidenceBase = classifyEvidenceBase(ratings.length);
 
   return {
     player,
     records,
-    trainings: records.length,
+    trainings: attendanceRecords.length,
     attended,
     late: attendanceDistribution.late,
-    absent: records.filter((record) => record.finalStatus && !["present", "Z"].includes(record.finalStatus)).length,
+    absent: attendanceRecords.filter((record) => record.finalStatus && !["present", "Z"].includes(record.finalStatus)).length,
     unexcused: attendanceDistribution.unexcused,
     rated: ratings.length,
     averageRating,
@@ -313,6 +315,16 @@ export function createPlayerAnalyticsSummary(
     latestRating,
     assessment
   };
+}
+
+export function hasRecordedAttendance(record: PlayerAnalyticsRecord) {
+  return Boolean(record.finalStatus);
+}
+
+export function isPastAttendanceEvent(event?: SquadTrainingEvent, now = new Date()) {
+  if (!event || event.deletedAt || event.archivedAt) return false;
+  const startKey = `${event.date} ${event.startTime || "00:00"}`;
+  return startKey < berlinDateTimeKey(now);
 }
 
 export function defaultSortDirection(sort: AnalyticsSortKey): AnalyticsSortDirection {
@@ -433,6 +445,19 @@ function dateToDateString(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function berlinDateTimeKey(date: Date) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 function parseDateToUtc(value: string) {

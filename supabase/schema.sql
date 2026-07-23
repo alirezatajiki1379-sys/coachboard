@@ -1492,8 +1492,24 @@ create table if not exists public.coach_attention_states (
   attention_type text not null,
   snoozed_until date,
   dismissed_at timestamptz,
+  dismissal_reason text,
+  resolved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+alter table public.coach_attention_states
+add column if not exists dismissal_reason text,
+add column if not exists resolved_at timestamptz;
+
+alter table public.coach_attention_states
+drop constraint if exists coach_attention_states_dismissal_reason_check;
+
+alter table public.coach_attention_states
+add constraint coach_attention_states_dismissal_reason_check
+check (
+  dismissal_reason is null
+  or dismissal_reason in ('dismissed', 'not_relevant')
 );
 
 

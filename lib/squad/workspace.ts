@@ -7,6 +7,7 @@ import {
   filterRecordsByPeriod,
   formatPercent,
   formatRating,
+  isPastAttendanceEvent,
   playerName,
   type AnalyticsPeriod,
   type AnalyticsSortDirection,
@@ -833,7 +834,8 @@ async function listWorkspaceRecords(db: SupabaseClient, userId: string): Promise
   if (error) return [];
   return ((data ?? []) as Array<SquadAttendanceRow & { squad_training_events?: SquadTrainingEventRow | null }>)
     .filter((row) => row.squad_training_events && !row.squad_training_events.deleted_at)
-    .map((row) => ({ ...mapAttendanceRow(row), event: row.squad_training_events ? mapTrainingEventRow(row.squad_training_events) : undefined }));
+    .map((row) => ({ ...mapAttendanceRow(row), event: row.squad_training_events ? mapTrainingEventRow(row.squad_training_events) : undefined }))
+    .filter((record) => isPastAttendanceEvent(record.event));
 }
 
 async function listWorkspaceViews(db: SupabaseClient, userId: string): Promise<WorkspaceSavedView[]> {

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
-import { createPlayerAnalyticsSummary, defaultSortDirection, sortPlayerAnalytics, type AnalyticsPeriod, type AnalyticsPlayerTypeFilter, type AnalyticsSortDirection, type AnalyticsSortKey, type PlayerAnalyticsRecord, type PlayerAnalyticsSummary } from "@/lib/squad/analytics";
+import { createPlayerAnalyticsSummary, defaultSortDirection, isPastAttendanceEvent, sortPlayerAnalytics, type AnalyticsPeriod, type AnalyticsPlayerTypeFilter, type AnalyticsSortDirection, type AnalyticsSortKey, type PlayerAnalyticsRecord, type PlayerAnalyticsSummary } from "@/lib/squad/analytics";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { Database } from "@/types/database";
 import type { PlayerCoachAssessment, SquadPlayer } from "@/types/domain";
@@ -154,7 +154,8 @@ async function listAnalyticsRecords(db: SupabaseClient, userId: string, playerId
     .map((row) => ({
       ...mapAttendanceRow(row),
       event: row.squad_training_events ? mapTrainingEventRow(row.squad_training_events) : undefined
-    }));
+    }))
+    .filter((record) => isPastAttendanceEvent(record.event));
 }
 
 async function listLatestAssessments(db: SupabaseClient, userId: string): Promise<PlayerCoachAssessment[]> {

@@ -4,10 +4,11 @@ import { ArrowDown, ArrowUp, Bell, Clock, Settings2 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
-import { clearAttentionState, dismissAttentionItem, resetAttentionSettings, saveAttentionSettings, snoozeAttentionItem } from "@/lib/squad/attention-actions";
+import { clearAttentionState, disableAttentionRule, dismissAttentionItem, resetAttentionSettings, saveAttentionSettings, snoozeAttentionItem } from "@/lib/squad/attention-actions";
 import {
   attentionCategories,
   attentionHref,
+  attentionPriorityFilterLabels,
   attentionPriorityLabels,
   attentionTone,
   parseAttentionCenterState,
@@ -94,14 +95,20 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
       />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard label="Open items" value={data.summary.open} href={attentionHref(data.state, { status: "open", priority: "all", category: "all" })} />
-        <SummaryCard label="High priority" value={data.summary.high + data.summary.critical} href={attentionHref(data.state, { status: "open", priority: "high" })} tone="red" />
+        <SummaryCard label="High Priority" value={data.summary.high + data.summary.critical} href={attentionHref(data.state, { status: "open", priority: "high-priority", category: "all" })} tone="red" />
+        <SummaryCard label="Open Items" value={data.summary.open} href={attentionHref(data.state, { status: "open", priority: "all", category: "all" })} />
         <SummaryCard label="Reviews" value={data.summary.review} href={attentionHref(data.state, { status: "open", category: "review" })} />
         <SummaryCard label="Medical reviews" value={data.summary.medical} href={attentionHref(data.state, { status: "open", category: "medical" })} tone="amber" />
         <SummaryCard label="Snoozed" value={data.summary.snoozed} href={attentionHref(data.state, { status: "snoozed" })} />
       </section>
 
       <ActionFilters data={data} />
+
+      {data.state.status === "open" && data.state.priority === "high-priority" && data.summary.open > 0 && data.summary.open === data.summary.high + data.summary.critical ? (
+        <p className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+          All current open items are classified as high priority.
+        </p>
+      ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
@@ -127,6 +134,7 @@ function ActionFilters({ data }: { data: AttentionCenterData }) {
         <Field label="Priority">
           <select name="priority" defaultValue={state.priority} className={fieldClass()}>
             <option value="all">All priorities</option>
+            <option value="high-priority">High Priority only</option>
             {priorities.map((priority) => <option key={priority.id} value={priority.id}>{priority.label}</option>)}
           </select>
         </Field>
@@ -197,11 +205,14 @@ function AttentionCard({ item, selected, stateHref, returnTo }: { item: Attentio
             <Badge tone={item.playerType === "trial" ? "amber" : "neutral"}>{item.playerType === "trial" ? "Trial" : "Roster"}</Badge>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge tone={attentionTone(item.priority)}>{attentionPriorityLabels[item.priority]}</Badge>
+            <Badge tone={attentionTone(item.priority)}>{attentionPriorityLabels[item.priority]} Priority</Badge>
             <Badge tone="neutral">{categoryLabel(item.category)}</Badge>
           </div>
           <h2 className="mt-3 text-lg font-bold text-board-navy">{item.title}</h2>
           <p className="mt-1 text-sm text-slate-600">{item.explanation}</p>
+          {item.priority === "critical" || item.priority === "high" ? (
+            <p className="mt-2 text-xs font-bold text-red-700">{highPriorityReason(item)}</p>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <ButtonLink href={stateHref} variant="secondary" className="h-9 px-3">Details</ButtonLink>
@@ -210,12 +221,30 @@ function AttentionCard({ item, selected, stateHref, returnTo }: { item: Attentio
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {item.snoozeable ? <SnoozeForm item={item} returnTo={returnTo} /> : null}
-        {item.dismissible ? (
-          <form action={dismissAttentionItem}>
-            <ActionHidden item={item} returnTo={returnTo} />
-            <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Dismiss</Button>
-          </form>
-        ) : null}
+        <form action={dismissAttentionItem}>
+          <ActionHidden item={item} returnTo={returnTo} />
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Dismiss</Button>
+        </form>
+        <form action={dismissAttentionItem}>
+          <ActionHidden item={item} returnTo={returnTo} />
+          <input type="hidden" name="reason" value="not_relevant" />
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Not relevant</Button>
+        </form>
+        <form action={dismissAttentionItem}>
+          <ActionHidden item={item} returnTo={returnTo} />
+          <input type="hidden" name="reason" value="resolved" />
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Mark as resolved</Button>
+        </form>
+        <form action={disableAttentionRule}>
+          <ActionHidden item={item} returnTo={returnTo} />
+          <ConfirmSubmitButton
+            message={`Stop showing "${item.title}" recommendations? You can enable this recommendation type again in Coach Actions settings.`}
+            variant="ghost"
+            className="h-8 px-2 text-xs"
+          >
+            Do not show this type
+          </ConfirmSubmitButton>
+        </form>
         {item.snoozedUntil || item.dismissedAt ? (
           <form action={clearAttentionState}>
             <ActionHidden item={item} returnTo={returnTo} />
@@ -244,9 +273,12 @@ function AttentionDetail({ item, returnTo }: { item?: AttentionItem; returnTo: s
           <h2 className="mt-1 text-xl font-bold text-board-navy">{item.title}</h2>
           <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? "No position"} · {item.playerType === "trial" ? "Trial" : "Roster"}</p>
         </div>
-        <Badge tone={attentionTone(item.priority)}>{attentionPriorityLabels[item.priority]}</Badge>
+        <Badge tone={attentionTone(item.priority)}>{attentionPriorityLabels[item.priority]} Priority</Badge>
       </div>
       <p className="mt-4 text-sm text-slate-700">{item.explanation}</p>
+      {item.priority === "critical" || item.priority === "high" ? (
+        <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-800">{highPriorityReason(item)}</p>
+      ) : null}
       <div className="mt-4 rounded-md bg-board-paper p-3">
         <p className="text-xs font-bold uppercase text-slate-500">Threshold</p>
         <p className="mt-1 text-sm font-semibold text-board-navy">{item.thresholdLabel}</p>
@@ -270,12 +302,30 @@ function AttentionDetail({ item, returnTo }: { item?: AttentionItem; returnTo: s
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         {item.snoozeable ? <SnoozeForm item={item} returnTo={returnTo} /> : null}
-        {item.dismissible ? (
-          <form action={dismissAttentionItem}>
-            <ActionHidden item={item} returnTo={returnTo} />
-            <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Dismiss</Button>
-          </form>
-        ) : null}
+        <form action={dismissAttentionItem}>
+          <ActionHidden item={item} returnTo={returnTo} />
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Dismiss</Button>
+        </form>
+        <form action={dismissAttentionItem}>
+          <ActionHidden item={item} returnTo={returnTo} />
+          <input type="hidden" name="reason" value="not_relevant" />
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Not relevant</Button>
+        </form>
+        <form action={dismissAttentionItem}>
+          <ActionHidden item={item} returnTo={returnTo} />
+          <input type="hidden" name="reason" value="resolved" />
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Mark as resolved</Button>
+        </form>
+        <form action={disableAttentionRule}>
+          <ActionHidden item={item} returnTo={returnTo} />
+          <ConfirmSubmitButton
+            message={`Stop showing "${item.title}" recommendations? You can enable this recommendation type again in Coach Actions settings.`}
+            variant="ghost"
+            className="h-8 px-2 text-xs"
+          >
+            Do not show this type
+          </ConfirmSubmitButton>
+        </form>
       </div>
     </section>
   );
@@ -369,7 +419,7 @@ function EmptyState({ data }: { data: AttentionCenterData }) {
   const text = data.state.status === "snoozed"
     ? "No snoozed items."
     : data.state.priority !== "all"
-      ? `No ${attentionPriorityLabels[data.state.priority].toLowerCase()} items.`
+      ? `No ${attentionPriorityFilterLabels[data.state.priority].toLowerCase()} items.`
       : data.state.category !== "all"
         ? `No ${categoryLabel(data.state.category).toLowerCase()} items currently require attention.`
         : "No open coaching actions. No players currently match your active attention rules and filters.";
@@ -380,6 +430,10 @@ function EmptyState({ data }: { data: AttentionCenterData }) {
       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">{text}</p>
     </div>
   );
+}
+
+function highPriorityReason(item: AttentionItem) {
+  return `${attentionPriorityLabels[item.priority]} priority because: ${item.thresholdLabel}`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

@@ -1060,6 +1060,8 @@ export type Database = {
           attention_type: string;
           snoozed_until: string | null;
           dismissed_at: string | null;
+          dismissal_reason: "dismissed" | "not_relevant" | null;
+          resolved_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -1071,6 +1073,8 @@ export type Database = {
           attention_type: string;
           snoozed_until?: string | null;
           dismissed_at?: string | null;
+          dismissal_reason?: "dismissed" | "not_relevant" | null;
+          resolved_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
