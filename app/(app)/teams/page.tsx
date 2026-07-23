@@ -12,7 +12,7 @@ import {
   switchTeam,
   updateTeamCalendarSettings
 } from "@/lib/squad/team-actions";
-import { federalStateName, germanFederalStates } from "@/lib/squad/regional-calendar";
+import { calendarCategoryLabel, federalStateName, germanFederalStates } from "@/lib/squad/regional-calendar";
 import { listAllTeams, listSquads } from "@/lib/squad/squads";
 import { createClient } from "@/lib/supabase/server";
 import type { Squad } from "@/types/domain";
@@ -169,7 +169,7 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
                     <form action={updateTeamCalendarSettings} className="rounded-lg border border-board-line bg-white p-4">
                       <input type="hidden" name="teamId" value={team.id} />
                       <h3 className="text-sm font-bold text-board-navy">Regional settings</h3>
-                      <p className="mt-1 text-xs text-slate-500">CoachBoard checks public holidays automatically. Official school holidays appear only if they are stored as regional calendar data.</p>
+                      <p className="mt-1 text-xs text-slate-500">CoachBoard checks statutory public holidays and official school holidays separately. Local and movable days can be confirmed by the Team.</p>
                       <div className="mt-3 grid gap-3 md:grid-cols-2">
                         <input type="hidden" name="countryCode" value="DE" />
                         <label>
@@ -190,11 +190,12 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
                         <label className="md:col-span-2">
                           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">City / local area</span>
                           <input name="city" defaultValue={team.city ?? ""} placeholder="optional, e.g. Solingen" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+                          <span className="mt-1 block text-xs text-slate-500">Needed only for exact municipality-specific holidays such as Augsburg Peace Festival or regional Corpus Christi rules.</span>
                         </label>
-                        <PreferenceSelect name="publicHolidays" label="Public holidays" value={preferenceValue(team, "publicHolidays", "ask")} options={holidayPreferenceOptions} />
-                        <PreferenceSelect name="schoolHolidays" label="School holidays" value={preferenceValue(team, "schoolHolidays", "ask")} options={holidayPreferenceOptions} />
-                        <PreferenceSelect name="localMovableHolidays" label="Local / movable days" value={preferenceValue(team, "localMovableHolidays", "confirmed_only")} options={localPreferenceOptions} />
-                        <PreferenceSelect name="customExclusions" label="Custom exclusions" value={preferenceValue(team, "customExclusions", "exclude")} options={customPreferenceOptions} />
+                        <PreferenceSelect name="publicHolidays" label="Statutory public holidays" value={preferenceValue(team, "publicHolidays", "ask")} options={holidayPreferenceOptions} />
+                        <PreferenceSelect name="schoolHolidays" label="Official school holidays" value={preferenceValue(team, "schoolHolidays", "ask")} options={holidayPreferenceOptions} />
+                        <PreferenceSelect name="localMovableHolidays" label="Movable/local school-free days" value={preferenceValue(team, "localMovableHolidays", "confirmed_only")} options={localPreferenceOptions} />
+                        <PreferenceSelect name="customExclusions" label="Custom Team exclusions" value={preferenceValue(team, "customExclusions", "exclude")} options={customPreferenceOptions} />
                       </div>
                       <Button type="submit" className="mt-4">
                         <Save className="h-4 w-4" />
@@ -203,8 +204,8 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
                     </form>
 
                     <div className="rounded-lg border border-board-line bg-white p-4">
-                      <h3 className="flex items-center gap-2 text-sm font-bold text-board-navy"><CalendarOff className="h-4 w-4" />Team exclusions</h3>
-                      <p className="mt-1 text-xs text-slate-500">Add local holidays, tournament weekends or team-created breaks. These can be used when generating recurring trainings.</p>
+                      <h3 className="flex items-center gap-2 text-sm font-bold text-board-navy"><CalendarOff className="h-4 w-4" />Movable and local school-free days</h3>
+                      <p className="mt-1 text-xs text-slate-500">Add confirmed local days, movable school-free days or Team breaks. These can be used when generating recurring trainings.</p>
                       <form action={createTeamCalendarExclusion} className="mt-3 grid gap-2">
                         <input type="hidden" name="teamId" value={team.id} />
                         <input name="name" required placeholder="e.g. Osterferien camp week" className="h-10 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
@@ -213,9 +214,9 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
                           <input name="endsOn" type="date" className="h-10 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
                         </div>
                         <select name="category" defaultValue="team_custom_exclusion" className="h-10 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                          <option value="team_custom_exclusion">Team custom exclusion</option>
-                          <option value="local_customary_day">Local customary day</option>
-                          <option value="movable_holiday">Movable holiday</option>
+                          <option value="team_custom_exclusion">Custom Team exclusion</option>
+                          <option value="local_school_free_day">Local school-free day</option>
+                          <option value="movable_school_holiday">Movable school holiday</option>
                         </select>
                         <input name="reason" placeholder="Reason/source note (optional)" className="h-10 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
                         <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -230,7 +231,7 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
                             <div key={exclusion.id} className="flex flex-col gap-2 rounded-md border border-board-line bg-board-paper p-3 sm:flex-row sm:items-center sm:justify-between">
                               <div>
                                 <p className="text-sm font-bold text-board-navy">{exclusion.name}</p>
-                                <p className="text-xs text-slate-500">{formatDateRange(exclusion.starts_on, exclusion.ends_on)} · {exclusion.category.replaceAll("_", " ")}</p>
+                                <p className="text-xs text-slate-500">{formatDateRange(exclusion.starts_on, exclusion.ends_on)} · {calendarCategoryLabel(exclusion.category)}</p>
                               </div>
                               <form action={deleteTeamCalendarExclusion}>
                                 <input type="hidden" name="exclusionId" value={exclusion.id} />

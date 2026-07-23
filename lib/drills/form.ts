@@ -178,6 +178,56 @@ export function parseDrillForm(formData: FormData): DrillFormResult {
   };
 }
 
+export function parseDrillDraftForm(formData: FormData): { data: Omit<DrillInsert, "user_id">; graphic: DrillEditorState; values: DrillFormValues } {
+  const values = snapshotDrillFormValues(formData);
+  const title = text(formData, "title") || "Untitled Drill";
+  const mainFocus = mainFocuses.includes(values.mainFocus as MainFocus) ? values.mainFocus as MainFocus : mainFocuses[0];
+  const drillType = drillTypes.includes(values.drillType as DrillType) ? values.drillType as DrillType : drillTypes[0];
+  const ageGroupValues = checkedValues<AgeGroup>(formData, "ageGroups", ageGroups);
+  const blockValues = checkedValues<TrainingBlock>(formData, "trainingBlocks", trainingBlocks);
+  const duration = Math.max(1, numberValue(formData, "durationMinutes", 10));
+  const minPlayers = Math.max(1, numberValue(formData, "minPlayers", 1));
+  const maxPlayers = Math.max(minPlayers, numberValue(formData, "maxPlayers", Math.max(minPlayers, 1)));
+  const difficulty = numberValue(formData, "difficultyLevel", 3);
+  const intensity = numberValue(formData, "intensityLevel", 3);
+  const tags = text(formData, "tags")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  const graphic = parseEditorJsonString(values.graphicJson);
+  const materialRows = parseMaterialsJson(text(formData, "materialsJson")) ?? parseMaterials(text(formData, "materials"));
+  const finalMaterials = materialRows.length ? materialRows : detectMaterialsFromGraphic(graphic);
+
+  return {
+    values,
+    graphic,
+    data: {
+      title,
+      short_description: optionalText(text(formData, "shortDescription")),
+      organization: optionalText(text(formData, "organization")),
+      coaching_points: optionalText(text(formData, "coachingPoints")),
+      variations: optionalText(text(formData, "variations")),
+      easier_version: optionalText(text(formData, "easierVersion")),
+      harder_version: optionalText(text(formData, "harderVersion")),
+      age_groups: ageGroupValues,
+      main_focus: mainFocus,
+      sub_focus: optionalText(text(formData, "subFocus")),
+      training_blocks: blockValues,
+      drill_type: drillType,
+      duration_minutes: duration,
+      min_players: minPlayers,
+      max_players: maxPlayers,
+      materials: materialsToJson(finalMaterials),
+      pitch_area: null,
+      difficulty_level: Math.min(Math.max(difficulty, 1), 5),
+      intensity_level: Math.min(Math.max(intensity, 1), 5),
+      is_favorite: formData.get("isFavorite") === "on",
+      tags,
+      status: "draft"
+    }
+  };
+}
+
 export function toDrillUpdate(data: Omit<DrillInsert, "user_id">): DrillUpdate {
   return data;
 }

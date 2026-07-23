@@ -43,6 +43,8 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold uppercase text-board-green">{drill.mainFocus}</p>
+              {drill.status === "draft" ? <StatusBadge label="Draft" /> : null}
+              {drill.status === "draft" ? <StatusBadge label="Reusable Draft" neutral /> : null}
               {view === "archived" ? <StatusBadge label="Archived" /> : null}
               {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
             </div>
@@ -52,9 +54,9 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
           <div className="flex flex-wrap gap-2">
             {view !== "trash" ? <ButtonLink href={`/drills/${drill.id}/edit`} variant="secondary">
               <Edit className="h-4 w-4" />
-              Edit
+              {drill.status === "draft" ? "Continue editing" : "Edit"}
             </ButtonLink> : null}
-            <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} view={view} />
+            <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} view={view} isDraft={drill.status === "draft"} />
           </div>
         </div>
 
@@ -106,9 +108,9 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
   );
 }
 
-function StatusBadge({ label, danger = false }: { label: string; danger?: boolean }) {
+function StatusBadge({ label, danger = false, neutral = false }: { label: string; danger?: boolean; neutral?: boolean }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${danger ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${danger ? "bg-red-50 text-red-700" : neutral ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>
       {label}
     </span>
   );

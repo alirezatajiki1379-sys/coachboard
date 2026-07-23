@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { parseDrillForm, toDrillUpdate } from "@/lib/drills/form";
+import { parseDrillDraftForm, parseDrillForm, toDrillUpdate } from "@/lib/drills/form";
 import type { DrillFormField, DrillFormValues } from "@/lib/drills/form";
 import { getDrillGraphic, upsertDrillGraphic } from "@/lib/drills/graphics";
 import { getUserDrill } from "@/lib/drills/queries";
@@ -47,6 +47,8 @@ function safeReturnTo(formData: FormData) {
 
 export async function createDrill(_: DrillActionState, formData: FormData): Promise<DrillActionState> {
   const returnTo = safeReturnTo(formData);
+  const intent = formString(formData, "intent");
+  if (intent === "saveDraft") return createDrillDraft(formData, returnTo);
   const parsed = parseDrillForm(formData);
   if (!parsed.ok) {
     return {
@@ -91,6 +93,8 @@ export async function updateDrill(_: DrillActionState, formData: FormData): Prom
   if (!drillId) {
     return { error: "Missing drill id." };
   }
+  const intent = formString(formData, "intent");
+  if (intent === "saveDraft") return updateDrillDraft(formData, drillId, returnTo);
 
   const parsed = parseDrillForm(formData);
   if (!parsed.ok) {
@@ -104,9 +108,11 @@ export async function updateDrill(_: DrillActionState, formData: FormData): Prom
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
+  const update = toDrillUpdate(parsed.data);
+  if (intent === "publish") update.status = "published";
   const { error } = await db
     .from("drills")
-    .update(toDrillUpdate(parsed.data))
+    .update(update)
     .eq("id", drillId)
     .eq("user_id", user.id);
 
@@ -125,7 +131,67 @@ export async function updateDrill(_: DrillActionState, formData: FormData): Prom
 
   revalidatePath("/drills");
   revalidatePath(`/drills/${drillId}`);
-  redirect(returnTo || `/drills/${drillId}`);
+  redirect(returnTo || (intent === "publish" ? `/drills/${drillId}` : `/drills/${drillId}`));
+}
+
+async function createDrillDraft(formData: FormData, returnTo: string): Promise<DrillActionState> {
+  const parsed = parseDrillDraftForm(formData);
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { data, error } = await db
+    .from("drills")
+    .insert({
+      ...parsed.data,
+      user_id: user.id,
+      status: "draft"
+    })
+    .select("id")
+    .single();
+
+  if (error) return { error: error.message, values: parsed.values, submissionId: Date.now() };
+
+  try {
+    await upsertDrillGraphic(supabase, user.id, data.id, parsed.graphic);
+  } catch (graphicError) {
+    return {
+      error: graphicError instanceof Error ? graphicError.message : "The drill draft was created, but the graphic could not be saved.",
+      values: parsed.values,
+      submissionId: Date.now()
+    };
+  }
+
+  revalidatePath("/drills");
+  redirect(returnTo || "/drills?view=drafts");
+}
+
+async function updateDrillDraft(formData: FormData, drillId: string, returnTo: string): Promise<DrillActionState> {
+  const parsed = parseDrillDraftForm(formData);
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("drills")
+    .update({
+      ...toDrillUpdate(parsed.data),
+      status: "draft"
+    })
+    .eq("id", drillId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message, values: parsed.values, submissionId: Date.now() };
+
+  try {
+    await upsertDrillGraphic(supabase, user.id, drillId, parsed.graphic);
+  } catch (graphicError) {
+    return {
+      error: graphicError instanceof Error ? graphicError.message : "The drill draft was saved, but the graphic could not be saved.",
+      values: parsed.values,
+      submissionId: Date.now()
+    };
+  }
+
+  revalidatePath("/drills");
+  revalidatePath(`/drills/${drillId}`);
+  redirect(returnTo || "/drills?view=drafts");
 }
 
 export async function deleteDrill(_: DrillDeleteState, formData: FormData): Promise<DrillDeleteState> {

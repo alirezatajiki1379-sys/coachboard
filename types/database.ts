@@ -1,5 +1,16 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
+export type RegionalCalendarEventCategory =
+  | "statutory_public_holiday"
+  | "official_school_holiday"
+  | "movable_school_holiday"
+  | "local_school_free_day";
+
+export type TeamCalendarExclusionCategory =
+  | "movable_school_holiday"
+  | "local_school_free_day"
+  | "team_custom_exclusion";
+
 export type Database = {
   public: {
     Tables: {
@@ -60,6 +71,7 @@ export type Database = {
           intensity_level: number;
           is_favorite: boolean;
           tags: string[];
+          status: "draft" | "published";
           archived_at: string | null;
           deleted_at: string | null;
           created_at: string;
@@ -89,6 +101,7 @@ export type Database = {
           intensity_level?: number;
           is_favorite?: boolean;
           tags?: string[];
+          status?: "draft" | "published";
           archived_at?: string | null;
           deleted_at?: string | null;
           created_at?: string;
@@ -118,6 +131,7 @@ export type Database = {
           intensity_level?: number;
           is_favorite?: boolean;
           tags?: string[];
+          status?: "draft" | "published";
           archived_at?: string | null;
           deleted_at?: string | null;
           created_at?: string;
@@ -270,7 +284,7 @@ export type Database = {
           country_code: string;
           federal_state_code: string | null;
           name: string;
-          category: string;
+          category: RegionalCalendarEventCategory;
           starts_on: string;
           ends_on: string;
           source: string | null;
@@ -282,7 +296,7 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["regional_calendar_events"]["Row"]> & {
           country_code: string;
           name: string;
-          category: string;
+          category: RegionalCalendarEventCategory;
           starts_on: string;
           ends_on: string;
         };
@@ -295,7 +309,7 @@ export type Database = {
           user_id: string;
           squad_id: string;
           name: string;
-          category: string;
+          category: TeamCalendarExclusionCategory;
           starts_on: string;
           ends_on: string;
           reason: string | null;
@@ -307,7 +321,7 @@ export type Database = {
           user_id: string;
           squad_id: string;
           name: string;
-          category: string;
+          category: TeamCalendarExclusionCategory;
           starts_on: string;
           ends_on: string;
         };
@@ -682,6 +696,7 @@ export type Database = {
           block: string | null;
           order_index: number;
           planned_duration_minutes: number | null;
+          status: "draft" | "ready" | "removed";
           snapshot_json: Json;
           created_at: string;
           updated_at: string;

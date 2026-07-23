@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
@@ -77,8 +77,19 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
     isDirty,
     isSaving: isSubmitting || isPending,
     onSaveDraftAndLeave: (href) => {
-      saveDraftNow();
-      window.location.href = href;
+      const form = formRef.current;
+      if (!form) {
+        saveDraftNow();
+        window.location.href = href;
+        return;
+      }
+      const formData = new FormData(form);
+      formData.set("intent", "saveDraft");
+      formData.set("returnTo", href);
+      setIsSubmitting(true);
+      startTransition(() => {
+        void action(initialActionState, formData);
+      });
     }
   });
 
@@ -262,6 +273,16 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
         <ButtonLink href={cancelHref ?? (drill ? `/drills/${drill.id}` : "/drills")} variant="secondary" className="justify-center">
           Cancel
         </ButtonLink>
+        <Button type="submit" name="intent" value="saveDraft" variant="secondary" disabled={isPending} className="justify-center">
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save draft
+        </Button>
+        {drill?.status === "draft" ? (
+          <Button type="submit" name="intent" value="publish" disabled={isPending} className="justify-center">
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Publish Drill
+          </Button>
+        ) : null}
         <Button type="submit" disabled={isPending} className="justify-center">
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {mode === "create" ? "Create drill" : "Save changes"}

@@ -5,7 +5,9 @@ import { AlertTriangle, CalendarPlus, Loader2 } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { createTrainingEvent, updateTrainingEvent, type TrainingEventActionState } from "@/lib/squad/attendance-actions";
 import {
+  calendarCategoryLabel,
   findCalendarConflicts,
+  normalizeCalendarCategory,
   shouldExcludeByDefault,
   summarizeCalendarConflicts,
   type CalendarConflict,
@@ -312,7 +314,7 @@ function CalendarWarning({ conflicts }: { conflicts: CalendarConflict[] }) {
       <ul className="mt-2 space-y-1 text-sm text-amber-900">
         {conflicts.map((conflict) => (
           <li key={`${conflict.date}-${conflict.event.id}`}>
-            {formatDate(conflict.date)}: {conflict.event.name} · {categoryLabel(conflict.event.category)}
+            {formatDate(conflict.date)}: {conflict.event.name} · {calendarCategoryLabel(conflict.event.category)}
             {conflict.event.confidence === "suggested" ? " · suggestion, confirm locally" : ""}
           </li>
         ))}
@@ -348,7 +350,7 @@ function CalendarConflictSelector({
   }
   const categoryCounts = countCategories(rows);
   const datesForCategory = (category: string) =>
-    rows.filter(([, conflicts]) => conflicts.some((conflict) => conflict.event.category === category)).map(([date]) => date);
+    rows.filter(([, conflicts]) => conflicts.some((conflict) => normalizeCalendarCategory(conflict.event.category) === category)).map(([date]) => date);
   const excludeCategory = (category: string) => {
     const next = new Set(excludedDates);
     for (const date of datesForCategory(category)) next.add(date);
@@ -373,7 +375,7 @@ function CalendarConflictSelector({
             onClick={() => excludeCategory(category)}
             className="rounded-md border border-amber-200 bg-white px-3 py-2 text-left text-xs font-bold text-board-navy hover:border-board-green"
           >
-            Exclude {categoryLabel(category)}
+            Exclude {calendarCategoryLabel(category)}
             <span className="mt-1 block font-medium text-slate-500">{categoryCounts.get(category)} affected</span>
           </button>
         ) : null)}
@@ -389,7 +391,7 @@ function CalendarConflictSelector({
       <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
         {rows.map(([date, conflicts]) => {
           const reasonLabel = conflicts.map((conflict) => conflict.event.name).join(", ");
-          const reasonType = conflicts[0]?.event.category ?? "team_custom_exclusion";
+          const reasonType = normalizeCalendarCategory(conflicts[0]?.event.category ?? "team_custom_exclusion");
           const checked = excludedDates.has(date);
           return (
             <label key={date} className="block rounded-md border border-amber-200 bg-white p-3 text-sm text-board-navy">
@@ -412,7 +414,7 @@ function CalendarConflictSelector({
                   <span className="mt-1 block text-xs text-slate-600">
                     {conflicts.map((conflict) => (
                       <span key={conflict.event.id} className="mr-2 inline-block">
-                        {conflict.event.name} ({categoryLabel(conflict.event.category)}
+                        {conflict.event.name} ({calendarCategoryLabel(conflict.event.category)}
                         {conflict.event.confidence === "suggested" ? ", suggested" : ""})
                       </span>
                     ))}
@@ -429,23 +431,15 @@ function CalendarConflictSelector({
   );
 }
 
-const calendarCategoryOrder = ["public_holiday", "school_holiday", "local_customary_day", "movable_holiday", "team_custom_exclusion"];
+const calendarCategoryOrder = ["statutory_public_holiday", "official_school_holiday", "movable_school_holiday", "local_school_free_day", "team_custom_exclusion"];
 
 function countCategories(rows: Array<[string, CalendarConflict[]]>) {
   const counts = new Map<string, number>();
   for (const [, conflicts] of rows) {
-    const categories = new Set(conflicts.map((conflict) => conflict.event.category));
+    const categories = new Set(conflicts.map((conflict) => normalizeCalendarCategory(conflict.event.category)));
     for (const category of categories) counts.set(category, (counts.get(category) ?? 0) + 1);
   }
   return counts;
-}
-
-function categoryLabel(category: string) {
-  if (category === "public_holiday") return "public holiday";
-  if (category === "school_holiday") return "school holiday";
-  if (category === "movable_holiday") return "movable holiday";
-  if (category === "local_customary_day") return "local/customary day";
-  return "team exclusion";
 }
 
 function formatDate(date: string) {

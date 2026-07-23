@@ -131,6 +131,7 @@ export type Drill = {
   intensityLevel: 1 | 2 | 3 | 4 | 5;
   isFavorite: boolean;
   tags: string[];
+  status: "draft" | "published";
   previewImageUrl?: string;
   archivedAt?: string;
   deletedAt?: string;

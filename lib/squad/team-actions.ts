@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { isGermanFederalState } from "@/lib/squad/regional-calendar";
+import { isGermanFederalState, normalizeCalendarCategory } from "@/lib/squad/regional-calendar";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -115,7 +115,11 @@ export async function createTeamCalendarExclusion(formData: FormData) {
   const name = formString(formData, "name");
   const startsOn = formString(formData, "startsOn");
   const endsOn = formString(formData, "endsOn") || startsOn;
-  const category = preference(formString(formData, "category"), ["movable_holiday", "local_customary_day", "team_custom_exclusion"], "team_custom_exclusion");
+  const category = preference(
+    normalizeCalendarCategory(formString(formData, "category")),
+    ["movable_school_holiday", "local_school_free_day", "team_custom_exclusion"],
+    "team_custom_exclusion"
+  );
   if (!teamId || !name || !startsOn || endsOn < startsOn) redirect("/teams?error=calendar");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;

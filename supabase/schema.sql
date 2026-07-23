@@ -134,6 +134,8 @@ create table if not exists public.drills (
 
   is_favorite boolean not null default false,
   tags text[] not null default '{}',
+  status text not null default 'published'
+    check (status in ('draft', 'published')),
 
   archived_at timestamptz,
   deleted_at timestamptz,
@@ -150,6 +152,16 @@ add column if not exists archived_at timestamptz;
 
 alter table public.drills
 add column if not exists deleted_at timestamptz;
+
+alter table public.drills
+add column if not exists status text not null default 'published';
+
+alter table public.drills
+drop constraint if exists drills_status_check;
+
+alter table public.drills
+add constraint drills_status_check
+check (status in ('draft', 'published'));
 
 
 -- =========================================================
@@ -443,7 +455,7 @@ create table if not exists public.regional_calendar_events (
   federal_state_code text,
   name text not null,
   category text not null
-    check (category in ('public_holiday', 'school_holiday', 'movable_holiday', 'local_customary_day')),
+    check (category in ('statutory_public_holiday', 'official_school_holiday', 'movable_school_holiday', 'local_school_free_day')),
   starts_on date not null,
   ends_on date not null,
   source text,
@@ -460,7 +472,7 @@ create table if not exists public.team_calendar_exclusions (
   squad_id uuid not null references public.squads(id) on delete cascade,
   name text not null,
   category text not null
-    check (category in ('movable_holiday', 'local_customary_day', 'team_custom_exclusion')),
+    check (category in ('movable_school_holiday', 'local_school_free_day', 'team_custom_exclusion')),
   starts_on date not null,
   ends_on date not null,
   reason text,
@@ -480,6 +492,53 @@ on public.regional_calendar_events (
   ends_on
 );
 
+alter table public.regional_calendar_events
+drop constraint if exists regional_calendar_events_category_check;
+
+delete from public.regional_calendar_events legacy
+using public.regional_calendar_events canonical
+where legacy.category in ('public_holiday', 'school_holiday', 'movable_holiday', 'local_customary_day')
+  and canonical.country_code = legacy.country_code
+  and canonical.federal_state_code is not distinct from legacy.federal_state_code
+  and canonical.name = legacy.name
+  and canonical.starts_on = legacy.starts_on
+  and canonical.ends_on = legacy.ends_on
+  and canonical.category = case legacy.category
+    when 'public_holiday' then 'statutory_public_holiday'
+    when 'school_holiday' then 'official_school_holiday'
+    when 'movable_holiday' then 'movable_school_holiday'
+    when 'local_customary_day' then 'local_school_free_day'
+  end;
+
+update public.regional_calendar_events
+set category = case category
+  when 'public_holiday' then 'statutory_public_holiday'
+  when 'school_holiday' then 'official_school_holiday'
+  when 'movable_holiday' then 'movable_school_holiday'
+  when 'local_customary_day' then 'local_school_free_day'
+  else category
+end
+where category in ('public_holiday', 'school_holiday', 'movable_holiday', 'local_customary_day');
+
+alter table public.regional_calendar_events
+add constraint regional_calendar_events_category_check
+check (category in ('statutory_public_holiday', 'official_school_holiday', 'movable_school_holiday', 'local_school_free_day'));
+
+alter table public.team_calendar_exclusions
+drop constraint if exists team_calendar_exclusions_category_check;
+
+update public.team_calendar_exclusions
+set category = case category
+  when 'movable_holiday' then 'movable_school_holiday'
+  when 'local_customary_day' then 'local_school_free_day'
+  else category
+end
+where category in ('movable_holiday', 'local_customary_day');
+
+alter table public.team_calendar_exclusions
+add constraint team_calendar_exclusions_category_check
+check (category in ('movable_school_holiday', 'local_school_free_day', 'team_custom_exclusion'));
+
 insert into public.regional_calendar_events (
   country_code,
   federal_state_code,
@@ -492,11 +551,11 @@ insert into public.regional_calendar_events (
   verified_at
 )
 values
-  ('DE', 'DE-NW', 'Autumn holidays', 'school_holiday', '2026-10-17', '2026-10-31', 'NRW official school holiday data', '2026/27', now()),
-  ('DE', 'DE-NW', 'Christmas holidays', 'school_holiday', '2026-12-23', '2027-01-06', 'NRW official school holiday data', '2026/27', now()),
-  ('DE', 'DE-NW', 'Easter holidays', 'school_holiday', '2027-03-22', '2027-04-03', 'NRW official school holiday data', '2026/27', now()),
-  ('DE', 'DE-NW', 'Additional school-free day', 'school_holiday', '2027-05-18', '2027-05-18', 'NRW official school holiday data', '2026/27', now()),
-  ('DE', 'DE-NW', 'Summer holidays', 'school_holiday', '2027-07-19', '2027-08-31', 'NRW official school holiday data', '2026/27', now())
+  ('DE', 'DE-NW', 'Autumn holidays', 'official_school_holiday', '2026-10-17', '2026-10-31', 'NRW official school holiday data', '2026/27', now()),
+  ('DE', 'DE-NW', 'Christmas holidays', 'official_school_holiday', '2026-12-23', '2027-01-06', 'NRW official school holiday data', '2026/27', now()),
+  ('DE', 'DE-NW', 'Easter holidays', 'official_school_holiday', '2027-03-22', '2027-04-03', 'NRW official school holiday data', '2026/27', now()),
+  ('DE', 'DE-NW', 'Additional school-free day', 'official_school_holiday', '2027-05-18', '2027-05-18', 'NRW official school holiday data', '2026/27', now()),
+  ('DE', 'DE-NW', 'Summer holidays', 'official_school_holiday', '2027-07-19', '2027-08-31', 'NRW official school holiday data', '2026/27', now())
 on conflict (country_code, federal_state_code, name, category, starts_on, ends_on)
 do update set
   source = excluded.source,
@@ -1069,11 +1128,23 @@ create table if not exists public.training_session_drill_instances (
   block text,
   order_index integer not null default 0,
   planned_duration_minutes integer,
+  status text not null default 'ready'
+    check (status in ('draft', 'ready', 'removed')),
   snapshot_json jsonb not null default '{}'::jsonb,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.training_session_drill_instances
+add column if not exists status text not null default 'ready';
+
+alter table public.training_session_drill_instances
+drop constraint if exists training_session_drill_instances_status_check;
+
+alter table public.training_session_drill_instances
+add constraint training_session_drill_instances_status_check
+check (status in ('draft', 'ready', 'removed'));
 
 create table if not exists public.training_event_groups (
   id uuid primary key default gen_random_uuid(),
@@ -1443,6 +1514,13 @@ on public.drills (
   deleted_at
 );
 
+create index if not exists drills_user_id_status_updated_idx
+on public.drills (
+  user_id,
+  status,
+  updated_at desc
+);
+
 create index if not exists drills_search_idx
 on public.drills
 using gin (
@@ -1692,6 +1770,13 @@ create index if not exists training_session_drill_instances_event_order_idx
 on public.training_session_drill_instances (
   user_id,
   event_id,
+  order_index
+);
+
+create index if not exists training_session_drill_instances_event_status_idx
+on public.training_session_drill_instances (
+  event_id,
+  status,
   order_index
 );
 

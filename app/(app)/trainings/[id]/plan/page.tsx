@@ -149,7 +149,10 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                     <input name="drillIds" value={drill.id} type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
                     <span className="min-w-0">
                       <span className="block font-bold text-board-navy">{drill.title}</span>
-                      <span className="mt-1 block text-xs font-semibold text-slate-500">{drill.durationMinutes} min · {drill.minPlayers}-{drill.maxPlayers} Players</span>
+                      <span className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500">
+                        <span>{drill.durationMinutes} min · {drill.minPlayers}-{drill.maxPlayers} Players</span>
+                        {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Draft</span> : null}
+                      </span>
                     </span>
                   </label>
                 ))}
@@ -202,6 +205,7 @@ type PlanDrill = {
   orderIndex: number;
   plannedDurationMinutes?: number;
   sourceDrillId?: string;
+  status: "draft" | "ready" | "removed";
 };
 
 type LibraryDrill = {
@@ -210,6 +214,7 @@ type LibraryDrill = {
   durationMinutes: number;
   minPlayers: number;
   maxPlayers: number;
+  status: "draft" | "published";
 };
 
 type TrainingGroupMemberRow = {
@@ -239,25 +244,27 @@ async function loadPlanInstance(supabase: Awaited<ReturnType<typeof createClient
 async function loadPlanDrills(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string): Promise<PlanDrill[]> {
   const { data, error } = await supabase
     .from("training_session_drill_instances")
-    .select("id,title,block,order_index,planned_duration_minutes,source_drill_id")
+    .select("id,title,block,order_index,planned_duration_minutes,source_drill_id,status")
     .eq("event_id", eventId)
     .eq("user_id", userId)
+    .neq("status", "removed")
     .order("order_index", { ascending: true });
   if (error) throw new Error(error.message);
-  return ((data ?? []) as Array<{ id: string; title: string; block: string | null; order_index: number; planned_duration_minutes: number | null; source_drill_id: string | null }>).map((row) => ({
+  return ((data ?? []) as Array<{ id: string; title: string; block: string | null; order_index: number; planned_duration_minutes: number | null; source_drill_id: string | null; status: "draft" | "ready" | "removed" | null }>).map((row) => ({
     id: row.id,
     title: row.title,
     phase: row.block ?? "Main Part",
     orderIndex: row.order_index,
     plannedDurationMinutes: row.planned_duration_minutes ?? undefined,
-    sourceDrillId: row.source_drill_id ?? undefined
+    sourceDrillId: row.source_drill_id ?? undefined,
+    status: row.status ?? "ready"
   }));
 }
 
 async function loadLibraryDrills(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, search: string): Promise<LibraryDrill[]> {
   let query = supabase
     .from("drills")
-    .select("id,title,duration_minutes,min_players,max_players,updated_at")
+    .select("id,title,duration_minutes,min_players,max_players,status,updated_at")
     .eq("user_id", userId)
     .is("archived_at", null)
     .is("deleted_at", null)
@@ -269,12 +276,13 @@ async function loadLibraryDrills(supabase: Awaited<ReturnType<typeof createClien
   }
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return ((data ?? []) as Array<{ id: string; title: string; duration_minutes: number; min_players: number; max_players: number }>).map((row) => ({
+  return ((data ?? []) as Array<{ id: string; title: string; duration_minutes: number; min_players: number; max_players: number; status: "draft" | "published" | null }>).map((row) => ({
     id: row.id,
     title: row.title,
     durationMinutes: row.duration_minutes,
     minPlayers: row.min_players,
-    maxPlayers: row.max_players
+    maxPlayers: row.max_players,
+    status: row.status ?? "published"
   }));
 }
 
@@ -326,10 +334,20 @@ function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { ev
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-bold uppercase text-slate-500">#{index + 1}</p>
-          <h4 className="font-bold text-board-navy">{drill.title}</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="font-bold text-board-navy">{drill.title || "Untitled Drill"}</h4>
+            {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Draft</span> : null}
+            {drill.status === "draft" && drill.sourceDrillId ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">Reusable Draft</span> : null}
+            {drill.status === "draft" && !drill.sourceDrillId ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">Session Draft</span> : null}
+          </div>
           <p className="mt-1 text-xs font-semibold text-slate-500">
-            {drill.plannedDurationMinutes ?? 0} min · All expected Players · {players.length} assigned
+            {drill.plannedDurationMinutes ?? "Duration missing"}{drill.plannedDurationMinutes ? " min" : ""} · All expected Players · {players.length} assigned
           </p>
+          {drill.status === "draft" ? (
+            <p className="mt-1 text-xs font-semibold text-amber-700">
+              Draft can stay in the plan. Missing information is non-blocking.
+            </p>
+          ) : null}
           {players.length ? (
             <p className="mt-1 text-xs font-semibold text-slate-500">
               {composition.goalkeeper} GK · {composition.defensive} DEF · {composition.midfield} MID · {composition.attacking} ATT
@@ -352,7 +370,8 @@ function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { ev
             <input type="hidden" name="direction" value="down" />
             <Button type="submit" variant="ghost" disabled={isLast} className="h-8 px-2 text-xs">Down</Button>
           </form>
-          {drill.sourceDrillId ? <ButtonLink href={`/drills/${drill.sourceDrillId}`} variant="ghost" className="h-8 px-2 text-xs">Open source</ButtonLink> : null}
+          {drill.sourceDrillId ? <ButtonLink href={`/drills/${drill.sourceDrillId}`} variant="ghost" className="h-8 px-2 text-xs">Preview</ButtonLink> : null}
+          {drill.sourceDrillId ? <ButtonLink href={`/drills/${drill.sourceDrillId}/edit?returnTo=/trainings/${eventId}/plan`} variant="ghost" className="h-8 px-2 text-xs">{drill.status === "draft" ? "Continue editing" : "Edit source"}</ButtonLink> : null}
         </div>
       </div>
       <form action={updateSessionPlanDrill} className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">

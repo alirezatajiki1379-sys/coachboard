@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
 import {
+  normalizeCalendarCategory,
+  municipalitySpecificPublicHolidayWarningsForGermanState,
+  officialSchoolHolidaysForGermanState,
   publicHolidaysForGermanState,
   suggestedLocalDaysForGermanState,
   type CalendarConflictContext,
@@ -69,7 +72,10 @@ export async function getTeamCalendarContext(
 
   if (row.country_code === "DE" && row.federal_state_code) {
     events.push(...publicHolidaysForGermanState(row.federal_state_code, startDate, endDate));
-    events.push(...suggestedLocalDaysForGermanState(row.federal_state_code, startDate, endDate));
+    events.push(...municipalitySpecificPublicHolidayWarningsForGermanState(row.federal_state_code, row.city ?? undefined, startDate, endDate));
+    const officialSchoolEvents = officialSchoolHolidaysForGermanState(row.federal_state_code, startDate, endDate);
+    events.push(...officialSchoolEvents);
+    events.push(...suggestedLocalDaysForGermanState(row.federal_state_code, startDate, endDate, officialSchoolEvents));
     const { data: regional } = await db
       .from("regional_calendar_events")
       .select("id,name,category,starts_on,ends_on,source,source_version,verified_at")
@@ -78,10 +84,11 @@ export async function getTeamCalendarContext(
       .lte("starts_on", endDate)
       .gte("ends_on", startDate);
     for (const item of (regional ?? []) as RegionalCalendarEventRow[]) {
+      const category = normalizeCalendarCategory(item.category);
       events.push({
         id: item.id,
         name: item.name,
-        category: item.category,
+        category,
         startsOn: item.starts_on,
         endsOn: item.ends_on,
         source: [item.source, item.source_version].filter(Boolean).join(" ") || "Stored regional calendar data",
@@ -99,14 +106,15 @@ export async function getTeamCalendarContext(
     .lte("starts_on", endDate)
     .gte("ends_on", startDate);
   for (const item of (exclusions ?? []) as TeamCalendarExclusionRow[]) {
+    const category = normalizeCalendarCategory(item.category);
     events.push({
       id: item.id,
       name: item.name,
-      category: item.category,
+      category,
       startsOn: item.starts_on,
       endsOn: item.ends_on,
       source: item.reason || "Team calendar",
-      confidence: item.category === "team_custom_exclusion" ? "coach_created" : "team_confirmed",
+      confidence: category === "team_custom_exclusion" ? "coach_created" : "team_confirmed",
       excludeByDefault: item.exclude_by_default ?? true
     });
   }
@@ -117,11 +125,30 @@ export async function getTeamCalendarContext(
     federalStateCode: row.federal_state_code ?? undefined,
     city: row.city ?? undefined,
     preferences,
-    events,
+    events: dedupeCalendarEvents(events),
     sourceLabel: row.federal_state_code
-      ? "German public holidays are calculated; school holidays are shown when stored in regional calendar data."
+      ? row.city
+        ? "German statutory public holidays and official school holidays are checked separately. Suggested local days need Team confirmation."
+        : "German statutory public holidays and official school holidays are checked separately. A regional public holiday may apply; select the Team's municipality for an exact result."
       : "Select a federal state to enable regional calendar checks."
   };
+}
+
+function dedupeCalendarEvents(events: CalendarConflictEvent[]) {
+  const seen = new Set<string>();
+  const result: CalendarConflictEvent[] = [];
+  for (const event of events) {
+    const key = [
+      event.category,
+      event.startsOn,
+      event.endsOn,
+      event.name.toLocaleLowerCase("en-US")
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(event);
+  }
+  return result.sort((a, b) => a.startsOn.localeCompare(b.startsOn) || a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 }
 
 function normalizePreferences(value: unknown): CalendarConflictContext["preferences"] {

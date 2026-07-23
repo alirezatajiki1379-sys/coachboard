@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { parseDrillForm } from "@/lib/drills/form";
+import { parseDrillDraftForm, parseDrillForm } from "@/lib/drills/form";
 import { upsertDrillGraphic } from "@/lib/drills/graphics";
 import type { DrillActionState } from "@/lib/drills/actions";
 
@@ -30,6 +30,8 @@ function safeReturnTo(formData: FormData, eventId: string) {
 export async function createSessionOnlyTrainingDrill(_: DrillActionState, formData: FormData): Promise<DrillActionState> {
   const eventId = formString(formData, "trainingEventId");
   if (!eventId) return { error: "Missing Training context.", submissionId: Date.now() };
+  const intent = formString(formData, "intent");
+  if (intent === "saveDraft") return createSessionOnlyTrainingDrillDraft(formData, eventId);
   const parsed = parseDrillForm(formData);
   if (!parsed.ok) {
     return { error: parsed.error, fieldErrors: parsed.fieldErrors, values: parsed.values, submissionId: Date.now() };
@@ -52,6 +54,7 @@ export async function createSessionOnlyTrainingDrill(_: DrillActionState, formDa
     block: parsed.data.training_blocks?.[0] ?? null,
     order_index: orderIndex,
     planned_duration_minutes: parsed.data.duration_minutes,
+    status: "ready",
     snapshot_json: {
       source: "session_only",
       drill: parsed.data,
@@ -66,6 +69,8 @@ export async function createSessionOnlyTrainingDrill(_: DrillActionState, formDa
 export async function createReusableTrainingDrill(_: DrillActionState, formData: FormData): Promise<DrillActionState> {
   const eventId = formString(formData, "trainingEventId");
   if (!eventId) return { error: "Missing Training context.", submissionId: Date.now() };
+  const intent = formString(formData, "intent");
+  if (intent === "saveDraft") return createReusableTrainingDrillDraft(formData, eventId);
   const parsed = parseDrillForm(formData);
   if (!parsed.ok) {
     return { error: parsed.error, fieldErrors: parsed.fieldErrors, values: parsed.values, submissionId: Date.now() };
@@ -78,7 +83,7 @@ export async function createReusableTrainingDrill(_: DrillActionState, formData:
 
   const { data: drill, error: drillError } = await db
     .from("drills")
-    .insert({ ...parsed.data, user_id: user.id })
+    .insert({ ...parsed.data, user_id: user.id, status: "published" })
     .select("id,updated_at")
     .single();
   if (drillError) return { error: drillError.message, submissionId: Date.now() };
@@ -104,6 +109,7 @@ export async function createReusableTrainingDrill(_: DrillActionState, formData:
     block: parsed.data.training_blocks?.[0] ?? null,
     order_index: orderIndex,
     planned_duration_minutes: parsed.data.duration_minutes,
+    status: "ready",
     snapshot_json: {
       source: "reusable_drill",
       sourceDrillId: drill.id,
@@ -112,6 +118,90 @@ export async function createReusableTrainingDrill(_: DrillActionState, formData:
     }
   });
   if (instanceError) return { error: instanceError.message, submissionId: Date.now() };
+  revalidatePath("/drills");
+  revalidateTraining(eventId);
+  redirect(safeReturnTo(formData, eventId));
+}
+
+async function createSessionOnlyTrainingDrillDraft(formData: FormData, eventId: string): Promise<DrillActionState> {
+  const parsed = parseDrillDraftForm(formData);
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const event = await getOwnedEvent(db, user.id, eventId);
+  if (!event) return { error: "Training not found.", values: parsed.values, submissionId: Date.now() };
+  const planInstanceId = await ensurePlanInstance(db, user.id, eventId, event.label || `Training plan ${event.date}`);
+  const orderIndex = await nextDrillOrder(db, user.id, eventId);
+  const { error } = await db.from("training_session_drill_instances").insert({
+    user_id: user.id,
+    event_id: eventId,
+    plan_instance_id: planInstanceId,
+    source_training_session_drill_id: null,
+    source_drill_id: null,
+    source_drill_updated_at: null,
+    title: parsed.data.title,
+    block: parsed.data.training_blocks?.[0] ?? null,
+    order_index: orderIndex,
+    planned_duration_minutes: parsed.values.durationMinutes ? parsed.data.duration_minutes : null,
+    status: "draft",
+    snapshot_json: {
+      source: "session_only",
+      status: "draft",
+      drill: parsed.data,
+      graphic: parsed.graphic
+    }
+  });
+  if (error) return { error: error.message, values: parsed.values, submissionId: Date.now() };
+  revalidateTraining(eventId);
+  redirect(safeReturnTo(formData, eventId));
+}
+
+async function createReusableTrainingDrillDraft(formData: FormData, eventId: string): Promise<DrillActionState> {
+  const parsed = parseDrillDraftForm(formData);
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const event = await getOwnedEvent(db, user.id, eventId);
+  if (!event) return { error: "Training not found.", values: parsed.values, submissionId: Date.now() };
+
+  const { data: drill, error: drillError } = await db
+    .from("drills")
+    .insert({ ...parsed.data, user_id: user.id, status: "draft" })
+    .select("id,updated_at")
+    .single();
+  if (drillError) return { error: drillError.message, values: parsed.values, submissionId: Date.now() };
+
+  try {
+    await upsertDrillGraphic(supabase, user.id, drill.id, parsed.graphic);
+  } catch (graphicError) {
+    return {
+      error: graphicError instanceof Error ? graphicError.message : "The reusable draft was created, but its graphic could not be saved.",
+      values: parsed.values,
+      submissionId: Date.now()
+    };
+  }
+
+  const planInstanceId = await ensurePlanInstance(db, user.id, eventId, event.label || `Training plan ${event.date}`);
+  const orderIndex = await nextDrillOrder(db, user.id, eventId);
+  const { error: instanceError } = await db.from("training_session_drill_instances").insert({
+    user_id: user.id,
+    event_id: eventId,
+    plan_instance_id: planInstanceId,
+    source_training_session_drill_id: null,
+    source_drill_id: drill.id,
+    source_drill_updated_at: drill.updated_at,
+    title: parsed.data.title,
+    block: parsed.data.training_blocks?.[0] ?? null,
+    order_index: orderIndex,
+    planned_duration_minutes: parsed.values.durationMinutes ? parsed.data.duration_minutes : null,
+    status: "draft",
+    snapshot_json: {
+      source: "reusable_drill",
+      status: "draft",
+      sourceDrillId: drill.id,
+      drill: parsed.data,
+      graphic: parsed.graphic
+    }
+  });
+  if (instanceError) return { error: instanceError.message, values: parsed.values, submissionId: Date.now() };
   revalidatePath("/drills");
   revalidateTraining(eventId);
   redirect(safeReturnTo(formData, eventId));

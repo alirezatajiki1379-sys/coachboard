@@ -25,7 +25,8 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
   const resolvedSearchParams = await searchParams;
   const filters = parseDrillFilters(resolvedSearchParams);
   const drills = await listUserDrills(supabase, user.id, filters);
-  const viewLabels = { active: "Active", archived: "Archived", trash: "Trash" } as const;
+  const draftCount = filters.view === "drafts" ? drills.length : await countDraftDrills(supabase, user.id);
+  const viewLabels = { active: "All Drills", published: "Published", drafts: `Drafts · ${draftCount}`, archived: "Archived", trash: "Trash" } as const;
 
   return (
     <div className="space-y-6">
@@ -44,7 +45,7 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
       </section>
 
       <nav className="flex flex-wrap gap-2 rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label="Drill library views">
-        {(["active", "archived", "trash"] as const).map((view) => (
+        {(["active", "published", "drafts", "archived", "trash"] as const).map((view) => (
           <Link
             key={view}
             href={view === "active" ? "/drills" : `/drills?view=${view}`}
@@ -65,7 +66,7 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
           drills.map((drill) => <DrillCard key={drill.id} drill={drill} view={filters.view} />)
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">No {viewLabels[filters.view].toLowerCase()} drills found</h2>
+            <h2 className="text-lg font-bold text-board-navy">No {viewLabels[filters.view].toLowerCase()} found</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
               Create your first drill, or clear the filters if you were searching. Drill cards show previews, materials,
               and quick actions once your library has content.
@@ -79,4 +80,16 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
       </section>
     </div>
   );
+}
+
+async function countDraftDrills(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const { count, error } = await supabase
+    .from("drills")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "draft")
+    .is("archived_at", null)
+    .is("deleted_at", null);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }

@@ -11,7 +11,7 @@ import type { DrillEditorState } from "@/types/editor";
 
 type DrillCardProps = {
   drill: Drill & { graphic?: DrillEditorState };
-  view?: "active" | "archived" | "trash";
+  view?: "active" | "published" | "drafts" | "archived" | "trash";
 };
 
 export function DrillCard({ drill, view = "active" }: DrillCardProps) {
@@ -50,13 +50,15 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs font-semibold uppercase text-board-green">{drill.mainFocus}</p>
+                {drill.status === "draft" ? <StatusBadge label="Draft" /> : null}
+                {drill.status === "draft" ? <StatusBadge label="Reusable Draft" neutral /> : null}
                 {view === "archived" ? <StatusBadge label="Archived" /> : null}
                 {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
               </div>
               <h2 className="mt-1 line-clamp-2 text-xl font-bold tracking-normal text-board-navy">{drill.title}</h2>
             </div>
             <div className="shrink-0">
-              <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} view={view} compact />
+              <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} view={view} compact isDraft={drill.status === "draft"} />
             </div>
           </div>
 
@@ -131,11 +133,11 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
           <div className="mt-5 flex flex-wrap gap-2">
             <ButtonLink href={`/drills/${drill.id}`} variant="secondary" className="h-9 px-3">
               <Eye className="h-4 w-4" />
-              Open
+              Preview
             </ButtonLink>
             {view !== "trash" ? <ButtonLink href={`/drills/${drill.id}/edit`} variant="secondary" className="h-9 px-3">
               <Edit className="h-4 w-4" />
-              Edit
+              {drill.status === "draft" ? "Continue editing" : "Edit"}
             </ButtonLink> : null}
           </div>
         </div>
@@ -144,9 +146,9 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
   );
 }
 
-function StatusBadge({ label, danger = false }: { label: string; danger?: boolean }) {
+function StatusBadge({ label, danger = false, neutral = false }: { label: string; danger?: boolean; neutral?: boolean }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${danger ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${danger ? "bg-red-50 text-red-700" : neutral ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>
       {label}
     </span>
   );

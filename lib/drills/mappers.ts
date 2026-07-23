@@ -39,6 +39,7 @@ export function mapDrillRow(row: DrillRow): Drill {
     intensityLevel: toLevel(row.intensity_level),
     isFavorite: row.is_favorite,
     tags: row.tags,
+    status: row.status === "draft" ? "draft" : "published",
     archivedAt: row.archived_at ?? undefined,
     deletedAt: row.deleted_at ?? undefined,
     createdAt: row.created_at,
@@ -69,6 +70,7 @@ export function mapDrillToDuplicateInsert(drill: Drill, userId: string): DrillIn
     difficulty_level: drill.difficultyLevel,
     intensity_level: drill.intensityLevel,
     is_favorite: false,
-    tags: drill.tags
+    tags: drill.tags,
+    status: drill.status
   };
 }

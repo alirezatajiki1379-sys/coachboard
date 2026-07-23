@@ -26,6 +26,7 @@ const drillLibraryColumns = [
   "intensity_level",
   "is_favorite",
   "tags",
+  "status",
   "archived_at",
   "deleted_at",
   "created_at",
@@ -33,7 +34,7 @@ const drillLibraryColumns = [
 ].join(",");
 
 export type DrillFilters = {
-  view: "active" | "archived" | "trash";
+  view: "active" | "drafts" | "published" | "archived" | "trash";
   search?: string;
   ageGroup?: string;
   mainFocus?: string;
@@ -59,7 +60,7 @@ export function parseDrillFilters(searchParams: Record<string, string | string[]
   };
 
   return {
-    view: get("view") === "archived" || get("view") === "trash" ? get("view") as DrillFilters["view"] : "active",
+    view: get("view") === "drafts" || get("view") === "published" || get("view") === "archived" || get("view") === "trash" ? get("view") as DrillFilters["view"] : "active",
     search: get("search")?.trim() || undefined,
     ageGroup: get("ageGroup") || undefined,
     mainFocus: get("mainFocus") || undefined,
@@ -85,6 +86,8 @@ export async function listUserDrills(
   });
 
   if (filters.view === "active") query = query.is("archived_at", null).is("deleted_at", null);
+  if (filters.view === "published") query = query.eq("status", "published").is("archived_at", null).is("deleted_at", null);
+  if (filters.view === "drafts") query = query.eq("status", "draft").is("archived_at", null).is("deleted_at", null);
   if (filters.view === "archived") query = query.not("archived_at", "is", null).is("deleted_at", null);
   if (filters.view === "trash") query = query.not("deleted_at", "is", null);
 
@@ -147,6 +150,7 @@ function mapDrillListRow(row: Partial<DrillRow>): Drill {
     intensity_level: row.intensity_level ?? 3,
     is_favorite: row.is_favorite ?? false,
     tags: row.tags ?? [],
+    status: row.status === "draft" ? "draft" : "published",
     archived_at: row.archived_at ?? null,
     deleted_at: row.deleted_at ?? null,
     created_at: row.created_at ?? "",

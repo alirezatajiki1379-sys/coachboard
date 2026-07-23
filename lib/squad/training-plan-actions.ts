@@ -83,8 +83,10 @@ export async function addExistingDrillsToSessionPlan(formData: FormData) {
       block: phase,
       order_index: startOrder + index,
       planned_duration_minutes: drill.duration_minutes,
+      status: drill.status === "draft" ? "draft" : "ready",
       snapshot_json: {
         source: "drill_library",
+        status: drill.status === "draft" ? "draft" : "ready",
         sourceDrill: {
           title: drill.title,
           shortDescription: drill.short_description,
@@ -275,6 +277,7 @@ async function copyTrainingSessionTemplate(db: SupabaseClient, userId: string, e
       block: row.block,
       order_index: row.order_index,
       planned_duration_minutes: row.planned_duration_minutes,
+      status: "ready",
       snapshot_json: {
         source: "training_plan_template",
         sourceDrill: drill ? { ...drill, drill_graphics: undefined, graphic: graphics } : null

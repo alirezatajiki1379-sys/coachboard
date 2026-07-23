@@ -8,18 +8,19 @@ import { Button } from "@/components/ui/button";
 type DrillActionsProps = {
   drillId: string;
   isFavorite: boolean;
-  view?: "active" | "archived" | "trash";
+  view?: "active" | "published" | "drafts" | "archived" | "trash";
   compact?: boolean;
+  isDraft?: boolean;
 };
 
-export function DrillActions({ drillId, isFavorite, view = "active", compact = false }: DrillActionsProps) {
+export function DrillActions({ drillId, isFavorite, view = "active", compact = false, isDraft = false }: DrillActionsProps) {
   const [deleteState, deleteAction, isDeleting] = useActionState(deleteDrill, {});
   const [permanentDeleteState, permanentDeleteAction, isPermanentlyDeleting] = useActionState(permanentlyDeleteDrill, {});
   const [deleteCancelled, setDeleteCancelled] = useState(false);
 
   return (
     <div className="flex flex-wrap gap-2">
-      {view === "active" ? (
+      {view === "active" || view === "published" || view === "drafts" ? (
         <form action={toggleFavorite}>
           <input type="hidden" name="drillId" value={drillId} />
           <input type="hidden" name="nextFavorite" value={String(!isFavorite)} />
@@ -38,7 +39,7 @@ export function DrillActions({ drillId, isFavorite, view = "active", compact = f
         </Button>
       </form> : null}
 
-      {view === "active" ? (
+      {view === "active" || view === "published" || view === "drafts" ? (
         <form action={archiveDrill}>
           <input type="hidden" name="drillId" value={drillId} />
           <Button type="submit" variant="secondary" className={compact ? "h-9 px-3" : undefined}>
@@ -62,7 +63,7 @@ export function DrillActions({ drillId, isFavorite, view = "active", compact = f
         action={deleteAction}
         onSubmit={(event) => {
           setDeleteCancelled(false);
-          if (!window.confirm("Move this drill to Trash? You can restore it later.")) {
+          if (!window.confirm(isDraft ? "Delete reusable Drill draft? This moves the draft to Trash. Existing Session copies remain unchanged." : "Move this drill to Trash? You can restore it later.")) {
             event.preventDefault();
             setDeleteCancelled(true);
           }
@@ -71,7 +72,7 @@ export function DrillActions({ drillId, isFavorite, view = "active", compact = f
         <input type="hidden" name="drillId" value={drillId} />
         <Button type="submit" variant="danger" className={compact ? "h-9 px-3" : undefined} disabled={isDeleting}>
           <Trash2 className="h-4 w-4" />
-          {compact ? null : "Move to Trash"}
+          {compact ? null : isDraft ? "Delete draft" : "Move to Trash"}
         </Button>
       </form> : null}
       {view === "trash" ? (
