@@ -51,6 +51,18 @@ type ErrorResponse = {
   error: "unauthorized" | "server_misconfigured" | "internal_server_error";
 };
 
+type DebugResponse = {
+  ok: false;
+  error: string;
+  env: {
+    apiKey: boolean;
+    ownerId: boolean;
+    serviceRole: boolean;
+    supabaseUrl: boolean;
+    anonKey: boolean;
+  };
+};
+
 type TrainingEventRow = Pick<
   Database["public"]["Tables"]["squad_training_events"]["Row"],
   "id" | "date" | "start_time" | "end_time" | "location" | "squad_id"
@@ -76,10 +88,12 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
+  const debugMode = request.nextUrl.searchParams.get("debug") === "1";
   try {
     const expectedKey = process.env.COACHBOARD_API_KEY;
     if (!expectedKey) {
       console.error("Dashboard API is missing COACHBOARD_API_KEY.");
+      if (debugMode) return debugJson(new Error("server_misconfigured: missing COACHBOARD_API_KEY"));
       return json({ error: "server_misconfigured" }, 500);
     }
 
@@ -91,10 +105,12 @@ export async function GET(request: NextRequest) {
     const ownerId = process.env.COACHBOARD_DASHBOARD_OWNER_ID;
     if (!ownerId) {
       console.error("Dashboard API is missing COACHBOARD_DASHBOARD_OWNER_ID.");
+      if (debugMode) return debugJson(new Error("server_misconfigured: missing COACHBOARD_DASHBOARD_OWNER_ID"));
       return json({ error: "server_misconfigured" }, 500);
     }
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       console.error("Dashboard API is missing server Supabase configuration.");
+      if (debugMode) return debugJson(new Error("server_misconfigured: missing server Supabase configuration"));
       return json({ error: "server_misconfigured" }, 500);
     }
 
@@ -165,15 +181,38 @@ export async function GET(request: NextRequest) {
     return json(response, 200);
   } catch (error) {
     console.error("Dashboard API failed.", error instanceof Error ? error.message : "Unknown error");
+    if (debugMode) return debugJson(error);
     return json({ error: "internal_server_error" }, 500);
   }
 }
 
-function json(body: DashboardResponse | ErrorResponse, status: number) {
+function json(body: DashboardResponse | ErrorResponse | DebugResponse, status: number) {
   return NextResponse.json(body, {
     status,
     headers: CORS_HEADERS
   });
+}
+
+function debugJson(error: unknown) {
+  return json({
+    ok: false,
+    error: debugErrorMessage(error),
+    env: {
+      apiKey: Boolean(process.env.COACHBOARD_API_KEY),
+      ownerId: Boolean(process.env.COACHBOARD_DASHBOARD_OWNER_ID),
+      serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      supabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+      anonKey: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+    }
+  }, 200);
+}
+
+function debugErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    const stackLines = error.stack?.split("\n").slice(0, 5).join("\n");
+    return stackLines ? `${error.message}\n${stackLines}` : error.message;
+  }
+  return String(error);
 }
 
 function isValidApiKey(providedKey: string | null, expectedKey: string) {
