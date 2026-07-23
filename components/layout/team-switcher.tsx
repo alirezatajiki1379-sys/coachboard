@@ -17,6 +17,8 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
   const searchParams = useSearchParams();
   const activeTeam = teams.find((team) => team.isActive) ?? teams[0];
   const switchReturnTo = teamSwitchReturnTo(pathname, searchParams, returnTo);
+  const activeTeamControlClass =
+    "h-10 rounded-md border border-white/10 bg-white/5 text-slate-200 transition hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-board-green/40";
 
   if (!activeTeam) {
     return (
@@ -35,7 +37,7 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
       <span className="block text-xs font-semibold uppercase text-slate-300">Active team</span>
       <div className="mt-1 flex items-center gap-2">
         <details className="group min-w-0 flex-1">
-          <summary className="flex h-9 cursor-pointer list-none items-center justify-between gap-2 rounded-md px-2 outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-board-green/40">
+          <summary className={`${activeTeamControlClass} flex cursor-pointer list-none items-center justify-between gap-2 px-3`}>
             <span className="min-w-0 truncate text-sm font-bold text-white" title={activeTeam.name}>{activeTeam.name}</span>
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-300 transition group-open:rotate-180" />
           </summary>
@@ -111,11 +113,11 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
         <ButtonLink
           href={`/teams/${activeTeam.id}/settings`}
           variant="ghost"
-          className="h-9 w-9 shrink-0 px-0 text-slate-200 hover:bg-white/10 hover:text-white"
+          className={`${activeTeamControlClass} w-10 shrink-0 justify-center px-0`}
           aria-label={`Open settings for ${activeTeam.name}`}
           title="Team settings"
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="h-5 w-5" />
         </ButtonLink>
       </div>
     </div>

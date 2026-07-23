@@ -41,9 +41,12 @@ CoachBoard is a football training planner for coaches. It helps a coach build a 
    ```bash
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=
+   COACHBOARD_API_KEY=
+   COACHBOARD_DASHBOARD_OWNER_ID=
    ```
 
-   Find these in Supabase under **Project Settings -> API**. Use the project URL and anon public key. Do not use or expose the service role key in this app.
+   Find the public Supabase values in Supabase under **Project Settings -> API**. `SUPABASE_SERVICE_ROLE_KEY`, `COACHBOARD_API_KEY`, and `COACHBOARD_DASHBOARD_OWNER_ID` are server-only values for the optional read-only external dashboard API. Never expose them in client-side code and never prefix them with `NEXT_PUBLIC_`.
 
 5. Run the SQL in [supabase/schema.sql](supabase/schema.sql) in the Supabase SQL Editor.
 
@@ -162,6 +165,9 @@ The app is Vercel-ready.
    ```bash
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   COACHBOARD_API_KEY=your-dashboard-api-key
+   COACHBOARD_DASHBOARD_OWNER_ID=your-supabase-user-uuid
    ```
 
 5. In Supabase, run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor before testing the deployed app.
@@ -180,6 +186,13 @@ Post-deployment test checklist:
 - Open the session detail page and print page.
 - Use browser print and Save as PDF.
 - Confirm another user account cannot see the first user's drills or sessions.
+
+External dashboard API checklist:
+
+- Add `SUPABASE_SERVICE_ROLE_KEY`, `COACHBOARD_API_KEY`, and `COACHBOARD_DASHBOARD_OWNER_ID` only as server-side Vercel environment variables.
+- `COACHBOARD_DASHBOARD_OWNER_ID` must be the Supabase user UUID whose CoachBoard teams/trainings should be exposed as counts.
+- Test with `curl -H "x-api-key: YOUR_KEY" "https://coachboard-ashen.vercel.app/api/dashboard"`.
+- Missing or wrong keys return `{"error":"unauthorized"}` with HTTP 401.
 
 ## Current Beta Notes
 

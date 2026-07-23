@@ -38,6 +38,7 @@ import {
   visibleAttention,
   workspaceColumns,
   workspaceHref,
+  workspaceViewSwitchHref,
   workspaceMobileMetrics,
   type WorkspaceData,
   type WorkspaceColumnDefinition,
@@ -156,7 +157,7 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
               key={item.id}
               role="tab"
               aria-selected={item.id === data.state.view}
-              href={workspaceHref(data.state, { view: item.id, selectedPlayer: undefined, sort: undefined, direction: undefined })}
+              href={workspaceViewSwitchHref(data.state, item.id)}
               className={cn(
                 "min-w-fit rounded-md px-3 py-2 text-sm font-bold transition",
                 item.id === data.state.view ? "bg-board-green text-white" : "text-slate-600 hover:bg-green-50 hover:text-board-green"
@@ -1105,21 +1106,44 @@ function InspectorPanel({ player, returnTo }: { player?: WorkspacePlayerSummary;
 }
 
 function WorkspaceEmpty({ data }: { data: WorkspaceData }) {
+  const hasSearchOrFilters = Boolean(
+    data.state.search ||
+    data.state.position ||
+    data.state.availability !== "all" ||
+    data.state.coachAssessment ||
+    data.state.developmentStatus ||
+    data.state.reviewStatus ||
+    data.state.evidenceBase ||
+    data.state.ratingStatus ||
+    data.state.importBatch
+  );
   const messages: Record<string, string> = {
-    "trial-players": "No active Trial Players.",
-    "reviews-due": "No player reviews are currently due.",
-    unavailable: "All active players are currently available.",
-    "needs-attention": "No players currently match the selected attention criteria."
+    "players:active": "No active Players in this Squad.",
+    "players:roster": "No active Players in this Squad.",
+    "players:trial": "No Trial Players.",
+    "players:archived": "No archived Players.",
+    "players:trash": "No Players in Trash.",
+    "view:trial-players": "No Trial Players.",
+    "view:reviews-due": "No reviews are currently due.",
+    "view:unavailable": "All active Players are currently available.",
+    "view:needs-attention": "No Players currently match the selected attention criteria."
   };
-  const message = data.allPlayers.length ? messages[data.state.view] ?? "No players match your search and filters." : "No players in the squad yet. Add one player manually or import an entire squad from Excel, CSV or a copied table.";
+  const categoryMessage = messages[`players:${data.state.players}`] ?? messages[`view:${data.state.view}`] ?? "No Players to show in this category.";
+  const message = data.allPlayers.length
+    ? hasSearchOrFilters ? "No Players match the current filters." : categoryMessage
+    : "No players in the squad yet. Add one player manually or import an entire squad from Excel, CSV or a copied table.";
   return (
-    <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
+    <div key={`${data.state.view}:${data.state.players}`} className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
       <h2 className="text-lg font-bold text-board-navy">Nothing to show</h2>
       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">{message}</p>
       {!data.allPlayers.length ? (
         <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
           <ButtonLink href="/squad/players/new">Add player manually</ButtonLink>
           <ButtonLink href="/squad/import" variant="secondary">Import players</ButtonLink>
+        </div>
+      ) : hasSearchOrFilters ? (
+        <div className="mt-5 flex justify-center">
+          <ButtonLink href={workspaceViewSwitchHref(data.state, data.state.view)} variant="secondary">Clear filters</ButtonLink>
         </div>
       ) : null}
     </div>

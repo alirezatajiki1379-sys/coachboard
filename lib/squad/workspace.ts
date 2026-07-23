@@ -588,6 +588,28 @@ export function workspaceHref(state: WorkspaceState, patch: Partial<WorkspaceSta
   return `/squad${query ? `?${query}` : ""}`;
 }
 
+export function workspaceViewSwitchHref(state: WorkspaceState, view: WorkspaceView) {
+  const viewConfig = quickViews.find((item) => item.id === view) ?? quickViews[0];
+  return workspaceHref({
+    ...state,
+    view,
+    savedView: undefined,
+    customize: false,
+    players: playersFilter(undefined, view),
+    position: undefined,
+    availability: availabilityFilter(undefined, view),
+    sort: viewConfig.defaultSort,
+    direction: viewConfig.defaultDirection,
+    selectedPlayer: undefined,
+    importBatch: undefined,
+    coachAssessment: undefined,
+    developmentStatus: undefined,
+    reviewStatus: undefined,
+    evidenceBase: undefined,
+    ratingStatus: undefined
+  }, {});
+}
+
 export function formatWorkspaceRating(value: number | null) {
   return value === null ? "-" : formatRating(value);
 }
