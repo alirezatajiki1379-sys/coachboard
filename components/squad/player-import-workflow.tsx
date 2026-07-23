@@ -3,14 +3,18 @@
 import { useMemo, useState, useTransition } from "react";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, Loader2, RotateCcw, Upload } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { confirmPlayerImport, undoPlayerImport, type PlayerImportActionState, type PlayerImportBatchSummary } from "@/lib/squad/import-actions";
+import { confirmPlayerImport, refreshPlayerImportDuplicateCheck, undoPlayerImport, type PlayerImportActionState, type PlayerImportBatchSummary } from "@/lib/squad/import-actions";
 import {
   buildReviewedRows,
+  duplicateConfidenceLabel,
+  duplicateSourceLabel,
   importFieldLabel,
   importFields,
   suggestColumnMapping,
   templateCsv,
   type ColumnMapping,
+  type DuplicatePlayerContext,
+  type DuplicateSource,
   type ImportMode,
   type ImportOperation,
   type ImportSourceType,
@@ -19,11 +23,10 @@ import {
   type ReviewedImportRow
 } from "@/lib/squad/importer";
 import { normalizePositions } from "@/lib/squad/intake";
-import type { SquadPlayer } from "@/types/domain";
 import { cn } from "@/lib/utils";
 
 type PlayerImportWorkflowProps = {
-  existingPlayers: SquadPlayer[];
+  existingPlayers: DuplicatePlayerContext;
   history: PlayerImportBatchSummary[];
 };
 
@@ -45,13 +48,14 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
   const [rows, setRows] = useState<ReviewedImportRow[]>([]);
   const [importMode, setImportMode] = useState<ImportMode>("add_new");
   const [result, setResult] = useState<PlayerImportActionState | null>(null);
+  const [duplicateRefreshMessage, setDuplicateRefreshMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const activeSheet = sheets[sheetIndex];
   const detected = useMemo(() => activeSheet ? detectTable(activeSheet.rows) : null, [activeSheet]);
   const warningCount = rows.reduce((sum, row) => sum + row.warnings.length, 0);
   const errorCount = rows.filter((row) => row.errors.length && !row.excluded).length;
-  const duplicateCount = rows.filter((row) => row.duplicateSignals.length && !row.excluded).length;
+  const duplicateSummary = summarizeDuplicates(rows);
   const positionSummary = summarizePositions(rows);
   const operationPlan = summarizeOperations(rows, importMode);
   const importDisabledReason = importDisabledMessage(operationPlan, errorCount, positionSummary);
@@ -89,6 +93,23 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
   function openPositionReview(returnStep = step) {
     setPositionReviewReturnStep(returnStep);
     goToStep(8);
+  }
+
+  function refreshDuplicates(nextStep?: number) {
+    setDuplicateRefreshMessage("Rechecking duplicate sources…");
+    startTransition(async () => {
+      const response = await refreshPlayerImportDuplicateCheck(rows);
+      if (!response.ok || !response.rows) {
+        setDuplicateRefreshMessage(response.error ?? "Duplicate detection could not be refreshed. The previous results may be outdated.");
+        return;
+      }
+      setRows(response.rows);
+      const diagnostics = response.diagnostics;
+      setDuplicateRefreshMessage(diagnostics
+        ? `Duplicate check updated: ${diagnostics.activeMatches} active · ${diagnostics.archivedMatches} archived · ${diagnostics.trashMatches} trash · ${diagnostics.legacyMatches} legacy · ${diagnostics.otherTeamMatches} other-team · ${diagnostics.fileDuplicates} file.`
+        : "Duplicate check updated.");
+      if (nextStep) goToStep(nextStep);
+    });
   }
 
   function confirmImport() {
@@ -210,8 +231,8 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
       ) : null}
 
       {step === 4 ? (
-        <Panel title="Review data" action={<Button onClick={() => goToStep(5)}>Resolve duplicates</Button>}>
-          <Summary operations={operationPlan} warnings={warningCount} errors={errorCount} duplicates={duplicateCount} />
+        <Panel title="Review data" action={<Button onClick={() => refreshDuplicates(5)}>Resolve duplicates</Button>}>
+          <Summary operations={operationPlan} warnings={warningCount} errors={errorCount} duplicates={duplicateSummary} />
           <WarningSummary rows={rows} onReviewPositions={() => openPositionReview(4)} />
           <PositionSummary summary={positionSummary} onReview={() => openPositionReview(4)} />
           <ReviewRows rows={rows} onRowsChange={setRows} />
@@ -219,8 +240,15 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
       ) : null}
 
       {step === 5 ? (
-        <Panel title="Resolve duplicates" action={<Button onClick={() => goToStep(6)}>Confirm import</Button>}>
-          <p className="text-sm text-slate-600">Possible duplicates are never merged silently. Choose what should happen for each row.</p>
+        <Panel title="Resolve duplicates" action={<Button onClick={() => refreshDuplicates(6)}>Confirm import</Button>}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <p className="text-sm text-slate-600">Matches are separated by source. Active Squad, archived, trash, other-team and duplicate-file rows are never merged silently.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => refreshDuplicates()} disabled={isPending}>Refresh duplicate check</Button>
+              <RestoreDeletedMatchesButton rows={rows} onRowsChange={setRows} />
+            </div>
+          </div>
+          {duplicateRefreshMessage ? <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700" aria-live="polite">{duplicateRefreshMessage}</p> : null}
           <ReviewRows rows={rows} onRowsChange={setRows} duplicatesOnly />
         </Panel>
       ) : null}
@@ -236,8 +264,10 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
           <div className="mt-4 grid gap-4 md:grid-cols-3">
             <Metric label="Warnings" value={String(warningCount)} />
             <Metric label="Errors" value={String(errorCount)} />
+            <Metric label="Active-Squad duplicates" value={String(duplicateSummary.active_team_player)} />
           </div>
           {importDisabledReason ? <Alert message={importDisabledReason} /> : null}
+          {duplicateRefreshMessage ? <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700" aria-live="polite">{duplicateRefreshMessage}</p> : null}
           <WarningSummary rows={rows} onReviewPositions={() => openPositionReview(6)} />
           <PositionSummary summary={positionSummary} onReview={() => openPositionReview(6)} />
           <label className="mt-5 block">
@@ -377,7 +407,7 @@ function ImportHistory({ history }: { history: PlayerImportBatchSummary[] }) {
 }
 
 function ReviewRows({ rows, onRowsChange, duplicatesOnly = false }: { rows: ReviewedImportRow[]; onRowsChange: (rows: ReviewedImportRow[]) => void; duplicatesOnly?: boolean }) {
-  const visible = duplicatesOnly ? rows.filter((row) => row.duplicateSignals.length) : rows;
+  const visible = duplicatesOnly ? rows.filter((row) => (row.duplicateMatches?.length ?? row.duplicateSignals.length) && !row.excluded) : rows;
   if (!visible.length) return <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No rows in this view.</p>;
   return (
     <div className="mt-4 space-y-3">
@@ -387,7 +417,6 @@ function ReviewRows({ rows, onRowsChange, duplicatesOnly = false }: { rows: Revi
             <div>
               <p className="font-bold text-board-navy">Row {row.rowNumber}: {row.values.firstName?.normalized} {row.values.lastName?.normalized}</p>
               <p className="mt-1 text-sm text-slate-600">{row.status} · {row.warnings.length} warnings · {row.errors.length} errors</p>
-              {row.duplicateSignals.length ? <p className="mt-2 text-sm font-semibold text-amber-800">{row.duplicateSignals.join(" ")}</p> : null}
             </div>
             <div className="flex flex-wrap gap-2">
               <select value={row.operation} onChange={(event) => updateRow(rows, onRowsChange, row.rowNumber, { operation: event.target.value as ImportOperation })} className="h-10 rounded-md border border-board-line bg-white px-2 text-sm">
@@ -399,6 +428,7 @@ function ReviewRows({ rows, onRowsChange, duplicatesOnly = false }: { rows: Revi
               <Button type="button" variant="secondary" onClick={() => updateRow(rows, onRowsChange, row.rowNumber, { excluded: !row.excluded, status: row.excluded ? row.status : "excluded" })}>{row.excluded ? "Include" : "Exclude"}</Button>
             </div>
           </div>
+          <DuplicateMatchList row={row} />
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {Object.entries(row.values).filter(([key]) => key !== "ignore" && key !== "fullName").map(([key, value]) => (
               <label key={key} className="block">
@@ -420,6 +450,53 @@ function ReviewRows({ rows, onRowsChange, duplicatesOnly = false }: { rows: Revi
         </article>
       ))}
     </div>
+  );
+}
+
+function DuplicateMatchList({ row }: { row: ReviewedImportRow }) {
+  const matches = row.duplicateMatches ?? [];
+  if (!matches.length) {
+    return row.duplicateSignals.length ? <p className="mt-3 text-sm font-semibold text-amber-800">{row.duplicateSignals.join(" ")}</p> : null;
+  }
+  return (
+    <div className="mt-3 grid gap-2 md:grid-cols-2">
+      {matches.map((match, index) => (
+        <div key={`${match.source}-${match.playerId ?? index}`} className={cn(
+          "rounded-md border p-3 text-sm",
+          match.source === "active_team_player" && "border-amber-200 bg-amber-50 text-amber-900",
+          match.source === "archived_team_player" && "border-sky-200 bg-sky-50 text-sky-900",
+          match.source === "trashed_team_player" && "border-red-200 bg-red-50 text-red-900",
+          match.source === "legacy_player" && "border-orange-200 bg-orange-50 text-orange-900",
+          match.source === "other_team_player" && "border-slate-200 bg-slate-50 text-slate-800",
+          match.source === "duplicate_import_row" && "border-purple-200 bg-purple-50 text-purple-900"
+        )}>
+          <p className="font-bold">{duplicateSourceLabel(match.source)}</p>
+          <p className="mt-1 text-xs font-bold uppercase tracking-wide">{duplicateConfidenceLabel(match.confidence)}</p>
+          <ul className="mt-2 list-disc space-y-1 pl-4">
+            {match.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RestoreDeletedMatchesButton({ rows, onRowsChange }: { rows: ReviewedImportRow[]; onRowsChange: (rows: ReviewedImportRow[]) => void }) {
+  const exactTrashMatches = rows.filter((row) => !row.excluded && row.duplicateMatches?.some((match) => match.source === "trashed_team_player" && match.confidence === "exact"));
+  if (!exactTrashMatches.length) return null;
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      className="h-9 px-3"
+      onClick={() => {
+        if (!window.confirm(`Restore ${exactTrashMatches.length} Player${exactTrashMatches.length === 1 ? "" : "s"} from Trash?\n\nExisting Player profiles and related historical data will be restored. Imported fields can be reviewed before updating.`)) return;
+        const targetRows = new Set(exactTrashMatches.map((row) => row.rowNumber));
+        onRowsChange(rows.map((row) => targetRows.has(row.rowNumber) ? { ...row, operation: "update" } : row));
+      }}
+    >
+      Restore all exact deleted-player matches
+    </Button>
   );
 }
 
@@ -454,15 +531,28 @@ function SheetPreview({ sheet }: { sheet: ParsedSheet }) {
   );
 }
 
-function Summary({ operations, warnings, errors, duplicates }: { operations: ImportPlanSummary; warnings: number; errors: number; duplicates: number }) {
+type DuplicateSummary = Record<DuplicateSource, number>;
+
+function Summary({ operations, warnings, errors, duplicates }: { operations: ImportPlanSummary; warnings: number; errors: number; duplicates: DuplicateSummary }) {
+  const duplicateTotal = Object.values(duplicates).reduce((sum, value) => sum + value, 0);
   return (
-    <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <Metric label="Create" value={String(operations.create)} />
-      <Metric label="Update" value={String(operations.update)} />
-      <Metric label="Skip" value={String(operations.skip)} />
-      <Metric label="Warnings" value={String(warnings)} />
-      <Metric label="Errors" value={String(errors)} />
-      <Metric label="Possible duplicates" value={String(duplicates)} />
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <Metric label="Create" value={String(operations.create)} />
+        <Metric label="Update" value={String(operations.update)} />
+        <Metric label="Skip" value={String(operations.skip)} />
+        <Metric label="Warnings" value={String(warnings)} />
+        <Metric label="Errors" value={String(errors)} />
+        <Metric label="All duplicate signals" value={String(duplicateTotal)} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <Metric label="Active Squad matches" value={String(duplicates.active_team_player)} />
+        <Metric label="Archived Player matches" value={String(duplicates.archived_team_player)} />
+        <Metric label="Player Trash matches" value={String(duplicates.trashed_team_player)} />
+        <Metric label="Legacy/no-team matches" value={String(duplicates.legacy_player)} />
+        <Metric label="Other-Team matches" value={String(duplicates.other_team_player)} />
+        <Metric label="Duplicate rows in file" value={String(duplicates.duplicate_import_row)} />
+      </div>
     </div>
   );
 }
@@ -778,6 +868,7 @@ function positionGroups() {
       options: [
         { value: "LW", label: "Left Wing" },
         { value: "RW", label: "Right Wing" },
+        { value: "SS", label: "Second Striker" },
         { value: "ST", label: "Striker" },
         { value: "CF", label: "Centre Forward" }
       ]
@@ -875,14 +966,31 @@ function summarizeAutomaticResolution(rows: ReviewedImportRow[]) {
 function summarizeOperations(rows: ReviewedImportRow[], importMode: ImportMode): ImportPlanSummary {
   return rows.reduce<ImportPlanSummary>((summary, row) => {
     if (row.excluded || row.errors.length || row.operation === "skip") return { ...summary, skip: summary.skip + 1 };
-    const hasMatch = Boolean(row.duplicatePlayerId || row.duplicateSignals.length);
+    const hasUpdatableMatch = Boolean(row.duplicatePlayerId);
     if (row.operation === "create") {
-      if (importMode === "update_only" || hasMatch) return { ...summary, skip: summary.skip + 1 };
+      if (importMode === "update_only") return { ...summary, skip: summary.skip + 1 };
       return { ...summary, create: summary.create + 1 };
     }
-    if ((row.operation === "update" || row.operation === "fill_missing") && hasMatch) return { ...summary, update: summary.update + 1 };
+    if ((row.operation === "update" || row.operation === "fill_missing") && hasUpdatableMatch) return { ...summary, update: summary.update + 1 };
     return { ...summary, skip: summary.skip + 1 };
   }, { create: 0, update: 0, skip: 0 });
+}
+
+function summarizeDuplicates(rows: ReviewedImportRow[]): DuplicateSummary {
+  const summary: DuplicateSummary = {
+    active_team_player: 0,
+    archived_team_player: 0,
+    trashed_team_player: 0,
+    legacy_player: 0,
+    other_team_player: 0,
+    duplicate_import_row: 0
+  };
+  for (const row of rows) {
+    if (row.excluded) continue;
+    const sources = new Set((row.duplicateMatches ?? []).map((match) => match.source));
+    for (const source of sources) summary[source] += 1;
+  }
+  return summary;
 }
 
 function importDisabledMessage(plan: ImportPlanSummary, errorCount: number, summary: PositionImportSummary) {

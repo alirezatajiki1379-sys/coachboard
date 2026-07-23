@@ -6,8 +6,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 import type { SquadPlayer } from "@/types/domain";
-import { valueOf, type ImportOperation, type PlayerImportPayload, type ReviewedImportRow } from "@/lib/squad/importer";
+import { refreshReviewedRowDuplicates, valueOf, type DuplicatePlayerContext, type ImportOperation, type PlayerImportPayload, type ReviewedImportRow } from "@/lib/squad/importer";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
+import { ensureActiveSquad } from "@/lib/squad/squads";
 
 export type PlayerImportActionState = {
   ok?: boolean;
@@ -19,6 +20,26 @@ export type PlayerImportActionState = {
     skipped: number;
     failed: number;
     warnings: number;
+  };
+};
+
+export type PlayerImportDuplicateRefreshState = {
+  ok: boolean;
+  rows?: ReviewedImportRow[];
+  error?: string;
+  diagnostics?: {
+    activeTeamPlayers: number;
+    archivedTeamPlayers: number;
+    trashedTeamPlayers: number;
+    legacyPlayers: number;
+    otherTeamPlayers: number;
+    importRows: number;
+    activeMatches: number;
+    archivedMatches: number;
+    trashMatches: number;
+    legacyMatches: number;
+    otherTeamMatches: number;
+    fileDuplicates: number;
   };
 };
 
@@ -67,7 +88,8 @@ export async function confirmPlayerImport(payload: PlayerImportPayload): Promise
   if (!rows.length) return { error: "No rows are selected for import." };
   if (rows.length > 2000) return { error: "Import is limited to 2,000 rows." };
 
-  const existingPlayers = await listExistingPlayers(db, user.id);
+  const activeSquad = await ensureActiveSquad(supabase, user.id);
+  const existingPlayers = await listExistingPlayers(db, user.id, activeSquad.id);
   const { data: batch, error: batchError } = await db
     .from("player_import_batches")
     .insert({
@@ -91,7 +113,7 @@ export async function confirmPlayerImport(payload: PlayerImportPayload): Promise
   let warnings = 0;
 
   for (const row of rows) {
-    const result = await processImportRow(db, user.id, String(batch.id), row, payload.importMode, existingPlayers);
+    const result = await processImportRow(db, user.id, activeSquad.id, String(batch.id), row, payload.importMode, existingPlayers);
     if (result.status === "created") {
       created += 1;
       if (result.player) existingPlayers.push(result.player);
@@ -129,9 +151,20 @@ export async function confirmPlayerImport(payload: PlayerImportPayload): Promise
   };
 }
 
+export async function refreshPlayerImportDuplicateCheck(rows: ReviewedImportRow[]): Promise<PlayerImportDuplicateRefreshState> {
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const activeSquad = await ensureActiveSquad(supabase, user.id);
+  const context = await listDuplicateContext(db, user.id, activeSquad.id);
+  const nextRows = refreshReviewedRowDuplicates(rows, context);
+  const diagnostics = duplicateRefreshDiagnostics(nextRows, context);
+  return { ok: true, rows: nextRows, diagnostics };
+}
+
 async function processImportRow(
   db: SupabaseClient,
   userId: string,
+  squadId: string,
   batchId: string,
   row: ReviewedImportRow,
   importMode: string,
@@ -143,7 +176,7 @@ async function processImportRow(
   }
 
   const matched = resolveMatchedPlayer(row, existingPlayers);
-  const operation = effectiveOperation(row.operation, importMode, matched);
+  const operation = effectiveOperation(row.operation, importMode, matched, row);
   if (operation === "skip") {
     await insertAuditRow(db, userId, batchId, row, "skipped", "skip", undefined, matched?.id);
     return { status: "skipped" };
@@ -157,7 +190,7 @@ async function processImportRow(
       await insertAuditRow(db, userId, batchId, row, "skipped", "skip", undefined, undefined, "update_only_mode");
       return { status: "skipped" };
     }
-    const insert = buildPlayerInsert(userId, batchId, row);
+    const insert = buildPlayerInsert(userId, squadId, batchId, row);
     const { data, error } = await db.from("squad_players").insert(insert).select("*").single();
     if (error || !data) {
       await insertAuditRow(db, userId, batchId, row, "failed", "create", undefined, undefined, "create_failed");
@@ -182,10 +215,10 @@ async function processImportRow(
   return { status: "updated" };
 }
 
-function effectiveOperation(operation: ImportOperation, importMode: string, matched?: SquadPlayer): ImportOperation {
+function effectiveOperation(operation: ImportOperation, importMode: string, matched?: SquadPlayer, row?: ReviewedImportRow): ImportOperation {
   if (operation === "skip") return "skip";
-  if (matched && importMode === "add_new" && operation === "create") return "skip";
-  if (matched && operation === "create") return "skip";
+  if (matched && importMode === "add_new" && operation === "create" && row?.duplicateMatches?.some((match) => match.source === "active_team_player")) return "skip";
+  if (matched && operation === "create" && row?.duplicateMatches?.some((match) => match.source === "active_team_player")) return "skip";
   if (!matched && (operation === "update" || operation === "fill_missing")) return "skip";
   return operation;
 }
@@ -204,9 +237,10 @@ function resolveMatchedPlayer(row: ReviewedImportRow, players: SquadPlayer[]) {
   });
 }
 
-function buildPlayerInsert(userId: string, batchId: string, row: ReviewedImportRow): Record<string, unknown> {
+function buildPlayerInsert(userId: string, squadId: string | undefined, batchId: string, row: ReviewedImportRow): Record<string, unknown> {
   return {
     user_id: userId,
+    squad_id: squadId ?? null,
     first_name: valueOf(row.values.firstName),
     last_name: nullable(valueOf(row.values.lastName)),
     date_of_birth: nullable(valueOf(row.values.dateOfBirth)),
@@ -254,7 +288,7 @@ function buildPlayerInsert(userId: string, batchId: string, row: ReviewedImportR
 }
 
 function buildPlayerUpdate(batchId: string, row: ReviewedImportRow, player: SquadPlayer, operation: "update" | "fill_missing") {
-  const insert = buildPlayerInsert(player.userId, batchId, row);
+  const insert = buildPlayerInsert(player.userId, player.squadId, batchId, row);
   const mapping: Array<[string, keyof SquadPlayer]> = [
     ["last_name", "lastName"],
     ["date_of_birth", "dateOfBirth"],
@@ -311,6 +345,10 @@ function buildPlayerUpdate(batchId: string, row: ReviewedImportRow, player: Squa
   next.onboarding_warnings = row.warnings;
   next.import_batch_id = insert.import_batch_id;
   next.onboarding_import_batch = insert.onboarding_import_batch;
+  if (row.duplicateMatches?.some((match) => match.playerId === player.id && (match.source === "trashed_team_player" || match.source === "archived_team_player"))) {
+    next.deleted_at = null;
+    next.archived_at = null;
+  }
   return { next, previous };
 }
 
@@ -406,10 +444,46 @@ export async function undoPlayerImport(batchId: string): Promise<PlayerImportAct
   return { ok: true, summary: { created: 0, updated: 0, skipped: blocked, failed: 0, warnings: rolledBack } };
 }
 
-async function listExistingPlayers(db: SupabaseClient, userId: string) {
-  const { data, error } = await db.from("squad_players").select("*").eq("user_id", userId);
+async function listExistingPlayers(db: SupabaseClient, userId: string, squadId: string) {
+  const { data, error } = await db.from("squad_players").select("*").eq("user_id", userId).eq("squad_id", squadId);
   if (error) return [];
   return ((data ?? []) as SquadPlayerRow[]).map(mapSquadPlayerRow);
+}
+
+async function listDuplicateContext(db: SupabaseClient, userId: string, activeSquadId: string): Promise<DuplicatePlayerContext> {
+  const { data, error } = await db.from("squad_players").select("*").eq("user_id", userId);
+  if (error) {
+    return { activeTeamPlayers: [], archivedTeamPlayers: [], trashedTeamPlayers: [], legacyPlayers: [], otherTeamPlayers: [] };
+  }
+  const players = ((data ?? []) as SquadPlayerRow[]).map(mapSquadPlayerRow);
+  return {
+    activeTeamPlayers: players.filter((player) => player.squadId === activeSquadId && !player.archivedAt && !player.deletedAt),
+    archivedTeamPlayers: players.filter((player) => player.squadId === activeSquadId && Boolean(player.archivedAt) && !player.deletedAt),
+    trashedTeamPlayers: players.filter((player) => player.squadId === activeSquadId && Boolean(player.deletedAt)),
+    legacyPlayers: players.filter((player) => !player.squadId),
+    otherTeamPlayers: players.filter((player) => player.squadId && player.squadId !== activeSquadId)
+  };
+}
+
+function duplicateRefreshDiagnostics(rows: ReviewedImportRow[], context: DuplicatePlayerContext): PlayerImportDuplicateRefreshState["diagnostics"] {
+  return {
+    activeTeamPlayers: context.activeTeamPlayers.length,
+    archivedTeamPlayers: context.archivedTeamPlayers.length,
+    trashedTeamPlayers: context.trashedTeamPlayers.length,
+    legacyPlayers: context.legacyPlayers.length,
+    otherTeamPlayers: context.otherTeamPlayers.length,
+    importRows: rows.filter((row) => !row.excluded).length,
+    activeMatches: countRowsWithMatch(rows, "active_team_player"),
+    archivedMatches: countRowsWithMatch(rows, "archived_team_player"),
+    trashMatches: countRowsWithMatch(rows, "trashed_team_player"),
+    legacyMatches: countRowsWithMatch(rows, "legacy_player"),
+    otherTeamMatches: countRowsWithMatch(rows, "other_team_player"),
+    fileDuplicates: countRowsWithMatch(rows, "duplicate_import_row")
+  };
+}
+
+function countRowsWithMatch(rows: ReviewedImportRow[], source: NonNullable<ReviewedImportRow["duplicateMatches"]>[number]["source"]) {
+  return rows.filter((row) => !row.excluded && row.duplicateMatches?.some((match) => match.source === source)).length;
 }
 
 async function canDeleteImportedPlayer(db: SupabaseClient, userId: string, playerId: string) {

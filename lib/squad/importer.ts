@@ -5,6 +5,23 @@ export type ImportSourceType = "xlsx" | "csv" | "paste" | "template";
 export type ImportMode = "add_new" | "add_update" | "update_only";
 export type ImportOperation = "create" | "update" | "fill_missing" | "skip";
 export type MappingConfidence = "high" | "possible" | "confirm" | "unmapped";
+export type DuplicateSource =
+  | "active_team_player"
+  | "archived_team_player"
+  | "trashed_team_player"
+  | "legacy_player"
+  | "other_team_player"
+  | "duplicate_import_row";
+
+export type DuplicateConfidence = "exact" | "strong" | "weak";
+
+export type DuplicateMatch = {
+  source: DuplicateSource;
+  confidence: DuplicateConfidence;
+  reasons: string[];
+  playerId?: string;
+  rowNumbers?: number[];
+};
 
 export type ImportFieldKey =
   | "ignore"
@@ -84,6 +101,7 @@ export type ReviewedImportRow = {
   excluded: boolean;
   duplicatePlayerId?: string;
   duplicateSignals: string[];
+  duplicateMatches: DuplicateMatch[];
   operation: ImportOperation;
 };
 
@@ -93,6 +111,14 @@ export type PlayerImportPayload = {
   sourceSheet?: string;
   importMode: ImportMode;
   rows: ReviewedImportRow[];
+};
+
+export type DuplicatePlayerContext = {
+  activeTeamPlayers: SquadPlayer[];
+  archivedTeamPlayers: SquadPlayer[];
+  trashedTeamPlayers: SquadPlayer[];
+  legacyPlayers: SquadPlayer[];
+  otherTeamPlayers: SquadPlayer[];
 };
 
 export const importFields: ImportFieldDefinition[] = [
@@ -187,8 +213,9 @@ export function buildReviewedRows(
   headers: string[],
   rows: string[][],
   mappings: ColumnMapping[],
-  existingPlayers: SquadPlayer[] = []
+  existingPlayers: SquadPlayer[] | DuplicatePlayerContext = []
 ): ReviewedImportRow[] {
+  const duplicateContext = normalizeDuplicateContext(existingPlayers);
   const sourceKey = new Set<string>();
   return rows.map((row, index) => {
     const values: Partial<Record<ImportFieldKey, ImportRowValue>> = {};
@@ -222,15 +249,23 @@ export function buildReviewedRows(
     if (!dateOfBirth) warnings.push("Date of birth missing.");
     if (!valueOf(values.position)) warnings.push("Primary position missing.");
 
-    const duplicateSignals = duplicateSignalsFor(values, existingPlayers);
+    const duplicateMatches = duplicateMatchesFor(values, duplicateContext);
     const sourceDuplicateKey = [firstName.toLowerCase(), lastName.toLowerCase(), dateOfBirth].join("|");
     if (sourceDuplicateKey !== "||") {
-      if (sourceKey.has(sourceDuplicateKey)) duplicateSignals.push("Duplicate row inside this import source.");
+      if (sourceKey.has(sourceDuplicateKey)) {
+        duplicateMatches.push({
+          source: "duplicate_import_row",
+          confidence: "exact",
+          rowNumbers: [index + 2],
+          reasons: ["Same first name, last name and date of birth as another row in this file."]
+        });
+      }
       sourceKey.add(sourceDuplicateKey);
     }
-    const duplicate = duplicateSignals[0];
-    const matched = duplicate ? findDuplicatePlayer(values, existingPlayers) : undefined;
-    const status = errors.length ? "error" : duplicate ? "duplicate" : warnings.length ? "warning" : "ready";
+    const duplicateSignals = duplicateSignalsForMatches(duplicateMatches);
+    const activeMatch = duplicateMatches.find((match) => match.source === "active_team_player");
+    const restoreMatch = duplicateMatches.find((match) => match.source === "trashed_team_player" || match.source === "archived_team_player");
+    const status = errors.length ? "error" : duplicateMatches.length ? "duplicate" : warnings.length ? "warning" : "ready";
     return {
       rowNumber: index + 2,
       status,
@@ -239,9 +274,52 @@ export function buildReviewedRows(
       warnings: Array.from(new Set(warnings)),
       errors,
       excluded: false,
-      duplicatePlayerId: matched?.id,
+      duplicatePlayerId: activeMatch?.playerId ?? restoreMatch?.playerId,
       duplicateSignals: Array.from(new Set(duplicateSignals)),
-      operation: duplicate ? "skip" : "create"
+      duplicateMatches,
+      operation: activeMatch ? "skip" : "create"
+    };
+  });
+}
+
+export function refreshReviewedRowDuplicates(
+  rows: ReviewedImportRow[],
+  existingPlayers: SquadPlayer[] | DuplicatePlayerContext = []
+): ReviewedImportRow[] {
+  const duplicateContext = normalizeDuplicateContext(existingPlayers);
+  const sourceKey = new Set<string>();
+  return rows.map((row) => {
+    if (row.excluded) return row;
+    const firstName = valueOf(row.values.firstName);
+    const lastName = valueOf(row.values.lastName);
+    const dateOfBirth = valueOf(row.values.dateOfBirth);
+    const duplicateMatches = duplicateMatchesFor(row.values, duplicateContext);
+    const sourceDuplicateKey = [firstName.toLowerCase(), lastName.toLowerCase(), dateOfBirth].join("|");
+    if (sourceDuplicateKey !== "||") {
+      if (sourceKey.has(sourceDuplicateKey)) {
+        duplicateMatches.push({
+          source: "duplicate_import_row",
+          confidence: "exact",
+          rowNumbers: [row.rowNumber],
+          reasons: ["Same first name, last name and date of birth as another row in this file."]
+        });
+      }
+      sourceKey.add(sourceDuplicateKey);
+    }
+
+    const activeMatch = duplicateMatches.find((match) => match.source === "active_team_player");
+    const restoreMatch = duplicateMatches.find((match) => match.source === "trashed_team_player" || match.source === "archived_team_player");
+    const duplicateSignals = duplicateSignalsForMatches(duplicateMatches);
+    const warnings = row.warnings;
+    const operation = nextOperationAfterDuplicateRefresh(row, activeMatch, restoreMatch);
+
+    return {
+      ...row,
+      status: row.errors.length ? "error" : duplicateMatches.length ? "duplicate" : warnings.length ? "warning" : "ready",
+      duplicatePlayerId: activeMatch?.playerId ?? restoreMatch?.playerId,
+      duplicateMatches,
+      duplicateSignals,
+      operation
     };
   });
 }
@@ -361,35 +439,89 @@ function applyPositionFallback(values: Partial<Record<ImportFieldKey, ImportRowV
   }
 }
 
-function duplicateSignalsFor(values: Partial<Record<ImportFieldKey, ImportRowValue>>, players: SquadPlayer[]) {
-  const matched = findDuplicatePlayer(values, players);
-  if (!matched) return [];
-  const signals: string[] = [];
-  if (valueOf(values.externalPlayerId) && matched.externalPlayerId === valueOf(values.externalPlayerId)) signals.push("Same external player ID.");
-  if (valueOf(values.playerEmail) && matched.playerEmail?.toLowerCase() === valueOf(values.playerEmail).toLowerCase()) signals.push("Same player email.");
-  if (
-    matched.firstName.toLowerCase() === valueOf(values.firstName).toLowerCase() &&
-    (matched.lastName ?? "").toLowerCase() === valueOf(values.lastName).toLowerCase() &&
-    matched.dateOfBirth &&
-    matched.dateOfBirth === valueOf(values.dateOfBirth)
-  ) signals.push("Same first name, last name and date of birth.");
-  if (valueOf(values.playerPhone) && matched.playerPhone === valueOf(values.playerPhone)) signals.push("Same player phone.");
-  if (valueOf(values.parentEmail) && matched.parentEmail?.toLowerCase() === valueOf(values.parentEmail).toLowerCase()) signals.push("Same guardian email.");
-  return signals.length ? signals : ["Possible matching name."];
+function duplicateMatchesFor(values: Partial<Record<ImportFieldKey, ImportRowValue>>, context: DuplicatePlayerContext): DuplicateMatch[] {
+  return [
+    ...context.activeTeamPlayers.flatMap((player) => duplicateMatchForPlayer(values, player, "active_team_player")),
+    ...context.archivedTeamPlayers.flatMap((player) => duplicateMatchForPlayer(values, player, "archived_team_player")),
+    ...context.trashedTeamPlayers.flatMap((player) => duplicateMatchForPlayer(values, player, "trashed_team_player")),
+    ...context.legacyPlayers.flatMap((player) => duplicateMatchForPlayer(values, player, "legacy_player")),
+    ...context.otherTeamPlayers.flatMap((player) => duplicateMatchForPlayer(values, player, "other_team_player"))
+  ];
 }
 
-function findDuplicatePlayer(values: Partial<Record<ImportFieldKey, ImportRowValue>>, players: SquadPlayer[]) {
-  const externalId = valueOf(values.externalPlayerId);
-  const email = valueOf(values.playerEmail).toLowerCase();
-  const firstName = valueOf(values.firstName).toLowerCase();
-  const lastName = valueOf(values.lastName).toLowerCase();
-  const dateOfBirth = valueOf(values.dateOfBirth);
-  return players.find((player) => {
-    if (externalId && player.externalPlayerId === externalId) return true;
-    if (email && player.playerEmail?.toLowerCase() === email) return true;
-    if (firstName && lastName && dateOfBirth && player.firstName.toLowerCase() === firstName && (player.lastName ?? "").toLowerCase() === lastName && player.dateOfBirth === dateOfBirth) return true;
-    return false;
-  });
+function duplicateMatchForPlayer(values: Partial<Record<ImportFieldKey, ImportRowValue>>, player: SquadPlayer, source: Exclude<DuplicateSource, "duplicate_import_row">): DuplicateMatch[] {
+  const reasons = duplicateReasonsForPlayer(values, player);
+  if (!reasons.length) return [];
+  return [{
+    source,
+    playerId: player.id,
+    confidence: duplicateConfidence(reasons),
+    reasons
+  }];
+}
+
+function duplicateReasonsForPlayer(values: Partial<Record<ImportFieldKey, ImportRowValue>>, player: SquadPlayer) {
+  const reasons: string[] = [];
+  if (valueOf(values.externalPlayerId) && player.externalPlayerId === valueOf(values.externalPlayerId)) reasons.push("Same external player ID.");
+  if (valueOf(values.playerEmail) && player.playerEmail?.toLowerCase() === valueOf(values.playerEmail).toLowerCase()) reasons.push("Same player email.");
+  if (
+    player.firstName.toLowerCase() === valueOf(values.firstName).toLowerCase() &&
+    (player.lastName ?? "").toLowerCase() === valueOf(values.lastName).toLowerCase() &&
+    player.dateOfBirth &&
+    player.dateOfBirth === valueOf(values.dateOfBirth)
+  ) reasons.push("Same first name, last name and date of birth.");
+  if (valueOf(values.playerPhone) && player.playerPhone === valueOf(values.playerPhone)) reasons.push("Same player phone.");
+  if (valueOf(values.parentEmail) && player.parentEmail?.toLowerCase() === valueOf(values.parentEmail).toLowerCase()) reasons.push("Same guardian email.");
+  return reasons;
+}
+
+function duplicateConfidence(reasons: string[]): DuplicateConfidence {
+  if (reasons.some((reason) => reason.includes("external player ID") || reason.includes("date of birth"))) return "exact";
+  if (reasons.length >= 2) return "strong";
+  return "weak";
+}
+
+function duplicateSignalsForMatches(matches: DuplicateMatch[]) {
+  return matches.map((match) => `${duplicateSourceLabel(match.source)}: ${duplicateConfidenceLabel(match.confidence)} (${match.reasons.join(" ")})`);
+}
+
+export function duplicateSourceLabel(source: DuplicateSource) {
+  if (source === "active_team_player") return "Active Squad match";
+  if (source === "archived_team_player") return "Archived Player found";
+  if (source === "trashed_team_player") return "Previously deleted Player found";
+  if (source === "legacy_player") return "Legacy Player record found";
+  if (source === "other_team_player") return "Similar Player found in another Team";
+  return "Duplicate rows in uploaded file";
+}
+
+export function duplicateConfidenceLabel(confidence: DuplicateConfidence) {
+  if (confidence === "exact") return "Exact match";
+  if (confidence === "strong") return "Strong possible match";
+  return "Weak possible match";
+}
+
+export function normalizeDuplicateContext(existingPlayers: SquadPlayer[] | DuplicatePlayerContext): DuplicatePlayerContext {
+  if (Array.isArray(existingPlayers)) {
+    return {
+      legacyPlayers: existingPlayers.filter((player) => !player.squadId),
+      activeTeamPlayers: existingPlayers.filter((player) => player.squadId && !player.archivedAt && !player.deletedAt),
+      archivedTeamPlayers: existingPlayers.filter((player) => player.squadId && Boolean(player.archivedAt) && !player.deletedAt),
+      trashedTeamPlayers: existingPlayers.filter((player) => player.squadId && Boolean(player.deletedAt)),
+      otherTeamPlayers: []
+    };
+  }
+  return existingPlayers;
+}
+
+function nextOperationAfterDuplicateRefresh(row: ReviewedImportRow, activeMatch?: DuplicateMatch, restoreMatch?: DuplicateMatch): ImportOperation {
+  if (row.excluded) return "skip";
+  if (!activeMatch && !restoreMatch) {
+    return row.operation === "skip" || row.operation === "update" || row.operation === "fill_missing" ? "create" : row.operation;
+  }
+  if (activeMatch) {
+    return row.operation === "update" || row.operation === "fill_missing" || row.operation === "skip" ? row.operation : "skip";
+  }
+  return row.operation === "update" || row.operation === "fill_missing" ? row.operation : "create";
 }
 
 function normalizeDate(value: string) {
