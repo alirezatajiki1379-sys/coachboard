@@ -5,7 +5,7 @@ import { CoachWorkspace } from "@/components/squad/coach-workspace";
 import { SquadNav } from "@/components/squad/squad-nav";
 import { ButtonLink } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
-import { getCoachWorkspaceData, parseWorkspaceState, workspaceHref } from "@/lib/squad/workspace";
+import { getCoachWorkspaceData, parseWorkspaceState } from "@/lib/squad/workspace";
 
 type SquadPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -32,9 +32,6 @@ export default async function SquadPage({ searchParams }: SquadPageProps) {
         metadata={`${data.counts.active} active players · ${data.counts.roster} roster · ${data.counts.trial} trial`}
         actions={(
           <>
-            <ButtonLink href={workspaceHref(data.state, { customize: true })} variant="secondary" className="justify-center">
-              Customize columns
-            </ButtonLink>
             <ButtonLink href="/squad/players/new" className="justify-center">
               <Plus className="h-4 w-4" />
               Add player

@@ -1056,7 +1056,9 @@ export type Database = {
           id: string;
           user_id: string;
           attention_key: string;
-          player_id: string;
+          player_id: string | null;
+          target_kind: "player" | "training";
+          target_id: string | null;
           attention_type: string;
           snoozed_until: string | null;
           dismissed_at: string | null;
@@ -1069,7 +1071,9 @@ export type Database = {
           id?: string;
           user_id: string;
           attention_key: string;
-          player_id: string;
+          player_id?: string | null;
+          target_kind?: "player" | "training";
+          target_id?: string | null;
           attention_type: string;
           snoozed_until?: string | null;
           dismissed_at?: string | null;

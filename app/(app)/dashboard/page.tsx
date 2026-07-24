@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, CalendarPlus, ClipboardList, Dumbbell, LibraryBig, Shapes, Target } from "lucide-react";
+import { Bell, CalendarDays, CalendarPlus, ClipboardList, Dumbbell, LibraryBig, Target, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageContainer, PageHeader } from "@/components/layout/page";
@@ -7,7 +7,8 @@ import { StatCard } from "@/components/ui/stat-card";
 import { createClient } from "@/lib/supabase/server";
 import { en } from "@/lib/i18n/en";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
-import { getDashboardAttentionSummary } from "@/lib/squad/attention-queries";
+import { attentionPriorityLabels, attentionTone } from "@/lib/squad/attention";
+import { getDashboardAttentionData } from "@/lib/squad/attention-queries";
 import { getDevelopmentDashboardSummary } from "@/lib/squad/development";
 import { sortTrainings, trainingDisplayTitle, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
 
@@ -38,13 +39,7 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const [drillCount, sessionCount, templateCount, recentDrills, recentSessions] = await Promise.all([
-    supabase
-      .from("drills")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .is("archived_at", null)
-      .is("deleted_at", null),
+  const [planCount, playerCount, trialCount, recentDrills, recentSessions] = await Promise.all([
     supabase
       .from("training_sessions")
       .select("id", { count: "exact", head: true })
@@ -52,9 +47,18 @@ export default async function DashboardPage() {
       .is("archived_at", null)
       .is("deleted_at", null),
     supabase
-      .from("drill_graphic_templates")
+      .from("squad_players")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id),
+      .eq("user_id", user.id)
+      .is("archived_at", null)
+      .is("deleted_at", null),
+    supabase
+      .from("squad_players")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("player_type", "trial")
+      .is("archived_at", null)
+      .is("deleted_at", null),
     supabase
       .from("drills")
       .select("id,title,main_focus,duration_minutes,updated_at")
@@ -72,24 +76,29 @@ export default async function DashboardPage() {
       .order("updated_at", { ascending: false })
       .limit(5)
   ]);
-  const [developmentSummary, attentionSummary] = await Promise.all([
+  const [developmentSummary, attentionData] = await Promise.all([
     getDevelopmentDashboardSummary(supabase, user.id),
-    getDashboardAttentionSummary(supabase, user.id)
+    getDashboardAttentionData(supabase, user.id)
   ]);
   const trainingEvents = sortTrainings(await listTrainingEventDetails(supabase, user.id));
   const today = new Date().toISOString().slice(0, 10);
   const nextTraining = trainingEvents.find((event) => event.date >= today);
+  const completedTrainings = trainingEvents.filter((event) => event.status === "completed").length;
+  const upcomingTrainings = trainingEvents.filter((event) => event.date >= today && event.status !== "completed").length;
+  const assignedPlanIds = new Set(trainingEvents.map((event) => event.linkedTrainingSessionId).filter((id): id is string => Boolean(id)));
+  const createdPlans = planCount.count ?? 0;
+  const assignedPlans = Math.min(createdPlans, assignedPlanIds.size);
+  const draftPlans = Math.max(0, createdPlans - assignedPlans);
   const openRatings = trainingEvents.filter((event) => event.status === "rating_open");
+  const planNextHref = nextTraining
+    ? nextTraining.linkedTrainingSessionId ? `/sessions/${nextTraining.linkedTrainingSessionId}` : `/trainings/${nextTraining.id}/plan`
+    : "/trainings/new";
+  const planNextLabel = nextTraining
+    ? nextTraining.linkedTrainingSessionId ? "Review Training Plan" : "Plan Next Training"
+    : "Create Training";
 
   const drills = (recentDrills.data ?? []) as RecentDrill[];
   const sessions = (recentSessions.data ?? []) as RecentSession[];
-  const focusCounts =
-    drills.reduce<Record<string, number>>((acc, drill) => {
-      acc[drill.main_focus] = (acc[drill.main_focus] ?? 0) + 1;
-      return acc;
-    }, {});
-  const topFocus = Object.entries(focusCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Add drills to learn";
-
   return (
     <PageContainer width="wide" className="space-y-8">
       <PageHeader
@@ -98,21 +107,25 @@ export default async function DashboardPage() {
         description="Plan concrete trainings, prepare attendance, rate players, and build reusable training plans."
         actions={(
           <>
-          <ButtonLink href="/drills/new">
-            <Dumbbell className="h-4 w-4" />
-            {en.actions.createDrill}
+          <ButtonLink href={planNextHref}>
+            <ClipboardList className="h-4 w-4" />
+            {planNextLabel}
           </ButtonLink>
           <ButtonLink href="/trainings/new" variant="secondary">
             <CalendarPlus className="h-4 w-4" />
             Create training
           </ButtonLink>
+          <ButtonLink href="/squad/import" variant="secondary">
+            <UsersRound className="h-4 w-4" />
+            Add or import players
+          </ButtonLink>
+          <ButtonLink href="/drills/new" variant="secondary">
+            <Dumbbell className="h-4 w-4" />
+            {en.actions.createDrill}
+          </ButtonLink>
           <ButtonLink href="/drills" variant="secondary">
             <LibraryBig className="h-4 w-4" />
             Drill library
-          </ButtonLink>
-          <ButtonLink href="/sessions" variant="secondary">
-            <CalendarDays className="h-4 w-4" />
-            Training plans
           </ButtonLink>
           </>
         )}
@@ -144,32 +157,32 @@ export default async function DashboardPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Total drills"
-          value={drillCount.count ?? 0}
-          detail="Private drills in your library"
-          icon={<Dumbbell className="h-5 w-5" />}
-          href="/drills"
+          label="Next training"
+          value={nextTraining ? trainingTimeRange(nextTraining) : "None"}
+          detail={nextTraining ? `${nextTraining.date} · ${nextTraining.squadName ?? "Current team"}` : "Create the next scheduled training"}
+          icon={<CalendarDays className="h-5 w-5" />}
+          href={nextTraining ? `/trainings/${nextTraining.id}` : "/trainings/new"}
         />
         <StatCard
-          label="Total sessions"
-          value={sessionCount.count ?? 0}
-          detail="Training plans created"
+          label="Training Sessions"
+          value={trainingEvents.length}
+          detail={`${completedTrainings} completed · ${upcomingTrainings} upcoming`}
+          icon={<CalendarDays className="h-5 w-5" />}
+          href="/trainings"
+        />
+        <StatCard
+          label="Training Plans"
+          value={createdPlans}
+          detail={`${assignedPlans} assigned · ${draftPlans} drafts/unassigned`}
           icon={<ClipboardList className="h-5 w-5" />}
           href="/sessions"
         />
         <StatCard
-          label="Saved templates"
-          value={templateCount.count ?? 0}
-          detail="Open the drill editor template section"
-          icon={<Shapes className="h-5 w-5" />}
-          href="/drills/new"
-        />
-        <StatCard
-          label="Most used focus"
-          value={topFocus}
-          detail="Based on recent drills for now"
-          icon={<LibraryBig className="h-5 w-5" />}
-          href="/drills"
+          label="Squad"
+          value={playerCount.count ?? 0}
+          detail={`${trialCount.count ?? 0} Trial Players · active team scope`}
+          icon={<UsersRound className="h-5 w-5" />}
+          href="/squad"
         />
       </section>
 
@@ -177,37 +190,24 @@ export default async function DashboardPage() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Bell className="h-5 w-5" />Coach Actions</h2>
-            <p className="mt-1 text-sm text-slate-600">Transparent reminders from squad data. No hidden player score.</p>
+            <p className="mt-1 text-sm text-slate-600">{attentionData.summary.critical + attentionData.summary.high} high priority · {attentionData.summary.open} open</p>
           </div>
-          <ButtonLink href="/actions" variant="ghost" className="h-9 px-3">Open Action Center</ButtonLink>
+          <ButtonLink href="/actions" variant="ghost" className="h-9 px-3">View all {attentionData.summary.open} open actions</ButtonLink>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <Link href="/actions" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-            <p className="text-xs font-bold uppercase text-slate-500">Open items</p>
-            <p className="mt-1 text-xl font-bold text-board-navy">{attentionSummary.open}</p>
-            <p className="mt-1 text-xs text-slate-500">need a coach decision</p>
-          </Link>
-          <Link href="/actions?priority=high" className="rounded-md bg-slate-50 p-3 transition hover:bg-red-50">
-            <p className="text-xs font-bold uppercase text-slate-500">High priority</p>
-            <p className="mt-1 text-xl font-bold text-red-700">{attentionSummary.high + attentionSummary.critical}</p>
-            <p className="mt-1 text-xs text-slate-500">review first</p>
-          </Link>
-          <Link href="/actions?category=review" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-            <p className="text-xs font-bold uppercase text-slate-500">Reviews</p>
-            <p className="mt-1 text-xl font-bold text-board-navy">{attentionSummary.review}</p>
-            <p className="mt-1 text-xs text-slate-500">due or overdue</p>
-          </Link>
-          <Link href="/actions?category=medical" className="rounded-md bg-slate-50 p-3 transition hover:bg-amber-50">
-            <p className="text-xs font-bold uppercase text-slate-500">Medical</p>
-            <p className="mt-1 text-xl font-bold text-amber-700">{attentionSummary.medical}</p>
-            <p className="mt-1 text-xs text-slate-500">operational reviews</p>
-          </Link>
-          <Link href="/actions?category=trial" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-            <p className="text-xs font-bold uppercase text-slate-500">Trial decisions</p>
-            <p className="mt-1 text-xl font-bold text-board-navy">{attentionSummary.trial}</p>
-            <p className="mt-1 text-xs text-slate-500">factual reminders</p>
-          </Link>
-        </div>
+        {attentionData.items.length ? (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {attentionData.items.map((item) => (
+              <Link key={item.key} href={item.suggestedActions[0]?.href ?? "/actions"} className="rounded-md border border-board-line bg-slate-50 p-4 transition hover:border-board-green/40 hover:bg-green-50">
+                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${attentionTone(item.priority) === "red" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{attentionPriorityLabels[item.priority].toUpperCase()}</span>
+                <h3 className="mt-3 font-bold text-board-navy">{item.title}</h3>
+                <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? "Current"}</p>
+                <p className="mt-2 line-clamp-2 text-sm text-slate-500">{item.explanation}</p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">No high-priority Coach Actions. Open items are still available in the Action Center when needed.</p>
+        )}
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">

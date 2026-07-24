@@ -6,6 +6,8 @@ import type { WorkspacePlayerSummary } from "@/lib/squad/workspace";
 export type AttentionPriority = "critical" | "high" | "medium" | "low" | "info";
 export type AttentionCategory = "review" | "observation" | "performance" | "attendance" | "development" | "medical" | "trial" | "data-quality";
 export type AttentionType =
+  | "training-review-incomplete"
+  | "training-plan-missing"
   | "review-overdue"
   | "review-due"
   | "no-recent-observation"
@@ -39,7 +41,9 @@ export type AttentionAction = {
 
 export type AttentionItem = {
   key: string;
-  playerId: string;
+  targetKind: "player" | "training";
+  targetId: string;
+  playerId?: string;
   playerName: string;
   playerPosition?: string;
   playerType: "roster" | "trial";
@@ -76,7 +80,9 @@ export type AttentionPreferences = {
 
 export type AttentionState = {
   attentionKey: string;
-  playerId: string;
+  playerId?: string | null;
+  targetKind: "player" | "training";
+  targetId: string;
   attentionType: AttentionType;
   snoozedUntil?: string | null;
   dismissedAt?: string | null;
@@ -126,7 +132,9 @@ type AttentionPreferencesRow = {
 
 type AttentionStateRow = {
   attention_key: string;
-  player_id: string;
+  player_id: string | null;
+  target_kind?: string | null;
+  target_id?: string | null;
   attention_type: string;
   snoozed_until: string | null;
   dismissed_at: string | null;
@@ -166,6 +174,8 @@ export const attentionPriorityFilterLabels: Record<AttentionCenterState["priorit
 export const defaultAttentionPreferences: AttentionPreferences = {
   version: 1,
   enabledRules: {
+    "training-review-incomplete": true,
+    "training-plan-missing": true,
     "review-overdue": true,
     "review-due": true,
     "no-recent-observation": true,
@@ -194,7 +204,7 @@ export const defaultAttentionPreferences: AttentionPreferences = {
   goalFollowUpDays: 21
 };
 
-const mandatoryRules = new Set<AttentionType>(["medical-return-review"]);
+const mandatoryRules = new Set<AttentionType>(["medical-return-review", "training-review-incomplete", "training-plan-missing"]);
 export function parseAttentionCenterState(searchParams: Record<string, string | string[] | undefined>): AttentionCenterState {
   return {
     priority: priorityValue(one(searchParams.priority)),
@@ -264,6 +274,8 @@ export function getPlayerAttentionItems(player: WorkspacePlayerSummary, preferen
   const name = [summary.player.firstName, summary.player.lastName].filter(Boolean).join(" ");
   const base = {
     playerId: summary.player.id,
+    targetKind: "player" as const,
+    targetId: summary.player.id,
     playerName: name,
     playerPosition: summary.player.position ?? undefined,
     playerType: summary.player.playerType,
@@ -578,6 +590,83 @@ export function getPlayerAttentionItems(player: WorkspacePlayerSummary, preferen
   return sortAttentionItems(items, parseAttentionCenterState({}));
 }
 
+export function getTrainingAttentionItems(
+  events: Array<{
+    id: string;
+    date: string;
+    startTime: string;
+    label?: string;
+    squadName?: string;
+    linkedTrainingSessionId?: string;
+    linkedTrainingSessionTitle?: string;
+    status: string;
+    attendance: Array<{ finalStatus?: string; overallRating?: number }>;
+  }>,
+  context: { today: string }
+): AttentionItem[] {
+  const items: AttentionItem[] = [];
+  for (const event of events) {
+    if (event.date > context.today || event.status === "draft") continue;
+    const attended = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
+    const missingAttendance = event.attendance.filter((entry) => !entry.finalStatus).length;
+    const missingRatings = attended.filter((entry) => !entry.overallRating).length;
+    if (missingAttendance || missingRatings) {
+      const details = [
+        missingAttendance ? `Attendance missing for ${missingAttendance} player${missingAttendance === 1 ? "" : "s"}` : "",
+        missingRatings ? `Ratings missing for ${missingRatings} player${missingRatings === 1 ? "" : "s"}` : ""
+      ].filter(Boolean);
+      items.push({
+        key: `training-review-incomplete:${event.id}`,
+        targetKind: "training",
+        targetId: event.id,
+        playerName: event.squadName ?? "Training",
+        playerPosition: event.date,
+        playerType: "roster",
+        type: "training-review-incomplete",
+        category: "attendance",
+        priority: event.date === context.today ? "critical" : "high",
+        title: "Complete Training review",
+        explanation: `${trainingLabel(event)} needs one training-level review. ${details.join(" · ")}.`,
+        evidence: evidence([
+          ["Training date", formatEventDate(event.date)],
+          ["Attendance missing", missingAttendance],
+          ["Ratings missing", missingRatings],
+          ["Affected players", missingAttendance + missingRatings]
+        ]),
+        thresholdLabel: "Past or current training has incomplete attendance or ratings.",
+        dueDate: event.date,
+        detectedAt: context.today,
+        suggestedActions: [{ label: "Open Training review", href: `/trainings/${event.id}/ratings`, primary: true }],
+        dismissible: true,
+        snoozeable: true
+      });
+    }
+    if (!event.linkedTrainingSessionId && event.date >= context.today) {
+      items.push({
+        key: `training-plan-missing:${event.id}`,
+        targetKind: "training",
+        targetId: event.id,
+        playerName: event.squadName ?? "Training",
+        playerPosition: event.date,
+        playerType: "roster",
+        type: "training-plan-missing",
+        category: "development",
+        priority: event.date === context.today ? "critical" : "high",
+        title: "Training Plan missing",
+        explanation: `${trainingLabel(event)} has no linked Training Plan yet.`,
+        evidence: evidence([["Training date", formatEventDate(event.date)], ["Plan", "Missing"]]),
+        thresholdLabel: "Upcoming training has no linked plan.",
+        dueDate: event.date,
+        detectedAt: context.today,
+        suggestedActions: [{ label: "Plan Training", href: `/trainings/${event.id}/plan`, primary: true }],
+        dismissible: true,
+        snoozeable: true
+      });
+    }
+  }
+  return sortAttentionItems(items, parseAttentionCenterState({}));
+}
+
 export function attentionTone(priority: AttentionPriority): "green" | "amber" | "red" | "neutral" {
   if (priority === "critical") return "red";
   if (priority === "high") return "red";
@@ -667,6 +756,8 @@ export async function listAttentionStates(db: SupabaseClient, userId: string) {
       result.set(row.attention_key, {
         attentionKey: row.attention_key,
         playerId: row.player_id,
+        targetKind: row.target_kind === "training" ? "training" : "player",
+        targetId: row.target_id ?? row.player_id ?? "",
         attentionType: row.attention_type as AttentionType,
         snoozedUntil: row.snoozed_until,
         dismissedAt: row.dismissed_at,
@@ -693,6 +784,10 @@ function actions(playerId: string, tab: "development" | "attendance" | "medical"
 
 function evidence(values: Array<[string, string | number | undefined | null]>): AttentionEvidence[] {
   return values.map(([label, value]) => ({ label, value: value ?? "-" }));
+}
+
+function trainingLabel(event: { label?: string; date: string; startTime: string }) {
+  return event.label ? `${event.label} · ${formatEventDate(event.date)}` : `${formatEventDate(event.date)} · ${event.startTime}`;
 }
 
 function priorityRank(priority: AttentionPriority) {

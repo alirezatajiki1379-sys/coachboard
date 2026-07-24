@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Bell, Clock, Settings2 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
-import { clearAttentionState, disableAttentionRule, dismissAttentionItem, resetAttentionSettings, saveAttentionSettings, snoozeAttentionItem } from "@/lib/squad/attention-actions";
+import { bulkUpdateAttentionItems, clearAttentionState, disableAttentionRule, dismissAttentionItem, resetAttentionSettings, saveAttentionSettings, snoozeAttentionItem } from "@/lib/squad/attention-actions";
 import {
   attentionCategories,
   attentionHref,
@@ -94,12 +94,11 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
         )}
       />
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="High Priority" value={data.summary.high + data.summary.critical} href={attentionHref(data.state, { status: "open", priority: "high-priority", category: "all" })} tone="red" />
         <SummaryCard label="Open Items" value={data.summary.open} href={attentionHref(data.state, { status: "open", priority: "all", category: "all" })} />
-        <SummaryCard label="Reviews" value={data.summary.review} href={attentionHref(data.state, { status: "open", category: "review" })} />
-        <SummaryCard label="Medical reviews" value={data.summary.medical} href={attentionHref(data.state, { status: "open", category: "medical" })} tone="amber" />
         <SummaryCard label="Snoozed" value={data.summary.snoozed} href={attentionHref(data.state, { status: "snoozed" })} />
+        <SummaryCard label="Dismissed" value={data.summary.dismissed} href={attentionHref(data.state, { status: "dismissed" })} />
       </section>
 
       <ActionFilters data={data} />
@@ -112,9 +111,33 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
-          {data.items.length ? data.items.map((item) => (
-            <AttentionCard key={item.key} item={item} selected={data.selected?.key === item.key} stateHref={attentionHref(data.state, { item: item.key, player: item.playerId })} returnTo={returnTo} />
-          )) : <EmptyState data={data} />}
+          {data.items.length ? (
+            <form action={bulkUpdateAttentionItems} className="space-y-3">
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <div className="rounded-lg border border-board-line bg-white p-3 shadow-soft">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-board-navy">Bulk manage visible actions</p>
+                    <p className="text-xs text-slate-500">Tick actions below, then resolve, snooze or dismiss only this filtered view.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" name="operation" value="resolved" variant="secondary" className="h-9 px-3">Mark resolved</Button>
+                    <select name="snooze" defaultValue="3d" className="h-9 rounded-md border border-board-line bg-white px-2 text-xs font-semibold text-slate-700">
+                      <option value="tomorrow">Tomorrow</option>
+                      <option value="3d">3 days</option>
+                      <option value="1w">Next week</option>
+                    </select>
+                    <Button type="submit" name="operation" value="snooze" variant="secondary" className="h-9 px-3">Snooze</Button>
+                    <Button type="submit" name="operation" value="dismiss" variant="ghost" className="h-9 px-3">Dismiss</Button>
+                    <Button type="submit" name="operation" value="not_relevant" variant="ghost" className="h-9 px-3">Not relevant</Button>
+                  </div>
+                </div>
+              </div>
+              {data.items.map((item) => (
+                <AttentionCard key={item.key} item={item} selected={data.selected?.key === item.key} stateHref={attentionHref(data.state, { item: item.key, player: item.playerId })} returnTo={returnTo} selectable />
+              ))}
+            </form>
+          ) : <EmptyState data={data} />}
         </div>
         <aside className="xl:sticky xl:top-6 xl:self-start">
           <AttentionDetail item={data.selected} returnTo={returnTo} />
@@ -194,15 +217,25 @@ function ActionFilters({ data }: { data: AttentionCenterData }) {
   );
 }
 
-function AttentionCard({ item, selected, stateHref, returnTo }: { item: AttentionItem; selected: boolean; stateHref: string; returnTo: string }) {
+function AttentionCard({ item, selected, stateHref, returnTo, selectable = false }: { item: AttentionItem; selected: boolean; stateHref: string; returnTo: string; selectable?: boolean }) {
   return (
     <article className={cn("rounded-lg border bg-white p-4 shadow-soft", selected ? "border-board-green ring-2 ring-green-100" : "border-board-line")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        {selectable ? (
+          <label className="flex shrink-0 items-center gap-2 text-xs font-bold uppercase text-slate-500">
+            <input name="items" type="checkbox" value={bulkValue(item)} className="h-4 w-4 rounded border-board-line text-board-green" aria-label={`Select ${item.title}`} />
+            Select
+          </label>
+        ) : null}
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={withReturnTo(`/squad/players/${item.playerId}`, returnTo)} className="font-bold text-board-navy hover:text-board-green">{item.playerName}</Link>
+            {item.targetKind === "player" && item.playerId ? (
+              <Link href={withReturnTo(`/squad/players/${item.playerId}`, returnTo)} className="font-bold text-board-navy hover:text-board-green">{item.playerName}</Link>
+            ) : (
+              <Link href={withReturnTo(`/trainings/${item.targetId}`, returnTo)} className="font-bold text-board-navy hover:text-board-green">{item.playerName}</Link>
+            )}
             <span className="text-sm text-slate-500">{item.playerPosition ?? "No position"}</span>
-            <Badge tone={item.playerType === "trial" ? "amber" : "neutral"}>{item.playerType === "trial" ? "Trial" : "Roster"}</Badge>
+            {item.targetKind === "player" ? <Badge tone={item.playerType === "trial" ? "amber" : "neutral"}>{item.playerType === "trial" ? "Trial" : "Roster"}</Badge> : <Badge tone="green">Training</Badge>}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge tone={attentionTone(item.priority)}>{attentionPriorityLabels[item.priority]} Priority</Badge>
@@ -271,7 +304,7 @@ function AttentionDetail({ item, returnTo }: { item?: AttentionItem; returnTo: s
         <div>
           <p className="text-sm font-bold uppercase text-slate-500">Context</p>
           <h2 className="mt-1 text-xl font-bold text-board-navy">{item.title}</h2>
-          <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? "No position"} · {item.playerType === "trial" ? "Trial" : "Roster"}</p>
+          <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? "No position"} · {item.targetKind === "training" ? "Training" : item.playerType === "trial" ? "Trial" : "Roster"}</p>
         </div>
         <Badge tone={attentionTone(item.priority)}>{attentionPriorityLabels[item.priority]} Priority</Badge>
       </div>
@@ -399,7 +432,9 @@ function ActionHidden({ item, returnTo }: { item: AttentionItem; returnTo: strin
   return (
     <>
       <input type="hidden" name="attentionKey" value={item.key} />
-      <input type="hidden" name="playerId" value={item.playerId} />
+      <input type="hidden" name="playerId" value={item.playerId ?? ""} />
+      <input type="hidden" name="targetKind" value={item.targetKind} />
+      <input type="hidden" name="targetId" value={item.targetId} />
       <input type="hidden" name="attentionType" value={item.type} />
       <input type="hidden" name="returnTo" value={returnTo} />
     </>
@@ -418,6 +453,10 @@ function SummaryCard({ label, value, href, tone = "green" }: { label: string; va
 function EmptyState({ data }: { data: AttentionCenterData }) {
   const text = data.state.status === "snoozed"
     ? "No snoozed items."
+    : data.state.status === "dismissed"
+      ? "No dismissed Coach Actions."
+      : data.state.priority === "high-priority"
+        ? "No high-priority Coach Actions."
     : data.state.priority !== "all"
       ? `No ${attentionPriorityFilterLabels[data.state.priority].toLowerCase()} items.`
       : data.state.category !== "all"
@@ -472,4 +511,14 @@ function withReturnTo(href: string, returnTo: string) {
   const params = new URLSearchParams(query);
   params.set("returnTo", returnTo);
   return `${path}?${params.toString()}`;
+}
+
+function bulkValue(item: AttentionItem) {
+  return JSON.stringify({
+    key: item.key,
+    type: item.type,
+    targetKind: item.targetKind,
+    targetId: item.targetId,
+    playerId: item.playerId ?? ""
+  });
 }

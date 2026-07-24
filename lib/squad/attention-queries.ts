@@ -6,6 +6,7 @@ import {
   filterAttentionItems,
   getAttentionPreferences,
   getPlayerAttentionItems,
+  getTrainingAttentionItems,
   isSnoozed,
   listAttentionStates,
   parseAttentionCenterState,
@@ -14,6 +15,7 @@ import {
   type AttentionCenterState
 } from "@/lib/squad/attention";
 import { getCoachWorkspaceData, parseWorkspaceState } from "@/lib/squad/workspace";
+import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -29,12 +31,18 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
     position: state.position,
     search: ""
   });
-  const workspace = await getCoachWorkspaceData(supabase, userId, workspaceState, { includeAttention: false });
+  const [workspace, trainingEvents] = await Promise.all([
+    getCoachWorkspaceData(supabase, userId, workspaceState, { includeAttention: false }),
+    listTrainingEventDetails(supabase, userId)
+  ]);
   const allItems = applyAttentionStates(
-    workspace.allPlayers.flatMap((player) => getPlayerAttentionItems(player, preferences, {
-      today: new Date().toISOString().slice(0, 10),
-      periodLabel: workspace.periodRangeLabel || workspace.periodLabel
-    })),
+    [
+      ...getTrainingAttentionItems(trainingEvents, { today: new Date().toISOString().slice(0, 10) }),
+      ...workspace.allPlayers.flatMap((player) => getPlayerAttentionItems(player, preferences, {
+        today: new Date().toISOString().slice(0, 10),
+        periodLabel: workspace.periodRangeLabel || workspace.periodLabel
+      }))
+    ],
     states
   );
   const filtered = sortAttentionItems(filterAttentionItems(allItems, state), state);
@@ -52,6 +60,21 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
 export async function getDashboardAttentionSummary(supabase: SupabaseServerClient, userId: string) {
   const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({}));
   return data.summary;
+}
+
+export async function getDashboardAttentionData(supabase: SupabaseServerClient, userId: string) {
+  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({ status: "open", priority: "all" }));
+  return {
+    summary: data.summary,
+    items: data.allItems
+      .filter((item) => !item.dismissedAt && !item.resolvedAt && !isSnoozed(item))
+      .filter((item) => item.priority === "critical" || item.priority === "high" || item.category === "trial")
+      .sort((a, b) => {
+        const rank = (priority: string) => priority === "critical" ? 0 : priority === "high" ? 1 : priority === "medium" ? 2 : 3;
+        return rank(a.priority) - rank(b.priority) || (a.dueDate ?? "9999-12-31").localeCompare(b.dueDate ?? "9999-12-31");
+      })
+      .slice(0, 3)
+  };
 }
 
 export async function getPlayerAttentionSummary(supabase: SupabaseServerClient, userId: string, playerId: string, period: AnalyticsPeriod = "30d") {

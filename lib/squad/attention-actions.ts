@@ -13,6 +13,8 @@ import { createClient } from "@/lib/supabase/server";
 
 const optionalRules: AttentionType[] = [
   "review-overdue",
+  "training-review-incomplete",
+  "training-plan-missing",
   "review-due",
   "no-recent-observation",
   "no-recent-rating",
@@ -79,13 +81,17 @@ export async function snoozeAttentionItem(formData: FormData) {
   const returnTo = formString(formData, "returnTo") || "/actions";
   const key = formString(formData, "attentionKey");
   const playerId = formString(formData, "playerId");
+  const targetKind = formString(formData, "targetKind") || "player";
+  const targetId = formString(formData, "targetId") || playerId;
   const attentionType = formString(formData, "attentionType");
   const until = snoozeDate(formString(formData, "snooze"));
-  if (!key || !playerId || !attentionType || !until) redirect(returnTo);
+  if (!key || !attentionType || !until || !targetId) redirect(returnTo);
   await supabase.from("coach_attention_states").upsert({
     user_id: user.id,
     attention_key: key,
-    player_id: playerId,
+    player_id: playerId || null,
+    target_kind: targetKind === "training" ? "training" : "player",
+    target_id: targetId,
     attention_type: attentionType,
     snoozed_until: until,
     dismissed_at: null,
@@ -101,14 +107,18 @@ export async function dismissAttentionItem(formData: FormData) {
   const returnTo = formString(formData, "returnTo") || "/actions";
   const key = formString(formData, "attentionKey");
   const playerId = formString(formData, "playerId");
+  const targetKind = formString(formData, "targetKind") || "player";
+  const targetId = formString(formData, "targetId") || playerId;
   const attentionType = formString(formData, "attentionType");
   const reason = formString(formData, "reason");
-  if (!key || !playerId || !attentionType) redirect(returnTo);
+  if (!key || !attentionType || !targetId) redirect(returnTo);
   const resolved = reason === "resolved";
   await supabase.from("coach_attention_states").upsert({
     user_id: user.id,
     attention_key: key,
-    player_id: playerId,
+    player_id: playerId || null,
+    target_kind: targetKind === "training" ? "training" : "player",
+    target_id: targetId,
     attention_type: attentionType,
     snoozed_until: null,
     dismissed_at: resolved ? null : new Date().toISOString(),
@@ -116,6 +126,33 @@ export async function dismissAttentionItem(formData: FormData) {
     resolved_at: resolved ? new Date().toISOString() : null
   }, { onConflict: "user_id,attention_key" });
   revalidateAttentionPaths(playerId);
+  redirect(returnTo);
+}
+
+export async function bulkUpdateAttentionItems(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const returnTo = formString(formData, "returnTo") || "/actions";
+  const operation = formString(formData, "operation");
+  const snooze = snoozeDate(formString(formData, "snooze"));
+  const now = new Date().toISOString();
+  const items = formData.getAll("items")
+    .map((value) => typeof value === "string" ? parseBulkItem(value) : null)
+    .filter((item): item is NonNullable<ReturnType<typeof parseBulkItem>> => Boolean(item));
+  if (!items.length) redirect(returnTo);
+  const rows = items.map((item) => ({
+    user_id: user.id,
+    attention_key: item.key,
+    player_id: item.playerId || null,
+    target_kind: item.targetKind,
+    target_id: item.targetId,
+    attention_type: item.type,
+    snoozed_until: operation === "snooze" ? snooze ?? addDays(3) : null,
+    dismissed_at: operation === "dismiss" || operation === "not_relevant" ? now : null,
+    dismissal_reason: operation === "not_relevant" ? "not_relevant" : operation === "dismiss" ? "dismissed" : null,
+    resolved_at: operation === "resolved" ? now : null
+  }));
+  await supabase.from("coach_attention_states").upsert(rows, { onConflict: "user_id,attention_key" });
+  revalidateAttentionPaths();
   redirect(returnTo);
 }
 
@@ -166,4 +203,21 @@ function addDays(days: number) {
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function parseBulkItem(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const record = parsed as Record<string, unknown>;
+    const key = typeof record.key === "string" ? record.key : "";
+    const type = typeof record.type === "string" ? record.type : "";
+    const targetKind = record.targetKind === "training" ? "training" : "player";
+    const targetId = typeof record.targetId === "string" ? record.targetId : "";
+    const playerId = typeof record.playerId === "string" ? record.playerId : "";
+    if (!key || !type || !targetId) return null;
+    return { key, type, targetKind, targetId, playerId };
+  } catch {
+    return null;
+  }
 }

@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { DragEvent } from "react";
-import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import {
   bulkArchiveSquadPlayers,
   bulkPermanentlyDeleteSquadPlayers,
@@ -14,14 +13,9 @@ import {
 } from "@/lib/squad/actions";
 import {
   createWorkspaceSavedView,
-  deleteWorkspaceSavedView,
-  duplicateWorkspaceSavedView,
-  moveWorkspaceSavedView,
-  renameWorkspaceSavedView,
   resetSystemWorkspaceOverride,
   saveWorkspaceColumnOrder,
   saveSystemWorkspaceOverride,
-  setDefaultWorkspaceView,
   updateWorkspaceSavedView
 } from "@/lib/squad/workspace-actions";
 import { coachAssessmentLabels, playerName } from "@/lib/squad/analytics";
@@ -81,10 +75,10 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   const visiblePlayerIds = useMemo(() => data.players.map((player) => player.analytics.player.id), [data.players]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedPlayers = useMemo(() => data.players.filter((player) => selectedIdSet.has(player.analytics.player.id)), [data.players, selectedIdSet]);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(data.selected?.analytics.player.id ?? data.players[0]?.analytics.player.id ?? null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(data.state.selectedPlayer ?? null);
   const selectedPlayer = useMemo(
-    () => data.players.find((player) => player.analytics.player.id === selectedPlayerId) ?? data.selected ?? data.players[0],
-    [data.players, data.selected, selectedPlayerId]
+    () => data.players.find((player) => player.analytics.player.id === selectedPlayerId),
+    [data.players, selectedPlayerId]
   );
 
   useEffect(() => {
@@ -93,9 +87,13 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
       setSelectedIds([]);
       return;
     }
-    setSelectedPlayerId((current) => data.players.some((player) => player.analytics.player.id === current) ? current : data.players[0].analytics.player.id);
+    setSelectedPlayerId((current) => current && data.players.some((player) => player.analytics.player.id === current) ? current : null);
     setSelectedIds((current) => current.filter((id) => data.players.some((player) => player.analytics.player.id === id)));
   }, [data.players]);
+
+  function toggleInspector(playerId: string) {
+    setSelectedPlayerId((current) => current === playerId ? null : playerId);
+  }
 
   function persistColumnOrder(nextOrder: typeof columnOrder, previousOrder: typeof columnOrder) {
     setColumnOrder(nextOrder);
@@ -150,7 +148,7 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-board-line bg-white p-3 shadow-soft">
+      <section className="sticky top-0 z-20 rounded-lg border border-board-line bg-white p-3 shadow-soft">
         <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Coach Workspace quick views">
           {quickViews.map((item) => (
             <Link
@@ -167,16 +165,13 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
             </Link>
           ))}
         </div>
-        <p className="mt-2 px-1 text-sm text-slate-600">{view.description}</p>
+        <p className="mt-2 px-1 text-xs font-semibold text-slate-500">{view.description}</p>
+        <WorkspaceFilters data={data} />
       </section>
-
-      <SavedViewsPanel data={data} />
-
-      <WorkspaceFilters data={data} />
 
       {data.state.customize ? <CustomizeWorkspacePanel data={data} /> : null}
 
-      <section className={cn("grid gap-6", data.configuration.inspectorMode === "open" && "xl:grid-cols-[minmax(0,1fr)_340px]")}>
+      <section className={cn("grid gap-6", selectedPlayer && data.configuration.inspectorMode === "open" && "xl:grid-cols-[minmax(0,1fr)_340px]")}>
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -242,13 +237,13 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
                   {grouped.map((group) => (
                     <section key={group.label} className="rounded-lg border border-board-line bg-white shadow-soft">
                       <h3 className="border-b border-board-line px-4 py-3 text-sm font-bold uppercase tracking-wide text-slate-500">{group.label}</h3>
-                      <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={setSelectedPlayerId} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} />
+                      <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={toggleInspector} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} />
                     </section>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-lg border border-board-line bg-white shadow-soft">
-                  <WorkspaceTable data={data} players={data.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={setSelectedPlayerId} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} />
+                  <WorkspaceTable data={data} players={data.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={toggleInspector} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} />
                 </div>
               )
             ) : (
@@ -257,13 +252,13 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
           </div>
 
           <div className="space-y-3 xl:hidden">
-            {data.players.length ? data.players.map((player) => <WorkspaceMobileCard key={player.analytics.player.id} data={data} player={player} selected={selectedPlayer?.analytics.player.id === player.analytics.player.id} onSelectPlayer={setSelectedPlayerId} selectionMode={selectionMode} checked={selectedIdSet.has(player.analytics.player.id)} onToggleSelected={toggleSelectedPlayer} />) : <WorkspaceEmpty data={data} />}
+            {data.players.length ? data.players.map((player) => <WorkspaceMobileCard key={player.analytics.player.id} data={data} player={player} selected={selectedPlayer?.analytics.player.id === player.analytics.player.id} onSelectPlayer={toggleInspector} selectionMode={selectionMode} checked={selectedIdSet.has(player.analytics.player.id)} onToggleSelected={toggleSelectedPlayer} />) : <WorkspaceEmpty data={data} />}
           </div>
         </div>
 
-        {data.configuration.inspectorMode === "open" ? <aside className="hidden xl:block">
+        {selectedPlayer && data.configuration.inspectorMode === "open" ? <aside className="hidden xl:block">
           <div className="sticky top-6">
-            <InspectorPanel player={selectedPlayer} returnTo={workspaceHref(data.state, { selectedPlayer: selectedPlayer?.analytics.player.id })} />
+            <InspectorPanel player={selectedPlayer} returnTo={workspaceHref(data.state, { selectedPlayer: selectedPlayer.analytics.player.id })} onClose={() => setSelectedPlayerId(null)} />
           </div>
         </aside> : null}
       </section>
@@ -397,69 +392,90 @@ function isValidEmail(value: string) {
 
 function WorkspaceFilters({ data }: { data: WorkspaceData }) {
   const state = data.state;
+  const activeFilterCount = [
+    state.players !== "active",
+    Boolean(state.position),
+    state.availability !== "all",
+    state.period !== "season",
+    Boolean(state.coachAssessment),
+    Boolean(state.developmentStatus),
+    Boolean(state.reviewStatus),
+    Boolean(state.evidenceBase),
+    Boolean(state.ratingStatus)
+  ].filter(Boolean).length;
   return (
-    <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-      <form action="/squad" className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+    <div className="mt-3 border-t border-board-line pt-3">
+      <form action="/squad" className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto_auto] lg:items-end">
         <input type="hidden" name="view" value={state.view} />
-        <Field label="Players">
-          <select name="players" defaultValue={state.players} className={fieldClass()}>
-            <option value="active">All active players</option>
-            <option value="roster">Roster players</option>
-            <option value="trial">Trial players</option>
-            <option value="archived">Archived players</option>
-            <option value="trash">Player Trash</option>
-          </select>
-        </Field>
-        <Field label="Position">
-          <select name="position" defaultValue={state.position ?? ""} className={fieldClass()}>
-            <option value="">All positions</option>
-            {data.positions.map((position) => <option key={position} value={position}>{position}</option>)}
-          </select>
-        </Field>
-        <Field label="Availability">
-          <select name="availability" defaultValue={state.availability} className={fieldClass()}>
-            <option value="all">All</option>
-            <option value="available">Available</option>
-            <option value="injured">Injured</option>
-            <option value="sick">Sick</option>
-            <option value="medical-review">Needs medical review</option>
-          </select>
-        </Field>
-        <Field label="Period">
-          <select name="period" defaultValue={state.period} className={fieldClass()}>
-            <option value="last5">Last 5 trainings</option>
-            <option value="last10">Last 10 trainings</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-            <option value="season">This season</option>
-            <option value="all">All time</option>
-            <option value="custom">Custom range</option>
-          </select>
-        </Field>
-        <Field label="Sort">
-          <select name="sort" defaultValue={state.sort} className={fieldClass()}>
-            {sortLabels.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select>
-        </Field>
         <Field label="Search">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input name="search" defaultValue={state.search} className={cn(fieldClass(), "pl-9")} placeholder="Name, club, position..." />
           </div>
         </Field>
-        {state.period === "custom" ? (
-          <>
-            <Field label="From">
-              <input name="from" defaultValue={state.customFrom ?? ""} type="date" className={fieldClass()} />
+        <details className="relative">
+          <summary className="flex h-11 cursor-pointer list-none items-center justify-center rounded-md border border-board-line px-3 text-sm font-bold text-board-navy hover:bg-slate-50">
+            View
+          </summary>
+          <div className="mt-2 min-w-72 rounded-lg border border-board-line bg-white p-3 shadow-soft lg:absolute lg:right-0 lg:z-30">
+            <SavedViewsCompact data={data} />
+          </div>
+        </details>
+        <details className="relative">
+          <summary className="flex h-11 cursor-pointer list-none items-center justify-center rounded-md border border-board-line px-3 text-sm font-bold text-board-navy hover:bg-slate-50">
+            Filters {activeFilterCount ? activeFilterCount : ""}
+          </summary>
+          <div className="mt-2 grid gap-3 rounded-lg border border-board-line bg-white p-3 shadow-soft md:grid-cols-2 lg:absolute lg:right-0 lg:z-30 lg:w-[720px] xl:grid-cols-3">
+            <Field label="Players">
+              <select name="players" defaultValue={state.players} className={fieldClass()}>
+                <option value="active">All active players</option>
+                <option value="roster">Roster players</option>
+                <option value="trial">Trial players</option>
+                <option value="archived">Archived players</option>
+                <option value="trash">Player Trash</option>
+              </select>
             </Field>
-            <Field label="To">
-              <input name="to" defaultValue={state.customTo ?? ""} type="date" className={fieldClass()} />
+            <Field label="Position">
+              <select name="position" defaultValue={state.position ?? ""} className={fieldClass()}>
+                <option value="">All positions</option>
+                {data.positions.map((position) => <option key={position} value={position}>{position}</option>)}
+              </select>
             </Field>
-          </>
-        ) : null}
-        <details className="md:col-span-2 xl:col-span-6">
-          <summary className="cursor-pointer text-sm font-bold text-board-navy">More filters</summary>
-          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <Field label="Availability">
+              <select name="availability" defaultValue={state.availability} className={fieldClass()}>
+                <option value="all">All</option>
+                <option value="available">Available</option>
+                <option value="injured">Injured</option>
+                <option value="sick">Sick</option>
+                <option value="medical-review">Needs medical review</option>
+              </select>
+            </Field>
+            <Field label="Period">
+              <select name="period" defaultValue={state.period} className={fieldClass()}>
+                <option value="last5">Last 5 trainings</option>
+                <option value="last10">Last 10 trainings</option>
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
+                <option value="season">This season</option>
+                <option value="all">All time</option>
+                <option value="custom">Custom range</option>
+              </select>
+            </Field>
+            <Field label="Sort">
+              <select name="sort" defaultValue={state.sort} className={fieldClass()}>
+                {sortLabels.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </Field>
+            {state.period === "custom" ? (
+              <>
+                <Field label="From">
+                  <input name="from" defaultValue={state.customFrom ?? ""} type="date" className={fieldClass()} />
+                </Field>
+                <Field label="To">
+                  <input name="to" defaultValue={state.customTo ?? ""} type="date" className={fieldClass()} />
+                </Field>
+              </>
+            ) : null}
             <Field label="Coach assessment">
               <select name="coachAssessment" defaultValue={state.coachAssessment ?? ""} className={fieldClass()}>
                 <option value="">Any assessment</option>
@@ -505,54 +521,49 @@ function WorkspaceFilters({ data }: { data: WorkspaceData }) {
             </Field>
           </div>
         </details>
-        <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-6">
-          <Button type="submit">Apply filters</Button>
-          <ButtonLink href={workspaceHref(state, { direction: state.direction === "asc" ? "desc" : "asc" })} variant="secondary">
+        <div className="flex gap-2">
+          <Button type="submit" className="h-11">Apply</Button>
+          <ButtonLink href={workspaceHref(state, { direction: state.direction === "asc" ? "desc" : "asc" })} variant="secondary" className="h-11">
             {state.direction === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-            {state.direction === "asc" ? "Ascending" : "Descending"}
-          </ButtonLink>
-          <ButtonLink href={workspaceHref({ ...state, view: "all", players: "active", availability: "all", period: "season", sort: "position", direction: "asc", search: "" }, { selectedPlayer: undefined })} variant="ghost">
-            Reset
+            {state.direction === "asc" ? "Asc" : "Desc"}
           </ButtonLink>
         </div>
+        <ButtonLink href={workspaceHref({ ...state, view: "all", players: "active", availability: "all", period: "season", sort: "position", direction: "asc", search: "" }, { selectedPlayer: undefined })} variant="ghost" className="h-11">
+          Reset
+        </ButtonLink>
+        <ButtonLink href={workspaceHref(state, { customize: true })} variant="secondary" className="h-11">
+          Columns
+        </ButtonLink>
+        {activeFilterCount || state.search ? (
+          <div className="flex flex-wrap gap-2 lg:col-span-5">
+            {state.search ? <Chip label={`Search: ${state.search}`} /> : null}
+            {state.position ? <Chip label={state.position} /> : null}
+            {state.players !== "active" ? <Chip label={state.players} /> : null}
+            {state.availability !== "all" ? <Chip label={state.availability} /> : null}
+            {state.period !== "season" ? <Chip label={state.period} /> : null}
+          </div>
+        ) : null}
       </form>
-    </section>
+    </div>
   );
 }
 
-function SavedViewsPanel({ data }: { data: WorkspaceData }) {
+function SavedViewsCompact({ data }: { data: WorkspaceData }) {
   const savedViews = data.savedViews.filter((view) => view.kind === "saved");
   return (
-    <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Saved Views</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            {data.activeSavedView ? `${data.activeSavedView.name}${data.activeSavedView.isDefault ? " · Default" : ""}` : "Use system quick views or save the current workspace for repeated coaching tasks."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {data.activeSavedView ? (
-            <form action={setDefaultWorkspaceView}>
-              <input type="hidden" name="savedViewId" value={data.activeSavedView.id} />
-              <Button type="submit" variant="secondary" className="h-9 px-3">Set as default</Button>
-            </form>
-          ) : (
-            <form action={setDefaultWorkspaceView}>
-              <input type="hidden" name="systemViewId" value={data.state.view} />
-              <Button type="submit" variant="secondary" className="h-9 px-3">Set system view default</Button>
-            </form>
-          )}
-        </div>
-      </div>
+    <div>
+      <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Saved Views</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        {data.activeSavedView ? `${data.activeSavedView.name}${data.activeSavedView.isDefault ? " · Default" : ""}` : "Default Squad View"}
+      </p>
       {savedViews.length ? (
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        <div className="mt-3 grid gap-2">
           {savedViews.map((view) => (
             <Link
               key={view.id}
               href={`/squad?savedView=${view.id}`}
               className={cn(
-                "min-w-fit rounded-md px-3 py-2 text-sm font-bold transition",
+                "rounded-md px-3 py-2 text-sm font-bold transition",
                 data.activeSavedView?.id === view.id ? "bg-board-green text-white" : "bg-slate-100 text-slate-700 hover:bg-green-50 hover:text-board-green"
               )}
             >
@@ -561,50 +572,13 @@ function SavedViewsPanel({ data }: { data: WorkspaceData }) {
           ))}
         </div>
       ) : (
-        <div className="mt-4 rounded-md border border-dashed border-board-line p-4">
+        <div className="mt-3 rounded-md border border-dashed border-board-line p-3">
           <p className="text-sm font-semibold text-board-navy">No saved views yet.</p>
           <p className="mt-1 text-sm text-slate-600">Configure the Workspace for a recurring coaching task, then save it for faster access next time.</p>
         </div>
       )}
-      {data.activeSavedView ? (
-        <details className="mt-4 rounded-md bg-board-paper p-3">
-          <summary className="cursor-pointer text-sm font-bold text-board-navy">Manage active saved view</summary>
-          <div className="mt-3 grid gap-3 lg:grid-cols-2">
-            <form action={renameWorkspaceSavedView} className="grid gap-2 rounded-md bg-white p-3">
-              <input type="hidden" name="savedViewId" value={data.activeSavedView.id} />
-              <Field label="Name"><input name="viewName" required maxLength={80} defaultValue={data.activeSavedView.name} className={fieldClass()} /></Field>
-              <Field label="Description"><input name="viewDescription" defaultValue={data.activeSavedView.description ?? ""} className={fieldClass()} /></Field>
-              <Button type="submit" variant="secondary" className="h-9">Rename</Button>
-            </form>
-            <div className="grid gap-2 rounded-md bg-white p-3">
-              <form action={duplicateWorkspaceSavedView}>
-                <input type="hidden" name="savedViewId" value={data.activeSavedView.id} />
-                <Button type="submit" variant="secondary" className="h-9 w-full">Duplicate</Button>
-              </form>
-              <div className="grid grid-cols-2 gap-2">
-                <form action={moveWorkspaceSavedView}>
-                  <input type="hidden" name="savedViewId" value={data.activeSavedView.id} />
-                  <input type="hidden" name="move" value="up" />
-                  <Button type="submit" variant="secondary" className="h-9 w-full">Move up</Button>
-                </form>
-                <form action={moveWorkspaceSavedView}>
-                  <input type="hidden" name="savedViewId" value={data.activeSavedView.id} />
-                  <input type="hidden" name="move" value="down" />
-                  <Button type="submit" variant="secondary" className="h-9 w-full">Move down</Button>
-                </form>
-              </div>
-              <form action={deleteWorkspaceSavedView}>
-                <input type="hidden" name="savedViewId" value={data.activeSavedView.id} />
-                <ConfirmSubmitButton message={`Delete saved view "${data.activeSavedView.name}"? Player data is not changed.`} className="h-9 w-full">
-                  Delete view
-                </ConfirmSubmitButton>
-                <p className="mt-1 text-xs text-slate-500">This removes only the saved layout. Player data is unchanged.</p>
-              </form>
-            </div>
-          </div>
-        </details>
-      ) : null}
-    </section>
+      <p className="mt-3 text-xs text-slate-500">Use Columns to save or manage the current view layout.</p>
+    </div>
   );
 }
 
@@ -1029,7 +1003,11 @@ function WorkspaceMobileCard({
   );
 }
 
-function InspectorPanel({ player, returnTo }: { player?: WorkspacePlayerSummary; returnTo: string }) {
+function Chip({ label }: { label: string }) {
+  return <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{label}</span>;
+}
+
+function InspectorPanel({ player, returnTo, onClose }: { player?: WorkspacePlayerSummary; returnTo: string; onClose: () => void }) {
   if (!player) {
     return (
       <section className="rounded-lg border border-dashed border-board-line bg-white p-5 shadow-soft">
@@ -1047,7 +1025,9 @@ function InspectorPanel({ player, returnTo }: { player?: WorkspacePlayerSummary;
           <h2 className="text-xl font-bold text-board-navy">{playerName(summary.player)}</h2>
           <p className="mt-1 text-sm text-slate-600">{summary.player.position ?? "No position"} · {calculateAge(summary.player.dateOfBirth) ?? "-"} years · {summary.player.playerType === "trial" ? "Trial" : "Roster"}</p>
         </div>
-        <UserRound className="h-5 w-5 text-board-green" />
+        <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Close Player details">
+          <X className="h-5 w-5" />
+        </button>
       </div>
       <div className="mt-4 space-y-4">
         <InspectorSection title="Availability" icon={<Stethoscope className="h-4 w-4" />}>

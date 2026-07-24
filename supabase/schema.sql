@@ -1395,7 +1395,9 @@ create table if not exists public.player_coach_assessments (
 create table if not exists public.player_development_goals (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  player_id uuid not null references public.squad_players(id) on delete cascade,
+  player_id uuid references public.squad_players(id) on delete cascade,
+  target_kind text not null default 'player',
+  target_id uuid,
   title text not null,
   description text,
   category text not null default 'individual'
@@ -1500,7 +1502,17 @@ create table if not exists public.coach_attention_states (
 
 alter table public.coach_attention_states
 add column if not exists dismissal_reason text,
-add column if not exists resolved_at timestamptz;
+add column if not exists resolved_at timestamptz,
+add column if not exists target_kind text not null default 'player',
+add column if not exists target_id uuid;
+
+alter table public.coach_attention_states
+alter column player_id drop not null;
+
+update public.coach_attention_states
+set target_kind = coalesce(target_kind, 'player'),
+    target_id = coalesce(target_id, player_id)
+where target_id is null;
 
 alter table public.coach_attention_states
 drop constraint if exists coach_attention_states_dismissal_reason_check;
@@ -1511,6 +1523,13 @@ check (
   dismissal_reason is null
   or dismissal_reason in ('dismissed', 'not_relevant')
 );
+
+alter table public.coach_attention_states
+drop constraint if exists coach_attention_states_target_kind_check;
+
+alter table public.coach_attention_states
+add constraint coach_attention_states_target_kind_check
+check (target_kind in ('player', 'training'));
 
 
 -- =========================================================
@@ -2970,11 +2989,27 @@ using (
 )
 with check (
   auth.uid() = user_id
-  and exists (
-    select 1
-    from public.squad_players
-    where squad_players.id = coach_attention_states.player_id
-    and squad_players.user_id = auth.uid()
+  and (
+    (
+      coach_attention_states.target_kind = 'player'
+      and coach_attention_states.player_id is not null
+      and exists (
+        select 1
+        from public.squad_players
+        where squad_players.id = coach_attention_states.player_id
+        and squad_players.user_id = auth.uid()
+      )
+    )
+    or (
+      coach_attention_states.target_kind = 'training'
+      and coach_attention_states.target_id is not null
+      and exists (
+        select 1
+        from public.squad_training_events
+        where squad_training_events.id = coach_attention_states.target_id
+        and squad_training_events.user_id = auth.uid()
+      )
+    )
   )
 );
 
