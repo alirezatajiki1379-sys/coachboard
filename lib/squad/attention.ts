@@ -8,6 +8,7 @@ export type AttentionCategory = "review" | "observation" | "performance" | "atte
 export type AttentionType =
   | "training-review-incomplete"
   | "training-plan-missing"
+  | "training-availability-missing"
   | "review-overdue"
   | "review-due"
   | "no-recent-observation"
@@ -124,6 +125,19 @@ export type AttentionCenterData = {
     trial: number;
     observation: number;
   };
+  diagnostics: AttentionPipelineDiagnostics;
+};
+
+export type AttentionPipelineDiagnostics = {
+  candidateActions: number;
+  invalidCandidatesRemoved: number;
+  duplicateCandidatesAggregated: number;
+  dismissedActionsExcluded: number;
+  snoozedActionsExcluded: number;
+  resolvedActionsExcluded: number;
+  validOpenActions: number;
+  highPriorityActions: number;
+  dashboardVisibleActions: number;
 };
 
 type AttentionPreferencesRow = {
@@ -176,6 +190,7 @@ export const defaultAttentionPreferences: AttentionPreferences = {
   enabledRules: {
     "training-review-incomplete": true,
     "training-plan-missing": true,
+    "training-availability-missing": true,
     "review-overdue": true,
     "review-due": true,
     "no-recent-observation": false,
@@ -204,7 +219,7 @@ export const defaultAttentionPreferences: AttentionPreferences = {
   goalFollowUpDays: 21
 };
 
-const mandatoryRules = new Set<AttentionType>(["medical-return-review", "training-review-incomplete", "training-plan-missing"]);
+const mandatoryRules = new Set<AttentionType>(["medical-return-review", "training-review-incomplete", "training-plan-missing", "training-availability-missing"]);
 export function parseAttentionCenterState(searchParams: Record<string, string | string[] | undefined>): AttentionCenterState {
   return {
     priority: priorityValue(one(searchParams.priority)),
@@ -600,13 +615,70 @@ export function getTrainingAttentionItems(
     linkedTrainingSessionId?: string;
     linkedTrainingSessionTitle?: string;
     status: string;
-    attendance: Array<{ finalStatus?: string; overallRating?: number }>;
+    attendance: Array<{ plannedStatus?: string; finalStatus?: string; overallRating?: number }>;
   }>,
   context: { today: string }
 ): AttentionItem[] {
   const items: AttentionItem[] = [];
   for (const event of events) {
-    if (event.date > context.today || event.status === "draft") continue;
+    const daysUntil = dayDiff(event.date, context.today);
+    const isUpcoming = daysUntil >= 0;
+    const isPastOrToday = daysUntil <= 0;
+    const isWithinPlanningWindow = isUpcoming && daysUntil <= 7;
+    if (isWithinPlanningWindow && !event.linkedTrainingSessionId) {
+      items.push({
+        key: `training-plan-missing:${event.id}`,
+        targetKind: "training",
+        targetId: event.id,
+        playerName: event.squadName ?? "Training",
+        playerPosition: event.date,
+        playerType: "roster",
+        type: "training-plan-missing",
+        category: "development",
+        priority: daysUntil === 0 ? "critical" : daysUntil <= 2 ? "high" : "medium",
+        title: "Training Plan missing",
+        explanation: `${trainingLabel(event)} has no linked Training Plan yet.`,
+        evidence: evidence([["Training date", formatEventDate(event.date)], ["Starts in", daysUntil === 0 ? "Today" : `${daysUntil}d`], ["Plan", "Missing"]]),
+        thresholdLabel: "Upcoming training within 7 days has no linked plan.",
+        dueDate: event.date,
+        detectedAt: context.today,
+        suggestedActions: [{ label: "Plan Training", href: `/trainings/${event.id}/plan`, primary: true }],
+        dismissible: true,
+        snoozeable: true
+      });
+    }
+
+    if (isWithinPlanningWindow) {
+      const openResponses = event.attendance.filter((entry) => entry.plannedStatus === "unclear").length;
+      if (openResponses > 0) {
+        items.push({
+          key: `training-availability-missing:${event.id}`,
+          targetKind: "training",
+          targetId: event.id,
+          playerName: event.squadName ?? "Training",
+          playerPosition: event.date,
+          playerType: "roster",
+          type: "training-availability-missing",
+          category: "attendance",
+          priority: daysUntil === 0 ? "critical" : daysUntil <= 2 ? "high" : "medium",
+          title: "Availability responses missing",
+          explanation: `${openResponses} player${openResponses === 1 ? " has" : "s have"} not responded for ${trainingLabel(event)}.`,
+          evidence: evidence([
+            ["Training date", formatEventDate(event.date)],
+            ["Starts in", daysUntil === 0 ? "Today" : `${daysUntil}d`],
+            ["Open responses", openResponses]
+          ]),
+          thresholdLabel: "Upcoming training has participants marked unclear.",
+          dueDate: event.date,
+          detectedAt: context.today,
+          suggestedActions: [{ label: "Open availability", href: `/trainings/${event.id}`, primary: true }],
+          dismissible: true,
+          snoozeable: true
+        });
+      }
+    }
+
+    if (!isPastOrToday || event.status === "draft") continue;
     const attended = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
     const missingAttendance = event.attendance.filter((entry) => !entry.finalStatus).length;
     const missingRatings = attended.filter((entry) => !entry.overallRating).length;
@@ -637,28 +709,6 @@ export function getTrainingAttentionItems(
         dueDate: event.date,
         detectedAt: context.today,
         suggestedActions: [{ label: "Open Training review", href: `/trainings/${event.id}/ratings`, primary: true }],
-        dismissible: true,
-        snoozeable: true
-      });
-    }
-    if (!event.linkedTrainingSessionId && event.date >= context.today) {
-      items.push({
-        key: `training-plan-missing:${event.id}`,
-        targetKind: "training",
-        targetId: event.id,
-        playerName: event.squadName ?? "Training",
-        playerPosition: event.date,
-        playerType: "roster",
-        type: "training-plan-missing",
-        category: "development",
-        priority: event.date === context.today ? "critical" : "high",
-        title: "Training Plan missing",
-        explanation: `${trainingLabel(event)} has no linked Training Plan yet.`,
-        evidence: evidence([["Training date", formatEventDate(event.date)], ["Plan", "Missing"]]),
-        thresholdLabel: "Upcoming training has no linked plan.",
-        dueDate: event.date,
-        detectedAt: context.today,
-        suggestedActions: [{ label: "Plan Training", href: `/trainings/${event.id}/plan`, primary: true }],
         dismissible: true,
         snoozeable: true
       });

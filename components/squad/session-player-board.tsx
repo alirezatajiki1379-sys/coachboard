@@ -36,7 +36,8 @@ export type SessionBoardGroup = {
   }>;
 };
 
-type BoardFilter = "all" | "presentLate" | "confirmed" | "trial" | "guest" | "unassigned";
+type BoardFilter = "all" | "presentLate" | "confirmed" | "trial" | "guest" | PositionFamily;
+type CompositionScope = "confirmed" | "expected" | "present";
 
 type SessionPlayerBoardProps = {
   eventId: string;
@@ -50,6 +51,10 @@ const filterLabels: Record<BoardFilter, string> = {
   confirmed: "Confirmed",
   trial: "Trial",
   guest: "Guest",
+  goalkeeper: "GK",
+  defensive: "Defensive",
+  midfield: "Midfield",
+  attacking: "Attacking",
   unassigned: "Unassigned"
 };
 
@@ -58,6 +63,7 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<BoardFilter>("all");
+  const [compositionScope, setCompositionScope] = useState<CompositionScope>("confirmed");
   const [targetGroupId, setTargetGroupId] = useState(groups[0]?.id ?? "");
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -75,10 +81,12 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
       if (filter === "confirmed") return !player.plannedStatus || player.plannedStatus === "expected";
       if (filter === "trial") return player.playerType === "trial";
       if (filter === "guest") return false;
-      if (filter === "unassigned") return resolvedPositionFamily(player) === "unassigned";
+      if (positionFamilyOrder.includes(filter as PositionFamily)) {
+        return resolvedPositionFamily(player) === filter && playersForCompositionScope([player], compositionScope).length > 0;
+      }
       return true;
     });
-  }, [filter, groupByPlayerId, players, search]);
+  }, [compositionScope, filter, groupByPlayerId, players, search]);
   const groupedPlayers = useMemo(() => {
     const map = new Map<PositionFamily, SessionBoardPlayer[]>();
     for (const family of positionFamilyOrder) map.set(family, []);
@@ -88,7 +96,9 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
     }
     return map;
   }, [visiblePlayers]);
-  const counts = useMemo(() => calculateCounts(players, customMembers.length), [customMembers.length, players]);
+  const statusCounts = useMemo(() => calculateStatusCounts(players, customMembers.length), [customMembers.length, players]);
+  const compositionPlayers = useMemo(() => playersForCompositionScope(players, compositionScope), [compositionScope, players]);
+  const compositionCounts = useMemo(() => calculateCompositionCounts(compositionPlayers), [compositionPlayers]);
   const selectedCount = selectedIds.length;
   const allVisibleSelected = visiblePlayers.length > 0 && visiblePlayers.every((player) => selectedIds.includes(player.id));
 
@@ -99,6 +109,12 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
   function selectAllVisible() {
     const visibleIds = visiblePlayers.map((player) => player.id);
     setSelectedIds((current) => Array.from(new Set([...current, ...visibleIds])));
+  }
+
+  function selectCompositionFamily(family: PositionFamily) {
+    setFilter(family);
+    const familyIds = compositionPlayers.filter((player) => resolvedPositionFamily(player) === family).map((player) => player.id);
+    setSelectedIds((current) => Array.from(new Set([...current, ...familyIds])));
   }
 
   function addSelectedToGroup() {
@@ -131,22 +147,44 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
-        <CountPill label="Expected" value={counts.expected} />
-        <CountPill label="Confirmed" value={counts.confirmed} />
-        <CountPill label="Present" value={counts.present} />
-        <CountPill label="Late" value={counts.late} />
-        <CountPill label="Roster" value={counts.roster} />
-        <CountPill label="Trial" value={counts.trial} />
-        <CountPill label="Guest" value={counts.guest} />
-        <CountPill label="GK" value={counts.goalkeeper} />
-        <CountPill label="Unassigned" value={counts.unassigned} tone={counts.unassigned ? "warning" : "normal"} />
+        <CountPill label="Expected" value={statusCounts.expected} />
+        <CountPill label="Confirmed" value={statusCounts.confirmed} />
+        <CountPill label="Declined" value={statusCounts.declined} tone={statusCounts.declined ? "warning" : "normal"} />
+        <CountPill label="Open" value={statusCounts.open} tone={statusCounts.open ? "warning" : "normal"} />
+        <CountPill label="Present" value={statusCounts.present} />
+        <CountPill label="Late" value={statusCounts.late} />
+        <CountPill label="Roster" value={statusCounts.roster} />
+        <CountPill label="Trial" value={statusCounts.trial} />
+        <CountPill label="Guest" value={statusCounts.guest} />
       </div>
 
-      <div className="mt-4 grid grid-cols-4 gap-1 text-center text-[11px] font-bold">
-        <FamilyCount family="goalkeeper" count={counts.goalkeeper} />
-        <FamilyCount family="defensive" count={counts.defensive} />
-        <FamilyCount family="midfield" count={counts.midfield} />
-        <FamilyCount family="attacking" count={counts.attacking} />
+      <div className="mt-4 rounded-md border border-board-line bg-board-paper p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-slate-500">{compositionScope} player composition</p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">Uses only the participant snapshot for this Training.</p>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {(["confirmed", "expected", "present"] as CompositionScope[]).map((scope) => (
+              <button
+                key={scope}
+                type="button"
+                onClick={() => setCompositionScope(scope)}
+                className={cn(
+                  "rounded-full px-2 py-1 text-[11px] font-bold capitalize transition",
+                  compositionScope === scope ? "bg-board-green text-white" : "bg-white text-slate-600 ring-1 ring-board-line hover:bg-slate-50"
+                )}
+              >
+                {scope}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-1 text-center text-[11px] font-bold sm:grid-cols-5">
+          {positionFamilyOrder.map((family) => (
+            <FamilyCount key={family} family={family} count={compositionCounts[family]} onClick={() => selectCompositionFamily(family)} />
+          ))}
+        </div>
       </div>
 
       <div className="mt-4 space-y-2">
@@ -182,6 +220,11 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
           <Button type="button" variant="secondary" onClick={allVisibleSelected ? () => setSelectedIds([]) : selectAllVisible} className="h-8 px-2 text-xs">
             {allVisibleSelected ? "Clear visible" : "Select all visible"}
           </Button>
+          {positionFamilyOrder.filter((family) => family !== "unassigned").map((family) => (
+            <Button key={family} type="button" variant="secondary" onClick={() => selectCompositionFamily(family)} className="h-8 px-2 text-xs">
+              Select {positionFamilyMeta[family].shortLabel}
+            </Button>
+          ))}
           <Button type="button" variant="ghost" onClick={() => setSelectedIds([])} className="h-8 px-2 text-xs">Clear selection</Button>
         </div>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row lg:flex-col">
@@ -261,23 +304,36 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
   );
 }
 
-function calculateCounts(sourcePlayers: SessionBoardPlayer[], guestCount: number) {
+function calculateStatusCounts(sourcePlayers: SessionBoardPlayer[], guestCount: number) {
   const present = sourcePlayers.filter((player) => player.finalStatus === "present").length;
   const late = sourcePlayers.filter((player) => player.finalStatus === "Z").length;
   return {
     expected: sourcePlayers.length,
     confirmed: sourcePlayers.filter((player) => !player.plannedStatus || player.plannedStatus === "expected").length,
+    declined: sourcePlayers.filter((player) => player.plannedStatus === "unavailable").length,
+    open: sourcePlayers.filter((player) => player.plannedStatus === "unclear").length,
     present,
     late,
     roster: sourcePlayers.filter((player) => player.playerType === "roster").length,
     trial: sourcePlayers.filter((player) => player.playerType === "trial").length,
-    guest: guestCount,
-    unassigned: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "unassigned").length,
+    guest: guestCount
+  };
+}
+
+function playersForCompositionScope(players: SessionBoardPlayer[], scope: CompositionScope) {
+  if (scope === "present") return players.filter((player) => player.finalStatus === "present" || player.finalStatus === "Z");
+  if (scope === "expected") return players;
+  return players.filter((player) => !player.plannedStatus || player.plannedStatus === "expected");
+}
+
+function calculateCompositionCounts(sourcePlayers: SessionBoardPlayer[]) {
+  return {
     goalkeeper: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "goalkeeper").length,
     defensive: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "defensive").length,
     midfield: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "midfield").length,
-    attacking: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "attacking").length
-  };
+    attacking: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "attacking").length,
+    unassigned: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "unassigned").length
+  } satisfies Record<PositionFamily, number>;
 }
 
 function CreateGroupInline({
@@ -369,13 +425,17 @@ function CountPill({ label, value, tone = "normal" }: { label: string; value: nu
   );
 }
 
-function FamilyCount({ family, count }: { family: PositionFamily; count: number }) {
+function FamilyCount({ family, count, onClick }: { family: PositionFamily; count: number; onClick?: () => void }) {
   const meta = positionFamilyMeta[family];
   return (
-    <div className={cn("rounded-md border px-1.5 py-1", meta.chipClassName)}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn("rounded-md border px-1.5 py-1 text-center transition hover:border-board-green focus:outline-none focus:ring-4 focus:ring-green-100", meta.chipClassName)}
+    >
       <p className="text-[10px] font-black text-board-navy">{meta.shortLabel}</p>
       <p className="text-sm font-black text-board-navy">{count}</p>
-    </div>
+    </button>
   );
 }
 

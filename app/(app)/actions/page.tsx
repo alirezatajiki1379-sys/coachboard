@@ -103,6 +103,8 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
 
       <ActionFilters data={data} />
 
+      <ActionDiagnostics data={data} />
+
       {data.state.status === "open" && data.state.priority === "high-priority" && data.summary.open > 0 && data.summary.open === data.summary.high + data.summary.critical ? (
         <p className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           All current open items are classified as high priority.
@@ -399,6 +401,18 @@ function AttentionSettings({ data, returnTo }: { data: AttentionCenterData; retu
               <input type="checkbox" checked disabled className="h-4 w-4" />
               Medical return review · mandatory
             </label>
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input type="checkbox" checked disabled className="h-4 w-4" />
+              Training plan missing · mandatory
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input type="checkbox" checked disabled className="h-4 w-4" />
+              Training review incomplete · mandatory
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input type="checkbox" checked disabled className="h-4 w-4" />
+              Availability responses missing · mandatory
+            </label>
             {optionalRules.map((rule) => (
               <label key={rule.id} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
                 <input name={`rule:${rule.id}`} type="checkbox" defaultChecked={preferences.enabledRules[rule.id] !== false} className="h-4 w-4" />
@@ -410,6 +424,34 @@ function AttentionSettings({ data, returnTo }: { data: AttentionCenterData; retu
         <Button type="submit">Save attention settings</Button>
       </form>
     </section>
+  );
+}
+
+function ActionDiagnostics({ data }: { data: AttentionCenterData }) {
+  const diagnostics = data.diagnostics;
+  const rows = [
+    ["Candidate actions generated", diagnostics.candidateActions],
+    ["Invalid candidates removed", diagnostics.invalidCandidatesRemoved],
+    ["Duplicate candidates aggregated", diagnostics.duplicateCandidatesAggregated],
+    ["Dismissed actions excluded", diagnostics.dismissedActionsExcluded],
+    ["Snoozed actions excluded", diagnostics.snoozedActionsExcluded],
+    ["Resolved actions excluded", diagnostics.resolvedActionsExcluded],
+    ["Valid open actions", diagnostics.validOpenActions],
+    ["High-priority actions", diagnostics.highPriorityActions],
+    ["Dashboard-visible actions", diagnostics.dashboardVisibleActions]
+  ] as const;
+  return (
+    <details className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+      <summary className="cursor-pointer text-sm font-bold text-board-navy">Generation diagnostics</summary>
+      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map(([label, value]) => (
+          <div key={label} className="rounded-md bg-board-paper px-3 py-2">
+            <p className="text-[11px] font-black uppercase text-slate-500">{label}</p>
+            <p className="mt-1 text-lg font-black text-board-navy">{value}</p>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -461,7 +503,7 @@ function EmptyState({ data }: { data: AttentionCenterData }) {
       ? `No ${attentionPriorityFilterLabels[data.state.priority].toLowerCase()} items.`
       : data.state.category !== "all"
         ? `No ${categoryLabel(data.state.category).toLowerCase()} items currently require attention.`
-        : "No open coaching actions. No players currently match your active attention rules and filters.";
+        : "You are up to date. No current Coach Actions match your active rules and filters.";
   return (
     <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
       <Bell className="mx-auto h-8 w-8 text-board-green" />
