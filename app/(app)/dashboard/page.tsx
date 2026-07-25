@@ -150,6 +150,7 @@ export default async function DashboardPage() {
             <div className="flex flex-wrap gap-2">
               <ButtonLink href={`/trainings/${nextTraining.id}`} variant="secondary" className="justify-center">Open</ButtonLink>
               <ButtonLink href={`/trainings/${nextTraining.id}/check-in`} className="justify-center">Check-in</ButtonLink>
+              <ButtonLink href={planNextHref} variant="secondary" className="justify-center">{nextTraining.linkedTrainingSessionId ? "Review Plan" : "Plan Training"}</ButtonLink>
             </div>
           </div>
         </section>

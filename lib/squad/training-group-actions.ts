@@ -114,6 +114,44 @@ export async function addPlayersToTrainingGroupInline(formData: FormData) {
   return { ok: true, message: `${newPlayerIds.length} Player${newPlayerIds.length === 1 ? "" : "s"} added.` };
 }
 
+export async function createTrainingGroupWithPlayersInline(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const name = formString(formData, "name");
+  const groupType = formString(formData, "groupType") === "label" ? "label" : "exclusive";
+  const playerIds = selectedValues(formData, "playerIds");
+  if (!eventId || !name) return { ok: false, message: "Enter a group name first." };
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  await assertOwnedEvent(db, user.id, eventId);
+  const { count } = await db.from("training_event_groups").select("id", { count: "exact", head: true }).eq("event_id", eventId).eq("user_id", user.id);
+  const { data: group, error } = await db.from("training_event_groups").insert({
+    user_id: user.id,
+    event_id: eventId,
+    name,
+    group_type: groupType,
+    sort_order: count ?? 0
+  }).select("id").single();
+  if (error) throw new Error(error.message);
+  const groupId = (group as { id: string }).id;
+  if (playerIds.length) {
+    const validPlayerIds = await validateEventPlayers(db, user.id, eventId, playerIds);
+    const rows = validPlayerIds.map((playerId, index) => ({
+      user_id: user.id,
+      group_id: groupId,
+      player_id: playerId,
+      custom_name: null,
+      sort_order: index
+    }));
+    const { error: memberError } = await db.from("training_event_group_members").insert(rows);
+    if (memberError) throw new Error(memberError.message);
+  }
+  revalidateTraining(eventId);
+  return {
+    ok: true,
+    message: playerIds.length ? `${name} created and ${playerIds.length} Player${playerIds.length === 1 ? "" : "s"} added.` : `${name} created.`
+  };
+}
+
 export async function addCustomNameToTrainingGroup(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const groupId = formString(formData, "groupId");

@@ -20,6 +20,7 @@ import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type Sq
 import { mapGoalRow, mapObservationRow } from "@/lib/squad/development";
 import { calculateAge } from "@/lib/squad/format";
 import { latestApplicableMedicalPeriod, medicalLabel, medicalNeedsReview } from "@/lib/squad/player-hub";
+import { getPositionFamily } from "@/lib/squad/positions";
 import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import type { Database } from "@/types/database";
@@ -708,11 +709,11 @@ function getReviewState(goals: PlayerDevelopmentGoal[], assessment?: PlayerCoach
 }
 
 function positionGroup(position?: string): PositionGroup {
-  const normalized = (position ?? "").toUpperCase().trim();
-  if (["GK", "TW"].includes(normalized)) return "Goalkeepers";
-  if (["CB", "IV", "RB", "RV", "LB", "LV"].includes(normalized)) return "Defenders";
-  if (["DM", "ZDM", "CM", "ZM", "AM", "ZOM"].includes(normalized)) return "Midfielders";
-  if (["RW", "RF", "LW", "LF", "ST"].includes(normalized)) return "Attackers";
+  const family = getPositionFamily(position);
+  if (family === "goalkeeper") return "Goalkeepers";
+  if (family === "defensive") return "Defenders";
+  if (family === "midfield") return "Midfielders";
+  if (family === "attacking") return "Attackers";
   return "Other";
 }
 

@@ -44,7 +44,7 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
       }))
     ],
     states
-  );
+  ).filter(isActionCenterWorthy);
   const filtered = sortAttentionItems(filterAttentionItems(allItems, state), state);
   return {
     state,
@@ -55,6 +55,16 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
     positions: workspace.positions,
     summary: attentionSummary(allItems)
   };
+}
+
+function isActionCenterWorthy(item: { category: string; priority: string; type: string }) {
+  if (item.category === "data-quality") return false;
+  if (item.priority === "info") return false;
+  if (item.type === "currently-unavailable") return false;
+  if (item.type === "limited-evidence") return false;
+  if (item.type === "no-recent-observation") return false;
+  if (item.type === "no-recent-rating") return false;
+  return true;
 }
 
 export async function getDashboardAttentionSummary(supabase: SupabaseServerClient, userId: string) {

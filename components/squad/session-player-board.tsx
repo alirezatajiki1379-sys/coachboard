@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type TransitionStartFunction } from "react";
 import { useRouter } from "next/navigation";
 import { Shield, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { addPlayersToTrainingGroupInline } from "@/lib/squad/training-group-actions";
+import { addPlayersToTrainingGroupInline, createTrainingGroupWithPlayersInline } from "@/lib/squad/training-group-actions";
 import {
   formatPositionAbbreviation,
   getPositionFamily,
+  normalizePosition,
   positionFamilyMeta,
   positionFamilyOrder,
   type PositionFamily
@@ -61,7 +62,6 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
   const groupByPlayerId = useMemo(() => buildGroupLabels(groups), [groups]);
-  const exclusiveAssigned = useMemo(() => buildExclusiveAssigned(groups), [groups]);
   const customMembers = groups.flatMap((group) =>
     group.members.filter((member) => member.customName).map((member) => ({ ...member, groupName: group.name }))
   );
@@ -75,20 +75,20 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
       if (filter === "confirmed") return !player.plannedStatus || player.plannedStatus === "expected";
       if (filter === "trial") return player.playerType === "trial";
       if (filter === "guest") return false;
-      if (filter === "unassigned") return !exclusiveAssigned.has(player.id);
+      if (filter === "unassigned") return resolvedPositionFamily(player) === "unassigned";
       return true;
     });
-  }, [exclusiveAssigned, filter, groupByPlayerId, players, search]);
+  }, [filter, groupByPlayerId, players, search]);
   const groupedPlayers = useMemo(() => {
     const map = new Map<PositionFamily, SessionBoardPlayer[]>();
     for (const family of positionFamilyOrder) map.set(family, []);
     for (const player of visiblePlayers) {
-      const family = getPositionFamily(player.position);
+      const family = resolvedPositionFamily(player);
       map.set(family, [...(map.get(family) ?? []), player]);
     }
     return map;
   }, [visiblePlayers]);
-  const counts = useMemo(() => calculateCounts(players, customMembers.length, exclusiveAssigned), [customMembers.length, exclusiveAssigned, players]);
+  const counts = useMemo(() => calculateCounts(players, customMembers.length), [customMembers.length, players]);
   const selectedCount = selectedIds.length;
   const allVisibleSelected = visiblePlayers.length > 0 && visiblePlayers.every((player) => selectedIds.includes(player.id));
 
@@ -192,10 +192,15 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
           >
             <option value="">Choose group</option>
             {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+            <option value="__create__">+ Create new group</option>
           </select>
-          <Button type="button" onClick={addSelectedToGroup} disabled={isPending || !selectedCount || !targetGroupId} className="h-9 px-3 text-xs">
-            {isPending ? "Adding..." : "Add to group"}
-          </Button>
+          {targetGroupId === "__create__" ? (
+            <CreateGroupInline eventId={eventId} selectedIds={selectedIds} defaultName={`Group ${groups.length + 1}`} isPending={isPending} startTransition={startTransition} setMessage={setMessage} setSelectedIds={setSelectedIds} />
+          ) : (
+            <Button type="button" onClick={addSelectedToGroup} disabled={isPending || !selectedCount || !targetGroupId} className="h-9 px-3 text-xs">
+              {isPending ? "Adding..." : "Add to group"}
+            </Button>
+          )}
         </div>
         {message ? <p className="mt-2 text-xs font-semibold text-slate-600" aria-live="polite">{message}</p> : null}
       </div>
@@ -218,7 +223,7 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
                     player={player}
                     selected={selectedIds.includes(player.id)}
                     groupLabels={groupByPlayerId.get(player.id) ?? []}
-                    unassigned={!exclusiveAssigned.has(player.id)}
+                    unassigned={resolvedPositionFamily(player) === "unassigned"}
                     onToggle={() => togglePlayer(player.id)}
                   />
                 ))}
@@ -247,13 +252,16 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
           {groups.map((group) => <GroupBalance key={group.id} group={group} players={players} />)}
         </div>
       ) : (
-        <p className="mt-4 rounded-md border border-dashed border-board-line p-3 text-sm text-slate-600">No groups yet. Create Group A or Group B on the Training detail page, then add selected Players here.</p>
+        <div className="mt-4 rounded-md border border-dashed border-board-line p-3 text-sm text-slate-600">
+          <p>No groups created yet.</p>
+          <button type="button" onClick={() => setTargetGroupId("__create__")} className="mt-2 text-sm font-bold text-board-green hover:underline">Create first group</button>
+        </div>
       )}
     </section>
   );
 }
 
-function calculateCounts(sourcePlayers: SessionBoardPlayer[], guestCount: number, exclusiveAssigned: Set<string>) {
+function calculateCounts(sourcePlayers: SessionBoardPlayer[], guestCount: number) {
   const present = sourcePlayers.filter((player) => player.finalStatus === "present").length;
   const late = sourcePlayers.filter((player) => player.finalStatus === "Z").length;
   return {
@@ -264,16 +272,64 @@ function calculateCounts(sourcePlayers: SessionBoardPlayer[], guestCount: number
     roster: sourcePlayers.filter((player) => player.playerType === "roster").length,
     trial: sourcePlayers.filter((player) => player.playerType === "trial").length,
     guest: guestCount,
-    unassigned: sourcePlayers.filter((player) => !exclusiveAssigned.has(player.id)).length,
-    goalkeeper: sourcePlayers.filter((player) => getPositionFamily(player.position) === "goalkeeper").length,
-    defensive: sourcePlayers.filter((player) => getPositionFamily(player.position) === "defensive").length,
-    midfield: sourcePlayers.filter((player) => getPositionFamily(player.position) === "midfield").length,
-    attacking: sourcePlayers.filter((player) => getPositionFamily(player.position) === "attacking").length
+    unassigned: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "unassigned").length,
+    goalkeeper: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "goalkeeper").length,
+    defensive: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "defensive").length,
+    midfield: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "midfield").length,
+    attacking: sourcePlayers.filter((player) => resolvedPositionFamily(player) === "attacking").length
   };
 }
 
+function CreateGroupInline({
+  eventId,
+  selectedIds,
+  defaultName,
+  isPending,
+  startTransition,
+  setMessage,
+  setSelectedIds
+}: {
+  eventId: string;
+  selectedIds: string[];
+  defaultName: string;
+  isPending: boolean;
+  startTransition: TransitionStartFunction;
+  setMessage: (message: string) => void;
+  setSelectedIds: (ids: string[]) => void;
+}) {
+  const [name, setName] = useState(defaultName);
+  const router = useRouter();
+  function createGroup() {
+    const formData = new FormData();
+    formData.set("eventId", eventId);
+    formData.set("name", name.trim() || defaultName);
+    formData.set("groupType", "exclusive");
+    for (const playerId of selectedIds) formData.append("playerIds", playerId);
+    startTransition(async () => {
+      const result = await createTrainingGroupWithPlayersInline(formData);
+      setMessage(result.message);
+      if (result.ok) {
+        setSelectedIds([]);
+        router.refresh();
+      }
+    });
+  }
+  return (
+    <div className="grid gap-2 rounded-md border border-board-line bg-white p-2">
+      <label className="text-xs font-bold uppercase text-slate-500">
+        Group name
+        <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+      </label>
+      <Button type="button" onClick={createGroup} disabled={isPending || !name.trim()} className="h-9 px-3 text-xs">
+        {selectedIds.length ? `Create and add ${selectedIds.length}` : "Create group"}
+      </Button>
+    </div>
+  );
+}
+
 function PlayerChip({ player, selected, groupLabels, unassigned, onToggle }: { player: SessionBoardPlayer; selected: boolean; groupLabels: string[]; unassigned: boolean; onToggle: () => void }) {
-  const family = getPositionFamily(player.position);
+  const position = resolveBoardPosition(player);
+  const family = getPositionFamily(position);
   const meta = positionFamilyMeta[family];
   const status = player.finalStatus ? finalStatusShort(player.finalStatus) : plannedStatusShort(player.plannedStatus);
   const secondary = player.secondaryPositions.filter(Boolean).slice(0, 2).map(formatPositionAbbreviation);
@@ -291,7 +347,7 @@ function PlayerChip({ player, selected, groupLabels, unassigned, onToggle }: { p
       )}
     >
       <span className="flex items-center gap-1.5">
-        <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-black", meta.badgeClassName)}>{formatPositionAbbreviation(player.position)}</span>
+        <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-black", meta.badgeClassName)}>{formatPositionAbbreviation(position)}</span>
         <span className="min-w-0 flex-1 truncate text-xs font-bold text-board-navy">{player.name}</span>
         {player.playerType === "trial" ? <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-black text-purple-700">TRIAL</span> : null}
         <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-200">{status}</span>
@@ -328,10 +384,10 @@ function GroupBalance({ group, players }: { group: SessionBoardGroup; players: S
   const linkedPlayers = group.members.map((member) => member.playerId ? playerById.get(member.playerId) : undefined).filter(Boolean) as SessionBoardPlayer[];
   const customCount = group.members.filter((member) => member.customName).length;
   const composition = {
-    goalkeeper: linkedPlayers.filter((player) => getPositionFamily(player.position) === "goalkeeper").length,
-    defensive: linkedPlayers.filter((player) => getPositionFamily(player.position) === "defensive").length,
-    midfield: linkedPlayers.filter((player) => getPositionFamily(player.position) === "midfield").length,
-    attacking: linkedPlayers.filter((player) => getPositionFamily(player.position) === "attacking").length
+    goalkeeper: linkedPlayers.filter((player) => resolvedPositionFamily(player) === "goalkeeper").length,
+    defensive: linkedPlayers.filter((player) => resolvedPositionFamily(player) === "defensive").length,
+    midfield: linkedPlayers.filter((player) => resolvedPositionFamily(player) === "midfield").length,
+    attacking: linkedPlayers.filter((player) => resolvedPositionFamily(player) === "attacking").length
   };
   return (
     <div className="rounded-md border border-board-line bg-board-paper p-2">
@@ -346,6 +402,16 @@ function GroupBalance({ group, players }: { group: SessionBoardGroup; players: S
   );
 }
 
+function resolveBoardPosition(player: SessionBoardPlayer) {
+  if (player.position && getPositionFamily(player.position) !== "unassigned") return normalizePosition(player.position);
+  const secondary = player.secondaryPositions.find((position) => getPositionFamily(position) !== "unassigned");
+  return secondary ? normalizePosition(secondary) : undefined;
+}
+
+function resolvedPositionFamily(player: SessionBoardPlayer) {
+  return getPositionFamily(resolveBoardPosition(player));
+}
+
 function buildGroupLabels(groups: SessionBoardGroup[]) {
   const map = new Map<string, string[]>();
   for (const group of groups) {
@@ -355,16 +421,6 @@ function buildGroupLabels(groups: SessionBoardGroup[]) {
     }
   }
   return map;
-}
-
-function buildExclusiveAssigned(groups: SessionBoardGroup[]) {
-  const ids = new Set<string>();
-  for (const group of groups.filter((item) => item.groupType === "exclusive")) {
-    for (const member of group.members) {
-      if (member.playerId) ids.add(member.playerId);
-    }
-  }
-  return ids;
 }
 
 function plannedStatusShort(status?: SessionBoardPlayer["plannedStatus"]) {

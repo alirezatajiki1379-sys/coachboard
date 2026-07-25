@@ -121,7 +121,8 @@ const attackingPositions = new Set([
 const goalkeeperPositions = new Set(["GK", "TW", "KEEPER", "GOALKEEPER", "TORWART"]);
 
 export function normalizePosition(value?: string) {
-  return (value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+  const normalized = (value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+  return positionAliases[normalized] ?? normalized;
 }
 
 export function getPositionFamily(position?: string): PositionFamily {
@@ -142,3 +143,51 @@ export function formatPositionAbbreviation(position?: string) {
   const normalized = normalizePosition(position);
   return normalized || "POS";
 }
+
+const positionAliases: Record<string, string> = {
+  TORWART: "GK",
+  TW: "GK",
+  GOALKEEPER: "GK",
+  KEEPER: "GK",
+  INNENVERTEIDIGER: "CB",
+  INNENVERTEIDIGUNG: "CB",
+  "CENTRE BACK": "CB",
+  "CENTER BACK": "CB",
+  IV: "CB",
+  RIV: "CB",
+  LIV: "CB",
+  RV: "RB",
+  "RIGHT BACK": "RB",
+  "RECHTER VERTEIDIGER": "RB",
+  LV: "LB",
+  "LEFT BACK": "LB",
+  "LINKER VERTEIDIGER": "LB",
+  ZDM: "CDM",
+  DM: "CDM",
+  "DEFENSIVE MIDFIELDER": "CDM",
+  "DEFENSIVE MIDFIELD": "CDM",
+  "DEFENSIVES MITTELFELD": "CDM",
+  ZM: "CM",
+  "CENTRAL MIDFIELDER": "CM",
+  "CENTRAL MIDFIELD": "CM",
+  "ZENTRALES MITTELFELD": "CM",
+  ZOM: "CAM",
+  AM: "CAM",
+  "ATTACKING MIDFIELDER": "CAM",
+  "ATTACKING MIDFIELD": "CAM",
+  "OFFENSIVES MITTELFELD": "CAM",
+  "RECHTS FLÜGEL": "RW",
+  "RECHTER FLÜGEL": "RW",
+  RECHTSFLÜGEL: "RW",
+  "RECHTS FLUEGEL": "RW",
+  "RECHTER FLUEGEL": "RW",
+  RECHTSFLUEGEL: "RW",
+  RF: "RW",
+  LF: "LW",
+  "LEFT WINGER": "LW",
+  "RIGHT WINGER": "RW",
+  STÜRMER: "ST",
+  STUERMER: "ST",
+  STRIKER: "ST",
+  "SECOND STRIKER": "SS"
+};

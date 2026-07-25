@@ -67,7 +67,7 @@ export async function listTrainingEventDetails(supabase: SupabaseServerClient, u
   const db = supabase as unknown as SupabaseClient;
   const { data, error } = await db
     .from("squad_attendance_records")
-    .select("id,user_id,event_id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,late_minutes,late_penalty_applied,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,rating_auto_suggestion,coach_note,sensitive_note,created_at,updated_at,squad_players(id,user_id,first_name,last_name,position,player_type,archived_at,deleted_at,created_at,updated_at)")
+    .select("id,user_id,event_id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,late_minutes,late_penalty_applied,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,rating_auto_suggestion,coach_note,sensitive_note,created_at,updated_at,squad_players(id,user_id,first_name,last_name,position,secondary_positions,player_type,archived_at,deleted_at,created_at,updated_at)")
     .eq("user_id", userId)
     .in("event_id", events.map((event) => event.id))
     .order("created_at", { ascending: true });
@@ -92,7 +92,7 @@ function compactPlayerToRow(playerInput?: Partial<SquadPlayerRow> | Partial<Squa
     last_name: player.last_name ?? null,
     date_of_birth: null,
     position: player.position ?? null,
-    secondary_positions: [],
+    secondary_positions: Array.isArray(player.secondary_positions) ? player.secondary_positions : [],
     strong_foot: null,
     club: null,
     original_club: null,

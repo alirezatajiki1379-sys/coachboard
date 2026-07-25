@@ -421,12 +421,18 @@ type SessionBoardPlayerSource = {
 
 function getPlayerComposition(players: SessionBoardPlayer[]) {
   return {
-    goalkeeper: players.filter((player) => getPositionFamily(player.position) === "goalkeeper").length,
-    defensive: players.filter((player) => getPositionFamily(player.position) === "defensive").length,
-    midfield: players.filter((player) => getPositionFamily(player.position) === "midfield").length,
-    attacking: players.filter((player) => getPositionFamily(player.position) === "attacking").length,
-    unassigned: players.filter((player) => getPositionFamily(player.position) === "unassigned").length
+    goalkeeper: players.filter((player) => boardPositionFamily(player) === "goalkeeper").length,
+    defensive: players.filter((player) => boardPositionFamily(player) === "defensive").length,
+    midfield: players.filter((player) => boardPositionFamily(player) === "midfield").length,
+    attacking: players.filter((player) => boardPositionFamily(player) === "attacking").length,
+    unassigned: players.filter((player) => boardPositionFamily(player) === "unassigned").length
   };
+}
+
+function boardPositionFamily(player: SessionBoardPlayer) {
+  if (player.position && getPositionFamily(player.position) !== "unassigned") return getPositionFamily(player.position);
+  const secondary = player.secondaryPositions.find((position) => getPositionFamily(position) !== "unassigned");
+  return getPositionFamily(secondary);
 }
 
 function scheduledDurationMinutes(startTime: string, endTime?: string) {

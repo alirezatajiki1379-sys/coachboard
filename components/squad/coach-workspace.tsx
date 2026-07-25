@@ -147,8 +147,8 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="sticky top-0 z-20 rounded-lg border border-board-line bg-white p-3 shadow-soft">
+    <div className="space-y-6 [--squad-controls-top:0rem] [--squad-table-head-top:8.5rem]">
+      <section className="sticky top-[var(--squad-controls-top)] z-20 rounded-lg border border-board-line bg-white p-3 shadow-soft">
         <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Coach Workspace quick views">
           {quickViews.map((item) => (
             <Link
@@ -257,7 +257,7 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
         </div>
 
         {selectedPlayer && data.configuration.inspectorMode === "open" ? <aside className="hidden xl:block">
-          <div className="sticky top-6">
+          <div>
             <InspectorPanel player={selectedPlayer} returnTo={workspaceHref(data.state, { selectedPlayer: selectedPlayer.analytics.player.id })} onClose={() => setSelectedPlayerId(null)} />
           </div>
         </aside> : null}
@@ -531,8 +531,8 @@ function WorkspaceFilters({ data }: { data: WorkspaceData }) {
         <ButtonLink href={workspaceHref({ ...state, view: "all", players: "active", availability: "all", period: "season", sort: "position", direction: "asc", search: "" }, { selectedPlayer: undefined })} variant="ghost" className="h-11">
           Reset
         </ButtonLink>
-        <ButtonLink href={workspaceHref(state, { customize: true })} variant="secondary" className="h-11">
-          Columns
+        <ButtonLink href={workspaceHref(state, { customize: !state.customize })} variant={state.customize ? "primary" : "secondary"} className="h-11" aria-expanded={state.customize} aria-controls="squad-columns-panel">
+          {state.customize ? "Close columns" : "Columns"}
         </ButtonLink>
         {activeFilterCount || state.search ? (
           <div className="flex flex-wrap gap-2 lg:col-span-5">
@@ -604,7 +604,7 @@ function CustomizeWorkspacePanel({ data }: { data: WorkspaceData }) {
     });
   }
   return (
-    <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+    <section id="squad-columns-panel" className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="hidden text-sm font-semibold uppercase text-board-green xl:block">Customize columns</p>
@@ -814,7 +814,7 @@ function WorkspaceTable({
     <div className="overflow-x-auto">
       <table className="min-w-[900px] w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="border-b border-board-line bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <tr className="sticky top-[var(--squad-table-head-top)] z-10 border-b border-board-line bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
             {selectionMode ? <th className="w-12 px-3 py-3">Select</th> : null}
             {columns.map((column) => (
               <WorkspaceHeaderCell
