@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { addPlayersToTrainingGroupInline, createTrainingGroupWithPlayersInline } from "@/lib/squad/training-group-actions";
 import {
   formatPositionAbbreviation,
+  formatPositionLabel,
   getPositionFamily,
   normalizePosition,
   positionFamilyMeta,
@@ -388,7 +389,7 @@ function PlayerChip({ player, selected, groupLabels, unassigned, onToggle }: { p
   const family = getPositionFamily(position);
   const meta = positionFamilyMeta[family];
   const status = player.finalStatus ? finalStatusShort(player.finalStatus) : plannedStatusShort(player.plannedStatus);
-  const secondary = player.secondaryPositions.filter(Boolean).slice(0, 2).map(formatPositionAbbreviation);
+  const secondary = player.secondaryPositions.filter(Boolean).slice(0, 2).map((position) => formatPositionLabel(position) ?? formatPositionAbbreviation(position));
   return (
     <button
       type="button"
@@ -409,7 +410,8 @@ function PlayerChip({ player, selected, groupLabels, unassigned, onToggle }: { p
         <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-200">{status}</span>
       </span>
       <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px] font-semibold text-slate-500">
-        {secondary.length ? <span>{secondary.join(" · ")}</span> : null}
+        {position ? <span>{formatPositionLabel(position) ?? formatPositionAbbreviation(position)}</span> : null}
+        {secondary.length ? <span>Also {secondary.join(" · ")}</span> : null}
         {groupLabels.length ? <span>{groupLabels.join(" · ")}</span> : unassigned ? <span>Unassigned</span> : null}
       </span>
     </button>

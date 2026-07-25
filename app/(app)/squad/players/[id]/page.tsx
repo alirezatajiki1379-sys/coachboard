@@ -21,6 +21,7 @@ import { attentionPriorityLabels, attentionTone, type AttentionItem } from "@/li
 import { formatEventDate, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
 import { calculateAge, formatLongDate, formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
 import { getPlayerHubData, medicalLabel, parsePlayerHubPeriod, parsePlayerHubTab, parsePlayerHubTimelineFilter, type PlayerHubData, type PlayerHubTab, type PlayerTimelineFilter } from "@/lib/squad/player-hub";
+import { formatPositionLabel } from "@/lib/squad/positions";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import type { PlayerContact, PlayerMedicalPeriod, SquadPlayer } from "@/types/domain";
@@ -139,9 +140,9 @@ function PlayerHubHeader({ hub, period, tab }: { hub: PlayerHubData; period: Ana
               {hub.currentMedical ? <Badge tone={hub.currentMedical.type === "injured" ? "red" : "amber"}>{medicalLabel(hub.currentMedical)}</Badge> : null}
             </div>
             <div className="mt-3 flex flex-wrap gap-2 text-sm text-slate-600">
-              <InfoPill label="Primary position" value={player.position || "No position"} />
-              {player.secondaryPositions.length ? <InfoPill label="Secondary" value={player.secondaryPositions.join(", ")} /> : null}
-              {player.preferredPositions.length ? <InfoPill label="Preferred" value={player.preferredPositions.join(", ")} /> : null}
+              <InfoPill label="Primary position" value={positionLabel(player.position) || "Position not added"} />
+              {player.secondaryPositions.length ? <InfoPill label="Secondary" value={positionListLabel(player.secondaryPositions) ?? player.secondaryPositions.join(", ")} /> : null}
+              {player.preferredPositions.length ? <InfoPill label="Preferred" value={positionListLabel(player.preferredPositions) ?? player.preferredPositions.join(", ")} /> : null}
               {player.strongFoot ? <InfoPill icon={<Footprints className="h-4 w-4" />} label="Dominant foot" value={player.strongFoot} /> : null}
               {player.club ? <InfoPill label="Club" value={player.club} /> : null}
               {player.dateOfBirth ? <InfoPill icon={<CalendarDays className="h-4 w-4" />} label="Birthdate" value={`${formatLongDate(player.dateOfBirth)}${age !== undefined ? ` · ${age} years` : ""}`} /> : null}
@@ -246,8 +247,8 @@ function OverviewTab({ hub, period, attentionItems }: { hub: PlayerHubData; peri
         <Card title="Current status" icon={<UserRound className="h-5 w-5" />}>
           <DetailGrid>
             <DetailRow label="Player type" value={hub.player.playerType === "trial" ? "Trial Player" : "Roster"} />
-            <DetailRow label="Position" value={hub.player.position} />
-            <DetailRow label="Secondary positions" value={hub.player.secondaryPositions.join(", ")} />
+            <DetailRow label="Position" value={positionLabel(hub.player.position)} />
+            <DetailRow label="Secondary positions" value={positionListLabel(hub.player.secondaryPositions)} />
             <DetailRow label="Dominant foot" value={hub.player.strongFoot} />
             <DetailRow label="Birthdate" value={hub.player.dateOfBirth ? `${formatLongDate(hub.player.dateOfBirth)} · ${calculateAge(hub.player.dateOfBirth) ?? "-"} years` : undefined} />
           </DetailGrid>
@@ -586,9 +587,9 @@ function DetailsTab({ hub, medicalError, contactError, deleteError }: { hub: Pla
           <DetailGrid>
             <DetailRow label="Current club" value={player.club} />
             <DetailRow label="Original imported club" value={player.originalClub} />
-            <DetailRow label="Primary position" value={player.position} />
-            <DetailRow label="Secondary positions" value={player.secondaryPositions.join(", ")} />
-            <DetailRow label="Player-preferred positions" value={player.preferredPositions.join(", ")} />
+            <DetailRow label="Primary position" value={positionLabel(player.position)} />
+            <DetailRow label="Secondary positions" value={positionListLabel(player.secondaryPositions)} />
+            <DetailRow label="Player-preferred positions" value={positionListLabel(player.preferredPositions)} />
             <DetailRow label="Original preferred positions" value={player.originalPreferredPositions} />
             <DetailRow label="Dominant foot" value={player.strongFoot} />
             <DetailRow label="Original dominant foot" value={player.originalStrongFoot} />
@@ -1362,6 +1363,15 @@ function ratingToneClass(rating: number) {
   if (rating === 3) return "bg-slate-100 text-slate-700";
   if (rating === 2) return "bg-amber-50 text-amber-700";
   return "bg-red-50 text-red-700";
+}
+
+function positionLabel(position?: string) {
+  return position ? formatPositionLabel(position) ?? position : undefined;
+}
+
+function positionListLabel(positions: string[]) {
+  const labels = positions.map((position) => positionLabel(position)).filter(Boolean);
+  return labels.length ? labels.join(", ") : undefined;
 }
 
 function medicalReviewNeeded(period: PlayerMedicalPeriod) {

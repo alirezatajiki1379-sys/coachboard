@@ -8,6 +8,7 @@ import type { Json } from "@/types/database";
 import type { SquadPlayer } from "@/types/domain";
 import { refreshReviewedRowDuplicates, valueOf, type DuplicatePlayerContext, type ImportOperation, type PlayerImportPayload, type ReviewedImportRow } from "@/lib/squad/importer";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
+import { buildPositionConsistencyReport, buildPositionRepairCandidate, positionRepairUpdate, type PositionConsistencyReport } from "@/lib/squad/position-repair";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 
 export type PlayerImportActionState = {
@@ -159,6 +160,66 @@ export async function refreshPlayerImportDuplicateCheck(rows: ReviewedImportRow[
   const nextRows = refreshReviewedRowDuplicates(rows, context);
   const diagnostics = duplicateRefreshDiagnostics(nextRows, context);
   return { ok: true, rows: nextRows, diagnostics };
+}
+
+export async function getActiveSquadPositionConsistencyReport(): Promise<PositionConsistencyReport> {
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const activeSquad = await ensureActiveSquad(supabase, user.id);
+  const { data, error } = await db
+    .from("squad_players")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("squad_id", activeSquad.id)
+    .is("archived_at", null)
+    .is("deleted_at", null);
+  if (error) {
+    return {
+      totalPlayers: 0,
+      canonicalPrimaryPositions: 0,
+      secondaryPositions: 0,
+      squadDisplayedPositions: 0,
+      profileMissingPositions: 0,
+      sessionPlanningUnassignedRisk: 0,
+      deterministicRepairs: [],
+      manualReview: []
+    };
+  }
+  return buildPositionConsistencyReport((data ?? []) as SquadPlayerRow[]);
+}
+
+export async function repairActiveSquadPlayerPositions() {
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const activeSquad = await ensureActiveSquad(supabase, user.id);
+  const { data, error } = await db
+    .from("squad_players")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("squad_id", activeSquad.id)
+    .is("archived_at", null)
+    .is("deleted_at", null);
+  if (error) redirect("/squad/import?positionRepair=error");
+
+  let repaired = 0;
+  let review = 0;
+  for (const player of (data ?? []) as SquadPlayerRow[]) {
+    const candidate = buildPositionRepairCandidate(player);
+    if (!candidate) continue;
+    const { error: updateError } = await db
+      .from("squad_players")
+      .update(positionRepairUpdate(player, candidate))
+      .eq("id", player.id)
+      .eq("user_id", user.id)
+      .eq("squad_id", activeSquad.id);
+    if (updateError) review += 1;
+    else repaired += 1;
+  }
+
+  revalidatePath("/squad");
+  revalidatePath("/squad/import");
+  revalidatePath("/trainings");
+  redirect(`/squad/import?positionRepair=repaired-${repaired}-review-${review}`);
 }
 
 async function processImportRow(

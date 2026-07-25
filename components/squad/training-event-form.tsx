@@ -13,6 +13,7 @@ import {
   type CalendarConflict,
   type CalendarConflictContext
 } from "@/lib/squad/regional-calendar";
+import { formatPositionLabel } from "@/lib/squad/positions";
 import { generateTrainingRecurrenceDates, recurrenceSummary, weekdayForDate } from "@/lib/trainings/utils";
 import type { Squad, SquadPlayer, SquadTrainingEventDetail } from "@/types/domain";
 
@@ -463,7 +464,7 @@ function ParticipantSelector({ participants, selected, compact = false }: { part
               <input name="participantIds" type="checkbox" value={player.id} defaultChecked={selected.has(player.id)} className="h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
               <span className="min-w-0 flex-1 truncate">
                 {[player.firstName, player.lastName].filter(Boolean).join(" ")}
-                {player.position ? <span className="font-medium text-slate-500"> · {player.position}</span> : null}
+                {player.position ? <span className="font-medium text-slate-500"> · {formatPositionLabel(player.position) ?? player.position}</span> : null}
               </span>
               {player.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">Trial</span> : null}
             </label>

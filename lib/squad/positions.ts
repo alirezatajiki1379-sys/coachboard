@@ -8,6 +8,26 @@ export type PositionFamilyMeta = {
   badgeClassName: string;
 };
 
+export const canonicalPositionLabels: Record<string, string> = {
+  GK: "Goalkeeper",
+  CB: "Centre Back",
+  RB: "Right Back",
+  LB: "Left Back",
+  RWB: "Right Wing-Back",
+  LWB: "Left Wing-Back",
+  CDM: "Defensive Midfielder",
+  CM: "Central Midfielder",
+  CAM: "Attacking Midfielder",
+  RM: "Right Midfielder",
+  LM: "Left Midfielder",
+  RW: "Right Winger",
+  LW: "Left Winger",
+  SS: "Second Striker",
+  ST: "Striker"
+};
+
+const canonicalPositionCodeSet = new Set(Object.keys(canonicalPositionLabels));
+
 export const positionFamilyOrder: PositionFamily[] = ["goalkeeper", "defensive", "midfield", "attacking", "unassigned"];
 
 export const positionFamilyMeta: Record<PositionFamily, PositionFamilyMeta> = {
@@ -142,6 +162,20 @@ export function isGoalkeeperPosition(position?: string) {
 export function formatPositionAbbreviation(position?: string) {
   const normalized = normalizePosition(position);
   return normalized || "POS";
+}
+
+export function normalizeCanonicalPosition(position?: string) {
+  const normalized = normalizePosition(position);
+  return canonicalPositionCodeSet.has(normalized) ? normalized : undefined;
+}
+
+export function isCanonicalPosition(position?: string) {
+  return Boolean(normalizeCanonicalPosition(position));
+}
+
+export function formatPositionLabel(position?: string) {
+  const canonical = normalizeCanonicalPosition(position);
+  return canonical ? canonicalPositionLabels[canonical] : undefined;
 }
 
 const positionAliases: Record<string, string> = {

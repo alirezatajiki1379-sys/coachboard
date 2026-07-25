@@ -2,6 +2,7 @@ import { CalendarDays, Footprints, Mail, Phone, UserRound } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
+import { formatPositionLabel } from "@/lib/squad/positions";
 import type { SquadPlayer } from "@/types/domain";
 
 export function PlayerCard({ player, view }: { player: SquadPlayer; view: "active" | "archived" }) {
@@ -13,7 +14,7 @@ export function PlayerCard({ player, view }: { player: SquadPlayer; view: "activ
           <div className="mt-2">
             {player.position ? (
               <span className="inline-flex rounded-full bg-green-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-board-green ring-1 ring-green-100">
-                {player.position}
+                {formatPositionLabel(player.position) ?? player.position}
               </span>
             ) : (
               <span className="text-xs font-semibold text-slate-500">No position set</span>
