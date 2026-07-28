@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
-import type { DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import {
@@ -63,6 +63,8 @@ const positionGroups = ["Goalkeepers", "Defenders", "Midfielders", "Attackers", 
 export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   const view = quickViews.find((item) => item.id === data.state.view) ?? quickViews[0];
   const grouped = groupWorkspacePlayers(data);
+  const controlsRef = useRef<HTMLElement | null>(null);
+  const [tableHeaderTop, setTableHeaderTop] = useState(136);
   const [columnOrder, setColumnOrder] = useState(data.configuration.columnOrder);
   const [columnOrderMessage, setColumnOrderMessage] = useState("");
   const [selectionMode, setSelectionMode] = useState(false);
@@ -90,6 +92,27 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
     setSelectedPlayerId((current) => current && data.players.some((player) => player.analytics.player.id === current) ? current : null);
     setSelectedIds((current) => current.filter((id) => data.players.some((player) => player.analytics.player.id === id)));
   }, [data.players]);
+
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const controlsElement = controls;
+
+    function updateTableHeaderTop() {
+      const nextTop = Math.ceil(controlsElement.getBoundingClientRect().height + 12);
+      setTableHeaderTop((current) => current === nextTop ? current : nextTop);
+    }
+
+    updateTableHeaderTop();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateTableHeaderTop) : null;
+    observer?.observe(controlsElement);
+    window.addEventListener("resize", updateTableHeaderTop);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateTableHeaderTop);
+    };
+  }, []);
 
   function toggleInspector(playerId: string) {
     setSelectedPlayerId((current) => current === playerId ? null : playerId);
@@ -146,9 +169,14 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
     });
   }
 
+  const stickyOffsets = {
+    "--squad-controls-top": "0rem",
+    "--squad-table-head-top": `${tableHeaderTop}px`
+  } as CSSProperties;
+
   return (
-    <div className="space-y-6 [--squad-controls-top:0rem] [--squad-table-head-top:8.5rem]">
-      <section className="sticky top-[var(--squad-controls-top)] z-20 rounded-lg border border-board-line bg-white p-3 shadow-soft">
+    <div className="space-y-6" style={stickyOffsets}>
+      <section ref={controlsRef} className="sticky top-[var(--squad-controls-top)] z-20 rounded-lg border border-board-line bg-white p-3 shadow-soft">
         <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Coach Workspace quick views">
           {quickViews.map((item) => (
             <Link
@@ -813,9 +841,9 @@ function WorkspaceTable({
   return (
     <div className="overflow-x-auto">
       <table className="min-w-[900px] w-full border-collapse text-left text-sm">
-        <thead>
-          <tr className="sticky top-[var(--squad-table-head-top)] z-10 border-b border-board-line bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
-            {selectionMode ? <th className="w-12 px-3 py-3">Select</th> : null}
+        <thead className="sticky top-[var(--squad-table-head-top,8.5rem)] z-30 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
+          <tr className="border-b border-board-line">
+            {selectionMode ? <th className="w-12 bg-slate-50 px-3 py-3">Select</th> : null}
             {columns.map((column) => (
               <WorkspaceHeaderCell
                 key={column.id}
@@ -837,7 +865,7 @@ function WorkspaceTable({
                 }}
               />
             ))}
-            <th className="px-3 py-3">Action</th>
+            <th className="bg-slate-50 px-3 py-3">Action</th>
           </tr>
         </thead>
         <tbody>
@@ -1166,7 +1194,7 @@ function WorkspaceHeaderCell({
   return (
     <th
       className={cn(
-        "relative px-3 py-3 transition-colors",
+        "relative bg-slate-50 px-3 py-3 transition-colors",
         active && "bg-green-50 text-board-green",
         locked ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing",
         isDragged && "bg-white shadow-sm ring-2 ring-board-green/30",
