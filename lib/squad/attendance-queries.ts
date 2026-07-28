@@ -294,15 +294,25 @@ export async function listTrainingParticipantOptions(supabase: SupabaseServerCli
     .select("*")
     .eq("user_id", userId)
     .is("archived_at", null)
+    .is("deleted_at", null)
     .order("player_type", { ascending: true })
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
   if (error) throw new Error(error.message);
   const targetSquadId = squadId ?? activeSquad?.id;
-  return ((data ?? []) as SquadPlayerRow[])
+  return uniquePlayerRows((data ?? []) as SquadPlayerRow[])
     .filter((player) => !targetSquadId || player.squad_id === targetSquadId)
     .filter((player) => player.player_type === "roster" || (player.player_type === "trial" && !player.converted_at))
     .map(mapSquadPlayerRow);
+}
+
+function uniquePlayerRows(players: SquadPlayerRow[]) {
+  const seen = new Set<string>();
+  return players.filter((player) => {
+    if (seen.has(player.id)) return false;
+    seen.add(player.id);
+    return true;
+  });
 }
 
 export async function listAvailableTrialPlayers(
@@ -333,6 +343,7 @@ export async function listAvailableTrialPlayers(
     .eq("player_type", "trial")
     .is("converted_at", null)
     .is("archived_at", null)
+    .is("deleted_at", null)
     .order("updated_at", { ascending: false });
   if (event?.squad_id) query = query.eq("squad_id", event.squad_id);
   const { data, error } = await query;

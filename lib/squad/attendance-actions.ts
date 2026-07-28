@@ -646,7 +646,8 @@ export async function addSquadPlayersToEvent(formData: FormData) {
     .select("id")
     .eq("user_id", user.id)
     .eq("player_type", "roster")
-    .is("archived_at", null);
+    .is("archived_at", null)
+    .is("deleted_at", null);
   if (event?.squad_id) playersQuery = playersQuery.eq("squad_id", event.squad_id);
   const { data: players, error: playersError } = await playersQuery;
   if (playersError) throw new Error(playersError.message);
@@ -731,6 +732,8 @@ export async function addExistingTrialPlayerToEvent(formData: FormData) {
     .eq("user_id", user.id)
     .eq("player_type", "trial")
     .is("converted_at", null)
+    .is("archived_at", null)
+    .is("deleted_at", null)
     .maybeSingle();
   if (playerError) throw new Error(playerError.message);
   if (player && event?.squad_id) {
@@ -1075,6 +1078,7 @@ async function validateSelectedParticipants(db: SupabaseClient, userId: string, 
     .select("id")
     .eq("user_id", userId)
     .is("archived_at", null)
+    .is("deleted_at", null)
     .in("id", safePlayerIds);
   if (squadId) playerQuery = playerQuery.eq("squad_id", squadId);
   const { data: players, error: playerError } = await playerQuery;
