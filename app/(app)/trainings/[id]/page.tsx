@@ -70,19 +70,27 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <Metric label="Expected" value={String(plannedAttendance.expected)} />
-        <Metric label="Confirmed" value={String(plannedAttendance.confirmed)} />
-        <Metric label="Declined" value={String(plannedAttendance.unavailable)} />
-        <Metric label="Open" value={String(plannedAttendance.unclear)} />
-        <Metric label="Field players" value={String(plannedAttendance.fieldPlayers)} />
-        <Metric label="Goalkeepers" value={String(plannedAttendance.goalkeepers)} tone={plannedAttendance.goalkeepers === 0 ? "warning" : "normal"} />
-        <Metric label="Unassigned" value={String(plannedAttendance.unassigned)} tone={plannedAttendance.unassigned > 0 ? "warning" : "normal"} />
-      </section>
-      <section className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Defensive" value={String(plannedAttendance.defensive)} />
-        <Metric label="Midfield" value={String(plannedAttendance.midfield)} />
-        <Metric label="Attacking" value={String(plannedAttendance.attacking)} />
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Planned participation</h2>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Expected" value={String(plannedAttendance.plannedExpected)} />
+            <Metric label="Not expected" value={String(plannedAttendance.unavailable + plannedAttendance.unclear)} tone={plannedAttendance.unavailable + plannedAttendance.unclear > 0 ? "warning" : "normal"} />
+            <Metric label="Total participants" value={String(plannedAttendance.expected)} />
+            <Metric label="Trial players" value={String(plannedAttendance.trialPlayers)} />
+          </div>
+        </div>
+        <div>
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Expected composition</h2>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <Metric label="Goalkeepers" value={String(plannedAttendance.goalkeepers)} tone={plannedAttendance.goalkeepers === 0 ? "warning" : "normal"} />
+            <Metric label="Field players" value={String(plannedAttendance.fieldPlayers)} />
+            <Metric label="Defensive" value={String(plannedAttendance.defensive)} />
+            <Metric label="Midfield" value={String(plannedAttendance.midfield)} />
+            <Metric label="Attacking" value={String(plannedAttendance.attacking)} />
+            <Metric label="Position missing" value={String(plannedAttendance.unassigned)} tone={plannedAttendance.unassigned > 0 ? "warning" : "normal"} />
+          </div>
+        </div>
       </section>
       {plannedAttendance.goalkeepers === 0 ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">No goalkeeper expected.</p> : null}
 
@@ -205,15 +213,23 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-bold text-board-navy">
-                      {attendanceDisplayName(entry)}
+                      {entry.player ? (
+                        <Link href={`/squad/players/${entry.player.id}`} className="underline-offset-4 hover:text-board-green hover:underline">
+                          {attendanceDisplayName(entry)}
+                        </Link>
+                      ) : (
+                        attendanceDisplayName(entry)
+                      )}
                       {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
-                      {effectiveParticipantPositionLabel(entry)} · {entry.player?.playerType === "trial" ? "Trial" : "Roster"} ·{" "}
-                      Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
+                      {effectiveParticipantPositionLabel(entry)} ·{" "}
+                      {plannedStatusLabel(entry.plannedStatus)}
                       {entry.plannedReason ? ` · Reason: ${plannedReasonLabel(entry.plannedReason)}` : ""}
+                      {` · ${entry.player?.playerType === "trial" ? "Trial" : "Roster"}`}
+                      {entry.finalStatus ? ` · Actual: ${finalStatusLabel(entry.finalStatus)}` : ""}
                       {entry.overallRating ? ` · Rating: ${entry.overallRating}` : ""}
-                      {` · Malus: ${reliabilityMalus(entry)}`}
+                      {entry.finalStatus ? ` · Malus: ${reliabilityMalus(entry)}` : ""}
                     </p>
                   </div>
                   {entry.player ? <ButtonLink href={`/squad/players/${entry.player.id}`} variant="ghost" className="h-8 px-2 text-xs">Profile</ButtonLink> : null}
@@ -464,7 +480,7 @@ function TrainingGroupsPanel({ eventId, attendance, groups }: { eventId: string;
                         );
                       })}
                     </div>
-                    <p className="text-xs font-semibold text-slate-500">{unassignedCount} unassigned Player{unassignedCount === 1 ? "" : "s"}.</p>
+                    <p className="text-xs font-semibold text-slate-500">{unassignedCount} Player{unassignedCount === 1 ? "" : "s"} with no group.</p>
                     <Button type="submit" variant="secondary" className="h-9 px-3">Add selected Players</Button>
                   </form>
                 ) : (

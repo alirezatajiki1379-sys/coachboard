@@ -84,7 +84,7 @@ function PositionConsistencyPanel({ report, repairState }: { report: Awaited<Ret
         <RepairMetric label="Canonical primary" value={report.canonicalPrimaryPositions} />
         <RepairMetric label="Secondary stored" value={report.secondaryPositions} />
         <RepairMetric label="Profile missing" value={report.profileMissingPositions} warning={report.profileMissingPositions > 0} />
-        <RepairMetric label="Planning unassigned risk" value={report.sessionPlanningUnassignedRisk} warning={report.sessionPlanningUnassignedRisk > 0} />
+        <RepairMetric label="Planning missing-position risk" value={report.sessionPlanningUnassignedRisk} warning={report.sessionPlanningUnassignedRisk > 0} />
       </div>
       <details className="mt-4 rounded-md bg-board-paper p-3">
         <summary className="cursor-pointer text-sm font-bold text-board-navy">

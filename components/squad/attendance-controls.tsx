@@ -26,8 +26,8 @@ import type { PlayerDevelopmentGoal, SquadAttendanceEntry, SquadFinalAttendanceS
 
 const plannedButtons: Array<{ status: SquadPlannedAttendanceStatus; label: string; icon: typeof Check; className: string }> = [
   { status: "expected", label: "Expected", icon: Check, className: "bg-green-600 text-white hover:bg-green-700" },
-  { status: "unavailable", label: "Unavailable", icon: UserMinus, className: "bg-red-50 text-red-700 hover:bg-red-100" },
-  { status: "unclear", label: "Unclear", icon: HelpCircle, className: "bg-slate-100 text-slate-700 hover:bg-slate-200" }
+  { status: "unavailable", label: "Not expected", icon: UserMinus, className: "bg-red-50 text-red-700 hover:bg-red-100" },
+  { status: "unclear", label: "Needs decision", icon: HelpCircle, className: "bg-slate-100 text-slate-700 hover:bg-slate-200" }
 ];
 
 const absenceOptions: Array<{ status: SquadFinalAttendanceStatus; label: string }> = [
@@ -157,7 +157,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
             name="plannedReason"
             defaultValue={entry.plannedReason ?? ""}
             className="h-10 rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
-            aria-label="Unavailable reason"
+            aria-label="Not expected reason"
           >
             <option value="">Reason optional</option>
             {(["V", "K", "E", "P", "S"] as const).map((reason) => (

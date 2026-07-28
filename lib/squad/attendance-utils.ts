@@ -22,11 +22,11 @@ export function isConfirmedAttending(entry: SquadAttendanceEntry) {
 }
 
 export function getPlannedAttendanceSummary(entries: SquadAttendanceEntry[]) {
-  const confirmedEntries = entries.filter(isExpectedFromPlannedStatus);
-  const composition = participantComposition(confirmedEntries);
+  const expectedEntries = entries.filter(isExpectedFromPlannedStatus);
+  const composition = participantComposition(expectedEntries);
   return {
     expected: entries.length,
-    confirmed: confirmedEntries.length,
+    plannedExpected: expectedEntries.length,
     unavailable: entries.filter((entry) => entry.plannedStatus === "unavailable").length,
     unclear: entries.filter((entry) => entry.plannedStatus === "unclear").length,
     fieldPlayers: composition.fieldPlayers,
@@ -35,7 +35,7 @@ export function getPlannedAttendanceSummary(entries: SquadAttendanceEntry[]) {
     midfield: composition.midfield,
     attacking: composition.attacking,
     unassigned: composition.unassigned,
-    trialPlayers: confirmedEntries.filter((entry) => entry.player?.playerType === "trial").length,
+    trialPlayers: expectedEntries.filter((entry) => entry.player?.playerType === "trial").length,
     total: entries.length
   };
 }
@@ -62,7 +62,7 @@ export function calculateAttendanceForecast(entries: SquadAttendanceEntry[]) {
   return {
     ...planned,
     ...final,
-    confirmedTotal: planned.confirmed
+    confirmedTotal: planned.plannedExpected
   };
 }
 

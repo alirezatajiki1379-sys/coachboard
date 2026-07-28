@@ -106,9 +106,8 @@ function TrainingStatusSummary({
 
   return (
     <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold">
-      <span aria-label={`${counts.expected} expected`} className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.expected} expected</span>
-      <span aria-label={`${counts.unavailable} unavailable`} className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.unavailable} unavailable</span>
-      <span aria-label={`${counts.unclear} unclear`} className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{counts.unclear} unclear</span>
+      <span aria-label={`${counts.plannedExpected} expected`} className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.plannedExpected} expected</span>
+      <span aria-label={`${counts.unavailable + counts.unclear} not expected`} className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.unavailable + counts.unclear} not expected</span>
       <span className={counts.goalkeepers === 0 ? "rounded-md bg-red-50 px-2 py-1 text-red-700" : "rounded-md bg-slate-100 px-2 py-1 text-slate-700"}>
         {counts.fieldPlayers} field · {counts.goalkeepers} GK · {counts.trialPlayers} trial
       </span>

@@ -40,7 +40,7 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
     loadTrainingGroups(supabase, user.id, event.id)
   ]);
   const boardPlayers = toBoardPlayers(event.attendance);
-  const expected = event.attendance.length;
+  const expected = event.attendance.filter((entry) => !entry.plannedStatus || entry.plannedStatus === "expected").length;
   const plannedDuration = planDrills.reduce((sum, drill) => sum + (drill.plannedDurationMinutes ?? 0), 0);
   const scheduledDuration = scheduledDurationMinutes(event.startTime, event.endTime);
   const drillsByPhase = groupDrillsByPhase(planDrills);

@@ -60,9 +60,9 @@ export const positionFamilyMeta: Record<PositionFamily, PositionFamilyMeta> = {
     badgeClassName: "bg-rose-700 text-white"
   },
   unassigned: {
-    label: "Unassigned position",
+    label: "Position missing",
     shortLabel: "POS",
-    sectionLabel: "Unassigned position",
+    sectionLabel: "Position missing",
     chipClassName: "border-slate-200 bg-slate-50",
     badgeClassName: "bg-slate-600 text-white"
   }

@@ -37,8 +37,8 @@ export type SessionBoardGroup = {
   }>;
 };
 
-type BoardFilter = "all" | "presentLate" | "confirmed" | "trial" | "guest" | PositionFamily;
-type CompositionScope = "confirmed" | "expected" | "present";
+type BoardFilter = "all" | "presentLate" | "expected" | "trial" | "guest" | PositionFamily;
+type CompositionScope = "expected" | "all" | "present";
 
 type SessionPlayerBoardProps = {
   eventId: string;
@@ -49,14 +49,14 @@ type SessionPlayerBoardProps = {
 const filterLabels: Record<BoardFilter, string> = {
   all: "All",
   presentLate: "Present + Late",
-  confirmed: "Confirmed",
+  expected: "Expected",
   trial: "Trial",
   guest: "Guest",
   goalkeeper: "GK",
   defensive: "Defensive",
   midfield: "Midfield",
   attacking: "Attacking",
-  unassigned: "Unassigned"
+  unassigned: "Position missing"
 };
 
 export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBoardProps) {
@@ -64,7 +64,7 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<BoardFilter>("all");
-  const [compositionScope, setCompositionScope] = useState<CompositionScope>("confirmed");
+  const [compositionScope, setCompositionScope] = useState<CompositionScope>("expected");
   const [targetGroupId, setTargetGroupId] = useState(groups[0]?.id ?? "");
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -79,7 +79,7 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
       const matchesSearch = !needle || [player.name, player.position, ...player.secondaryPositions, ...groupLabels].filter(Boolean).join(" ").toLowerCase().includes(needle);
       if (!matchesSearch) return false;
       if (filter === "presentLate") return player.finalStatus === "present" || player.finalStatus === "Z";
-      if (filter === "confirmed") return !player.plannedStatus || player.plannedStatus === "expected";
+      if (filter === "expected") return !player.plannedStatus || player.plannedStatus === "expected";
       if (filter === "trial") return player.playerType === "trial";
       if (filter === "guest") return false;
       if (positionFamilyOrder.includes(filter as PositionFamily)) {
@@ -149,9 +149,8 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         <CountPill label="Expected" value={statusCounts.expected} />
-        <CountPill label="Confirmed" value={statusCounts.confirmed} />
-        <CountPill label="Declined" value={statusCounts.declined} tone={statusCounts.declined ? "warning" : "normal"} />
-        <CountPill label="Open" value={statusCounts.open} tone={statusCounts.open ? "warning" : "normal"} />
+        <CountPill label="Not expected" value={statusCounts.notExpected} tone={statusCounts.notExpected ? "warning" : "normal"} />
+        <CountPill label="Total players" value={statusCounts.total} />
         <CountPill label="Present" value={statusCounts.present} />
         <CountPill label="Late" value={statusCounts.late} />
         <CountPill label="Roster" value={statusCounts.roster} />
@@ -162,11 +161,11 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
       <div className="mt-4 rounded-md border border-board-line bg-board-paper p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-wide text-slate-500">{compositionScope} player composition</p>
+            <p className="text-xs font-black uppercase tracking-wide text-slate-500">{compositionScope === "all" ? "All participant composition" : `${compositionScope} player composition`}</p>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">Uses only the participant snapshot for this Training.</p>
           </div>
           <div className="flex flex-wrap gap-1">
-            {(["confirmed", "expected", "present"] as CompositionScope[]).map((scope) => (
+            {(["expected", "all", "present"] as CompositionScope[]).map((scope) => (
               <button
                 key={scope}
                 type="button"
@@ -267,7 +266,7 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
                     player={player}
                     selected={selectedIds.includes(player.id)}
                     groupLabels={groupByPlayerId.get(player.id) ?? []}
-                    unassigned={resolvedPositionFamily(player) === "unassigned"}
+                    positionMissing={resolvedPositionFamily(player) === "unassigned"}
                     onToggle={() => togglePlayer(player.id)}
                   />
                 ))}
@@ -309,9 +308,9 @@ function calculateStatusCounts(sourcePlayers: SessionBoardPlayer[], guestCount: 
   const present = sourcePlayers.filter((player) => player.finalStatus === "present").length;
   const late = sourcePlayers.filter((player) => player.finalStatus === "Z").length;
   return {
-    expected: sourcePlayers.length,
-    confirmed: sourcePlayers.filter((player) => !player.plannedStatus || player.plannedStatus === "expected").length,
-    declined: sourcePlayers.filter((player) => player.plannedStatus === "unavailable").length,
+    total: sourcePlayers.length,
+    expected: sourcePlayers.filter((player) => !player.plannedStatus || player.plannedStatus === "expected").length,
+    notExpected: sourcePlayers.filter((player) => player.plannedStatus === "unavailable" || player.plannedStatus === "unclear").length,
     open: sourcePlayers.filter((player) => player.plannedStatus === "unclear").length,
     present,
     late,
@@ -323,7 +322,7 @@ function calculateStatusCounts(sourcePlayers: SessionBoardPlayer[], guestCount: 
 
 function playersForCompositionScope(players: SessionBoardPlayer[], scope: CompositionScope) {
   if (scope === "present") return players.filter((player) => player.finalStatus === "present" || player.finalStatus === "Z");
-  if (scope === "expected") return players;
+  if (scope === "all") return players;
   return players.filter((player) => !player.plannedStatus || player.plannedStatus === "expected");
 }
 
@@ -384,7 +383,7 @@ function CreateGroupInline({
   );
 }
 
-function PlayerChip({ player, selected, groupLabels, unassigned, onToggle }: { player: SessionBoardPlayer; selected: boolean; groupLabels: string[]; unassigned: boolean; onToggle: () => void }) {
+function PlayerChip({ player, selected, groupLabels, positionMissing, onToggle }: { player: SessionBoardPlayer; selected: boolean; groupLabels: string[]; positionMissing: boolean; onToggle: () => void }) {
   const position = resolveBoardPosition(player);
   const family = getPositionFamily(position);
   const meta = positionFamilyMeta[family];
@@ -395,7 +394,7 @@ function PlayerChip({ player, selected, groupLabels, unassigned, onToggle }: { p
       type="button"
       onClick={onToggle}
       aria-pressed={selected}
-      aria-label={`${player.name}, ${meta.label}, ${player.playerType === "trial" ? "Trial Player" : "Roster Player"}, ${status}${groupLabels.length ? `, assigned to ${groupLabels.join(", ")}` : ", unassigned"}`}
+      aria-label={`${player.name}, ${meta.label}, ${player.playerType === "trial" ? "Trial Player" : "Roster Player"}, ${status}${groupLabels.length ? `, assigned to ${groupLabels.join(", ")}` : ", no group"}`}
       className={cn(
         "w-full rounded-md border px-2 py-1.5 text-left transition focus:outline-none focus:ring-4 focus:ring-green-100",
         meta.chipClassName,
@@ -412,7 +411,7 @@ function PlayerChip({ player, selected, groupLabels, unassigned, onToggle }: { p
       <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px] font-semibold text-slate-500">
         {position ? <span>{formatPositionLabel(position) ?? formatPositionAbbreviation(position)}</span> : null}
         {secondary.length ? <span>Also {secondary.join(" · ")}</span> : null}
-        {groupLabels.length ? <span>{groupLabels.join(" · ")}</span> : unassigned ? <span>Unassigned</span> : null}
+        {groupLabels.length ? <span>{groupLabels.join(" · ")}</span> : <span>{positionMissing ? "Position missing" : "No group"}</span>}
       </span>
     </button>
   );

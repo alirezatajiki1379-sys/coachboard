@@ -116,7 +116,7 @@ export function trainingSummaryCounts(event: SquadTrainingEventDetail) {
   const plannedAttendance = getPlannedAttendanceSummary(event.attendance);
   const finalAttendance = getFinalAttendanceSummary(event.attendance);
   const ratings = trainingRatingStats(event);
-  return { attendance: { ...plannedAttendance, ...finalAttendance, confirmedTotal: plannedAttendance.expected }, plannedAttendance, finalAttendance, ratings };
+  return { attendance: { ...plannedAttendance, ...finalAttendance, confirmedTotal: plannedAttendance.plannedExpected }, plannedAttendance, finalAttendance, ratings };
 }
 
 export function todayDateString() {

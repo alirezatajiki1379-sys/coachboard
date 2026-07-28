@@ -50,22 +50,30 @@ export default async function TrainingEventPage({ params }: EventPageProps) {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <Metric label="Expected" value={String(counts.expected)} />
-        <Metric label="Confirmed" value={String(counts.confirmedTotal)} />
-        <Metric label="Declined" value={String(counts.unavailable)} />
-        <Metric label="Open" value={String(counts.unclear)} />
-        <Metric label="Field players" value={String(counts.fieldPlayers)} />
-        <Metric label="Goalkeepers" value={String(counts.goalkeepers)} tone={counts.goalkeepers === 0 ? "warning" : "normal"} />
-        <Metric label="Unassigned" value={String(counts.unassigned)} tone={counts.unassigned > 0 ? "warning" : "normal"} />
-      </section>
-      <section className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Defensive" value={String(counts.defensive)} />
-        <Metric label="Midfield" value={String(counts.midfield)} />
-        <Metric label="Attacking" value={String(counts.attacking)} />
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Planned participation</h2>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Expected" value={String(counts.plannedExpected)} />
+            <Metric label="Not expected" value={String(counts.unavailable + counts.unclear)} tone={counts.unavailable + counts.unclear > 0 ? "warning" : "normal"} />
+            <Metric label="Total participants" value={String(counts.expected)} />
+            <Metric label="Trial players" value={String(counts.trialPlayers)} />
+          </div>
+        </div>
+        <div>
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">Expected composition</h2>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <Metric label="Goalkeepers" value={String(counts.goalkeepers)} tone={counts.goalkeepers === 0 ? "warning" : "normal"} />
+            <Metric label="Field players" value={String(counts.fieldPlayers)} />
+            <Metric label="Defensive" value={String(counts.defensive)} />
+            <Metric label="Midfield" value={String(counts.midfield)} />
+            <Metric label="Attacking" value={String(counts.attacking)} />
+            <Metric label="Position missing" value={String(counts.unassigned)} tone={counts.unassigned > 0 ? "warning" : "normal"} />
+          </div>
+        </div>
       </section>
       <p className="text-sm text-slate-500">Trial players are included in expected total and also shown separately as information.</p>
-      {counts.goalkeepers === 0 ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">No expected goalkeeper confirmed yet.</p> : null}
+      {counts.goalkeepers === 0 ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">No goalkeeper expected yet.</p> : null}
 
       <section className="grid gap-4 lg:grid-cols-2">
         <form action={addSquadPlayersToEvent} className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
@@ -114,11 +122,18 @@ export default async function TrainingEventPage({ params }: EventPageProps) {
               <div className="flex flex-col gap-3">
                 <div>
                   <p className="font-bold text-board-navy">
-                    {attendanceDisplayName(entry)}
+                    {entry.player ? (
+                      <Link href={`/squad/players/${entry.player.id}`} className="underline-offset-4 hover:text-board-green hover:underline">
+                        {attendanceDisplayName(entry)}
+                      </Link>
+                    ) : (
+                      attendanceDisplayName(entry)
+                    )}
                     {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    {effectiveParticipantPositionLabel(entry)} · {entry.player?.playerType === "trial" ? "Trial" : "Roster"} · Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
+                    {effectiveParticipantPositionLabel(entry)} · {plannedStatusLabel(entry.plannedStatus)} · {entry.player?.playerType === "trial" ? "Trial" : "Roster"}
+                    {entry.finalStatus ? ` · Actual: ${finalStatusLabel(entry.finalStatus)}` : ""}
                   </p>
                   {entry.plannedReason || entry.plannedReasonNote ? (
                     <p className="mt-1 text-sm text-slate-600">

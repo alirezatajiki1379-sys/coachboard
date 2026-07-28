@@ -259,8 +259,8 @@ function SelectableTrainingCard({ event, attendance, selected, onToggle }: { eve
           <span className="mt-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{event.status.replaceAll("_", " ")}</span>
           <span className="mt-1 block text-xl font-bold tracking-normal text-board-navy">{title}</span>
           <span className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-            <span className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.present || counts.expected} present/expected</span>
-            <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.absent || counts.unavailable} absence/unavailable</span>
+            <span className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.present || counts.plannedExpected} present/expected</span>
+            <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.absent || counts.unavailable + counts.unclear} absence/not expected</span>
             <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{counts.late} late</span>
             <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-700">{attendance.length} participant records</span>
             {event.recurrenceSeriesId ? <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">Recurring</span> : null}

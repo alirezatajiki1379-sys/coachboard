@@ -26,8 +26,8 @@ export function attendanceCounts(entries: SquadAttendanceEntry[]) {
 
 export function plannedStatusLabel(status?: SquadAttendanceEntry["plannedStatus"]) {
   if (status === "expected") return "Expected";
-  if (status === "unavailable") return "Unavailable";
-  if (status === "unclear") return "Unclear";
+  if (status === "unavailable") return "Not expected";
+  if (status === "unclear") return "Not expected";
   return "Expected";
 }
 
@@ -47,7 +47,7 @@ export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"]) {
     S: "Late cancellation",
     U: "Unexcused"
   };
-  return status ? labels[status] : "Open";
+  return status ? labels[status] : "Not recorded yet";
 }
 
 export function reliabilityMalus(entry: SquadAttendanceEntry) {

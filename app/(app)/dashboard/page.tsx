@@ -144,7 +144,10 @@ export default async function DashboardPage() {
               <h2 className="mt-1 text-2xl font-bold text-board-navy">{trainingDisplayTitle(nextTraining)}</h2>
               <p className="mt-2 text-sm text-slate-600">{nextTraining.date} · {trainingTimeRange(nextTraining)}{nextTraining.location ? ` · ${nextTraining.location}` : ""}</p>
               <p className="mt-2 text-sm font-semibold text-slate-700">
-                {trainingSummaryCounts(nextTraining).attendance.confirmedTotal} expected · {trainingSummaryCounts(nextTraining).attendance.unavailable} unavailable · {trainingSummaryCounts(nextTraining).attendance.goalkeepers} GK · {trainingSummaryCounts(nextTraining).attendance.trialPlayers} trial · {nextTraining.linkedTrainingSessionId ? "Plan available" : "No plan"}
+                {trainingSummaryCounts(nextTraining).attendance.confirmedTotal} expected · {trainingSummaryCounts(nextTraining).attendance.goalkeepers} Goalkeepers · {trainingSummaryCounts(nextTraining).attendance.fieldPlayers} Field Players
+              </p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                {trainingSummaryCounts(nextTraining).attendance.defensive} Defensive · {trainingSummaryCounts(nextTraining).attendance.midfield} Midfield · {trainingSummaryCounts(nextTraining).attendance.attacking} Attacking · {trainingSummaryCounts(nextTraining).attendance.unassigned} Position missing · {nextTraining.linkedTrainingSessionId ? "Plan available" : "No plan"}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
