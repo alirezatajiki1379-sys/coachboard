@@ -72,12 +72,32 @@ export async function listTrainingEventDetails(supabase: SupabaseServerClient, u
     .in("event_id", events.map((event) => event.id))
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
+  const attendanceRows = (data ?? []) as unknown as CompactAttendanceRow[];
+  const playersById = await loadAttendancePlayersById(
+    db,
+    userId,
+    attendanceRows.map((row) => row.player_id)
+  );
   const attendanceByEvent = new Map<string, ReturnType<typeof mapAttendanceRow>[]>();
-  for (const row of (data ?? []) as unknown as CompactAttendanceRow[]) {
-    const mapped = mapAttendanceRow(row, compactPlayerToRow(row.squad_players ?? undefined));
+  for (const row of attendanceRows) {
+    const mapped = mapAttendanceRow(row, playersById.get(row.player_id) ?? compactPlayerToRow(row.squad_players ?? undefined));
     attendanceByEvent.set(row.event_id, [...(attendanceByEvent.get(row.event_id) ?? []), mapped]);
   }
   return events.map((event) => ({ ...event, attendance: attendanceByEvent.get(event.id) ?? [] }));
+}
+
+async function loadAttendancePlayersById(db: SupabaseClient, userId: string, playerIds: string[]) {
+  const uniquePlayerIds = Array.from(new Set(playerIds.filter(Boolean)));
+  const playersById = new Map<string, SquadPlayerRow>();
+  if (!uniquePlayerIds.length) return playersById;
+
+  const { data, error } = await db.from("squad_players").select("*").eq("user_id", userId).in("id", uniquePlayerIds);
+  if (error) throw new Error(error.message);
+
+  for (const player of (data ?? []) as SquadPlayerRow[]) {
+    playersById.set(player.id, player);
+  }
+  return playersById;
 }
 
 function compactPlayerToRow(playerInput?: Partial<SquadPlayerRow> | Partial<SquadPlayerRow>[] | null): SquadPlayerRow | undefined {
@@ -182,8 +202,15 @@ export async function getTrainingEventDetail(
     }
   >;
 
+  const playersById = await loadAttendancePlayersById(
+    db,
+    userId,
+    attendanceRows.map((row) => row.player_id)
+  );
   const medicalByPlayer = await getMedicalByPlayer(db, userId, eventData.date, attendanceRows.map((row) => row.player_id));
-  const attendance = attendanceRows.map((row) => applyMedicalPrefill(mapAttendanceRow(row, row.squad_players ?? undefined), medicalByPlayer.get(row.player_id)));
+  const attendance = attendanceRows.map((row) =>
+    applyMedicalPrefill(mapAttendanceRow(row, playersById.get(row.player_id) ?? row.squad_players ?? undefined), medicalByPlayer.get(row.player_id))
+  );
 
   const event = mapTrainingEventRow(
     eventData as SquadTrainingEventRow,
