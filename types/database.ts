@@ -626,6 +626,8 @@ export type Database = {
           focus: string | null;
           season_label: string | null;
           linked_training_session_id: string | null;
+          participant_source_mode: "current_squad_sync" | "custom_selection";
+          participants_locked_at: string | null;
           status: "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
           general_notes: string | null;
           created_at: string;
@@ -652,6 +654,8 @@ export type Database = {
           focus?: string | null;
           season_label?: string | null;
           linked_training_session_id?: string | null;
+          participant_source_mode?: "current_squad_sync" | "custom_selection";
+          participants_locked_at?: string | null;
           status?: "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
           general_notes?: string | null;
           created_at?: string;

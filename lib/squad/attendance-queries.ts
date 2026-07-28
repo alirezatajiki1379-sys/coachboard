@@ -65,6 +65,7 @@ export async function listTrainingEventDetails(supabase: SupabaseServerClient, u
   const events = await listTrainingEvents(supabase, userId, options);
   if (!events.length) return [];
   const db = supabase as unknown as SupabaseClient;
+  await syncEligibleFutureEventsWithCurrentSquad(db, userId, events);
   const { data, error } = await db
     .from("squad_attendance_records")
     .select("id,user_id,event_id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,late_minutes,late_penalty_applied,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,rating_auto_suggestion,coach_note,sensitive_note,created_at,updated_at,squad_players(id,user_id,first_name,last_name,position,secondary_positions,player_type,archived_at,deleted_at,created_at,updated_at)")
@@ -186,6 +187,7 @@ export async function getTrainingEventDetail(
 
   if (error) throw new Error(error.message);
   if (!eventData) return null;
+  await syncEligibleFutureEventsWithCurrentSquad(db, userId, [mapTrainingEventRow(eventData as SquadTrainingEventRow)]);
 
   const { data: attendanceData, error: attendanceError } = await db
     .from("squad_attendance_records")
@@ -220,6 +222,150 @@ export async function getTrainingEventDetail(
 
   const linked = (eventData as SquadTrainingEventRow & { training_sessions?: LinkedSessionRow | null }).training_sessions;
   return { ...event, linkedTrainingSessionDuration: linked?.duration_target_minutes ?? undefined, attendance };
+}
+
+async function syncEligibleFutureEventsWithCurrentSquad(db: SupabaseClient, userId: string, events: Array<Pick<SquadTrainingEventDetail, "id" | "date" | "status" | "squadId" | "participantSourceMode" | "participantsLockedAt" | "deletedAt">>) {
+  const eligibleEvents = events.filter((event) => isEligibleForCurrentSquadSync(event));
+  if (!eligibleEvents.length) return;
+  for (const event of eligibleEvents) {
+    await syncEventWithCurrentSquad(db, userId, event);
+  }
+}
+
+function isEligibleForCurrentSquadSync(event: Pick<SquadTrainingEventDetail, "date" | "status" | "participantSourceMode" | "participantsLockedAt" | "deletedAt">) {
+  return (
+    event.participantSourceMode === "current_squad_sync" &&
+    !event.participantsLockedAt &&
+    !event.deletedAt &&
+    event.date >= todayDateString() &&
+    (event.status === "draft" || event.status === "prepared")
+  );
+}
+
+async function syncEventWithCurrentSquad(
+  db: SupabaseClient,
+  userId: string,
+  event: Pick<SquadTrainingEventDetail, "id" | "date" | "squadId">
+) {
+  let playerQuery = db
+    .from("squad_players")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("player_type", "roster")
+    .is("archived_at", null)
+    .is("deleted_at", null);
+  if (event.squadId) playerQuery = playerQuery.eq("squad_id", event.squadId);
+  const { data: players, error: playersError } = await playerQuery;
+  if (playersError) throw new Error(playersError.message);
+
+  const currentPlayerIds = Array.from(new Set(((players ?? []) as Array<{ id: string }>).map((player) => player.id)));
+  const currentPlayerIdSet = new Set(currentPlayerIds);
+
+  const { data: existing, error: existingError } = await db
+    .from("squad_attendance_records")
+    .select("id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,coach_note")
+    .eq("user_id", userId)
+    .eq("event_id", event.id);
+  if (existingError) throw new Error(existingError.message);
+
+  const existingRows = (existing ?? []) as Array<{
+    id: string;
+    player_id: string;
+    planned_status: string | null;
+    planned_reason: string | null;
+    planned_reason_note: string | null;
+    planned_status_source: string | null;
+    final_status: string | null;
+    overall_rating: number | null;
+    rating_technique: number | null;
+    rating_game_understanding: number | null;
+    rating_intensity: number | null;
+    rating_behavior: number | null;
+    coach_note: string | null;
+  }>;
+  const existingPlayerIds = new Set(existingRows.map((row) => row.player_id));
+  const missingPlayerIds = currentPlayerIds.filter((playerId) => !existingPlayerIds.has(playerId));
+  if (missingPlayerIds.length) {
+    const medicalByPlayer = await getMedicalByPlayer(db, userId, event.date, missingPlayerIds);
+    const rows = missingPlayerIds.map((playerId) => {
+      const medical = medicalByPlayer.get(playerId);
+      return {
+        user_id: userId,
+        event_id: event.id,
+        player_id: playerId,
+        planned_status: medical ? "unavailable" : "expected",
+        planned_reason: medical ? medicalReasonForType(medical.type) : null,
+        planned_reason_note: medical?.description ?? null,
+        planned_status_source: medical ? "medical" : "default"
+      };
+    });
+    const { error } = await db.from("squad_attendance_records").upsert(rows, { onConflict: "event_id,player_id", ignoreDuplicates: true });
+    if (error) throw new Error(error.message);
+  }
+
+  const protectedPlayerIds = await loadProtectedGroupPlayerIds(db, userId, event.id);
+  const removableIds = existingRows
+    .filter((row) => !currentPlayerIdSet.has(row.player_id) && !hasMeaningfulParticipantData(row, protectedPlayerIds.has(row.player_id)))
+    .map((row) => row.id);
+  if (removableIds.length) {
+    const { error } = await db.from("squad_attendance_records").delete().eq("user_id", userId).in("id", removableIds);
+    if (error) throw new Error(error.message);
+  }
+}
+
+async function loadProtectedGroupPlayerIds(db: SupabaseClient, userId: string, eventId: string) {
+  const result = new Set<string>();
+  const { data: groups, error: groupError } = await db.from("training_event_groups").select("id").eq("user_id", userId).eq("event_id", eventId);
+  if (groupError) throw new Error(groupError.message);
+  const groupIds = ((groups ?? []) as Array<{ id: string }>).map((group) => group.id);
+  if (!groupIds.length) return result;
+  const { data: members, error: memberError } = await db.from("training_event_group_members").select("player_id").eq("user_id", userId).in("group_id", groupIds);
+  if (memberError) throw new Error(memberError.message);
+  for (const member of (members ?? []) as Array<{ player_id: string | null }>) {
+    if (member.player_id) result.add(member.player_id);
+  }
+  return result;
+}
+
+function hasMeaningfulParticipantData(
+  row: {
+    planned_status: string | null;
+    planned_reason: string | null;
+    planned_reason_note: string | null;
+    planned_status_source: string | null;
+    final_status: string | null;
+    overall_rating: number | null;
+    rating_technique: number | null;
+    rating_game_understanding: number | null;
+    rating_intensity: number | null;
+    rating_behavior: number | null;
+    coach_note: string | null;
+  },
+  hasGroupAssignment: boolean
+) {
+  return Boolean(
+    hasGroupAssignment ||
+      row.final_status ||
+      row.overall_rating ||
+      row.rating_technique ||
+      row.rating_game_understanding ||
+      row.rating_intensity ||
+      row.rating_behavior ||
+      row.coach_note ||
+      row.planned_status_source === "manual" ||
+      row.planned_reason ||
+      row.planned_reason_note ||
+      row.planned_status === "unavailable" ||
+      row.planned_status === "unclear"
+  );
+}
+
+function todayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 async function getMedicalByPlayer(db: SupabaseClient, userId: string, eventDate: string, playerIds: string[]) {

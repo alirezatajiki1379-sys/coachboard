@@ -113,11 +113,11 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
         <ButtonLink
           href={`/teams/${activeTeam.id}/settings`}
           variant="ghost"
-          className={`${activeTeamControlClass} w-10 shrink-0 justify-center px-0`}
+          className={`${activeTeamControlClass} w-10 shrink-0 items-center justify-center px-0`}
           aria-label={`Open settings for ${activeTeam.name}`}
           title="Team settings"
         >
-          <Settings className="h-5 w-5" />
+          <Settings className="h-5 w-5 -translate-y-px" />
         </ButtonLink>
       </div>
     </div>

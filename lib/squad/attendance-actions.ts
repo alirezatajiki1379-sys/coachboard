@@ -34,6 +34,7 @@ export type TrainingEventActionState = {
     planApplyMode?: string;
     editScope?: string;
     creationToken?: string;
+    participantSourceMode?: string;
   };
   submissionId?: number;
 };
@@ -85,6 +86,10 @@ function numberOrNull(value: string) {
 
 function selectedParticipantIds(formData: FormData) {
   return Array.from(new Set(formData.getAll("participantIds").filter((value): value is string => typeof value === "string" && Boolean(value))));
+}
+
+function participantSourceMode(formData: FormData) {
+  return formString(formData, "participantSourceMode") === "custom_selection" ? "custom_selection" : "current_squad_sync";
 }
 
 function selectedValues(formData: FormData, key: string) {
@@ -160,7 +165,8 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
     repeatEndDate: formString(formData, "repeatEndDate"),
     repeatOccurrenceCount: formString(formData, "repeatOccurrenceCount") || "10",
     planApplyMode: formString(formData, "planApplyMode") || "none",
-    creationToken: formString(formData, "creationToken")
+    creationToken: formString(formData, "creationToken"),
+    participantSourceMode: participantSourceMode(formData)
   };
   const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
   if (!values.date) fieldErrors.date = "Choose the training date.";
@@ -260,6 +266,7 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
       focus: optional(values.focus),
       season_label: seasonLabelForDate(date),
       linked_training_session_id: values.planApplyMode === "all" || (values.planApplyMode === "first" && keptIndex === 0) ? optional(values.linkedTrainingSessionId) : null,
+      participant_source_mode: values.participantSourceMode,
       general_notes: optional(values.generalNotes),
       status: "draft"
     }));
@@ -295,6 +302,7 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
       focus: optional(values.focus),
       season_label: seasonLabelForDate(values.date),
       linked_training_session_id: optional(values.linkedTrainingSessionId),
+      participant_source_mode: values.participantSourceMode,
       general_notes: optional(values.generalNotes),
       status: "draft"
     })
@@ -323,7 +331,8 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
     linkedTrainingSessionId: formString(formData, "linkedTrainingSessionId"),
     squadId: formString(formData, "squadId"),
     generalNotes: formString(formData, "generalNotes"),
-    editScope: formString(formData, "editScope") || "single"
+    editScope: formString(formData, "editScope") || "single",
+    participantSourceMode: participantSourceMode(formData)
   };
   const fieldErrors: TrainingEventActionState["fieldErrors"] = {};
   if (!eventId) return { error: "Missing training event.", values, submissionId: Date.now() };
@@ -358,6 +367,7 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
       focus: optional(values.focus),
       season_label: seasonLabelForDate(values.date),
       linked_training_session_id: optional(values.linkedTrainingSessionId),
+      participant_source_mode: values.participantSourceMode,
       general_notes: optional(values.generalNotes),
       is_series_exception: originalEvent.recurrence_series_id ? values.editScope !== "future" : false,
       exception_type: originalEvent.recurrence_series_id && values.editScope !== "future" ? "edited" : null,
@@ -389,6 +399,7 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
           location: optional(values.location),
           focus: optional(values.focus),
           linked_training_session_id: optional(values.linkedTrainingSessionId),
+          participant_source_mode: values.participantSourceMode,
           general_notes: optional(values.generalNotes)
         })
         .eq("user_id", user.id)
@@ -415,6 +426,70 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
   revalidateEvent(eventId);
   revalidatePath("/trainings");
   redirect(`/trainings/${eventId}`);
+}
+
+export async function syncTrainingWithCurrentSquad(formData: FormData) {
+  const eventId = formString(formData, "eventId");
+  const syncScope = formString(formData, "syncScope");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { data: event, error: eventError } = await db
+    .from("squad_training_events")
+    .select("id,date,squad_id,recurrence_series_id,status,participants_locked_at,deleted_at")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (eventError) throw new Error(eventError.message);
+  if (!event || event.deleted_at) redirect("/trainings");
+
+  const events = await loadSyncTargetEvents(db, user.id, event, syncScope === "future");
+  for (const target of events) {
+    const currentSquadIds = await currentRosterPlayerIds(db, user.id, target.squad_id ?? undefined);
+    await syncTrainingParticipants(db, user.id, target.id, target.date, currentSquadIds, { squadId: target.squad_id ?? undefined, alreadyValidated: true });
+    await db
+      .from("squad_training_events")
+      .update({ participant_source_mode: "current_squad_sync", participants_locked_at: null })
+      .eq("id", target.id)
+      .eq("user_id", user.id);
+    revalidateEvent(target.id);
+  }
+  revalidatePath("/trainings");
+  revalidatePath("/dashboard");
+  redirect(`/trainings/${eventId}`);
+}
+
+async function loadSyncTargetEvents(
+  db: SupabaseClient,
+  userId: string,
+  event: { id: string; date: string; squad_id: string | null; recurrence_series_id: string | null; status: string; participants_locked_at: string | null },
+  includeFuture: boolean
+) {
+  if (!includeFuture || !event.recurrence_series_id) return [event];
+  const { data, error } = await db
+    .from("squad_training_events")
+    .select("id,date,squad_id,recurrence_series_id,status,participants_locked_at")
+    .eq("user_id", userId)
+    .eq("recurrence_series_id", event.recurrence_series_id)
+    .gte("date", event.date)
+    .is("deleted_at", null)
+    .is("participants_locked_at", null)
+    .in("status", ["draft", "prepared"]);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Array<{ id: string; date: string; squad_id: string | null; recurrence_series_id: string | null; status: string; participants_locked_at: string | null }>;
+}
+
+async function currentRosterPlayerIds(db: SupabaseClient, userId: string, squadId?: string) {
+  let query = db
+    .from("squad_players")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("player_type", "roster")
+    .is("archived_at", null)
+    .is("deleted_at", null);
+  if (squadId) query = query.eq("squad_id", squadId);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return Array.from(new Set(((data ?? []) as Array<{ id: string }>).map((player) => player.id)));
 }
 
 export async function createRecurringTrainingEvents(_: TrainingEventActionState, formData: FormData): Promise<TrainingEventActionState> {
@@ -1043,14 +1118,19 @@ async function syncTrainingParticipants(
   if (!removeUnselected) return;
   const { data: existing, error: existingError } = await db
     .from("squad_attendance_records")
-    .select("id, player_id, final_status, overall_rating, rating_technique, rating_game_understanding, rating_intensity, rating_behavior, coach_note")
+    .select("id, player_id, planned_status, planned_reason, planned_reason_note, planned_status_source, final_status, overall_rating, rating_technique, rating_game_understanding, rating_intensity, rating_behavior, coach_note")
     .eq("event_id", eventId)
     .eq("user_id", userId);
   if (existingError) throw new Error(existingError.message);
+  const protectedGroupPlayerIds = await loadProtectedGroupPlayerIds(db, userId, eventId);
   const selected = new Set(safePlayerIds);
   const removableIds = ((existing ?? []) as Array<{
     id: string;
     player_id: string;
+    planned_status: string | null;
+    planned_reason: string | null;
+    planned_reason_note: string | null;
+    planned_status_source: string | null;
     final_status: string | null;
     overall_rating: number | null;
     rating_technique: number | null;
@@ -1061,13 +1141,60 @@ async function syncTrainingParticipants(
   }>)
     .filter((record) => {
       if (selected.has(record.player_id)) return false;
-      return !record.final_status && !record.overall_rating && !record.rating_technique && !record.rating_game_understanding && !record.rating_intensity && !record.rating_behavior && !record.coach_note;
+      return !hasMeaningfulParticipantData(record, protectedGroupPlayerIds.has(record.player_id));
     })
     .map((record) => record.id);
   if (removableIds.length) {
     const { error } = await db.from("squad_attendance_records").delete().eq("user_id", userId).in("id", removableIds);
     if (error) throw new Error(error.message);
   }
+}
+
+async function loadProtectedGroupPlayerIds(db: SupabaseClient, userId: string, eventId: string) {
+  const result = new Set<string>();
+  const { data: groups, error: groupError } = await db.from("training_event_groups").select("id").eq("user_id", userId).eq("event_id", eventId);
+  if (groupError) throw new Error(groupError.message);
+  const groupIds = ((groups ?? []) as Array<{ id: string }>).map((group) => group.id);
+  if (!groupIds.length) return result;
+  const { data: members, error: memberError } = await db.from("training_event_group_members").select("player_id").eq("user_id", userId).in("group_id", groupIds);
+  if (memberError) throw new Error(memberError.message);
+  for (const member of (members ?? []) as Array<{ player_id: string | null }>) {
+    if (member.player_id) result.add(member.player_id);
+  }
+  return result;
+}
+
+function hasMeaningfulParticipantData(
+  record: {
+    planned_status: string | null;
+    planned_reason: string | null;
+    planned_reason_note: string | null;
+    planned_status_source: string | null;
+    final_status: string | null;
+    overall_rating: number | null;
+    rating_technique: number | null;
+    rating_game_understanding: number | null;
+    rating_intensity: number | null;
+    rating_behavior: number | null;
+    coach_note: string | null;
+  },
+  hasGroupAssignment: boolean
+) {
+  return Boolean(
+    hasGroupAssignment ||
+      record.planned_status_source === "manual" ||
+      record.planned_status === "unavailable" ||
+      record.planned_status === "unclear" ||
+      record.planned_reason ||
+      record.planned_reason_note ||
+      record.final_status ||
+      record.overall_rating ||
+      record.rating_technique ||
+      record.rating_game_understanding ||
+      record.rating_intensity ||
+      record.rating_behavior ||
+      record.coach_note
+  );
 }
 
 async function validateSelectedParticipants(db: SupabaseClient, userId: string, squadId: string | undefined, playerIds: string[]) {
@@ -1285,7 +1412,12 @@ async function markEventPrepared(db: SupabaseClient, userId: string, eventId: st
 }
 
 async function markEventInProgress(db: SupabaseClient, userId: string, eventId: string) {
-  await db.from("squad_training_events").update({ status: "in_progress" }).eq("id", eventId).eq("user_id", userId).neq("status", "completed");
+  await db
+    .from("squad_training_events")
+    .update({ status: "in_progress", participants_locked_at: new Date().toISOString() })
+    .eq("id", eventId)
+    .eq("user_id", userId)
+    .neq("status", "completed");
 }
 
 function attendanceMutationError(code: string, message: string): AttendanceMutationResult {

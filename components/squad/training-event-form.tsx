@@ -15,7 +15,7 @@ import {
 } from "@/lib/squad/regional-calendar";
 import { formatPositionLabel } from "@/lib/squad/positions";
 import { generateTrainingRecurrenceDates, recurrenceSummary, weekdayForDate } from "@/lib/trainings/utils";
-import type { Squad, SquadPlayer, SquadTrainingEventDetail } from "@/types/domain";
+import type { ParticipantSourceMode, Squad, SquadPlayer, SquadTrainingEventDetail } from "@/types/domain";
 
 type TrainingEventFormProps = {
   sessions: Array<{ id: string; title: string }>;
@@ -61,7 +61,8 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
         repeatEndDate: "",
         repeatOccurrenceCount: "10",
         planApplyMode: "none",
-        editScope: "single"
+        editScope: "single",
+        participantSourceMode: event?.participantSourceMode ?? "current_squad_sync"
       },
     [activeTeam?.id, event, state.values]
   );
@@ -177,7 +178,7 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
           </div>
         </section>
 
-        <ParticipantSelector participants={participants} selected={selectedParticipants} />
+        <ParticipantSelector participants={participants} selected={selectedParticipants} initialMode={normalizeParticipantSourceMode(values.participantSourceMode)} />
 
         <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <h2 className="text-lg font-bold text-board-navy">Repeat</h2>
@@ -304,6 +305,10 @@ const weekdayOptions = [
   { value: "6", short: "Sat" },
   { value: "7", short: "Sun" }
 ];
+
+function normalizeParticipantSourceMode(value?: string): ParticipantSourceMode {
+  return value === "custom_selection" ? "custom_selection" : "current_squad_sync";
+}
 
 function CalendarWarning({ conflicts }: { conflicts: CalendarConflict[] }) {
   return (
@@ -448,20 +453,111 @@ function formatDate(date: string) {
   return year && month && day ? `${day}.${month}.${year}` : date;
 }
 
-function ParticipantSelector({ participants, selected, compact = false }: { participants: SquadPlayer[]; selected: Set<string>; compact?: boolean }) {
+function ParticipantSelector({
+  participants,
+  selected,
+  compact = false,
+  initialMode = "current_squad_sync"
+}: {
+  participants: SquadPlayer[];
+  selected: Set<string>;
+  compact?: boolean;
+  initialMode?: ParticipantSourceMode;
+}) {
+  const [participantMode, setParticipantMode] = useState<ParticipantSourceMode>(initialMode);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(selected));
+  const eligibleSquadPlayers = participants.filter((player) => player.playerType === "roster");
+  const visiblePlayers = participants.filter((player) => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return true;
+    return [player.firstName, player.lastName, player.position, ...player.secondaryPositions].filter(Boolean).join(" ").toLowerCase().includes(needle);
+  });
   const rosterCount = participants.filter((player) => player.playerType === "roster").length;
   const trialCount = participants.filter((player) => player.playerType === "trial").length;
+  const submittedPlayerIds = participantMode === "current_squad_sync" ? eligibleSquadPlayers.map((player) => player.id) : Array.from(selectedIds);
+
+  function togglePlayer(playerId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  }
+
+  function selectVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const player of visiblePlayers) next.add(player.id);
+      return next;
+    });
+  }
+
+  function selectEntireSquad() {
+    if (eligibleSquadPlayers.length >= 15 && !window.confirm(`Add all ${eligibleSquadPlayers.length} active Squad Players?`)) return;
+    setSelectedIds(new Set(eligibleSquadPlayers.map((player) => player.id)));
+  }
+
   return (
     <section className={compact ? "mt-4 rounded-lg border border-board-line bg-board-paper p-4" : "rounded-lg border border-board-line bg-white p-5 shadow-soft"}>
+      <input type="hidden" name="participantSourceMode" value={participantMode} />
+      {submittedPlayerIds.map((playerId) => <input key={playerId} type="hidden" name="participantIds" value={playerId} />)}
       <h2 className="text-lg font-bold text-board-navy">Participants</h2>
       <p className="mt-1 text-sm text-slate-500">
         Active Team players are selected by default. Add or remove players for this training only. {trialCount ? `${trialCount} trial player${trialCount === 1 ? "" : "s"} available.` : ""}
       </p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className={`rounded-md border p-3 ${participantMode === "current_squad_sync" ? "border-board-green bg-green-50" : "border-board-line bg-white"}`}>
+          <input
+            type="radio"
+            name="participantModeChoice"
+            value="current_squad_sync"
+            checked={participantMode === "current_squad_sync"}
+            onChange={() => setParticipantMode("current_squad_sync")}
+            className="mr-2"
+          />
+          <span className="font-bold text-board-navy">Entire squad</span>
+          <span className="mt-1 block text-sm text-slate-600">All active Roster Players are expected. Future Squad changes are synchronized automatically.</span>
+          <span className="mt-2 block text-xs font-bold text-board-green">{eligibleSquadPlayers.length} active Squad Players will be added.</span>
+        </label>
+        <label className={`rounded-md border p-3 ${participantMode === "custom_selection" ? "border-board-green bg-green-50" : "border-board-line bg-white"}`}>
+          <input
+            type="radio"
+            name="participantModeChoice"
+            value="custom_selection"
+            checked={participantMode === "custom_selection"}
+            onChange={() => setParticipantMode("custom_selection")}
+            className="mr-2"
+          />
+          <span className="font-bold text-board-navy">Custom selection</span>
+          <span className="mt-1 block text-sm text-slate-600">Choose individual Players manually. The participant list stays stable.</span>
+          <span className="mt-2 block text-xs font-bold text-slate-500">{selectedIds.size} selected.</span>
+        </label>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" className="h-9 px-3 text-xs" onClick={selectEntireSquad}>Select entire Squad</Button>
+        <Button type="button" variant="secondary" className="h-9 px-3 text-xs" onClick={selectVisible}>Select all visible</Button>
+        <Button type="button" variant="ghost" className="h-9 px-3 text-xs" onClick={() => setSelectedIds(new Set())}>Clear selection</Button>
+      </div>
+      {participantMode === "custom_selection" ? (
+        <label className="mt-4 block">
+          <span className="sr-only">Search participants</span>
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Players" className="h-10 w-full rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+        </label>
+      ) : null}
       {participants.length ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {participants.map((player) => (
+          {(participantMode === "custom_selection" ? visiblePlayers : eligibleSquadPlayers).map((player) => (
             <label key={player.id} className="flex items-center gap-3 rounded-md border border-board-line bg-white px-3 py-2 text-sm font-semibold text-board-navy">
-              <input name="participantIds" type="checkbox" value={player.id} defaultChecked={selected.has(player.id)} className="h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
+              <input
+                type="checkbox"
+                value={player.id}
+                checked={participantMode === "current_squad_sync" ? true : selectedIds.has(player.id)}
+                disabled={participantMode === "current_squad_sync"}
+                onChange={() => togglePlayer(player.id)}
+                className="h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green disabled:opacity-60"
+              />
               <span className="min-w-0 flex-1 truncate">
                 {[player.firstName, player.lastName].filter(Boolean).join(" ")}
                 {player.position ? <span className="font-medium text-slate-500"> · {formatPositionLabel(player.position) ?? player.position}</span> : null}

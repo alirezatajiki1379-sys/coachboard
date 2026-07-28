@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw, Trash2 } from "lucide-react";
+import { Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { deleteTrainingEvent, permanentlyDeleteTrainingEvent, restoreTrainingEvent } from "@/lib/squad/attendance-actions";
 
@@ -39,8 +39,14 @@ export function TrainingEventActions({ eventId, attendanceCount = 0, compact = f
 
   return (
     <div className="relative z-10 flex flex-wrap gap-2">
-      <ButtonLink href={`/trainings/${eventId}/edit`} variant="secondary" className={compact ? "h-9 px-3" : "justify-center"}>
-        Edit
+      <ButtonLink
+        href={`/trainings/${eventId}/edit`}
+        variant="secondary"
+        className="h-9 w-9 justify-center px-0"
+        aria-label="Edit training"
+        title="Edit training"
+      >
+        <Pencil className="h-4 w-4" />
       </ButtonLink>
       <form action={deleteTrainingEvent}>
         <input type="hidden" name="eventId" value={eventId} />

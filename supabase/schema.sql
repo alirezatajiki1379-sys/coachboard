@@ -1073,7 +1073,21 @@ add column if not exists is_series_exception boolean not null default false,
 add column if not exists exception_type text,
 add column if not exists recurrence_original_date date,
 add column if not exists archived_at timestamptz,
-add column if not exists deleted_at timestamptz;
+add column if not exists deleted_at timestamptz,
+add column if not exists participant_source_mode text not null default 'current_squad_sync',
+add column if not exists participants_locked_at timestamptz;
+
+alter table public.squad_training_events
+drop constraint if exists squad_training_events_participant_source_mode_check;
+
+alter table public.squad_training_events
+add constraint squad_training_events_participant_source_mode_check
+check (
+  participant_source_mode in (
+    'current_squad_sync',
+    'custom_selection'
+  )
+);
 
 insert into public.squads (user_id, name, is_active)
 select distinct user_id, 'Active Squad', true

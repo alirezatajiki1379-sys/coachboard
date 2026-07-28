@@ -261,6 +261,7 @@ export type Squad = {
 };
 
 export type SquadTrainingEventStatus = "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
+export type ParticipantSourceMode = "current_squad_sync" | "custom_selection";
 export type SquadPlannedAttendanceStatus = "expected" | "unavailable" | "unclear";
 export type SquadAttendanceReason = "V" | "K" | "E" | "P" | "S" | "Z" | "U";
 export type SquadFinalAttendanceStatus = "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
@@ -374,6 +375,8 @@ export type SquadTrainingEvent = {
   linkedTrainingSessionId?: string;
   linkedTrainingSessionTitle?: string;
   linkedTrainingSessionDuration?: number;
+  participantSourceMode: ParticipantSourceMode;
+  participantsLockedAt?: string;
   status: SquadTrainingEventStatus;
   generalNotes?: string;
   completedAt?: string;

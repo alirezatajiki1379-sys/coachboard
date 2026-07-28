@@ -26,6 +26,8 @@ export function mapTrainingEventRow(row: SquadTrainingEventRow, linkedTitle?: st
     seasonLabel: row.season_label ?? undefined,
     linkedTrainingSessionId: row.linked_training_session_id ?? undefined,
     linkedTrainingSessionTitle: linkedTitle,
+    participantSourceMode: row.participant_source_mode ?? "current_squad_sync",
+    participantsLockedAt: row.participants_locked_at ?? undefined,
     status: row.status,
     generalNotes: row.general_notes ?? undefined,
     completedAt: row.completed_at ?? undefined,
