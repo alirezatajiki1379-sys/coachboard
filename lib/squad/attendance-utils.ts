@@ -1,5 +1,5 @@
 import type { SquadAttendanceEntry, SquadAttendanceReason, SquadFinalAttendanceStatus } from "@/types/domain";
-import { isGoalkeeperPosition } from "@/lib/squad/positions";
+import { formatPositionLabel, getPositionFamily, normalizeCanonicalPosition, type PositionFamily } from "@/lib/squad/positions";
 
 export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
   V: "Injured",
@@ -22,26 +22,35 @@ export function isConfirmedAttending(entry: SquadAttendanceEntry) {
 }
 
 export function getPlannedAttendanceSummary(entries: SquadAttendanceEntry[]) {
-  const expectedEntries = entries.filter(isExpectedFromPlannedStatus);
+  const confirmedEntries = entries.filter(isExpectedFromPlannedStatus);
+  const composition = participantComposition(confirmedEntries);
   return {
-    expected: expectedEntries.length,
+    expected: entries.length,
+    confirmed: confirmedEntries.length,
     unavailable: entries.filter((entry) => entry.plannedStatus === "unavailable").length,
     unclear: entries.filter((entry) => entry.plannedStatus === "unclear").length,
-    fieldPlayers: expectedEntries.filter((entry) => !isGoalkeeperPosition(entry.player?.position)).length,
-    goalkeepers: expectedEntries.filter((entry) => isGoalkeeperPosition(entry.player?.position)).length,
-    trialPlayers: expectedEntries.filter((entry) => entry.player?.playerType === "trial").length,
+    fieldPlayers: composition.fieldPlayers,
+    goalkeepers: composition.goalkeepers,
+    defensive: composition.defensive,
+    midfield: composition.midfield,
+    attacking: composition.attacking,
+    unassigned: composition.unassigned,
+    trialPlayers: confirmedEntries.filter((entry) => entry.player?.playerType === "trial").length,
     total: entries.length
   };
 }
 
 export function getFinalAttendanceSummary(entries: SquadAttendanceEntry[]) {
   const presentEntries = entries.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
+  const composition = participantComposition(presentEntries);
   return {
     present: presentEntries.length,
     late: entries.filter((entry) => entry.finalStatus === "Z").length,
     absent: entries.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus)).length,
     unresolved: entries.filter((entry) => !entry.finalStatus).length,
-    goalkeepersPresent: presentEntries.filter((entry) => isGoalkeeperPosition(entry.player?.position)).length,
+    fieldPlayersPresent: composition.fieldPlayers,
+    goalkeepersPresent: composition.goalkeepers,
+    unassignedPresent: composition.unassigned,
     trialPlayersPresent: presentEntries.filter((entry) => entry.player?.playerType === "trial").length,
     totalParticipants: entries.length
   };
@@ -53,12 +62,53 @@ export function calculateAttendanceForecast(entries: SquadAttendanceEntry[]) {
   return {
     ...planned,
     ...final,
-    confirmedTotal: planned.expected
+    confirmedTotal: planned.confirmed
   };
 }
 
 export function calculateReliabilityPenalty(entry: Pick<SquadAttendanceEntry, "finalStatus" | "latePenaltyApplied">) {
   return calculateReliabilityPenaltyFromStatus(entry.finalStatus, entry.latePenaltyApplied);
+}
+
+export function effectiveParticipantPosition(entry: SquadAttendanceEntry) {
+  return normalizeCanonicalPosition(entry.player?.position) ?? firstValidSecondaryPosition(entry);
+}
+
+export function effectiveParticipantPositionFamily(entry: SquadAttendanceEntry): PositionFamily {
+  return getPositionFamily(effectiveParticipantPosition(entry));
+}
+
+export function effectiveParticipantPositionLabel(entry: SquadAttendanceEntry) {
+  const position = effectiveParticipantPosition(entry);
+  return formatPositionLabel(position) ?? "Position not assigned";
+}
+
+export function participantComposition(entries: SquadAttendanceEntry[]) {
+  const counts = {
+    goalkeepers: 0,
+    fieldPlayers: 0,
+    defensive: 0,
+    midfield: 0,
+    attacking: 0,
+    unassigned: 0
+  };
+  for (const entry of entries) {
+    const family = effectiveParticipantPositionFamily(entry);
+    if (family === "goalkeeper") counts.goalkeepers += 1;
+    else if (family === "defensive") {
+      counts.fieldPlayers += 1;
+      counts.defensive += 1;
+    } else if (family === "midfield") {
+      counts.fieldPlayers += 1;
+      counts.midfield += 1;
+    } else if (family === "attacking") {
+      counts.fieldPlayers += 1;
+      counts.attacking += 1;
+    } else {
+      counts.unassigned += 1;
+    }
+  }
+  return counts;
 }
 
 export function calculateReliabilityPenaltyFromStatus(status?: SquadFinalAttendanceStatus | null, latePenaltyApplied = true) {
@@ -75,4 +125,8 @@ export function calculateSuggestedOverallRating(values: Array<number | null | un
   if (!ratings.length) return null;
   const rounded = Math.round(ratings.reduce((sum, value) => sum + value, 0) / ratings.length);
   return Math.min(5, Math.max(1, rounded));
+}
+
+function firstValidSecondaryPosition(entry: SquadAttendanceEntry) {
+  return entry.player?.secondaryPositions.map((position) => normalizeCanonicalPosition(position)).find(Boolean);
 }

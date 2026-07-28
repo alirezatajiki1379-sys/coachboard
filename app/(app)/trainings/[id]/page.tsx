@@ -8,6 +8,7 @@ import { TrainingEventActions } from "@/components/squad/training-event-actions"
 import { addCustomNameToTrainingGroup, addPlayersToTrainingGroup, createTrainingGroup, deleteTrainingGroup, removeTrainingGroupMember } from "@/lib/squad/training-group-actions";
 import { applyTrainingPlanTemplate, createBlankSessionPlan } from "@/lib/squad/training-plan-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
+import { effectiveParticipantPositionLabel } from "@/lib/squad/attendance-utils";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
 import { createClient } from "@/lib/supabase/server";
 import { seasonLabelForDate, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
@@ -71,11 +72,17 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Metric label="Expected" value={String(plannedAttendance.expected)} />
-        <Metric label="Unavailable" value={String(plannedAttendance.unavailable)} />
-        <Metric label="Unclear" value={String(plannedAttendance.unclear)} />
+        <Metric label="Confirmed" value={String(plannedAttendance.confirmed)} />
+        <Metric label="Declined" value={String(plannedAttendance.unavailable)} />
+        <Metric label="Open" value={String(plannedAttendance.unclear)} />
         <Metric label="Field players" value={String(plannedAttendance.fieldPlayers)} />
         <Metric label="Goalkeepers" value={String(plannedAttendance.goalkeepers)} tone={plannedAttendance.goalkeepers === 0 ? "warning" : "normal"} />
-        <Metric label="Trial players" value={String(plannedAttendance.trialPlayers)} />
+        <Metric label="Unassigned" value={String(plannedAttendance.unassigned)} tone={plannedAttendance.unassigned > 0 ? "warning" : "normal"} />
+      </section>
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Defensive" value={String(plannedAttendance.defensive)} />
+        <Metric label="Midfield" value={String(plannedAttendance.midfield)} />
+        <Metric label="Attacking" value={String(plannedAttendance.attacking)} />
       </section>
       {plannedAttendance.goalkeepers === 0 ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">No goalkeeper expected.</p> : null}
 
@@ -202,6 +209,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
                       {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
+                      {effectiveParticipantPositionLabel(entry)} · {entry.player?.playerType === "trial" ? "Trial" : "Roster"} ·{" "}
                       Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
                       {entry.plannedReason ? ` · Reason: ${plannedReasonLabel(entry.plannedReason)}` : ""}
                       {entry.overallRating ? ` · Rating: ${entry.overallRating}` : ""}

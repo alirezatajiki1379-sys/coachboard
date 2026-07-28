@@ -5,6 +5,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { CompleteEventButton, MarkAllExpectedButton, MissingStatusesNotice, PlannedAttendanceControls } from "@/components/squad/attendance-controls";
 import { addExistingTrialPlayerToEvent, addSquadPlayersToEvent, addTrialPlayerToEvent, convertTrialPlayerToSquadPlayer, removePlayerFromEvent } from "@/lib/squad/attendance-actions";
 import { attendanceCounts, attendanceDisplayName, eventTimeRange, eventTitle, finalStatusLabel, formatEventDate, plannedReasonLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
+import { effectiveParticipantPositionLabel } from "@/lib/squad/attendance-utils";
 import { getTrainingEventDetail, listAvailableTrialPlayers } from "@/lib/squad/attendance-queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -49,12 +50,19 @@ export default async function TrainingEventPage({ params }: EventPageProps) {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Metric label="Expected total" value={String(counts.confirmedTotal)} />
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <Metric label="Expected" value={String(counts.expected)} />
+        <Metric label="Confirmed" value={String(counts.confirmedTotal)} />
+        <Metric label="Declined" value={String(counts.unavailable)} />
+        <Metric label="Open" value={String(counts.unclear)} />
         <Metric label="Field players" value={String(counts.fieldPlayers)} />
         <Metric label="Goalkeepers" value={String(counts.goalkeepers)} tone={counts.goalkeepers === 0 ? "warning" : "normal"} />
-        <Metric label="Trial players" value={String(counts.trialPlayers)} />
-        <Metric label="Unclear" value={String(counts.unclear)} />
+        <Metric label="Unassigned" value={String(counts.unassigned)} tone={counts.unassigned > 0 ? "warning" : "normal"} />
+      </section>
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Defensive" value={String(counts.defensive)} />
+        <Metric label="Midfield" value={String(counts.midfield)} />
+        <Metric label="Attacking" value={String(counts.attacking)} />
       </section>
       <p className="text-sm text-slate-500">Trial players are included in expected total and also shown separately as information.</p>
       {counts.goalkeepers === 0 ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">No expected goalkeeper confirmed yet.</p> : null}
@@ -110,7 +118,7 @@ export default async function TrainingEventPage({ params }: EventPageProps) {
                     {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
+                    {effectiveParticipantPositionLabel(entry)} · {entry.player?.playerType === "trial" ? "Trial" : "Roster"} · Planned: {plannedStatusLabel(entry.plannedStatus)} · Actual: {finalStatusLabel(entry.finalStatus)}
                   </p>
                   {entry.plannedReason || entry.plannedReasonNote ? (
                     <p className="mt-1 text-sm text-slate-600">
