@@ -395,7 +395,7 @@ export async function addAllEligibleDepthAssignments(formData: FormData) {
   const states = (statesResult.data ?? []) as PlayerStateActionRow[];
   const stateByPlayer = new Map(states.map((state) => [state.player_id, state]));
   const excludedPlayerIds = new Set(states.filter((state) => state.inclusion_status === "excluded").map((state) => state.player_id));
-  const assignments = (assignmentsResult.data ?? []) as AssignmentRow[];
+  const assignments = await repairDuplicateDepthAssignments(db, user.id, planId, (assignmentsResult.data ?? []) as AssignmentRow[]);
   const assignedPlayerIds = new Set(assignments.map((assignment) => assignment.player_id));
   let nextOrder = Math.max(0, ...assignments.map((assignment) => assignment.depth_order)) + 1;
   const players = ((playersResult.data ?? []) as SquadPlayerRow[])
@@ -433,6 +433,9 @@ export async function removeDepthAssignment(formData: FormData) {
   if ((assignment as { is_preferred_starter?: boolean } | null)?.is_preferred_starter) {
     await promoteFirstDepthOption(db, user.id, planId, (assignment as { slot_id: string }).slot_id);
   }
+  if ((assignment as { slot_id?: string } | null)?.slot_id) {
+    await normalizeSlotDepthOrder(db, user.id, planId, (assignment as { slot_id: string }).slot_id);
+  }
   redirectToPlanner(planId);
 }
 
@@ -455,6 +458,41 @@ export async function moveDepthAssignment(formData: FormData) {
   if (!swap) redirectToPlanner(planId);
   await db.from("squad_tactical_depth_assignments").update({ depth_order: swap.depth_order }).eq("id", current.id).eq("user_id", user.id);
   await db.from("squad_tactical_depth_assignments").update({ depth_order: current.depth_order }).eq("id", swap.id).eq("user_id", user.id);
+  await normalizeSlotDepthOrder(db, user.id, planId, current.slot_id);
+  redirectToPlanner(planId);
+}
+
+export async function moveDepthAssignmentToRank(formData: FormData) {
+  const { db, user } = await requireUser();
+  const planId = text(formData, "planId");
+  const assignmentId = text(formData, "assignmentId");
+  const targetRank = Math.max(1, Number(text(formData, "targetRank")) || 1);
+  const { data: current } = await db
+    .from("squad_tactical_depth_assignments")
+    .select("*")
+    .eq("id", assignmentId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!current) redirectToPlanner(planId);
+  const row = current as AssignmentRow;
+  const { data } = await db
+    .from("squad_tactical_depth_assignments")
+    .select("id,is_preferred_starter,depth_order")
+    .eq("user_id", user.id)
+    .eq("tactical_plan_id", planId)
+    .eq("slot_id", row.slot_id)
+    .order("depth_order", { ascending: true });
+  const withoutCurrent = ((data ?? []) as Array<{ id: string; is_preferred_starter: boolean; depth_order: number }>).filter((assignment) => assignment.id !== assignmentId);
+  const next = [...withoutCurrent];
+  next.splice(Math.min(targetRank - 1, next.length), 0, { id: assignmentId, is_preferred_starter: targetRank === 1, depth_order: targetRank });
+  await Promise.all(next.map((assignment, index) => (
+    db
+      .from("squad_tactical_depth_assignments")
+      .update({ depth_order: index + 1, is_preferred_starter: index === 0 })
+      .eq("id", assignment.id)
+      .eq("user_id", user.id)
+      .eq("tactical_plan_id", planId)
+  )));
   redirectToPlanner(planId);
 }
 
@@ -550,7 +588,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
 
   if (slots.length === 0 || players.length === 0) redirectToPlanner(planId);
 
-  let assignments = ((assignmentsResult.data ?? []) as AssignmentRow[]).filter((assignment) => !excludedPlayerIds.has(assignment.player_id));
+  let assignments = await repairDuplicateDepthAssignments(db, user.id, planId, ((assignmentsResult.data ?? []) as AssignmentRow[]).filter((assignment) => !excludedPlayerIds.has(assignment.player_id)));
   if (mode === "rebuild_all") {
     await db.from("squad_tactical_depth_assignments").delete().eq("user_id", user.id).eq("tactical_plan_id", planId);
     assignments = [];
@@ -675,6 +713,55 @@ function assignmentKey(slotId: string, playerId: string) {
   return `${slotId}:${playerId}`;
 }
 
+async function repairDuplicateDepthAssignments(db: SupabaseClient, userId: string, planId: string, assignments: AssignmentRow[]) {
+  const bestBySlotPlayer = new Map<string, AssignmentRow>();
+  const duplicateIds: string[] = [];
+  for (const assignment of assignments) {
+    const key = assignmentKey(assignment.slot_id, assignment.player_id);
+    const existing = bestBySlotPlayer.get(key);
+    if (!existing) {
+      bestBySlotPlayer.set(key, assignment);
+      continue;
+    }
+    const keepNew = assignment.is_preferred_starter && !existing.is_preferred_starter
+      ? true
+      : assignment.is_preferred_starter === existing.is_preferred_starter && assignment.depth_order < existing.depth_order;
+    if (keepNew) {
+      duplicateIds.push(existing.id);
+      bestBySlotPlayer.set(key, assignment);
+    } else {
+      duplicateIds.push(assignment.id);
+    }
+  }
+  if (duplicateIds.length > 0) {
+    await db.from("squad_tactical_depth_assignments").delete().eq("user_id", userId).eq("tactical_plan_id", planId).in("id", duplicateIds);
+  }
+
+  const repaired = Array.from(bestBySlotPlayer.values());
+  const bySlot = new Map<string, AssignmentRow[]>();
+  for (const assignment of repaired) {
+    bySlot.set(assignment.slot_id, [...(bySlot.get(assignment.slot_id) ?? []), assignment]);
+  }
+  for (const slotAssignments of bySlot.values()) {
+    const ordered = [...slotAssignments].sort((a, b) => Number(b.is_preferred_starter) - Number(a.is_preferred_starter) || a.depth_order - b.depth_order);
+    for (const [index, assignment] of ordered.entries()) {
+      const nextOrder = index + 1;
+      const isStarter = index === 0;
+      if (assignment.depth_order !== nextOrder || assignment.is_preferred_starter !== isStarter) {
+        await db
+          .from("squad_tactical_depth_assignments")
+          .update({ depth_order: nextOrder, is_preferred_starter: isStarter })
+          .eq("id", assignment.id)
+          .eq("user_id", userId)
+          .eq("tactical_plan_id", planId);
+        assignment.depth_order = nextOrder;
+        assignment.is_preferred_starter = isStarter;
+      }
+    }
+  }
+  return repaired.sort((a, b) => a.depth_order - b.depth_order);
+}
+
 type StarterPick = {
   slot: TacticalPlanSlot;
   player: SquadPlayer;
@@ -789,4 +876,24 @@ async function promoteFirstDepthOption(db: SupabaseClient, userId: string, planI
   if (data) {
     await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: true }).eq("id", data.id).eq("user_id", userId);
   }
+}
+
+async function normalizeSlotDepthOrder(db: SupabaseClient, userId: string, planId: string, slotId: string) {
+  const { data } = await db
+    .from("squad_tactical_depth_assignments")
+    .select("id,is_preferred_starter,depth_order")
+    .eq("user_id", userId)
+    .eq("tactical_plan_id", planId)
+    .eq("slot_id", slotId)
+    .order("depth_order", { ascending: true });
+  const ordered = ((data ?? []) as Array<{ id: string; is_preferred_starter: boolean; depth_order: number }>)
+    .sort((a, b) => Number(b.is_preferred_starter) - Number(a.is_preferred_starter) || a.depth_order - b.depth_order);
+  await Promise.all(ordered.map((assignment, index) => (
+    db
+      .from("squad_tactical_depth_assignments")
+      .update({ depth_order: index + 1, is_preferred_starter: index === 0 })
+      .eq("id", assignment.id)
+      .eq("user_id", userId)
+      .eq("tactical_plan_id", planId)
+  )));
 }

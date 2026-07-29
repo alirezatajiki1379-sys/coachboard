@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Archive, Copy, Goal, RotateCcw, Shield, Star, Trash2, Users } from "lucide-react";
 import {
   addDepthAssignment,
@@ -12,6 +12,7 @@ import {
   deleteTacticalPlan,
   duplicateTacticalPlan,
   moveDepthAssignment,
+  moveDepthAssignmentToRank,
   removeDepthAssignment,
   restoreTacticalPlan,
   setDefaultTacticalPlan,
@@ -58,15 +59,25 @@ const tacticalStatusOptions = [
   ...tacticalPlayerRoleOptions
 ];
 
-const depthPitchRows = [
-  ["ST"],
-  ["SS"],
-  ["LW", "CAM", "RW"],
-  ["LM", "CM", "RM"],
-  ["CDM"],
-  ["LWB", "LB", "CB", "RB", "RWB"],
-  ["GK"]
-];
+const mirrorX = (x: number) => 100 - x;
+
+const depthPitchAnchors = [
+  { code: "ST", x: 50, y: 11, lane: "centre", line: "forward" },
+  { code: "LW", x: 13, y: 25, lane: "far-left", line: "wing" },
+  { code: "CAM", x: 50, y: 27, lane: "centre", line: "attacking-midfield" },
+  { code: "RW", x: mirrorX(13), y: 25, lane: "far-right", line: "wing" },
+  { code: "LM", x: 13, y: 43, lane: "far-left", line: "midfield" },
+  { code: "CM", x: 50, y: 43, lane: "centre", line: "midfield" },
+  { code: "RM", x: mirrorX(13), y: 43, lane: "far-right", line: "midfield" },
+  { code: "CDM", x: 50, y: 58, lane: "centre", line: "holding" },
+  { code: "LWB", x: 12, y: 67, lane: "far-left", line: "wing-back" },
+  { code: "RWB", x: mirrorX(12), y: 67, lane: "far-right", line: "wing-back" },
+  { code: "LB", x: 8, y: 80, lane: "far-left", line: "defensive" },
+  { code: "CB", x: 50, y: 80, lane: "centre", line: "defensive" },
+  { code: "RB", x: mirrorX(8), y: 80, lane: "far-right", line: "defensive" },
+  { code: "GK", x: 50, y: 93, lane: "centre", line: "goalkeeper" },
+  { code: "SS", x: 68, y: 18, lane: "right", line: "forward" }
+] as const;
 
 export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
   const [mode, setMode] = useState<PlannerMode>("formation");
@@ -84,7 +95,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
     () => new Set(data.playerStates.filter((state) => state.inclusionStatus === "excluded").map((state) => state.playerId)),
     [data.playerStates]
   );
-  const activeAssignments = data.assignments.filter((assignment) => !excludedPlayerIds.has(assignment.playerId) && playersById.has(assignment.playerId));
+  const activeAssignments = uniqueDepthAssignments(data.assignments.filter((assignment) => !excludedPlayerIds.has(assignment.playerId) && playersById.has(assignment.playerId)));
   const assignmentsBySlot = new Map<string, typeof data.assignments>();
   for (const assignment of activeAssignments) {
     assignmentsBySlot.set(assignment.slotId, [...(assignmentsBySlot.get(assignment.slotId) ?? []), assignment]);
@@ -246,6 +257,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
 
           <PlannerPitch className="mt-4 min-h-[620px] overflow-x-auto p-4">
             <FormationSlotRows
+              planId={data.selectedPlan.id}
               slots={data.slots}
               selectedSlotId={selectedSlot?.id}
               assignmentsBySlot={assignmentsBySlot}
@@ -593,6 +605,7 @@ function IconForm({
 }
 
 function FormationSlotRows({
+  planId,
   slots,
   selectedSlotId,
   assignmentsBySlot,
@@ -600,6 +613,7 @@ function FormationSlotRows({
   includedPlayers,
   onSelect
 }: {
+  planId: string;
   slots: TacticalPlanSlot[];
   selectedSlotId?: string;
   assignmentsBySlot: Map<string, TacticalPlannerData["assignments"]>;
@@ -619,10 +633,12 @@ function FormationSlotRows({
           {row.slots.map((slot) => (
             <SlotButton
               key={slot.id}
+              planId={planId}
               slot={slot}
               selected={selectedSlotId === slot.id}
               assignments={assignmentsBySlot.get(slot.id) ?? []}
               playersById={playersById}
+              availablePlayers={includedPlayers}
               eligibleCount={includedPlayers.filter((player) => {
                 const fit = evaluatePlayerSlotFit(player, slot, false);
                 return isFitAllowedByAutoFillEligibility(fit.fitType, "natural_secondary", false);
@@ -650,18 +666,34 @@ function groupSlotsIntoPitchRows(slots: TacticalPlanSlot[]) {
     }));
 }
 
+function uniqueDepthAssignments(assignments: TacticalPlannerData["assignments"]) {
+  const best = new Map<string, TacticalPlannerData["assignments"][number]>();
+  for (const assignment of assignments) {
+    const key = `${assignment.slotId}:${assignment.playerId}`;
+    const existing = best.get(key);
+    if (!existing || assignment.isPreferredStarter || assignment.depthOrder < existing.depthOrder) {
+      best.set(key, assignment);
+    }
+  }
+  return Array.from(best.values()).sort((a, b) => a.depthOrder - b.depthOrder);
+}
+
 function SlotButton({
+  planId,
   slot,
   selected,
   assignments,
   playersById,
+  availablePlayers,
   eligibleCount,
   onSelect
 }: {
+  planId: string;
   slot: TacticalPlanSlot;
   selected: boolean;
   assignments: TacticalPlannerData["assignments"];
   playersById: Map<string, SquadPlayer>;
+  availablePlayers: SquadPlayer[];
   eligibleCount: number;
   onSelect: () => void;
 }) {
@@ -671,13 +703,17 @@ function SlotButton({
   const displayText = starterPlayer ? playerName(starterPlayer) : "Open";
 
   return (
-    <button
-      type="button"
+    <div
       onClick={onSelect}
       className={cn(
         "min-h-[5.25rem] w-full rounded-lg border p-2 text-left shadow-lg transition",
         selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/25" : "border-white/70 bg-white/90 text-slate-800 hover:bg-white"
       )}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") onSelect();
+      }}
     >
       <span className="flex items-center justify-between gap-2">
         <span className="text-xs font-black uppercase text-board-green">{slot.code}</span>
@@ -685,8 +721,166 @@ function SlotButton({
       </span>
       <span className="mt-1 line-clamp-2 block text-xs font-bold sm:text-sm">{displayText}</span>
       <span className="mt-1 block text-[11px] font-semibold text-slate-500">{depthCount} assigned · {eligibleCount} eligible</span>
-      <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Manage depth</span>
-    </button>
+      {selected ? (
+        <InlineDepthControls
+          planId={planId}
+          slot={slot}
+          depth={assignments}
+          playersById={playersById}
+          availablePlayers={availablePlayers}
+          compact
+        />
+      ) : (
+        <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Click to rank</span>
+      )}
+    </div>
+  );
+}
+
+function InlineDepthControls({
+  planId,
+  slot,
+  depth,
+  playersById,
+  availablePlayers,
+  compact = false
+}: {
+  planId: string;
+  slot: TacticalPlanSlot;
+  depth: TacticalPlannerData["assignments"];
+  playersById: Map<string, SquadPlayer>;
+  availablePlayers?: SquadPlayer[];
+  compact?: boolean;
+}) {
+  const reorderFormRef = useRef<HTMLFormElement>(null);
+  const [draggedAssignmentId, setDraggedAssignmentId] = useState("");
+  const [dropRank, setDropRank] = useState(1);
+  const sortedDepth = uniqueDepthAssignments(depth).sort((a, b) => a.depthOrder - b.depthOrder);
+  const assignedPlayerIds = new Set(sortedDepth.map((assignment) => assignment.playerId));
+  const addablePlayers = (availablePlayers ?? [])
+    .filter((player) => !assignedPlayerIds.has(player.id))
+    .map((player) => ({ player, fit: evaluatePlayerSlotFit(player, slot) }))
+    .filter((item) => item.fit.eligible && isFitAllowedByAutoFillEligibility(item.fit.fitType, "natural_secondary", false))
+    .sort((a, b) => b.fit.baseScore - a.fit.baseScore || playerName(a.player).localeCompare(playerName(b.player)));
+
+  return (
+    <div className={cn("mt-2 space-y-1", compact ? "text-[11px]" : "text-xs")} onClick={(event) => event.stopPropagation()}>
+      <form ref={reorderFormRef} action={moveDepthAssignmentToRank} className="hidden">
+        <input type="hidden" name="planId" value={planId} />
+        <input type="hidden" name="assignmentId" value={draggedAssignmentId} />
+        <input type="hidden" name="targetRank" value={dropRank} />
+      </form>
+      {sortedDepth.length === 0 ? (
+        <p className="rounded bg-slate-50 px-2 py-1 font-semibold text-slate-500">No assigned player</p>
+      ) : sortedDepth.map((assignment, index) => {
+        const player = playersById.get(assignment.playerId);
+        if (!player) return null;
+        return (
+          <div
+            key={assignment.id}
+            draggable
+            onDragStart={(event) => {
+              setDraggedAssignmentId(assignment.id);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", assignment.id);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const sourceId = draggedAssignmentId || event.dataTransfer.getData("text/plain");
+              if (!sourceId || sourceId === assignment.id) return;
+              setDraggedAssignmentId(sourceId);
+              setDropRank(index + 1);
+              window.setTimeout(() => reorderFormRef.current?.requestSubmit(), 0);
+            }}
+            className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto_auto_auto] items-center gap-1 rounded bg-slate-50 px-1.5 py-1"
+          >
+            <span className="font-black text-board-green">{index + 1}</span>
+            <span className="cursor-grab text-slate-400" aria-hidden="true">⋮⋮</span>
+            <span className="truncate font-bold text-board-navy" title={playerName(player)}>{playerName(player)}{index === 0 ? " · Starter" : ""}</span>
+            <DepthIconAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="↑" title="Move up" extra={{ direction: "up" }} disabled={index === 0} />
+            <DepthIconAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="↓" title="Move down" extra={{ direction: "down" }} disabled={index === sortedDepth.length - 1} />
+            <DepthIconAction action={removeDepthAssignment} planId={planId} assignmentId={assignment.id} label="×" title="Remove from depth" variant="danger" />
+          </div>
+        );
+      })}
+      {sortedDepth.length > 1 ? (
+        <div className="flex flex-wrap gap-1 pt-1">
+          {sortedDepth.slice(1).map((assignment) => {
+            const player = playersById.get(assignment.playerId);
+            return (
+              <DepthAction key={assignment.id} action={setPreferredStarter} planId={planId} assignmentId={assignment.id} label={`Set ${player ? playerName(player).split(" ")[0] : "player"} starter`} />
+            );
+          })}
+        </div>
+      ) : null}
+      {availablePlayers ? (
+        <details className="pt-1">
+          <summary className="cursor-pointer rounded-full bg-board-navy px-2 py-1 text-center font-bold text-white">+ Add Player</summary>
+          <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-md border border-board-line bg-white p-2 shadow-lg">
+            <form action={addAllEligibleDepthAssignments} className="mb-2">
+              <input type="hidden" name="planId" value={planId} />
+              <input type="hidden" name="slotId" value={slot.id} />
+              <input type="hidden" name="eligibility" value="natural_secondary" />
+              <Button type="submit" variant="secondary" className="h-8 w-full px-2 text-xs">Add all exact Players</Button>
+            </form>
+            {addablePlayers.length === 0 ? (
+              <p className="px-2 py-1 text-xs font-semibold text-slate-500">No eligible players to add.</p>
+            ) : addablePlayers.map(({ player, fit }) => (
+              <form key={player.id} action={addDepthAssignment} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1">
+                <input type="hidden" name="planId" value={planId} />
+                <input type="hidden" name="slotId" value={slot.id} />
+                <input type="hidden" name="playerId" value={player.id} />
+                <span className="min-w-0 truncate font-semibold text-slate-700" title={playerName(player)}>{playerName(player)} · {fitMeta[fit.fitType].label}</span>
+                <Button type="submit" variant="secondary" className="h-7 px-2 text-[11px]">Add</Button>
+              </form>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function DepthIconAction({
+  action,
+  planId,
+  assignmentId,
+  label,
+  title,
+  disabled,
+  variant = "secondary",
+  extra
+}: {
+  action: (formData: FormData) => void | Promise<void>;
+  planId: string;
+  assignmentId: string;
+  label: string;
+  title: string;
+  disabled?: boolean;
+  variant?: "secondary" | "danger";
+  extra?: Record<string, string>;
+}) {
+  return (
+    <form action={action}>
+      <input type="hidden" name="planId" value={planId} />
+      <input type="hidden" name="assignmentId" value={assignmentId} />
+      {extra ? Object.entries(extra).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />) : null}
+      <button
+        type="submit"
+        title={title}
+        disabled={disabled}
+        className={cn(
+          "flex h-6 w-6 items-center justify-center rounded text-xs font-black disabled:cursor-not-allowed disabled:opacity-40",
+          variant === "danger" ? "bg-red-50 text-red-700 hover:bg-red-100" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+        )}
+      >
+        {label}
+      </button>
+    </form>
   );
 }
 
@@ -871,13 +1065,21 @@ function UniversalSquadDepth({
   const slotForPosition = slots.find((slot) => slot.naturalPositions.includes(selectedPosition) || slot.acceptedPositions.includes(selectedPosition));
   const assignmentsByPlayer = new Map<string, TacticalPlannerData["assignments"]>();
   const slotById = new Map(slots.map((slot) => [slot.id, slot]));
+  const slotByPosition = new Map<string, TacticalPlanSlot>();
+  for (const slot of slots) {
+    const positionCode = slot.naturalPositions[0] ?? slot.acceptedPositions[0];
+    if (positionCode && !slotByPosition.has(positionCode)) slotByPosition.set(positionCode, slot);
+  }
   const playersById = new Map(players.map((player) => [player.id, player]));
-  const assignedPlayerIds = new Set(assignments.map((assignment) => assignment.playerId));
-  const selectedSlotDepth = slotForPosition ? assignments.filter((assignment) => assignment.slotId === slotForPosition.id).sort((a, b) => a.depthOrder - b.depthOrder) : [];
+  const uniqueAssignments = uniqueDepthAssignments(assignments);
+  const assignedPlayerIds = new Set(uniqueAssignments.map((assignment) => assignment.playerId));
+  const selectedSlotDepth = slotForPosition ? uniqueAssignments.filter((assignment) => assignment.slotId === slotForPosition.id).sort((a, b) => a.depthOrder - b.depthOrder) : [];
   const assignedCountByPosition = new Map<string, number>();
-  for (const assignment of assignments) {
+  const depthBySlot = new Map<string, TacticalPlannerData["assignments"]>();
+  for (const assignment of uniqueAssignments) {
     assignmentsByPlayer.set(assignment.playerId, [...(assignmentsByPlayer.get(assignment.playerId) ?? []), assignment]);
     const slot = slotById.get(assignment.slotId);
+    depthBySlot.set(assignment.slotId, [...(depthBySlot.get(assignment.slotId) ?? []), assignment]);
     const positionCode = slot?.naturalPositions[0] ?? slot?.acceptedPositions[0];
     if (positionCode) assignedCountByPosition.set(positionCode, (assignedCountByPosition.get(positionCode) ?? 0) + 1);
   }
@@ -905,38 +1107,31 @@ function UniversalSquadDepth({
           </div>
         </div>
 
-        <PlannerPitch className="mt-5 min-h-[760px] overflow-y-auto p-4 sm:p-5">
-            <div className="space-y-3">
-              {depthPitchRows.map((row) => (
-                <div
-                  key={row.join("-")}
-                  className={cn(
-                    "grid gap-3",
-                    row.length === 1 ? "grid-cols-1 justify-items-center" : "",
-                    row.length === 3 ? "grid-cols-1 sm:grid-cols-3" : "",
-                    row.length === 5 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-5" : ""
-                  )}
-                >
-                  {row.map((code) => {
-                    const position = squadDepthPositions.find((item) => item.code === code);
-                    if (!position) return null;
-                    const exactCandidates = resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code });
-                    const shownCandidates = includeCompatible ? resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code, includeCompatible: true }) : exactCandidates;
-                    return (
-                      <DepthPitchCard
-                        key={position.code}
-                        position={position}
-                        exactCandidates={exactCandidates}
-                        shownCandidates={shownCandidates}
-                        assignedCount={assignedCountByPosition.get(position.code) ?? 0}
-                        selected={selectedPosition === position.code}
-                        onSelect={() => setSelectedPosition(position.code)}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+        <PlannerPitch className="mt-5 h-[980px] min-w-[980px] overflow-visible">
+          {depthPitchAnchors.map((anchor) => {
+            const position = squadDepthPositions.find((item) => item.code === anchor.code);
+            if (!position) return null;
+            const exactCandidates = resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code });
+            const shownCandidates = includeCompatible ? resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code, includeCompatible: true }) : exactCandidates;
+            const slot = slotByPosition.get(position.code);
+            return (
+              <DepthPitchCard
+                key={position.code}
+                position={position}
+                anchor={anchor}
+                exactCandidates={exactCandidates}
+                shownCandidates={shownCandidates}
+                assignedCount={assignedCountByPosition.get(position.code) ?? 0}
+                selected={selectedPosition === position.code}
+                onSelect={() => setSelectedPosition(position.code)}
+                planId={selectedPlanId}
+                slot={slot}
+                depth={slot ? (depthBySlot.get(slot.id) ?? []) : []}
+                playersById={playersById}
+                availablePlayers={scopedPlayers}
+              />
+            );
+          })}
         </PlannerPitch>
       </section>
 
@@ -971,18 +1166,30 @@ function UniversalSquadDepth({
 
 function DepthPitchCard({
   position,
+  anchor,
   exactCandidates,
   shownCandidates,
   assignedCount,
   selected,
-  onSelect
+  onSelect,
+  planId,
+  slot,
+  depth,
+  playersById,
+  availablePlayers
 }: {
   position: (typeof squadDepthPositions)[number];
+  anchor: (typeof depthPitchAnchors)[number];
   exactCandidates: PositionCandidate[];
   shownCandidates: PositionCandidate[];
   assignedCount: number;
   selected: boolean;
   onSelect: () => void;
+  planId: string;
+  slot?: TacticalPlanSlot;
+  depth: TacticalPlannerData["assignments"];
+  playersById: Map<string, SquadPlayer>;
+  availablePlayers: SquadPlayer[];
 }) {
   const primaryCount = exactCandidates.filter((candidate) => candidate.fit === "primary").length;
   const secondaryCount = exactCandidates.filter((candidate) => candidate.fit === "secondary").length;
@@ -991,13 +1198,20 @@ function DepthPitchCard({
   const warning = exactCount === 0 ? "No exact option" : exactCount === 1 ? "Thin" : exactCount === 2 ? "Covered" : "Strong";
   const previewCandidates = shownCandidates.slice(0, 2);
   const hiddenCount = Math.max(0, shownCandidates.length - previewCandidates.length);
+  const transform = anchor.lane === "far-left" ? "translate(0,-50%)" : anchor.lane === "far-right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)";
 
   return (
-    <button
-      type="button"
+    <div
       onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") onSelect();
+      }}
+      style={{ left: `${anchor.x}%`, top: `${anchor.y}%`, transform }}
       className={cn(
-        "min-h-32 w-full max-w-full rounded-lg border p-3 text-left shadow-lg transition sm:max-w-[12rem]",
+        "absolute rounded-lg border p-3 text-left shadow-lg transition",
+        selected ? "z-30 min-h-40 w-72" : "z-10 min-h-32 w-40",
         selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/30" : "border-white/70 bg-white/95 text-slate-800 hover:bg-white"
       )}
     >
@@ -1032,8 +1246,19 @@ function DepthPitchCard({
         ))}
         {hiddenCount > 0 ? <p className="text-xs font-bold text-slate-500">+{hiddenCount} more</p> : null}
       </div>
-      <span className="mt-2 inline-flex rounded-full bg-board-navy px-2 py-1 text-[11px] font-bold text-white">Manage depth · {assignedCount}</span>
-    </button>
+      {selected && slot ? (
+        <InlineDepthControls
+          planId={planId}
+          slot={slot}
+          depth={depth}
+          playersById={playersById}
+          availablePlayers={availablePlayers}
+        />
+      ) : (
+        <span className="mt-2 inline-flex rounded-full bg-board-navy px-2 py-1 text-[11px] font-bold text-white">Click to rank · {assignedCount}</span>
+      )}
+      {selected && !slot ? <p className="mt-2 rounded bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500">No matching slot in this formation.</p> : null}
+    </div>
   );
 }
 
