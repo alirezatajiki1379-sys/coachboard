@@ -229,11 +229,11 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
                 assignments={activeAssignments}
                 playerStates={data.playerStates}
               />
-              <IconForm action={clearStartingXi} planId={data.selectedPlan.id} label="Clear XI" icon={<RotateCcw className="h-4 w-4" />} />
+              <IconForm action={clearStartingXi} planId={data.selectedPlan.id} label="Clear XI" icon={<RotateCcw className="h-4 w-4" />} confirmMessage="Clear the current Starting XI? Depth rankings stay available." />
             </div>
           </div>
 
-          <PlannerPitch className="mt-4 min-h-[620px] overflow-x-auto p-4" onClick={() => setSelectedSlotId(null)}>
+          <PlannerPitch className="mt-4" onClick={() => setSelectedSlotId(null)}>
             <FormationSlotRows
               planId={data.selectedPlan.id}
               slots={data.slots}
@@ -344,8 +344,8 @@ function PlannerPitch({ children, className, onClick }: { children: ReactNode; c
     <div
       onClick={onClick}
       className={cn(
-        "relative overflow-hidden rounded-xl border border-emerald-950/20 bg-emerald-800 shadow-inner",
-        "bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_50%,transparent_50%)] bg-[length:44px_44px]",
+        "relative mx-auto aspect-[68/105] w-full max-w-[820px] overflow-hidden rounded-xl border border-emerald-950/20 bg-emerald-800 shadow-inner",
+        "bg-[linear-gradient(90deg,rgba(255,255,255,0.035)_50%,transparent_50%)] bg-[length:44px_44px]",
         className
       )}
       role="img"
@@ -359,37 +359,37 @@ function PlannerPitch({ children, className, onClick }: { children: ReactNode; c
 
 function FootballPitchSvg() {
   return (
-    <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full text-white/65" viewBox="0 0 68 105" preserveAspectRatio="none">
+    <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full text-white/70" viewBox="0 0 680 1050" preserveAspectRatio="xMidYMid meet">
       <defs>
-        <pattern id="planner-net" width="1.2" height="1.2" patternUnits="userSpaceOnUse">
-          <path d="M 1.2 0 L 0 0 0 1.2" fill="none" stroke="currentColor" strokeWidth="0.08" opacity="0.35" />
+        <pattern id="planner-net" width="12" height="12" patternUnits="userSpaceOnUse">
+          <path d="M 12 0 L 0 0 0 12" fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.3" />
         </pattern>
       </defs>
-      <rect x="2" y="2" width="64" height="101" rx="0.5" fill="none" stroke="currentColor" strokeWidth="0.55" />
-      <line x1="2" y1="52.5" x2="66" y2="52.5" stroke="currentColor" strokeWidth="0.45" />
-      <circle cx="34" cy="52.5" r="9.15" fill="none" stroke="currentColor" strokeWidth="0.45" />
-      <circle cx="34" cy="52.5" r="0.55" fill="currentColor" opacity="0.9" />
+      <rect x="40" y="45" width="600" height="960" rx="5" fill="none" stroke="currentColor" strokeWidth="5.5" />
+      <line x1="40" y1="525" x2="640" y2="525" stroke="currentColor" strokeWidth="4.5" />
+      <circle cx="340" cy="525" r="91.5" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <circle cx="340" cy="525" r="5.5" fill="currentColor" opacity="0.9" />
 
-      <rect x="13.84" y="2" width="40.32" height="16.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
-      <rect x="24.84" y="2" width="18.32" height="5.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
-      <circle cx="34" cy="13" r="0.45" fill="currentColor" />
-      <path d="M 26.7 18.5 A 9.15 9.15 0 0 0 41.3 18.5" fill="none" stroke="currentColor" strokeWidth="0.35" opacity="0.65" />
+      <rect x="151.6" y="45" width="376.8" height="165" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <rect x="249.2" y="45" width="181.6" height="55" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <circle cx="340" cy="155" r="4.5" fill="currentColor" />
+      <path d="M 267 210 A 91.5 91.5 0 0 0 413 210" fill="none" stroke="currentColor" strokeWidth="3.5" opacity="0.7" />
 
-      <rect x="13.84" y="86.5" width="40.32" height="16.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
-      <rect x="24.84" y="97.5" width="18.32" height="5.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
-      <circle cx="34" cy="92" r="0.45" fill="currentColor" />
-      <path d="M 26.7 86.5 A 9.15 9.15 0 0 1 41.3 86.5" fill="none" stroke="currentColor" strokeWidth="0.35" opacity="0.65" />
+      <rect x="151.6" y="840" width="376.8" height="165" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <rect x="249.2" y="950" width="181.6" height="55" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <circle cx="340" cy="895" r="4.5" fill="currentColor" />
+      <path d="M 267 840 A 91.5 91.5 0 0 1 413 840" fill="none" stroke="currentColor" strokeWidth="3.5" opacity="0.7" />
 
-      <path d="M 2 5 A 3 3 0 0 0 5 2" fill="none" stroke="currentColor" strokeWidth="0.32" opacity="0.7" />
-      <path d="M 63 2 A 3 3 0 0 0 66 5" fill="none" stroke="currentColor" strokeWidth="0.32" opacity="0.7" />
-      <path d="M 5 103 A 3 3 0 0 0 2 100" fill="none" stroke="currentColor" strokeWidth="0.32" opacity="0.7" />
-      <path d="M 66 100 A 3 3 0 0 0 63 103" fill="none" stroke="currentColor" strokeWidth="0.32" opacity="0.7" />
+      <path d="M 40 75 A 30 30 0 0 0 70 45" fill="none" stroke="currentColor" strokeWidth="3.2" opacity="0.7" />
+      <path d="M 610 45 A 30 30 0 0 0 640 75" fill="none" stroke="currentColor" strokeWidth="3.2" opacity="0.7" />
+      <path d="M 70 1005 A 30 30 0 0 0 40 975" fill="none" stroke="currentColor" strokeWidth="3.2" opacity="0.7" />
+      <path d="M 640 975 A 30 30 0 0 0 610 1005" fill="none" stroke="currentColor" strokeWidth="3.2" opacity="0.7" />
 
-      <g opacity="0.8">
-        <rect x="29" y="-1.6" width="10" height="3.6" rx="0.35" fill="none" stroke="currentColor" strokeWidth="0.45" />
-        <rect x="30" y="-5" width="8" height="3.4" fill="url(#planner-net)" stroke="currentColor" strokeWidth="0.28" />
-        <rect x="29" y="103" width="10" height="3.6" rx="0.35" fill="none" stroke="currentColor" strokeWidth="0.45" />
-        <rect x="30" y="106.6" width="8" height="3.4" fill="url(#planner-net)" stroke="currentColor" strokeWidth="0.28" />
+      <g opacity="0.85">
+        <rect x="290" y="18" width="100" height="27" rx="3.5" fill="none" stroke="currentColor" strokeWidth="4.5" />
+        <rect x="300" y="0" width="80" height="18" fill="url(#planner-net)" stroke="currentColor" strokeWidth="2.8" />
+        <rect x="290" y="1005" width="100" height="27" rx="3.5" fill="none" stroke="currentColor" strokeWidth="4.5" />
+        <rect x="300" y="1032" width="80" height="18" fill="url(#planner-net)" stroke="currentColor" strokeWidth="2.8" />
       </g>
     </svg>
   );
@@ -612,23 +612,32 @@ function FormationSlotRows({
   onSelect: (slotId: string) => void;
 }) {
   const rows = groupSlotsIntoPitchRows(slots);
+  const selectedSlot = selectedSlotId ? slots.find((slot) => slot.id === selectedSlotId) : undefined;
+  const selectedDepth = selectedSlot ? (assignmentsBySlot.get(selectedSlot.id) ?? []) : [];
+  const selectedEligibleCount = selectedSlot
+    ? includedPlayers.filter((player) => {
+        const fit = evaluatePlayerSlotFit(player, selectedSlot, false);
+        return isFitAllowedByAutoFillEligibility(fit.fitType, "natural_secondary", false);
+      }).length
+    : 0;
   return (
-    <div className="relative z-10 flex min-h-[590px] min-w-[900px] flex-col justify-between gap-4 py-8">
+    <div className="relative z-10 flex h-full min-h-0 flex-col justify-between gap-4 px-[7%] py-[8%]">
       {rows.map((row) => (
         <div
           key={row.key}
-          className="grid justify-center gap-3"
-          style={{ gridTemplateColumns: `repeat(${row.slots.length}, minmax(11.25rem, 13.75rem))` }}
+          className="mx-auto grid w-full justify-center gap-2 sm:gap-3"
+          style={{
+            gridTemplateColumns: `repeat(${row.slots.length}, minmax(0, 1fr))`,
+            maxWidth: rowWidth(row.slots.length)
+          }}
         >
           {row.slots.map((slot) => (
             <SlotButton
               key={slot.id}
-              planId={planId}
               slot={slot}
               selected={selectedSlotId === slot.id}
               assignments={assignmentsBySlot.get(slot.id) ?? []}
               playersById={playersById}
-              availablePlayers={includedPlayers}
               eligibleCount={includedPlayers.filter((player) => {
                 const fit = evaluatePlayerSlotFit(player, slot, false);
                 return isFitAllowedByAutoFillEligibility(fit.fitType, "natural_secondary", false);
@@ -639,8 +648,26 @@ function FormationSlotRows({
           ))}
         </div>
       ))}
+      {selectedSlot ? (
+        <SlotEditorOverlay
+          planId={planId}
+          slot={selectedSlot}
+          depth={selectedDepth}
+          playersById={playersById}
+          availablePlayers={includedPlayers}
+          eligibleCount={selectedEligibleCount}
+        />
+      ) : null}
     </div>
   );
+}
+
+function rowWidth(slotCount: number) {
+  if (slotCount <= 1) return "34%";
+  if (slotCount === 2) return "52%";
+  if (slotCount === 3) return "76%";
+  if (slotCount === 4) return "91%";
+  return "94%";
 }
 
 function groupSlotsIntoPitchRows(slots: TacticalPlanSlot[]) {
@@ -670,22 +697,18 @@ function uniqueDepthAssignments(assignments: TacticalPlannerData["assignments"])
 }
 
 function SlotButton({
-  planId,
   slot,
   selected,
   assignments,
   playersById,
-  availablePlayers,
   eligibleCount,
   mode,
   onSelect
 }: {
-  planId: string;
   slot: TacticalPlanSlot;
   selected: boolean;
   assignments: TacticalPlannerData["assignments"];
   playersById: Map<string, SquadPlayer>;
-  availablePlayers: SquadPlayer[];
   eligibleCount: number;
   mode: PlannerMode;
   onSelect: () => void;
@@ -715,8 +738,8 @@ function SlotButton({
         onSelect();
       }}
       className={cn(
-        "min-h-[5.25rem] w-full rounded-lg border p-2 text-left shadow-lg transition",
-        selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/25" : "border-white/70 bg-white/90 text-slate-800 hover:bg-white"
+        "min-h-12 w-full rounded-lg border p-1.5 text-left shadow-lg transition sm:min-h-[5.9rem] sm:p-2",
+        selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/25" : "border-white/80 bg-white text-slate-800 hover:bg-white"
       )}
       role="button"
       tabIndex={0}
@@ -729,11 +752,11 @@ function SlotButton({
         }
       }}
     >
-      <span className="flex items-center justify-between gap-2">
+      <span className="flex items-center justify-between gap-1 sm:gap-2">
         <span className="text-xs font-black uppercase text-board-green">{slot.code}</span>
         <span
           className={cn(
-            "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ring-1",
+            "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-black ring-1 sm:h-5 sm:min-w-5 sm:px-1.5 sm:text-[11px]",
             depthCount <= 1 ? "bg-red-100 text-red-800 ring-red-300" : "bg-slate-100 text-slate-700 ring-slate-200"
           )}
           title={depthTitle}
@@ -742,9 +765,9 @@ function SlotButton({
           {depthCount}
         </span>
       </span>
-      <span className="mt-1 line-clamp-2 block text-sm font-black leading-tight text-board-navy" title={displayText}>{displayText}</span>
+      <span className="mt-1 hidden text-sm font-black leading-tight text-board-navy sm:line-clamp-2" title={displayText}>{displayText}</span>
       {!selected && mode === "formation" && alternatives.length > 0 ? (
-        <div className="mt-1 space-y-0.5">
+        <div className="mt-1 hidden space-y-0.5 sm:block">
           <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Alternatives</p>
           {alternatives.map((assignment) => {
             const player = playersById.get(assignment.playerId);
@@ -755,7 +778,7 @@ function SlotButton({
         </div>
       ) : null}
       {!selected && mode === "depth" ? (
-        <div className="mt-1 space-y-0.5">
+        <div className="mt-1 hidden space-y-0.5 sm:block">
           {rankingPreview.length === 0 ? <p className="text-xs font-semibold text-slate-500">No Player ranked</p> : rankingPreview.map((assignment, index) => {
             const player = playersById.get(assignment.playerId);
             if (!player) return null;
@@ -764,16 +787,58 @@ function SlotButton({
           {remainingCount > 0 ? <p className="text-xs font-bold text-slate-500">+{remainingCount} more</p> : null}
         </div>
       ) : null}
-      {selected ? (
-        <InlineDepthControls
-          planId={planId}
-          slot={slot}
-          depth={assignments}
-          playersById={playersById}
-          availablePlayers={availablePlayers}
-          compact
-        />
-      ) : null}
+    </div>
+  );
+}
+
+function SlotEditorOverlay({
+  planId,
+  slot,
+  depth,
+  playersById,
+  availablePlayers,
+  eligibleCount
+}: {
+  planId: string;
+  slot: TacticalPlanSlot;
+  depth: TacticalPlannerData["assignments"];
+  playersById: Map<string, SquadPlayer>;
+  availablePlayers: SquadPlayer[];
+  eligibleCount: number;
+}) {
+  const left = Math.min(Math.max(slot.x, 18), 82);
+  const top = Math.min(Math.max(slot.y + 6, 14), 76);
+  const alignClass = slot.x < 32 ? "left-4 translate-x-0" : slot.x > 68 ? "right-4 translate-x-0" : "-translate-x-1/2";
+  const style = slot.x < 32 || slot.x > 68 ? { top: `${top}%` } : { left: `${left}%`, top: `${top}%` };
+
+  return (
+    <div
+      className={cn(
+        "absolute z-40 max-h-[45%] w-[22rem] max-w-[calc(100%-2rem)] overflow-y-auto rounded-xl border border-board-green/30 bg-white p-3 shadow-2xl",
+        "max-md:fixed max-md:inset-x-3 max-md:bottom-3 max-md:top-auto max-md:max-h-[70vh] max-md:w-auto max-md:translate-x-0",
+        alignClass
+      )}
+      style={style}
+      onClick={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-wide text-board-green">{slot.code}</p>
+          <h4 className="font-bold text-board-navy">{slot.label}</h4>
+        </div>
+        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600" title={`${eligibleCount} eligible Players available`}>
+          {eligibleCount} eligible
+        </span>
+      </div>
+      <InlineDepthControls
+        planId={planId}
+        slot={slot}
+        depth={depth}
+        playersById={playersById}
+        availablePlayers={availablePlayers}
+        compact
+      />
     </div>
   );
 }

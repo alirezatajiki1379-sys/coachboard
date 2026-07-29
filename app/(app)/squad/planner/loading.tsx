@@ -50,26 +50,26 @@ export default function SquadPlannerLoading() {
 
             <div
               className={cn(
-                "relative mt-4 min-h-[620px] overflow-hidden rounded-xl border border-emerald-950/20 bg-emerald-800 p-4 shadow-inner",
-                "bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_50%,transparent_50%)] bg-[length:44px_44px]"
+                "relative mx-auto mt-4 aspect-[68/105] w-full max-w-[820px] overflow-hidden rounded-xl border border-emerald-950/20 bg-emerald-800 shadow-inner",
+                "bg-[linear-gradient(90deg,rgba(255,255,255,0.035)_50%,transparent_50%)] bg-[length:44px_44px]"
               )}
             >
               <PitchLines />
-              <div className="relative z-10 flex min-h-[590px] min-w-[900px] flex-col justify-between gap-4 py-8">
+              <div className="relative z-10 flex h-full min-h-0 flex-col justify-between gap-4 px-[7%] py-[8%]">
                 {skeletonRows.map((row, rowIndex) => (
                   <div
                     key={row.join("-")}
-                    className="grid justify-center gap-3"
-                    style={{ gridTemplateColumns: `repeat(${row.length}, minmax(11.25rem, 13.75rem))` }}
+                    className="mx-auto grid w-full justify-center gap-2 sm:gap-3"
+                    style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))`, maxWidth: skeletonRowWidth(row.length) }}
                   >
                     {row.map((code, index) => (
-                      <div key={`${code}-${rowIndex}-${index}`} className="min-h-[5.25rem] rounded-lg border border-white/50 bg-white/75 p-2 shadow-lg">
-                        <div className="flex items-center justify-between gap-2">
+                      <div key={`${code}-${rowIndex}-${index}`} className="min-h-12 rounded-lg border border-white/80 bg-white p-1.5 shadow-lg sm:min-h-[5.9rem] sm:p-2">
+                        <div className="flex items-center justify-between gap-1 sm:gap-2">
                           <span className="text-xs font-black uppercase text-board-green">{code}</span>
-                          <span className="h-5 w-5 animate-pulse rounded-full bg-slate-200" />
+                          <span className="h-4 w-4 animate-pulse rounded-full bg-slate-200 sm:h-5 sm:w-5" />
                         </div>
-                        <div className="mt-3 h-4 w-28 animate-pulse rounded bg-slate-200" />
-                        <div className="mt-2 h-3 w-20 animate-pulse rounded bg-slate-200/80" />
+                        <div className="mt-3 hidden h-4 w-28 animate-pulse rounded bg-slate-200 sm:block" />
+                        <div className="mt-2 hidden h-3 w-20 animate-pulse rounded bg-slate-200/80 sm:block" />
                       </div>
                     ))}
                   </div>
@@ -97,12 +97,22 @@ export default function SquadPlannerLoading() {
 
 function PitchLines() {
   return (
-    <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full text-white/65" viewBox="0 0 68 105" preserveAspectRatio="none">
-      <rect x="2" y="2" width="64" height="101" rx="0.5" fill="none" stroke="currentColor" strokeWidth="0.55" />
-      <line x1="2" y1="52.5" x2="66" y2="52.5" stroke="currentColor" strokeWidth="0.45" />
-      <circle cx="34" cy="52.5" r="9.15" fill="none" stroke="currentColor" strokeWidth="0.45" />
-      <rect x="13.84" y="2" width="40.32" height="16.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
-      <rect x="13.84" y="86.5" width="40.32" height="16.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
+    <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full text-white/70" viewBox="0 0 680 1050" preserveAspectRatio="xMidYMid meet">
+      <rect x="40" y="45" width="600" height="960" rx="5" fill="none" stroke="currentColor" strokeWidth="5.5" />
+      <line x1="40" y1="525" x2="640" y2="525" stroke="currentColor" strokeWidth="4.5" />
+      <circle cx="340" cy="525" r="91.5" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <rect x="151.6" y="45" width="376.8" height="165" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <rect x="249.2" y="45" width="181.6" height="55" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <rect x="151.6" y="840" width="376.8" height="165" fill="none" stroke="currentColor" strokeWidth="4.5" />
+      <rect x="249.2" y="950" width="181.6" height="55" fill="none" stroke="currentColor" strokeWidth="4.5" />
     </svg>
   );
+}
+
+function skeletonRowWidth(slotCount: number) {
+  if (slotCount <= 1) return "34%";
+  if (slotCount === 2) return "52%";
+  if (slotCount === 3) return "76%";
+  if (slotCount === 4) return "91%";
+  return "94%";
 }
