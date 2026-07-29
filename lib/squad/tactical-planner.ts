@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
 import { ensureActiveSquad } from "@/lib/squad/squads";
-import { formatPositionLabel, normalizeCanonicalPosition } from "@/lib/squad/positions";
+import { canonicalPositionLabels, formatPositionLabel, getPositionFamily, normalizeCanonicalPosition, type PositionFamily } from "@/lib/squad/positions";
 import { getTacticalFormation, type TacticalFormationCode } from "@/lib/squad/tactical-formations";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { Squad, SquadPlayer } from "@/types/domain";
@@ -96,6 +96,45 @@ export type TacticalSlotFitResult = {
   baseScore: number;
   eligible: boolean;
 };
+
+export type PositionCandidateFit = "primary" | "secondary" | "compatible";
+
+export type PositionCandidate = {
+  player: SquadPlayer;
+  primaryPosition: string | null;
+  secondaryPositions: string[];
+  matchedPosition: string;
+  fit: PositionCandidateFit;
+  secondaryPositionIndex: number | null;
+};
+
+export type SquadDepthPosition = {
+  code: string;
+  label: string;
+  family: PositionFamily;
+};
+
+export const squadDepthPositions: SquadDepthPosition[] = [
+  "GK",
+  "RB",
+  "CB",
+  "LB",
+  "RWB",
+  "LWB",
+  "CDM",
+  "CM",
+  "CAM",
+  "RM",
+  "LM",
+  "RW",
+  "LW",
+  "SS",
+  "ST"
+].map((code) => ({
+  code,
+  label: canonicalPositionLabels[code] ?? code,
+  family: getPositionFamily(code)
+}));
 
 type PlanRow = {
   id: string;
@@ -325,6 +364,94 @@ export function getPlayerFitForSlot(player: Pick<SquadPlayer, "position" | "seco
 
 export function isAutoFillEligibleFit(fitType: TacticalFitType, allowOutOfPosition = false) {
   return fitType === "natural" || fitType === "secondary" || fitType === "compatible" || (allowOutOfPosition && fitType === "out_of_position");
+}
+
+export function resolveCandidatesForPosition({
+  players,
+  canonicalPosition,
+  includeCompatible = false
+}: {
+  players: SquadPlayer[];
+  canonicalPosition: string;
+  includeCompatible?: boolean;
+}): PositionCandidate[] {
+  const target = normalizeCanonicalPosition(canonicalPosition);
+  if (!target) return [];
+  const compatible = includeCompatible ? new Set(compatiblePositionsFor(target)) : new Set<string>();
+  return players
+    .flatMap((player): PositionCandidate[] => {
+      const positions = resolvePlayerPositions(player);
+      if (positions.primary === target) {
+        return [{
+          player,
+          primaryPosition: positions.primary,
+          secondaryPositions: positions.secondary,
+          matchedPosition: target,
+          fit: "primary",
+          secondaryPositionIndex: null
+        }];
+      }
+      const secondaryIndex = positions.secondary.findIndex((position) => position === target);
+      if (secondaryIndex >= 0) {
+        return [{
+          player,
+          primaryPosition: positions.primary,
+          secondaryPositions: positions.secondary,
+          matchedPosition: target,
+          fit: "secondary",
+          secondaryPositionIndex: secondaryIndex
+        }];
+      }
+      if (includeCompatible) {
+        const compatiblePrimary = positions.primary && compatible.has(positions.primary) ? positions.primary : undefined;
+        const compatibleSecondaryIndex = positions.secondary.findIndex((position) => compatible.has(position));
+        const matchedPosition = compatiblePrimary ?? (compatibleSecondaryIndex >= 0 ? positions.secondary[compatibleSecondaryIndex] : undefined);
+        if (matchedPosition) {
+          return [{
+            player,
+            primaryPosition: positions.primary,
+            secondaryPositions: positions.secondary,
+            matchedPosition,
+            fit: "compatible",
+            secondaryPositionIndex: compatiblePrimary ? null : compatibleSecondaryIndex
+          }];
+        }
+      }
+      return [];
+    })
+    .sort((a, b) => {
+      const fitDelta = candidateFitRank(a) - candidateFitRank(b);
+      if (fitDelta !== 0) return fitDelta;
+      const secondaryDelta = (a.secondaryPositionIndex ?? -1) - (b.secondaryPositionIndex ?? -1);
+      if (secondaryDelta !== 0) return secondaryDelta;
+      return playerName(a.player).localeCompare(playerName(b.player));
+    });
+}
+
+function candidateFitRank(candidate: PositionCandidate) {
+  if (candidate.fit === "primary") return 0;
+  if (candidate.fit === "secondary") return 1;
+  return 2;
+}
+
+function compatiblePositionsFor(position: string) {
+  const map: Record<string, string[]> = {
+    RB: ["RWB", "CB"],
+    LB: ["LWB", "CB"],
+    CB: ["RB", "LB", "CDM"],
+    RWB: ["RB", "RM", "RW"],
+    LWB: ["LB", "LM", "LW"],
+    CDM: ["CM", "CB"],
+    CM: ["CDM", "CAM"],
+    CAM: ["CM", "RW", "LW", "SS"],
+    RM: ["RW", "RB", "RWB"],
+    LM: ["LW", "LB", "LWB"],
+    RW: ["RM", "RWB", "ST"],
+    LW: ["LM", "LWB", "ST"],
+    SS: ["CAM", "ST"],
+    ST: ["SS"]
+  };
+  return map[position] ?? [];
 }
 
 function getNaturalPositionsForSlot(code: string, acceptedPositions: string[]) {
