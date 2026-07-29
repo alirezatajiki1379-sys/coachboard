@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Archive, Copy, Goal, RotateCcw, Shield, Star, Trash2, Users } from "lucide-react";
 import {
   addDepthAssignment,
@@ -58,14 +58,14 @@ const tacticalStatusOptions = [
 
 export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
   const [mode, setMode] = useState<PlannerMode>("formation");
-  const [selectedSlotId, setSelectedSlotId] = useState(data.slots[0]?.id ?? "");
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [showTrials, setShowTrials] = useState(false);
   const [search, setSearch] = useState("");
   const [poolFilter, setPoolFilter] = useState<"all" | "unassigned" | "excluded">("unassigned");
   const [roleFilter, setRoleFilter] = useState("");
   const [positionFilter, setPositionFilter] = useState("");
 
-  const selectedSlot = data.slots.find((slot) => slot.id === selectedSlotId) ?? data.slots[0];
+  const selectedSlot = selectedSlotId ? data.slots.find((slot) => slot.id === selectedSlotId) : undefined;
   const playersById = useMemo(() => new Map(data.players.map((player) => [player.id, player])), [data.players]);
   const statesByPlayer = useMemo(() => new Map(data.playerStates.map((state) => [state.playerId, state])), [data.playerStates]);
   const excludedPlayerIds = useMemo(
@@ -91,6 +91,14 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
   const starters = activeAssignments.filter((assignment) => assignment.isPreferredStarter);
   const activePlans = data.plans.filter((plan) => plan.status === "active");
   const archivedPlans = data.plans.filter((plan) => plan.status === "archived");
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedSlotId(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, []);
 
   if (!data.selectedPlan) {
     return (
@@ -224,7 +232,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
             </div>
           </div>
 
-          <PlannerPitch className="mt-4 min-h-[620px] overflow-x-auto p-4">
+          <PlannerPitch className="mt-4 min-h-[620px] overflow-x-auto p-4" onClick={() => setSelectedSlotId(null)}>
             <FormationSlotRows
               planId={data.selectedPlan.id}
               slots={data.slots}
@@ -233,7 +241,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
               playersById={playersById}
               includedPlayers={includedPlayers}
               mode={mode}
-              onSelect={setSelectedSlotId}
+              onSelect={(slotId) => setSelectedSlotId((current) => (current === slotId ? null : slotId))}
             />
           </PlannerPitch>
         </section>
@@ -330,9 +338,10 @@ function PlanSelect({ plans, selectedPlanId }: { plans: TacticalPlannerData["pla
   );
 }
 
-function PlannerPitch({ children, className }: { children: ReactNode; className?: string }) {
+function PlannerPitch({ children, className, onClick }: { children: ReactNode; className?: string; onClick?: () => void }) {
   return (
     <div
+      onClick={onClick}
       className={cn(
         "relative overflow-hidden rounded-xl border border-emerald-950/20 bg-emerald-800 shadow-inner",
         "bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_50%,transparent_50%)] bg-[length:44px_44px]",
@@ -675,27 +684,55 @@ function SlotButton({
   const starter = orderedAssignments.find((assignment) => assignment.isPreferredStarter) ?? orderedAssignments[0];
   const starterPlayer = starter ? playersById.get(starter.playerId) : undefined;
   const depthCount = orderedAssignments.length;
-  const displayText = starterPlayer ? playerName(starterPlayer) : "Open";
+  const displayText = starterPlayer ? playerName(starterPlayer) : "No Player ranked";
   const alternatives = orderedAssignments.filter((assignment) => assignment.id !== starter?.id).slice(0, 2);
   const rankingPreview = orderedAssignments.slice(0, 3);
   const remainingCount = Math.max(0, orderedAssignments.length - (mode === "depth" ? rankingPreview.length : 1 + alternatives.length));
+  const additionalEligibleCount = Math.max(0, eligibleCount - depthCount);
+  const lowDepthTitle =
+    depthCount === 0
+      ? "No Player ranked"
+      : depthCount === 1
+        ? "Only one ranked Player"
+        : depthCount === 2
+          ? "Only two ranked Players"
+          : "";
 
   return (
     <div
-      onClick={onSelect}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect();
+      }}
       className={cn(
         "min-h-[5.25rem] w-full rounded-lg border p-2 text-left shadow-lg transition",
         selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/25" : "border-white/70 bg-white/90 text-slate-800 hover:bg-white"
       )}
       role="button"
       tabIndex={0}
+      title={`${depthCount} Players currently ranked. ${additionalEligibleCount} additional eligible Players available.`}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onSelect();
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          onSelect();
+        }
       }}
     >
       <span className="flex items-center justify-between gap-2">
         <span className="text-xs font-black uppercase text-board-green">{slot.code}</span>
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{depthCount}</span>
+        {depthCount <= 2 ? (
+          <span
+            className={cn(
+              "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ring-1",
+              depthCount === 0 ? "bg-red-100 text-red-800 ring-red-300" : "bg-red-50 text-red-700 ring-red-200"
+            )}
+            title={lowDepthTitle}
+            aria-label={`Low depth: ${lowDepthTitle}`}
+          >
+            {depthCount}
+          </span>
+        ) : null}
       </span>
       <span className="mt-1 line-clamp-2 block text-sm font-black leading-tight text-board-navy" title={displayText}>{displayText}</span>
       {!selected && mode === "formation" && alternatives.length > 0 ? (
@@ -711,7 +748,7 @@ function SlotButton({
       ) : null}
       {!selected && mode === "depth" ? (
         <div className="mt-1 space-y-0.5">
-          {rankingPreview.length === 0 ? <p className="text-xs font-semibold text-slate-500">No assigned players</p> : rankingPreview.map((assignment, index) => {
+          {rankingPreview.length === 0 ? <p className="text-xs font-semibold text-slate-500">No Player ranked</p> : rankingPreview.map((assignment, index) => {
             const player = playersById.get(assignment.playerId);
             if (!player) return null;
             return <p key={assignment.id} className="line-clamp-2 text-xs font-semibold leading-tight text-slate-700" title={playerName(player)}>{index + 1}. {playerName(player)}</p>;
@@ -719,7 +756,6 @@ function SlotButton({
           {remainingCount > 0 ? <p className="text-xs font-bold text-slate-500">+{remainingCount} more</p> : null}
         </div>
       ) : null}
-      <span className="mt-1 block text-[11px] font-semibold text-slate-500">{depthCount} assigned · {eligibleCount} eligible</span>
       {selected ? (
         <InlineDepthControls
           planId={planId}
@@ -729,9 +765,7 @@ function SlotButton({
           availablePlayers={availablePlayers}
           compact
         />
-      ) : (
-        <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Click to rank</span>
-      )}
+      ) : null}
     </div>
   );
 }
