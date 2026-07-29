@@ -18,7 +18,7 @@ import {
   updatePlayerPlanState,
   updateTacticalPlan
 } from "@/lib/squad/tactical-planner-actions";
-import { getPlayerFitForSlot, isAutoFillEligibleFit, playerName, playerPositionText, tacticalPlayerRoleOptions, tacticalRoleLabel, tacticalRoleScore, type TacticalPlannerData, type TacticalPlanSlot, type TacticalFitType } from "@/lib/squad/tactical-planner";
+import { evaluatePlayerSlotFit, playerName, playerPositionText, tacticalPlayerRoleOptions, tacticalRoleLabel, tacticalRoleScore, type TacticalPlannerData, type TacticalPlanSlot, type TacticalFitType } from "@/lib/squad/tactical-planner";
 import { tacticalFormations } from "@/lib/squad/tactical-formations";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -737,6 +737,7 @@ function PlayerStateCard({
   assignmentsSummary?: string;
   alreadyInSelectedSlot?: boolean;
 }) {
+  const selectedSlotFit = selectedSlot ? evaluatePlayerSlotFit(player, selectedSlot, true) : undefined;
   if (excluded) {
     return (
       <form action={updatePlayerPlanState} className="rounded-lg border border-red-100 bg-red-50 p-3">
@@ -773,6 +774,11 @@ function PlayerStateCard({
             {player.playerType === "trial" ? <StatusChip label="Trial" tone="amber" /> : null}
           </div>
           <p className="mt-2 text-xs text-slate-500">{assignmentsSummary || "No depth assignment yet"}</p>
+          {selectedSlotFit ? (
+            <p className={cn("mt-1 text-xs font-semibold", selectedSlotFit.fitType === "out_of_position" ? "text-red-700" : "text-board-green")}>
+              Fit for {selectedSlot?.code}: {fitMeta[selectedSlotFit.fitType].label}{selectedSlotFit.matchedPosition ? ` · matched ${selectedSlotFit.matchedPosition}` : ""}
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
           {selectedSlot ? (
@@ -871,11 +877,12 @@ function PlannerHelp() {
 }
 
 function sortPlayersByFit(players: SquadPlayer[], slot: TacticalPlanSlot, assignedPlayerIds: Set<string>) {
-  const fitOrder: Record<TacticalFitType, number> = { natural: 0, secondary: 1, compatible: 2, out_of_position: 3, no_data: 4 };
   return [...players].sort((a, b) => {
     const assignedDelta = Number(assignedPlayerIds.has(a.id)) - Number(assignedPlayerIds.has(b.id));
     if (assignedDelta !== 0) return assignedDelta;
-    const fitDelta = fitOrder[getPlayerFitForSlot(a, slot)] - fitOrder[getPlayerFitForSlot(b, slot)];
+    const aFit = evaluatePlayerSlotFit(a, slot, true);
+    const bFit = evaluatePlayerSlotFit(b, slot, true);
+    const fitDelta = bFit.baseScore - aFit.baseScore;
     if (fitDelta !== 0) return fitDelta;
     return playerName(a).localeCompare(playerName(b));
   });
@@ -909,6 +916,14 @@ function buildAutoFillPreview({
   const rows: Array<{ slotId: string; slotCode: string; playerName: string; detail: string; fitType?: TacticalFitType; isExisting: boolean }> = [];
   const messages: string[] = [];
   const orderedSlots = sortPreviewSlotsByScarcity(slots, eligiblePlayers, stateByPlayer, allowOutOfPosition);
+  const previewPicks = choosePreviewStarterAssignments(
+    orderedSlots.filter((slot) => mode === "rebuild_all" || !assignments.some((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter)),
+    eligiblePlayers,
+    stateByPlayer,
+    new Set(startingRows.map((assignment) => assignment.playerId)),
+    allowOutOfPosition
+  );
+  const previewPickBySlot = new Map(previewPicks.map((pick) => [pick.slot.id, pick]));
 
   for (const slot of orderedSlots) {
     const existingStarter = mode === "rebuild_all" ? undefined : assignments.find((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter);
@@ -918,15 +933,14 @@ function buildAutoFillPreview({
       continue;
     }
     if (filledSlotIds.has(slot.id)) continue;
-    const candidate = choosePreviewPlayerForSlot(eligiblePlayers, slot, stateByPlayer, usedStarterPlayerIds, allowOutOfPosition);
-    if (!candidate) {
+    const pick = previewPickBySlot.get(slot.id);
+    if (!pick) {
       rows.push({ slotId: slot.id, slotCode: slot.code, playerName: "No suitable player", detail: `No natural, secondary or compatible ${slot.label} option found.`, isExisting: false });
       messages.push(`No suitable ${slot.label} available`);
       continue;
     }
-    const fitType = getPlayerFitForSlot(candidate, slot);
-    rows.push({ slotId: slot.id, slotCode: slot.code, playerName: playerName(candidate), detail: `${playerPositionText(candidate)} · ${fitMeta[fitType].label} · ${tacticalRoleLabel(stateByPlayer.get(candidate.id)?.tacticalStatus, true)}`, fitType, isExisting: false });
-    usedStarterPlayerIds.add(candidate.id);
+    rows.push({ slotId: slot.id, slotCode: slot.code, playerName: playerName(pick.player), detail: `${playerPositionText(pick.player)} · matched ${pick.matchedPosition ?? "position"} · ${fitMeta[pick.fitType].label} · ${tacticalRoleLabel(stateByPlayer.get(pick.player.id)?.tacticalStatus, true)}`, fitType: pick.fitType, isExisting: false });
+    usedStarterPlayerIds.add(pick.player.id);
   }
 
   const filledStarters = rows.filter((row) => row.playerName !== "No suitable player").length;
@@ -959,6 +973,75 @@ function sortPreviewSlotsByScarcity(
   });
 }
 
+type PreviewStarterPick = {
+  slot: TacticalPlanSlot;
+  player: SquadPlayer;
+  fitType: TacticalFitType;
+  matchedPosition?: string;
+  score: number;
+};
+
+type PreviewMatchingResult = {
+  filled: number;
+  score: number;
+  picks: PreviewStarterPick[];
+};
+
+function choosePreviewStarterAssignments(
+  slots: TacticalPlanSlot[],
+  players: SquadPlayer[],
+  stateByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>,
+  disallowedPlayerIds: Set<string>,
+  allowOutOfPosition: boolean
+) {
+  const candidatesBySlot = new Map<string, PreviewStarterPick[]>();
+  for (const slot of slots) {
+    candidatesBySlot.set(
+      slot.id,
+      players
+        .filter((player) => !disallowedPlayerIds.has(player.id))
+        .map((player) => {
+          const fit = evaluatePlayerSlotFit(player, slot, allowOutOfPosition);
+          return {
+            slot,
+            player,
+            fitType: fit.fitType,
+            matchedPosition: fit.matchedPosition,
+            score: fit.eligible ? fit.baseScore + tacticalRoleScore(stateByPlayer.get(player.id)?.tacticalStatus) * 2 : 0
+          };
+        })
+        .filter((candidate) => candidate.score > 0)
+        .sort((a, b) => b.score - a.score || playerName(a.player).localeCompare(playerName(b.player)))
+        .slice(0, 18)
+    );
+  }
+  const orderedSlots = [...slots].sort((a, b) => (candidatesBySlot.get(a.id)?.length ?? 0) - (candidatesBySlot.get(b.id)?.length ?? 0) || a.sortOrder - b.sortOrder);
+  const memo = new Map<string, PreviewMatchingResult>();
+  const better = (a: PreviewMatchingResult, b: PreviewMatchingResult) => {
+    if (a.filled !== b.filled) return a.filled > b.filled ? a : b;
+    if (a.score !== b.score) return a.score > b.score ? a : b;
+    return a.picks.length <= b.picks.length ? a : b;
+  };
+  const solve = (index: number, usedPlayerIds: Set<string>): PreviewMatchingResult => {
+    if (index >= orderedSlots.length) return { filled: 0, score: 0, picks: [] };
+    const key = `${index}|${Array.from(usedPlayerIds).sort().join(",")}`;
+    const cached = memo.get(key);
+    if (cached) return cached;
+    const slot = orderedSlots[index];
+    let best = solve(index + 1, usedPlayerIds);
+    for (const candidate of candidatesBySlot.get(slot.id) ?? []) {
+      if (usedPlayerIds.has(candidate.player.id)) continue;
+      const nextUsed = new Set(usedPlayerIds);
+      nextUsed.add(candidate.player.id);
+      const rest = solve(index + 1, nextUsed);
+      best = better({ filled: rest.filled + 1, score: rest.score + candidate.score, picks: [candidate, ...rest.picks] }, best);
+    }
+    memo.set(key, best);
+    return best;
+  };
+  return solve(0, new Set(disallowedPlayerIds)).picks;
+}
+
 function choosePreviewPlayerForSlot(
   players: SquadPlayer[],
   slot: TacticalPlanSlot,
@@ -974,17 +1057,9 @@ function choosePreviewPlayerForSlot(
 }
 
 function scorePreviewPlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, tacticalStatus: string | undefined, allowOutOfPosition: boolean) {
-  const fitType = getPlayerFitForSlot(player, slot);
-  if (!isAutoFillEligibleFit(fitType, allowOutOfPosition)) return 0;
-  return positionFitPreviewScore(fitType) + tacticalRoleScore(tacticalStatus) * 2;
-}
-
-function positionFitPreviewScore(fitType: TacticalFitType) {
-  if (fitType === "natural") return 1000;
-  if (fitType === "secondary") return 750;
-  if (fitType === "compatible") return 400;
-  if (fitType === "out_of_position") return 25;
-  return 0;
+  const fit = evaluatePlayerSlotFit(player, slot, allowOutOfPosition);
+  if (!fit.eligible) return 0;
+  return fit.baseScore + tacticalRoleScore(tacticalStatus) * 2;
 }
 
 function getPlayerPositionFamilies(player: SquadPlayer) {

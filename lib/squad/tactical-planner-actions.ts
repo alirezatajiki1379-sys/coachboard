@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { ensureActiveSquad } from "@/lib/squad/squads";
-import { createSlotRowsForPlan, getPlayerFitForSlot, isAutoFillEligibleFit, mapTacticalSlotRow, normalizeTacticalPlayerStatus, tacticalRoleScore, type TacticalFitType, type TacticalPlanSlot } from "@/lib/squad/tactical-planner";
+import { createSlotRowsForPlan, evaluatePlayerSlotFit, getPlayerFitForSlot, mapTacticalSlotRow, normalizeTacticalPlayerStatus, tacticalRoleScore, type TacticalFitType, type TacticalPlanSlot } from "@/lib/squad/tactical-planner";
 import { getTacticalFormation } from "@/lib/squad/tactical-formations";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { SquadPlayer } from "@/types/domain";
@@ -519,15 +519,21 @@ export async function autoFillTacticalPlan(formData: FormData) {
     nextDepthOrderBySlot.set(slot.id, maxDepth + 1);
   }
 
-  for (const slot of slots) {
-    if (slotHasStarter.has(slot.id)) continue;
-    const candidate = choosePlayerForSlot(players, slot, stateByPlayer, usedStarterPlayerIds, allowOutOfPosition);
-    if (!candidate) continue;
+  const starterPicks = chooseStarterAssignments(
+    orderedSlots.filter((slot) => !slotHasStarter.has(slot.id)),
+    players,
+    stateByPlayer,
+    usedStarterPlayerIds,
+    allowOutOfPosition
+  );
+
+  for (const pick of starterPicks) {
+    const { slot, player: candidate } = pick;
     const existingAssignment = assignments.find((assignment) => assignment.slot_id === slot.id && assignment.player_id === candidate.id);
     await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: false }).eq("user_id", user.id).eq("tactical_plan_id", planId).eq("slot_id", slot.id);
     await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: false }).eq("user_id", user.id).eq("tactical_plan_id", planId).eq("player_id", candidate.id);
     if (existingAssignment) {
-      await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: true, fit_type: getPlayerFitForSlot(candidate, slot) }).eq("id", existingAssignment.id).eq("user_id", user.id);
+      await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: true, fit_type: pick.fitType }).eq("id", existingAssignment.id).eq("user_id", user.id);
     } else {
       const depthOrder = nextDepthOrderBySlot.get(slot.id) ?? 1;
       generatedRows.push({
@@ -537,7 +543,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
         player_id: candidate.id,
         depth_order: depthOrder,
         is_preferred_starter: true,
-        fit_type: getPlayerFitForSlot(candidate, slot)
+        fit_type: pick.fitType
       });
       nextDepthOrderBySlot.set(slot.id, depthOrder + 1);
       existingAssignmentKey.add(assignmentKey(slot.id, candidate.id));
@@ -596,6 +602,69 @@ function assignmentKey(slotId: string, playerId: string) {
   return `${slotId}:${playerId}`;
 }
 
+type StarterPick = {
+  slot: TacticalPlanSlot;
+  player: SquadPlayer;
+  fitType: TacticalFitType;
+  score: number;
+};
+
+type MatchingResult = {
+  filled: number;
+  score: number;
+  picks: StarterPick[];
+};
+
+function chooseStarterAssignments(
+  slots: TacticalPlanSlot[],
+  players: SquadPlayer[],
+  stateByPlayer: Map<string, PlayerStateActionRow>,
+  disallowedPlayerIds: Set<string>,
+  allowOutOfPosition: boolean
+) {
+  const candidatesBySlot = new Map<string, StarterPick[]>();
+  for (const slot of slots) {
+    const candidates = players
+      .filter((player) => !disallowedPlayerIds.has(player.id))
+      .map((player) => {
+        const score = scorePlayerForSlot(player, slot, stateByPlayer.get(player.id), allowOutOfPosition);
+        return { slot, player, score, fitType: evaluatePlayerSlotFit(player, slot, allowOutOfPosition).fitType };
+      })
+      .filter((candidate) => candidate.score > 0)
+      .sort((a, b) => b.score - a.score || `${a.player.lastName ?? ""} ${a.player.firstName}`.localeCompare(`${b.player.lastName ?? ""} ${b.player.firstName}`))
+      .slice(0, 18);
+    candidatesBySlot.set(slot.id, candidates);
+  }
+  const orderedSlots = [...slots].sort((a, b) => (candidatesBySlot.get(a.id)?.length ?? 0) - (candidatesBySlot.get(b.id)?.length ?? 0) || a.sortOrder - b.sortOrder);
+  const memo = new Map<string, MatchingResult>();
+
+  function better(a: MatchingResult, b: MatchingResult) {
+    if (a.filled !== b.filled) return a.filled > b.filled ? a : b;
+    if (a.score !== b.score) return a.score > b.score ? a : b;
+    return a.picks.length <= b.picks.length ? a : b;
+  }
+
+  function solve(index: number, usedPlayerIds: Set<string>): MatchingResult {
+    if (index >= orderedSlots.length) return { filled: 0, score: 0, picks: [] };
+    const key = `${index}|${Array.from(usedPlayerIds).sort().join(",")}`;
+    const cached = memo.get(key);
+    if (cached) return cached;
+    const slot = orderedSlots[index];
+    let best = solve(index + 1, usedPlayerIds);
+    for (const candidate of candidatesBySlot.get(slot.id) ?? []) {
+      if (usedPlayerIds.has(candidate.player.id)) continue;
+      const nextUsed = new Set(usedPlayerIds);
+      nextUsed.add(candidate.player.id);
+      const rest = solve(index + 1, nextUsed);
+      best = better({ filled: rest.filled + 1, score: rest.score + candidate.score, picks: [candidate, ...rest.picks] }, best);
+    }
+    memo.set(key, best);
+    return best;
+  }
+
+  return solve(0, new Set(disallowedPlayerIds)).picks.sort((a, b) => a.slot.sortOrder - b.slot.sortOrder);
+}
+
 function sortSlotsByScarcity(slots: TacticalPlanSlot[], players: SquadPlayer[], stateByPlayer: Map<string, PlayerStateActionRow>, allowOutOfPosition: boolean) {
   return [...slots].sort((a, b) => {
     const aCandidates = players.filter((player) => scorePlayerForSlot(player, a, stateByPlayer.get(player.id), allowOutOfPosition) > 0).length;
@@ -613,17 +682,9 @@ function choosePlayerForSlot(players: SquadPlayer[], slot: TacticalPlanSlot, sta
 }
 
 function scorePlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, state: PlayerStateActionRow | undefined, allowOutOfPosition: boolean) {
-  const fitType = getPlayerFitForSlot(player, slot);
-  if (!isAutoFillEligibleFit(fitType, allowOutOfPosition)) return 0;
-  return positionFitScore(fitType) + tacticalRoleScore(state?.tactical_status) * 2;
-}
-
-function positionFitScore(fitType: TacticalFitType) {
-  if (fitType === "natural") return 1000;
-  if (fitType === "secondary") return 750;
-  if (fitType === "compatible") return 400;
-  if (fitType === "out_of_position") return 25;
-  return 0;
+  const fit = evaluatePlayerSlotFit(player, slot, allowOutOfPosition);
+  if (!fit.eligible) return 0;
+  return fit.baseScore + tacticalRoleScore(state?.tactical_status) * 2;
 }
 
 export async function clearStartingXi(formData: FormData) {

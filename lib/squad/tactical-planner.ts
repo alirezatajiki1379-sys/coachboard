@@ -83,6 +83,20 @@ export type TacticalPlanWarning = {
   message: string;
 };
 
+export type ResolvedPlayerPositions = {
+  primary: string | null;
+  secondary: string[];
+  all: string[];
+};
+
+export type TacticalSlotFitResult = {
+  fitType: TacticalFitType;
+  matchedPosition?: string;
+  secondaryIndex?: number;
+  baseScore: number;
+  eligible: boolean;
+};
+
 type PlanRow = {
   id: string;
   user_id: string;
@@ -244,16 +258,69 @@ export function playerPositionText(player: Pick<SquadPlayer, "position" | "secon
   return [primary, ...secondary].filter(Boolean).join(" / ") || "No position";
 }
 
-export function getPlayerFitForSlot(player: Pick<SquadPlayer, "position" | "secondaryPositions">, slot: Pick<TacticalPlanSlot, "acceptedPositions"> & Partial<Pick<TacticalPlanSlot, "naturalPositions">>): TacticalFitType {
+export function resolvePlayerPositions(player: Pick<SquadPlayer, "position" | "secondaryPositions">): ResolvedPlayerPositions {
+  const primary = normalizeCanonicalPosition(player.position) ?? null;
+  const secondary: string[] = [];
+  const seen = new Set<string>();
+  if (primary) seen.add(primary);
+  for (const rawPosition of player.secondaryPositions ?? []) {
+    const canonical = normalizeCanonicalPosition(rawPosition);
+    if (!canonical || seen.has(canonical)) continue;
+    secondary.push(canonical);
+    seen.add(canonical);
+  }
+  return {
+    primary,
+    secondary,
+    all: [primary, ...secondary].filter(Boolean) as string[]
+  };
+}
+
+export function evaluatePlayerSlotFit(
+  player: Pick<SquadPlayer, "position" | "secondaryPositions">,
+  slot: Pick<TacticalPlanSlot, "acceptedPositions"> & Partial<Pick<TacticalPlanSlot, "naturalPositions">>,
+  allowOutOfPosition = false
+): TacticalSlotFitResult {
+  const positions = resolvePlayerPositions(player);
   const accepted = new Set(slot.acceptedPositions.map((position) => normalizeCanonicalPosition(position) ?? position));
   const natural = new Set((slot.naturalPositions ?? Array.from(accepted).slice(0, 1)).map((position) => normalizeCanonicalPosition(position) ?? position));
-  const primary = normalizeCanonicalPosition(player.position);
-  const secondary = (player.secondaryPositions ?? []).map((position) => normalizeCanonicalPosition(position)).filter(Boolean) as string[];
-  if (!primary && secondary.length === 0) return "no_data";
-  if (primary && natural.has(primary)) return "natural";
-  if (secondary.some((position) => natural.has(position))) return "secondary";
-  if ((primary && accepted.has(primary)) || secondary.some((position) => accepted.has(position))) return "compatible";
-  return "out_of_position";
+  if (positions.all.length === 0) return { fitType: "no_data", baseScore: 0, eligible: false };
+  if (positions.primary && natural.has(positions.primary)) {
+    return { fitType: "natural", matchedPosition: positions.primary, baseScore: 1000, eligible: true };
+  }
+  const secondaryNaturalIndex = positions.secondary.findIndex((position) => natural.has(position));
+  if (secondaryNaturalIndex >= 0) {
+    return {
+      fitType: "secondary",
+      matchedPosition: positions.secondary[secondaryNaturalIndex],
+      secondaryIndex: secondaryNaturalIndex,
+      baseScore: Math.max(775, 850 - secondaryNaturalIndex * 25),
+      eligible: true
+    };
+  }
+  if (positions.primary && accepted.has(positions.primary)) {
+    return { fitType: "compatible", matchedPosition: positions.primary, baseScore: 500, eligible: true };
+  }
+  const secondaryCompatibleIndex = positions.secondary.findIndex((position) => accepted.has(position));
+  if (secondaryCompatibleIndex >= 0) {
+    return {
+      fitType: "compatible",
+      matchedPosition: positions.secondary[secondaryCompatibleIndex],
+      secondaryIndex: secondaryCompatibleIndex,
+      baseScore: Math.max(350, 425 - secondaryCompatibleIndex * 15),
+      eligible: true
+    };
+  }
+  return {
+    fitType: "out_of_position",
+    matchedPosition: positions.primary ?? positions.secondary[0],
+    baseScore: allowOutOfPosition ? 25 : 0,
+    eligible: allowOutOfPosition
+  };
+}
+
+export function getPlayerFitForSlot(player: Pick<SquadPlayer, "position" | "secondaryPositions">, slot: Pick<TacticalPlanSlot, "acceptedPositions"> & Partial<Pick<TacticalPlanSlot, "naturalPositions">>): TacticalFitType {
+  return evaluatePlayerSlotFit(player, slot, true).fitType;
 }
 
 export function isAutoFillEligibleFit(fitType: TacticalFitType, allowOutOfPosition = false) {
