@@ -401,7 +401,7 @@ export function CompleteEventButton({ eventId }: { eventId: string }) {
   return (
     <form action={completeTrainingEvent}>
       <input type="hidden" name="eventId" value={eventId} />
-      <Button type="submit" variant="secondary" className="h-9 px-3">
+      <Button type="submit" variant="secondary" className="h-10 px-3">
         Mark completed
       </Button>
     </form>

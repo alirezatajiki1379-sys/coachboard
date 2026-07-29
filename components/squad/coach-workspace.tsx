@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import type { CSSProperties, DragEvent } from "react";
 import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -63,8 +63,6 @@ const positionGroups = ["Goalkeepers", "Defenders", "Midfielders", "Attackers", 
 export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   const view = quickViews.find((item) => item.id === data.state.view) ?? quickViews[0];
   const grouped = groupWorkspacePlayers(data);
-  const controlsRef = useRef<HTMLElement | null>(null);
-  const [tableHeaderTop, setTableHeaderTop] = useState(136);
   const [columnOrder, setColumnOrder] = useState(data.configuration.columnOrder);
   const [columnOrderMessage, setColumnOrderMessage] = useState("");
   const [selectionMode, setSelectionMode] = useState(false);
@@ -92,27 +90,6 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
     setSelectedPlayerId((current) => current && data.players.some((player) => player.analytics.player.id === current) ? current : null);
     setSelectedIds((current) => current.filter((id) => data.players.some((player) => player.analytics.player.id === id)));
   }, [data.players]);
-
-  useEffect(() => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-    const controlsElement = controls;
-
-    function updateTableHeaderTop() {
-      const nextTop = Math.ceil(controlsElement.getBoundingClientRect().height + 12);
-      setTableHeaderTop((current) => current === nextTop ? current : nextTop);
-    }
-
-    updateTableHeaderTop();
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateTableHeaderTop) : null;
-    observer?.observe(controlsElement);
-    window.addEventListener("resize", updateTableHeaderTop);
-
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", updateTableHeaderTop);
-    };
-  }, []);
 
   function toggleInspector(playerId: string) {
     setSelectedPlayerId((current) => current === playerId ? null : playerId);
@@ -169,14 +146,9 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
     });
   }
 
-  const stickyOffsets = {
-    "--squad-controls-top": "0rem",
-    "--squad-table-head-top": `${tableHeaderTop}px`
-  } as CSSProperties;
-
   return (
-    <div className="space-y-6" style={stickyOffsets}>
-      <section ref={controlsRef} className="sticky top-[var(--squad-controls-top)] z-20 rounded-lg border border-board-line bg-white p-3 shadow-soft">
+    <div className="space-y-6 [--squad-controls-top:0rem]">
+      <section className="sticky top-[var(--squad-controls-top)] z-20 rounded-lg border border-board-line bg-white p-3 shadow-soft">
         <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Coach Workspace quick views">
           {quickViews.map((item) => (
             <Link
@@ -841,14 +813,20 @@ function WorkspaceTable({
   return (
     <div className="overflow-x-auto">
       <table className="min-w-[900px] w-full border-collapse text-left text-sm">
-        <thead className="sticky top-[var(--squad-table-head-top,8.5rem)] z-30 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
+        <colgroup>
+          {selectionMode ? <col className="w-12" /> : null}
+          {columns.map((column) => <col key={column.id} className={column.id === "player" ? "w-[240px]" : undefined} />)}
+          <col className="w-[90px]" />
+        </colgroup>
+        <thead className="sticky top-0 z-30 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
           <tr className="border-b border-board-line">
-            {selectionMode ? <th className="w-12 bg-slate-50 px-3 py-3">Select</th> : null}
+            {selectionMode ? <th scope="col" className="sticky left-0 z-40 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]">Select</th> : null}
             {columns.map((column) => (
               <WorkspaceHeaderCell
                 key={column.id}
                 column={column}
                 data={data}
+                selectionMode={selectionMode}
                 draggedColumn={draggedColumn}
                 dropTarget={dropTarget}
                 disabled={isSavingColumnOrder}
@@ -865,7 +843,7 @@ function WorkspaceTable({
                 }}
               />
             ))}
-            <th className="bg-slate-50 px-3 py-3">Action</th>
+            <th scope="col" className="bg-slate-50 px-3 py-3">Action</th>
           </tr>
         </thead>
         <tbody>
@@ -928,7 +906,7 @@ function WorkspaceRow({
       )}
     >
       {selectionMode ? (
-        <td className="px-3 py-3">
+        <td className={cn("sticky left-0 z-20 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", selected ? "bg-green-50" : "bg-white")}>
           <input
             type="checkbox"
             checked={checked}
@@ -939,7 +917,20 @@ function WorkspaceRow({
           />
         </td>
       ) : null}
-      {columns.map((column) => <td key={column.id} className={cn(cellClass(data, column.sortable), draggedColumn === column.id && "bg-green-50/70 outline outline-1 outline-board-green/20")}>{renderColumnCell(column.id, data, player)}</td>)}
+      {columns.map((column) => (
+        <td
+          key={column.id}
+          style={column.id === "player" ? ({ left: selectionMode ? "3rem" : 0 } as CSSProperties) : undefined}
+          className={cn(
+            cellClass(data, column.sortable),
+            column.id === "player" && "sticky z-10 min-w-[240px] shadow-[1px_0_0_#d9e2dc]",
+            column.id === "player" && (selected ? "bg-green-50" : "bg-white"),
+            draggedColumn === column.id && "bg-green-50/70 outline outline-1 outline-board-green/20"
+          )}
+        >
+          {renderColumnCell(column.id, data, player)}
+        </td>
+      ))}
       <td className="px-3 py-3">
         <Button type="button" variant="secondary" className="h-8 px-2" onClick={(event) => {
           event.stopPropagation();
@@ -1161,6 +1152,7 @@ function WorkspaceEmpty({ data }: { data: WorkspaceData }) {
 function WorkspaceHeaderCell({
   column,
   data,
+  selectionMode,
   draggedColumn,
   dropTarget,
   disabled,
@@ -1171,6 +1163,7 @@ function WorkspaceHeaderCell({
 }: {
   column: WorkspaceColumnDefinition;
   data: WorkspaceData;
+  selectionMode: boolean;
   draggedColumn: WorkspaceColumnDefinition["id"] | null;
   dropTarget: { id: WorkspaceColumnDefinition["id"]; side: "before" | "after" } | null;
   disabled: boolean;
@@ -1185,6 +1178,7 @@ function WorkspaceHeaderCell({
   const isDropBefore = dropTarget?.id === column.id && dropTarget.side === "before";
   const isDropAfter = dropTarget?.id === column.id && dropTarget.side === "after";
   const direction = active ? (data.state.direction === "asc" ? "desc" : "asc") : "asc";
+  const isPlayerColumn = column.id === "player";
 
   function insertionSide(event: DragEvent<HTMLTableCellElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1193,8 +1187,11 @@ function WorkspaceHeaderCell({
 
   return (
     <th
+      scope="col"
+      style={isPlayerColumn ? ({ left: selectionMode ? "3rem" : 0 } as CSSProperties) : undefined}
       className={cn(
         "relative bg-slate-50 px-3 py-3 transition-colors",
+        isPlayerColumn && "sticky z-40 min-w-[240px] shadow-[1px_0_0_#d9e2dc]",
         active && "bg-green-50 text-board-green",
         locked ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing",
         isDragged && "bg-white shadow-sm ring-2 ring-board-green/30",

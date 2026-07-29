@@ -5,11 +5,11 @@ import { ArrowLeft, CalendarDays, ClipboardList, MapPin, Plus, Star, Trash2, Use
 import { Button, ButtonLink } from "@/components/ui/button";
 import { CompleteEventButton, MissingStatusesNotice } from "@/components/squad/attendance-controls";
 import { TrainingEventActions } from "@/components/squad/training-event-actions";
+import { TrainingParticipantsTable } from "@/components/squad/training-participants-table";
 import { addCustomNameToTrainingGroup, addPlayersToTrainingGroup, createTrainingGroup, deleteTrainingGroup, removeTrainingGroupMember } from "@/lib/squad/training-group-actions";
 import { syncTrainingWithCurrentSquad } from "@/lib/squad/attendance-actions";
 import { applyTrainingPlanTemplate, createBlankSessionPlan } from "@/lib/squad/training-plan-actions";
-import { attendanceDisplayName, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
-import { effectiveParticipantPositionLabel } from "@/lib/squad/attendance-utils";
+import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
 import { createClient } from "@/lib/supabase/server";
 import { seasonLabelForDate, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
@@ -64,22 +64,18 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
             {event.generalNotes ? <p className="mt-3 whitespace-pre-line text-sm text-slate-600">{event.generalNotes}</p> : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/check-in`} className="justify-center">Quick check-in</ButtonLink> : null}
-            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="justify-center">Ratings</ButtonLink> : null}
+            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/check-in`} className="h-10 justify-center px-4">Quick check-in</ButtonLink> : null}
+            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/plan`} variant="secondary" className="h-10 justify-center px-4">Plan</ButtonLink> : null}
+            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="h-10 justify-center px-4">Ratings</ButtonLink> : null}
+            {!event.deletedAt ? <CompleteEventButton eventId={event.id} /> : null}
             {!event.deletedAt && event.participantSourceMode === "current_squad_sync" && !event.participantsLockedAt ? (
               <form action={syncTrainingWithCurrentSquad} className="flex flex-wrap gap-2">
                 <input type="hidden" name="eventId" value={event.id} />
-                {event.recurrenceSeriesId ? (
-                  <select name="syncScope" defaultValue="single" className="h-9 rounded-md border border-board-line bg-white px-2 text-xs font-semibold text-board-navy">
-                    <option value="single">This Session only</option>
-                    <option value="future">This and following Sessions</option>
-                  </select>
-                ) : null}
-                <Button type="submit" variant="secondary" className="h-9 px-3 text-xs">Sync with current Squad</Button>
+                <input type="hidden" name="syncScope" value="single" />
+                <Button type="submit" variant="secondary" className="h-10 px-3 text-xs">Sync Squad</Button>
               </form>
             ) : null}
             <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} isTrash={Boolean(event.deletedAt)} isRecurring={Boolean(event.recurrenceSeriesId)} />
-            {!event.deletedAt ? <CompleteEventButton eventId={event.id} /> : null}
           </div>
         </div>
       </section>
@@ -220,53 +216,21 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
       </div>
 
       <Panel title="Training participants">
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Metric label="Expected" value={String(plannedAttendance.plannedExpected)} />
-          <Metric label="Not expected" value={String(plannedAttendance.unavailable + plannedAttendance.unclear)} tone={plannedAttendance.unavailable + plannedAttendance.unclear > 0 ? "warning" : "normal"} />
-          <Metric label="Goalkeepers" value={String(plannedAttendance.goalkeepers)} tone={plannedAttendance.goalkeepers === 0 ? "warning" : "normal"} />
-          <Metric label="Field players" value={String(plannedAttendance.fieldPlayers)} />
-          <Metric label="Position missing" value={String(plannedAttendance.unassigned)} tone={plannedAttendance.unassigned > 0 ? "warning" : "normal"} />
-        </div>
-        <p className="mb-4 text-xs font-semibold text-slate-500">
-          Defensive: {plannedAttendance.defensive} · Midfield: {plannedAttendance.midfield} · Attacking: {plannedAttendance.attacking}
-        </p>
-        <div className="overflow-hidden rounded-lg border border-board-line">
-          {event.attendance.length ? (
-            <div className="hidden grid-cols-[minmax(180px,1.5fr)_minmax(140px,1fr)_110px_120px_95px_110px] gap-3 border-b border-board-line bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500 md:grid">
-              <span>Player</span>
-              <span>Position</span>
-              <span>Planned</span>
-              <span>Reason</span>
-              <span>Type</span>
-              <span>Group</span>
-            </div>
-          ) : null}
-          {event.attendance.length ? (
-            event.attendance.map((entry) => (
-              <article key={entry.id} className="grid gap-2 border-b border-board-line bg-white px-3 py-3 text-sm last:border-b-0 md:min-h-14 md:grid-cols-[minmax(180px,1.5fr)_minmax(140px,1fr)_110px_120px_95px_110px] md:items-center md:gap-3">
-                <div className="min-w-0">
-                  {entry.player ? (
-                    <Link href={`/squad/players/${entry.player.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
-                      {attendanceDisplayName(entry)}
-                    </Link>
-                  ) : (
-                    <p className="font-bold text-board-navy">{attendanceDisplayName(entry)}</p>
-                  )}
-                  {entry.finalStatus ? <p className="mt-0.5 text-xs font-semibold text-slate-500">Actual: {finalStatusLabel(entry.finalStatus)}{entry.finalStatus ? ` · Malus: ${reliabilityMalus(entry)}` : ""}</p> : null}
-                </div>
-                <p className="font-semibold text-slate-700">{effectiveParticipantPositionLabel(entry)}</p>
-                <span className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-bold ${entry.plannedStatus === "unavailable" || entry.plannedStatus === "unclear" ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"}`}>
-                  {plannedStatusLabel(entry.plannedStatus)}
-                </span>
-                <p className="text-sm text-slate-600">{entry.plannedReason ? plannedReasonLabel(entry.plannedReason) : "-"}</p>
-                <p className="text-sm font-semibold text-slate-600">{entry.player?.playerType === "trial" ? "Trial" : "Roster"}</p>
-                <p className="text-sm font-semibold text-slate-600">{entry.player ? groupLabelsByPlayerId.get(entry.player.id)?.join(", ") || "No group" : "No group"}</p>
-              </article>
-            ))
-          ) : (
-            <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No players added yet. Open the attendance preparation page to add squad players or trial players.</p>
-          )}
-        </div>
+        <TrainingParticipantsTable
+          eventId={event.id}
+          attendance={event.attendance}
+          groupLabelsByPlayerId={Array.from(groupLabelsByPlayerId.entries())}
+          summary={{
+            expected: plannedAttendance.plannedExpected,
+            notExpected: plannedAttendance.unavailable + plannedAttendance.unclear,
+            goalkeepers: plannedAttendance.goalkeepers,
+            fieldPlayers: plannedAttendance.fieldPlayers,
+            defensive: plannedAttendance.defensive,
+            midfield: plannedAttendance.midfield,
+            attacking: plannedAttendance.attacking,
+            positionMissing: plannedAttendance.unassigned
+          }}
+        />
       </Panel>
     </div>
   );
