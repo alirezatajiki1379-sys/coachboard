@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import type { CSSProperties, DragEvent } from "react";
+import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import {
@@ -13,7 +13,6 @@ import {
 } from "@/lib/squad/actions";
 import {
   createWorkspaceSavedView,
-  resetSystemWorkspaceOverride,
   saveWorkspaceColumnOrder,
   saveSystemWorkspaceOverride,
   updateWorkspaceSavedView
@@ -25,6 +24,7 @@ import { cn } from "@/lib/utils";
 import {
   availabilityDetail,
   availabilityLabel,
+  defaultWorkspaceConfiguration,
   formatWorkspacePercent,
   formatWorkspaceRating,
   hiddenAttentionCount,
@@ -584,25 +584,95 @@ function SavedViewsCompact({ data }: { data: WorkspaceData }) {
 
 function CustomizeWorkspacePanel({ data }: { data: WorkspaceData }) {
   const config = data.configuration;
-  const visibleSet = new Set(config.visibleColumns);
-  const [customColumnOrder, setCustomColumnOrder] = useState<WorkspaceColumnDefinition["id"][]>(config.columnOrder);
+  const [customVisibleColumns, setCustomVisibleColumns] = useState<WorkspaceColumnDefinition["id"][]>(config.visibleColumns);
+  const [customColumnOrder, setCustomColumnOrder] = useState<WorkspaceColumnDefinition["id"][]>(normalizeWorkspaceColumnOrder(config.columnOrder));
+  const [draggedCustomColumn, setDraggedCustomColumn] = useState<WorkspaceColumnDefinition["id"] | null>(null);
+  const [dropCustomTarget, setDropCustomTarget] = useState<{ id: WorkspaceColumnDefinition["id"] | "action"; side: "before" | "after" } | null>(null);
+  const [keyboardGrabbedColumn, setKeyboardGrabbedColumn] = useState<WorkspaceColumnDefinition["id"] | null>(null);
+  const [keyboardOriginalOrder, setKeyboardOriginalOrder] = useState<WorkspaceColumnDefinition["id"][] | null>(null);
+  const [columnReorderAnnouncement, setColumnReorderAnnouncement] = useState("");
+  const visibleSet = new Set(customVisibleColumns);
   const columnsByCustomOrder = customColumnOrder
     .map((id) => workspaceColumns.find((column) => column.id === id))
     .filter((column): column is WorkspaceColumnDefinition => Boolean(column));
   const orderedColumns = columnsByCustomOrder.filter((column) => column.required || visibleSet.has(column.id));
   const hiddenColumns = workspaceColumns.filter((column) => !visibleSet.has(column.id) && !column.required);
   const activeAction = data.activeSavedView ? updateWorkspaceSavedView : saveSystemWorkspaceOverride;
-  function moveCustomColumn(columnId: WorkspaceColumnDefinition["id"], direction: -1 | 1) {
-    if (columnId === "player") return;
+
+  function toggleCustomColumn(columnId: WorkspaceColumnDefinition["id"], checked: boolean) {
+    const column = workspaceColumns.find((item) => item.id === columnId);
+    if (!column || column.required) return;
+    setCustomVisibleColumns((current) => {
+      if (checked) return current.includes(columnId) ? current : [...current, columnId];
+      return current.filter((id) => id !== columnId);
+    });
+  }
+
+  function moveCustomColumnToTarget(columnId: WorkspaceColumnDefinition["id"], targetId: WorkspaceColumnDefinition["id"] | "action", side: "before" | "after") {
+    if (!isWorkspaceColumnReorderable(columnId)) return;
     setCustomColumnOrder((current) => {
-      const next = [...current];
-      const index = next.indexOf(columnId);
-      const target = index + direction;
-      if (index <= 0 || target <= 0 || target >= next.length) return current;
-      [next[index], next[target]] = [next[target], next[index]];
+      const next = moveWorkspaceColumnInOrder(current, columnId, targetId, side);
+      const movedColumn = workspaceColumns.find((column) => column.id === columnId);
+      const targetColumn = targetId === "action" ? undefined : workspaceColumns.find((column) => column.id === targetId);
+      if (next !== current && movedColumn) {
+        setColumnReorderAnnouncement(
+          targetId === "action"
+            ? `${movedColumn.label} moved before Action.`
+            : `${movedColumn.label} moved ${side} ${targetColumn?.label ?? "the selected column"}.`
+        );
+      }
       return next;
     });
   }
+
+  function moveKeyboardColumn(columnId: WorkspaceColumnDefinition["id"], direction: -1 | 1) {
+    const movableIds: WorkspaceColumnDefinition["id"][] = orderedColumns.map((column) => column.id).filter((id) => isWorkspaceColumnReorderable(id));
+    const currentIndex = movableIds.indexOf(columnId);
+    const targetId = movableIds[currentIndex + direction];
+    if (!targetId) return;
+    moveCustomColumnToTarget(columnId, targetId, direction < 0 ? "before" : "after");
+  }
+
+  function handleColumnKeyboard(event: ReactKeyboardEvent<HTMLButtonElement>, columnId: WorkspaceColumnDefinition["id"]) {
+    if (!isWorkspaceColumnReorderable(columnId)) return;
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      if (keyboardGrabbedColumn === columnId) {
+        setKeyboardGrabbedColumn(null);
+        setKeyboardOriginalOrder(null);
+        setColumnReorderAnnouncement(`${workspaceColumns.find((column) => column.id === columnId)?.label ?? "Column"} dropped.`);
+        return;
+      }
+      setKeyboardGrabbedColumn(columnId);
+      setKeyboardOriginalOrder(customColumnOrder);
+      setColumnReorderAnnouncement(`${workspaceColumns.find((column) => column.id === columnId)?.label ?? "Column"} picked up. Use Arrow Up or Arrow Down to reorder.`);
+    }
+    if (keyboardGrabbedColumn === columnId && event.key === "ArrowUp") {
+      event.preventDefault();
+      moveKeyboardColumn(columnId, -1);
+    }
+    if (keyboardGrabbedColumn === columnId && event.key === "ArrowDown") {
+      event.preventDefault();
+      moveKeyboardColumn(columnId, 1);
+    }
+    if (keyboardGrabbedColumn === columnId && event.key === "Escape") {
+      event.preventDefault();
+      if (keyboardOriginalOrder) setCustomColumnOrder(keyboardOriginalOrder);
+      setKeyboardGrabbedColumn(null);
+      setKeyboardOriginalOrder(null);
+      setColumnReorderAnnouncement("Column reorder cancelled.");
+    }
+  }
+
+  function resetColumns() {
+    const recommended = defaultWorkspaceConfiguration(data.state.view);
+    setCustomVisibleColumns(recommended.visibleColumns);
+    setCustomColumnOrder(normalizeWorkspaceColumnOrder(recommended.columnOrder));
+    setKeyboardGrabbedColumn(null);
+    setKeyboardOriginalOrder(null);
+    setColumnReorderAnnouncement("Recommended column layout restored. Apply to save it.");
+  }
+
   return (
     <section id="squad-columns-panel" className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -619,31 +689,56 @@ function CustomizeWorkspacePanel({ data }: { data: WorkspaceData }) {
       <form action={activeAction} className="mt-5 space-y-6">
         <WorkspaceStateFields data={data} />
         {data.activeSavedView ? <input type="hidden" name="savedViewId" value={data.activeSavedView.id} /> : null}
+        <div className="hidden">
+          {workspaceColumns.map((column) => (
+            <span key={column.id}>
+              {column.required || visibleSet.has(column.id) ? <input type="hidden" name={`column:${column.id}`} value="on" /> : null}
+              <input type="hidden" name={`order:${column.id}`} value={customColumnOrder.indexOf(column.id) + 1 || 999} />
+            </span>
+          ))}
+        </div>
         <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="hidden space-y-4 xl:block">
             <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Visible Columns and Order</h3>
-            <div className="space-y-2">
-              {orderedColumns.map((column, index) => (
-                <div key={column.id} className="grid gap-2 rounded-md bg-slate-50 p-2 md:grid-cols-[1fr_auto]">
-                  <label className="flex gap-2 text-sm">
-                    <input name={`column:${column.id}`} type="checkbox" defaultChecked={column.required || visibleSet.has(column.id)} disabled={column.required} className="mt-1 h-4 w-4" />
-                    <span>
-                      <span className="font-bold text-board-navy">{column.label}{column.required ? " · locked first" : ""}</span>
-                      <span className="block text-xs text-slate-500">{column.description}</span>
-                    </span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input name={`order:${column.id}`} type="hidden" value={index + 1} />
-                    <Button type="button" variant="secondary" className="h-8 px-2 text-xs" disabled={column.id === "player" || index <= 1} aria-label={`Move ${column.label} left`} onClick={() => moveCustomColumn(column.id, -1)}>
-                      Left
-                    </Button>
-                    <Button type="button" variant="secondary" className="h-8 px-2 text-xs" disabled={column.id === "player" || index === orderedColumns.length - 1} aria-label={`Move ${column.label} right`} onClick={() => moveCustomColumn(column.id, 1)}>
-                      Right
-                    </Button>
-                  </div>
-                </div>
+            <p className="text-xs text-slate-500">Drag visible columns into the order you want. Player stays first and Action stays last.</p>
+            <div className="space-y-2" role="list" aria-label="Visible desktop columns">
+              {orderedColumns.map((column) => (
+                <ColumnPreferenceRow
+                  key={column.id}
+                  column={column}
+                  checked={column.required || visibleSet.has(column.id)}
+                  locked={column.id === "player"}
+                  lockLabel={column.id === "player" ? "Locked first" : undefined}
+                  draggedColumn={draggedCustomColumn}
+                  dropTarget={dropCustomTarget}
+                  keyboardGrabbedColumn={keyboardGrabbedColumn}
+                  onCheckedChange={(checked) => toggleCustomColumn(column.id, checked)}
+                  onDragStart={() => setDraggedCustomColumn(column.id)}
+                  onDragEnd={() => {
+                    setDraggedCustomColumn(null);
+                    setDropCustomTarget(null);
+                  }}
+                  onDragOver={(targetId, side) => setDropCustomTarget({ id: targetId, side })}
+                  onDrop={(targetId, side) => {
+                    if (draggedCustomColumn) moveCustomColumnToTarget(draggedCustomColumn, targetId, side);
+                    setDraggedCustomColumn(null);
+                    setDropCustomTarget(null);
+                  }}
+                  onKeyDown={(event) => handleColumnKeyboard(event, column.id)}
+                />
               ))}
+              <ActionPreferenceRow
+                draggedColumn={draggedCustomColumn}
+                dropTarget={dropCustomTarget}
+                onDragOver={(side) => setDropCustomTarget({ id: "action", side })}
+                onDrop={(side) => {
+                  if (draggedCustomColumn) moveCustomColumnToTarget(draggedCustomColumn, "action", side);
+                  setDraggedCustomColumn(null);
+                  setDropCustomTarget(null);
+                }}
+              />
             </div>
+            <p className="sr-only" aria-live="polite">{columnReorderAnnouncement}</p>
             {hiddenColumns.length ? (
               <div className="rounded-md border border-dashed border-board-line p-3">
                 <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Hidden columns</h3>
@@ -651,8 +746,7 @@ function CustomizeWorkspacePanel({ data }: { data: WorkspaceData }) {
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {hiddenColumns.map((column) => (
                     <label key={column.id} className="flex gap-2 rounded-md bg-slate-50 p-2 text-sm">
-                      <input name={`order:${column.id}`} type="hidden" value={customColumnOrder.indexOf(column.id) + 1 || 999} />
-                      <input name={`column:${column.id}`} type="checkbox" className="mt-1 h-4 w-4" />
+                      <input type="checkbox" checked={visibleSet.has(column.id)} onChange={(event) => toggleCustomColumn(column.id, event.target.checked)} className="mt-1 h-4 w-4" />
                       <span className="font-bold text-board-navy">{column.label}</span>
                     </label>
                   ))}
@@ -663,12 +757,6 @@ function CustomizeWorkspacePanel({ data }: { data: WorkspaceData }) {
 
           <div className="space-y-4">
             <div className="rounded-md border border-board-line p-3 xl:hidden">
-              {workspaceColumns.map((column) => (
-                <span key={column.id} className="hidden">
-                  {column.required || visibleSet.has(column.id) ? <input type="hidden" name={`column:${column.id}`} value="on" /> : null}
-                  <input type="hidden" name={`order:${column.id}`} value={config.columnOrder.indexOf(column.id) + 1 || 999} />
-                </span>
-              ))}
               <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Mobile card metrics</h3>
               <p className="mt-1 text-xs text-slate-500">Choose up to four. Player name, position, type and availability always stay visible.</p>
               <div className="mt-3 grid gap-2">
@@ -732,17 +820,164 @@ function CustomizeWorkspacePanel({ data }: { data: WorkspaceData }) {
         </section>
 
         <div className="flex flex-wrap gap-2 border-t border-board-line pt-4">
-          <Button type="submit">{data.activeSavedView ? "Save changes" : "Save system view customization"}</Button>
+          <Button type="submit">{data.activeSavedView ? "Apply changes" : "Apply columns and preferences"}</Button>
           {!data.activeSavedView ? (
             <Button formAction={createWorkspaceSavedView} variant="secondary">Save as new view</Button>
           ) : (
             <Button formAction={createWorkspaceSavedView} variant="secondary">Save as new</Button>
           )}
-          {data.activeSavedView ? null : <Button formAction={resetSystemWorkspaceOverride} variant="ghost">Reset to CoachBoard default</Button>}
+          <Button type="button" variant="ghost" onClick={resetColumns}>Reset to recommended</Button>
           <ButtonLink href={workspaceHref(data.state, { customize: false })} variant="ghost">Cancel</ButtonLink>
         </div>
       </form>
     </section>
+  );
+}
+
+function ColumnPreferenceRow({
+  column,
+  checked,
+  locked,
+  lockLabel,
+  draggedColumn,
+  dropTarget,
+  keyboardGrabbedColumn,
+  onCheckedChange,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
+  onKeyDown
+}: {
+  column: WorkspaceColumnDefinition;
+  checked: boolean;
+  locked?: boolean;
+  lockLabel?: string;
+  draggedColumn: WorkspaceColumnDefinition["id"] | null;
+  dropTarget: { id: WorkspaceColumnDefinition["id"] | "action"; side: "before" | "after" } | null;
+  keyboardGrabbedColumn: WorkspaceColumnDefinition["id"] | null;
+  onCheckedChange: (checked: boolean) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDragOver: (columnId: WorkspaceColumnDefinition["id"], side: "before" | "after") => void;
+  onDrop: (columnId: WorkspaceColumnDefinition["id"], side: "before" | "after") => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+}) {
+  const reorderable = isWorkspaceColumnReorderable(column.id) && !locked;
+  const isDragged = draggedColumn === column.id;
+  const isKeyboardGrabbed = keyboardGrabbedColumn === column.id;
+  const isDropBefore = dropTarget?.id === column.id && dropTarget.side === "before";
+  const isDropAfter = dropTarget?.id === column.id && dropTarget.side === "after";
+
+  function insertionSide(event: DragEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  }
+
+  return (
+    <div
+      role="listitem"
+      className={cn(
+        "relative grid gap-2 rounded-md border p-3 transition md:grid-cols-[auto_1fr_auto]",
+        isDragged ? "border-board-green bg-green-50 shadow-soft" : "border-transparent bg-slate-50",
+        isKeyboardGrabbed && "ring-2 ring-board-green/30",
+        isDropBefore && "before:absolute before:-top-1 before:left-3 before:right-3 before:h-1 before:rounded-full before:bg-board-green",
+        isDropAfter && "after:absolute after:-bottom-1 after:left-3 after:right-3 after:h-1 after:rounded-full after:bg-board-green"
+      )}
+      onDragOver={(event) => {
+        if (!draggedColumn || !reorderable || draggedColumn === column.id) return;
+        event.preventDefault();
+        onDragOver(column.id, insertionSide(event));
+      }}
+      onDrop={(event) => {
+        if (!draggedColumn || !reorderable || draggedColumn === column.id) return;
+        event.preventDefault();
+        onDrop(column.id, insertionSide(event));
+      }}
+    >
+      <button
+        type="button"
+        draggable={reorderable}
+        disabled={!reorderable}
+        aria-label={reorderable ? `Drag ${column.label} column` : `${column.label} column ${lockLabel ?? "locked"}`}
+        aria-pressed={isKeyboardGrabbed}
+        title={reorderable ? "Drag to reorder. Keyboard: Space, Arrow Up/Down, Space." : lockLabel}
+        className={cn(
+          "flex h-9 w-9 items-center justify-center rounded-md border text-slate-500",
+          reorderable ? "cursor-grab border-board-line bg-white hover:text-board-green active:cursor-grabbing" : "cursor-default border-slate-200 bg-slate-100"
+        )}
+        onDragStart={(event) => {
+          if (!reorderable) {
+            event.preventDefault();
+            return;
+          }
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", column.id);
+          onDragStart();
+        }}
+        onDragEnd={onDragEnd}
+        onKeyDown={onKeyDown}
+      >
+        <GripVertical className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <label className="flex min-w-0 gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={locked}
+          onChange={(event) => onCheckedChange(event.target.checked)}
+          className="mt-1 h-4 w-4 shrink-0"
+        />
+        <span className="min-w-0">
+          <span className="font-bold text-board-navy">{column.label}</span>
+          <span className="block text-xs text-slate-500">{column.description}</span>
+        </span>
+      </label>
+      {lockLabel ? <span className="self-center rounded-full bg-slate-200 px-2 py-1 text-xs font-bold text-slate-600">{lockLabel}</span> : null}
+    </div>
+  );
+}
+
+function ActionPreferenceRow({
+  draggedColumn,
+  dropTarget,
+  onDragOver,
+  onDrop
+}: {
+  draggedColumn: WorkspaceColumnDefinition["id"] | null;
+  dropTarget: { id: WorkspaceColumnDefinition["id"] | "action"; side: "before" | "after" } | null;
+  onDragOver: (side: "before" | "after") => void;
+  onDrop: (side: "before" | "after") => void;
+}) {
+  const isDropBefore = dropTarget?.id === "action" && dropTarget.side === "before";
+
+  return (
+    <div
+      role="listitem"
+      className={cn(
+        "relative grid gap-2 rounded-md border border-transparent bg-slate-50 p-3 md:grid-cols-[auto_1fr_auto]",
+        isDropBefore && "before:absolute before:-top-1 before:left-3 before:right-3 before:h-1 before:rounded-full before:bg-board-green"
+      )}
+      onDragOver={(event) => {
+        if (!draggedColumn) return;
+        event.preventDefault();
+        onDragOver("before");
+      }}
+      onDrop={(event) => {
+        if (!draggedColumn) return;
+        event.preventDefault();
+        onDrop("before");
+      }}
+    >
+      <span className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-slate-100 text-slate-500">
+        <GripVertical className="h-4 w-4" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 text-sm">
+        <p className="font-bold text-board-navy">Action</p>
+        <p className="text-xs text-slate-500">Open and row actions stay at the end of the table.</p>
+      </div>
+      <span className="self-center rounded-full bg-slate-200 px-2 py-1 text-xs font-bold text-slate-600">Locked last</span>
+    </div>
   );
 }
 
@@ -800,14 +1035,10 @@ function WorkspaceTable({
   const [dropTarget, setDropTarget] = useState<{ id: WorkspaceColumnDefinition["id"]; side: "before" | "after" } | null>(null);
 
   function moveColumn(columnId: WorkspaceColumnDefinition["id"], targetId: WorkspaceColumnDefinition["id"], side: "before" | "after") {
-    if (columnId === "player" || targetId === "player") return;
+    if (!isWorkspaceColumnReorderable(columnId) || targetId === "player") return;
     const visibleIds = columns.map((column) => column.id);
-    const visibleOrder = visibleIds.filter((id) => id !== columnId);
-    const targetIndex = visibleOrder.indexOf(targetId);
-    if (targetIndex < 0) return;
-    visibleOrder.splice(side === "after" ? targetIndex + 1 : targetIndex, 0, columnId);
-    const hiddenOrder = columnOrder.filter((id) => !visibleOrder.includes(id) && id !== "player");
-    onColumnOrderChange(["player", ...visibleOrder.filter((id) => id !== "player"), ...hiddenOrder], columnOrder);
+    if (!visibleIds.includes(targetId)) return;
+    onColumnOrderChange(moveWorkspaceColumnInOrder(columnOrder, columnId, targetId, side), columnOrder);
   }
 
   return (
@@ -1302,10 +1533,41 @@ function InspectorGrid({ items }: { items: Array<[string, string]> }) {
   );
 }
 
+function isWorkspaceColumnReorderable(columnId: WorkspaceColumnDefinition["id"]) {
+  return columnId !== "player";
+}
+
+function normalizeWorkspaceColumnOrder(columnOrder: WorkspaceColumnDefinition["id"][]) {
+  const allowed = new Set(workspaceColumns.map((column) => column.id));
+  const clean = Array.from(new Set(columnOrder.filter((id) => allowed.has(id))));
+  const rest = clean.filter((id) => id !== "player");
+  const missing = workspaceColumns.map((column) => column.id).filter((id) => id !== "player" && !rest.includes(id));
+  return ["player", ...rest, ...missing] as WorkspaceColumnDefinition["id"][];
+}
+
+function moveWorkspaceColumnInOrder(
+  columnOrder: WorkspaceColumnDefinition["id"][],
+  columnId: WorkspaceColumnDefinition["id"],
+  targetId: WorkspaceColumnDefinition["id"] | "action",
+  side: "before" | "after"
+) {
+  if (!isWorkspaceColumnReorderable(columnId)) return normalizeWorkspaceColumnOrder(columnOrder);
+  const normalized = normalizeWorkspaceColumnOrder(columnOrder);
+  const next = normalized.filter((id) => id !== columnId);
+  if (targetId === "action") {
+    return normalizeWorkspaceColumnOrder([...next, columnId]);
+  }
+  if (targetId === "player") return normalized;
+  const targetIndex = next.indexOf(targetId);
+  if (targetIndex < 0) return normalized;
+  next.splice(side === "after" ? targetIndex + 1 : targetIndex, 0, columnId);
+  return normalizeWorkspaceColumnOrder(next);
+}
+
 function visibleDesktopColumns(data: WorkspaceData, columnOrder = data.configuration.columnOrder) {
   const visible = new Set(data.configuration.visibleColumns);
   const byId = new Map(workspaceColumns.map((column) => [column.id, column]));
-  const ordered = columnOrder
+  const ordered = normalizeWorkspaceColumnOrder(columnOrder)
     .map((id) => byId.get(id))
     .filter((column): column is WorkspaceColumnDefinition => Boolean(column && (column.required || visible.has(column.id))));
   if (!ordered.some((column) => column.id === "player")) {
