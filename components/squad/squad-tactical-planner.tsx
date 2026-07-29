@@ -5,7 +5,7 @@ import { Archive, Copy, Goal, RotateCcw, Shield, Star, Trash2, Users } from "luc
 import {
   addDepthAssignment,
   archiveTacticalPlan,
-  autoFillStartingXi,
+  autoFillTacticalPlan,
   clearStartingXi,
   createTacticalPlan,
   deleteTacticalPlan,
@@ -18,10 +18,11 @@ import {
   updatePlayerPlanState,
   updateTacticalPlan
 } from "@/lib/squad/tactical-planner-actions";
-import { getPlayerFitForSlot, playerName, playerPositionText, type TacticalPlannerData, type TacticalPlanSlot, type TacticalFitType } from "@/lib/squad/tactical-planner";
+import { getPlayerFitForSlot, playerName, playerPositionText, tacticalPlayerRoleOptions, tacticalRoleLabel, tacticalRoleScore, type TacticalPlannerData, type TacticalPlanSlot, type TacticalFitType } from "@/lib/squad/tactical-planner";
 import { tacticalFormations } from "@/lib/squad/tactical-formations";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getPositionFamily, normalizeCanonicalPosition, positionFamilyMeta, positionFamilyOrder, type PositionFamily } from "@/lib/squad/positions";
 import type { SquadPlayer } from "@/types/domain";
 
 type PlannerMode = "starting" | "depth" | "pool";
@@ -34,12 +35,8 @@ const fitMeta: Record<TacticalFitType, { label: string; className: string }> = {
 };
 
 const tacticalStatusOptions = [
-  { value: "", label: "No status" },
-  { value: "core", label: "Core" },
-  { value: "rotation", label: "Rotation" },
-  { value: "development", label: "Development" },
-  { value: "limited", label: "Limited" },
-  { value: "unavailable", label: "Unavailable" }
+  { value: "", label: "No tactical role" },
+  ...tacticalPlayerRoleOptions
 ];
 
 export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
@@ -47,6 +44,9 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
   const [selectedSlotId, setSelectedSlotId] = useState(data.slots[0]?.id ?? "");
   const [showTrials, setShowTrials] = useState(false);
   const [search, setSearch] = useState("");
+  const [poolFilter, setPoolFilter] = useState<"all" | "unassigned" | "excluded">("unassigned");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [positionFilter, setPositionFilter] = useState("");
 
   const selectedSlot = data.slots.find((slot) => slot.id === selectedSlotId) ?? data.slots[0];
   const playersById = useMemo(() => new Map(data.players.map((player) => [player.id, player])), [data.players]);
@@ -93,13 +93,42 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
       <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase text-board-green">{data.squad.name}</p>
-            <h2 className="mt-1 text-2xl font-bold text-board-navy">{data.selectedPlan.name}</h2>
+            <p className="text-xs font-bold uppercase text-board-green">Squad Planner · {data.squad.name}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <PlanSelect plans={activePlans} selectedPlanId={data.selectedPlan.id} />
+              {data.selectedPlan.isDefault ? <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-bold text-green-700">Default</span> : null}
+            </div>
             <p className="mt-1 text-sm text-slate-600">
               {data.selectedPlan.formationCode} · {starters.length}/11 starters · {activeAssignments.length} depth assignments
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <form action={updateTacticalPlan} className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="planId" value={data.selectedPlan.id} />
+              <input type="hidden" name="name" value={data.selectedPlan.name} />
+              <input type="hidden" name="notes" value={data.selectedPlan.notes ?? ""} />
+              <input type="hidden" name="includeNewPlayersAutomatically" value={data.selectedPlan.includeNewPlayersAutomatically ? "on" : ""} />
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                Formation
+                <select
+                  name="formationCode"
+                  defaultValue={data.selectedPlan.formationCode}
+                  className="h-10 rounded-md border border-board-line px-3 text-sm font-semibold"
+                  onChange={(event) => {
+                    const currentAssignments = activeAssignments.length;
+                    if (currentAssignments > 0 && !window.confirm("Change formation? Compatible Player assignments will be preserved. Assignments without a matching slot will return to Unassigned Players.")) {
+                      event.currentTarget.value = data.selectedPlan?.formationCode ?? "4-3-3";
+                      return;
+                    }
+                    event.currentTarget.form?.requestSubmit();
+                  }}
+                >
+                  {tacticalFormations.map((formation) => (
+                    <option key={formation.code} value={formation.code}>{formation.name}</option>
+                  ))}
+                </select>
+              </label>
+            </form>
             {(["starting", "depth", "pool"] as PlannerMode[]).map((item) => (
               <button
                 key={item}
@@ -116,39 +145,31 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-          <form action={updateTacticalPlan} className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-board-line pt-4">
+          <details className="rounded-md border border-board-line bg-slate-50 px-3 py-2">
+            <summary className="cursor-pointer text-sm font-bold text-board-navy">Rename / notes</summary>
+          <form action={updateTacticalPlan} className="mt-3 grid gap-3 md:grid-cols-2">
             <input type="hidden" name="planId" value={data.selectedPlan.id} />
+            <input type="hidden" name="formationCode" value={data.selectedPlan.formationCode} />
             <label className="space-y-1 text-sm font-semibold text-slate-700">
               Plan name
               <input name="name" defaultValue={data.selectedPlan.name} className="h-10 w-full rounded-md border border-board-line px-3 text-sm font-normal" />
-            </label>
-            <label className="space-y-1 text-sm font-semibold text-slate-700">
-              Formation
-              <select name="formationCode" defaultValue={data.selectedPlan.formationCode} className="h-10 w-full rounded-md border border-board-line px-3 text-sm font-normal">
-                {tacticalFormations.map((formation) => (
-                  <option key={formation.code} value={formation.code}>{formation.name}</option>
-                ))}
-              </select>
             </label>
             <label className="flex items-center gap-2 rounded-md border border-board-line px-3 text-sm font-semibold text-slate-700">
               <input name="includeNewPlayersAutomatically" type="checkbox" defaultChecked={data.selectedPlan.includeNewPlayersAutomatically} />
               Include new roster players
             </label>
-            <Button type="submit" className="self-end">Save plan settings</Button>
-            <label className="space-y-1 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-4">
+            <label className="space-y-1 text-sm font-semibold text-slate-700 md:col-span-2">
               Plan notes
               <textarea name="notes" defaultValue={data.selectedPlan.notes ?? ""} rows={2} className="w-full rounded-md border border-board-line px-3 py-2 text-sm font-normal" />
             </label>
+            <Button type="submit" className="self-end">Save</Button>
           </form>
-
-          <div className="flex flex-wrap items-start gap-2 lg:justify-end">
-            <PlanSelect plans={activePlans} selectedPlanId={data.selectedPlan.id} />
+          </details>
             <CreatePlanForm compact />
             <IconForm action={setDefaultTacticalPlan} planId={data.selectedPlan.id} label="Default" icon={<Star className="h-4 w-4" />} disabled={data.selectedPlan.isDefault} />
             <IconForm action={duplicateTacticalPlan} planId={data.selectedPlan.id} label="Duplicate" icon={<Copy className="h-4 w-4" />} />
             <IconForm action={archiveTacticalPlan} planId={data.selectedPlan.id} label="Archive" icon={<Archive className="h-4 w-4" />} confirmMessage="Archive this tactical plan?" />
-          </div>
         </div>
       </section>
 
@@ -160,7 +181,13 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
               <p className="text-sm text-slate-600">Click a slot to manage starter and depth. The board does not change training sessions.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <IconForm action={autoFillStartingXi} planId={data.selectedPlan.id} label="Auto-fill XI" icon={<Users className="h-4 w-4" />} />
+              <AutoFillMenu
+                planId={data.selectedPlan.id}
+                slots={data.slots}
+                players={data.players}
+                assignments={activeAssignments}
+                playerStates={data.playerStates}
+              />
               <IconForm action={clearStartingXi} planId={data.selectedPlan.id} label="Clear XI" icon={<RotateCcw className="h-4 w-4" />} />
             </div>
           </div>
@@ -204,6 +231,15 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
             showTrials={showTrials}
             search={search}
             mode={mode}
+            selectedSlot={selectedSlot}
+            assignments={activeAssignments}
+            slots={data.slots}
+            poolFilter={poolFilter}
+            roleFilter={roleFilter}
+            positionFilter={positionFilter}
+            onPoolFilterChange={setPoolFilter}
+            onRoleFilterChange={setRoleFilter}
+            onPositionFilterChange={setPositionFilter}
             onShowTrialsChange={setShowTrials}
             onSearchChange={setSearch}
           />
@@ -249,7 +285,6 @@ function CreatePlanForm({ compact = false, className }: { compact?: boolean; cla
 }
 
 function PlanSelect({ plans, selectedPlanId }: { plans: TacticalPlannerData["plans"]; selectedPlanId: string }) {
-  if (plans.length <= 1) return null;
   return (
     <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
       Plan
@@ -258,13 +293,91 @@ function PlanSelect({ plans, selectedPlanId }: { plans: TacticalPlannerData["pla
         onChange={(event) => {
           window.location.href = `/squad/planner?plan=${event.target.value}`;
         }}
-        className="h-10 rounded-md border border-board-line px-3 text-sm"
+        disabled={plans.length <= 1}
+        className="h-10 min-w-48 rounded-md border border-board-line px-3 text-sm disabled:bg-slate-50 disabled:text-slate-500"
       >
         {plans.map((plan) => (
           <option key={plan.id} value={plan.id}>{plan.name}{plan.isDefault ? " · Default" : ""}</option>
         ))}
       </select>
     </label>
+  );
+}
+
+function AutoFillMenu({
+  planId,
+  slots,
+  players,
+  assignments,
+  playerStates
+}: {
+  planId: string;
+  slots: TacticalPlanSlot[];
+  players: SquadPlayer[];
+  assignments: TacticalPlannerData["assignments"];
+  playerStates: TacticalPlannerData["playerStates"];
+}) {
+  const [mode, setMode] = useState<"empty_xi" | "xi_depth" | "rebuild_all">("empty_xi");
+  const [includeTrials, setIncludeTrials] = useState(false);
+  const preview = useMemo(
+    () => buildAutoFillPreview({ mode, includeTrials, slots, players, assignments, playerStates }),
+    [assignments, includeTrials, mode, playerStates, players, slots]
+  );
+  return (
+    <details className="relative">
+      <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded-md bg-board-green px-3 text-sm font-bold text-white shadow-sm transition hover:bg-board-green/90">
+        <Users className="h-4 w-4" />
+        Auto-fill
+      </summary>
+      <form
+        action={autoFillTacticalPlan}
+        onSubmit={(event) => {
+          const formData = new FormData(event.currentTarget);
+          if (formData.get("mode") === "rebuild_all" && assignments.length > 0 && !window.confirm("Rebuild all assignments? Existing Starting XI and depth ordering will be replaced. Excluded players stay excluded.")) {
+            event.preventDefault();
+          }
+        }}
+        className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-board-line bg-white p-3 shadow-xl"
+      >
+        <input type="hidden" name="planId" value={planId} />
+        <label className="space-y-1 text-xs font-bold text-slate-700">
+          Mode
+          <select name="mode" value={mode} onChange={(event) => setMode(event.target.value as "empty_xi" | "xi_depth" | "rebuild_all")} className="h-10 w-full rounded-md border border-board-line px-3 text-sm font-semibold">
+            <option value="empty_xi">Fill empty Starting XI slots</option>
+            <option value="xi_depth">Fill XI + basic depth</option>
+            <option value="rebuild_all">Rebuild all assignments</option>
+          </select>
+        </label>
+        <label className="mt-3 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+          <input type="checkbox" name="includeTrials" checked={includeTrials} onChange={(event) => setIncludeTrials(event.target.checked)} />
+          Include trial players
+        </label>
+        <div className="mt-3 rounded-md border border-board-line bg-slate-50 p-3">
+          <p className="text-xs font-black uppercase text-board-green">Preview</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-700">
+            <span>{preview.filledStarters}/11 starters</span>
+            <span>{preview.newStarters} new starters</span>
+            <span>{preview.backupsAdded} backups</span>
+            <span>{preview.unassignedCount} unassigned</span>
+          </div>
+          <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1 text-xs">
+            {preview.rows.map((row) => (
+              <p key={row.slotId} className="flex justify-between gap-2 rounded bg-white px-2 py-1">
+                <span className="font-bold text-slate-700">{row.slotCode}</span>
+                <span className="truncate text-slate-600">{row.playerName}</span>
+              </p>
+            ))}
+          </div>
+          {preview.messages.length > 0 ? (
+            <div className="mt-2 space-y-1 text-xs text-amber-700">
+              {preview.messages.map((message) => <p key={message}>{message}</p>)}
+            </div>
+          ) : null}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">Uses natural position fit first, then tactical role, then backup depth.</p>
+        <Button type="submit" className="mt-3 w-full">Apply auto-fill</Button>
+      </form>
+    </details>
   );
 }
 
@@ -456,6 +569,15 @@ function PlayerPoolPanel({
   showTrials,
   search,
   mode,
+  selectedSlot,
+  assignments,
+  slots,
+  poolFilter,
+  roleFilter,
+  positionFilter,
+  onPoolFilterChange,
+  onRoleFilterChange,
+  onPositionFilterChange,
   onShowTrialsChange,
   onSearchChange
 }: {
@@ -468,16 +590,41 @@ function PlayerPoolPanel({
   showTrials: boolean;
   search: string;
   mode: PlannerMode;
+  selectedSlot?: TacticalPlanSlot;
+  assignments: TacticalPlannerData["assignments"];
+  slots: TacticalPlanSlot[];
+  poolFilter: "all" | "unassigned" | "excluded";
+  roleFilter: string;
+  positionFilter: string;
+  onPoolFilterChange: (value: "all" | "unassigned" | "excluded") => void;
+  onRoleFilterChange: (value: string) => void;
+  onPositionFilterChange: (value: string) => void;
   onShowTrialsChange: (value: boolean) => void;
   onSearchChange: (value: string) => void;
 }) {
   const excludedPlayers = players.filter((player) => excludedPlayerIds.has(player.id));
-  const list = mode === "pool" ? includedPlayers : unassignedPlayers;
+  const slotById = new Map(slots.map((slot) => [slot.id, slot]));
+  const assignmentsByPlayer = new Map<string, TacticalPlannerData["assignments"]>();
+  for (const assignment of assignments) {
+    assignmentsByPlayer.set(assignment.playerId, [...(assignmentsByPlayer.get(assignment.playerId) ?? []), assignment]);
+  }
+  const baseList = poolFilter === "excluded" ? excludedPlayers : poolFilter === "all" || mode === "pool" ? includedPlayers : unassignedPlayers;
+  const filteredList = baseList.filter((player) => {
+    const state = statesByPlayer.get(player.id);
+    if (roleFilter === "none" && state?.tacticalStatus) return false;
+    if (roleFilter && roleFilter !== "none" && state?.tacticalStatus !== roleFilter) return false;
+    if (positionFilter) {
+      const family = getPlayerPositionFamilies(player).includes(positionFilter as PositionFamily);
+      if (!family) return false;
+    }
+    return true;
+  });
+  const list = selectedSlot && poolFilter !== "excluded" ? sortPlayersByFit(filteredList, selectedSlot, new Set()) : filteredList;
   return (
     <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-board-navy">Player pool</h3>
+          <h3 className="font-bold text-board-navy">{selectedSlot ? `${selectedSlot.code} options` : "Player pool"}</h3>
           <p className="text-sm text-slate-600">{includedPlayers.length} included · {unassignedPlayers.length} unassigned · {excludedPlayers.length} excluded</p>
         </div>
         <Shield className="h-5 w-5 text-board-green" />
@@ -495,25 +642,52 @@ function PlayerPoolPanel({
           Show trial
         </label>
       </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <label className="space-y-1 text-xs font-bold text-slate-600">
+          Pool
+          <select value={poolFilter} onChange={(event) => onPoolFilterChange(event.target.value as "all" | "unassigned" | "excluded")} className="h-9 w-full rounded-md border border-board-line px-2 text-xs font-semibold">
+            <option value="unassigned">Unassigned</option>
+            <option value="all">Included</option>
+            <option value="excluded">Excluded</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs font-bold text-slate-600">
+          Role
+          <select value={roleFilter} onChange={(event) => onRoleFilterChange(event.target.value)} className="h-9 w-full rounded-md border border-board-line px-2 text-xs font-semibold">
+            <option value="">All roles</option>
+            <option value="none">No role</option>
+            {tacticalPlayerRoleOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1 text-xs font-bold text-slate-600">
+          Position
+          <select value={positionFilter} onChange={(event) => onPositionFilterChange(event.target.value)} className="h-9 w-full rounded-md border border-board-line px-2 text-xs font-semibold">
+            <option value="">All positions</option>
+            {positionFamilyOrder.map((family) => (
+              <option key={family} value={family}>{positionFamilyMeta[family].label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div className="mt-3 max-h-96 space-y-2 overflow-y-auto pr-1">
         {list.length === 0 ? (
-          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">No matching included players.</p>
+          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">No matching players for this filter.</p>
         ) : list.map((player) => (
-          <PlayerStateCard key={player.id} planId={planId} player={player} state={statesByPlayer.get(player.id)} excluded={false} />
+          <PlayerStateCard
+            key={player.id}
+            planId={planId}
+            player={player}
+            state={statesByPlayer.get(player.id)}
+            excluded={poolFilter === "excluded"}
+            selectedSlot={poolFilter === "excluded" ? undefined : selectedSlot}
+            assignmentsSummary={formatAssignmentsSummary(assignmentsByPlayer.get(player.id) ?? [], slotById)}
+            alreadyInSelectedSlot={Boolean(selectedSlot && (assignmentsByPlayer.get(player.id) ?? []).some((assignment) => assignment.slotId === selectedSlot.id))}
+          />
         ))}
       </div>
-
-      {excludedPlayers.length > 0 ? (
-        <details className="mt-4 rounded-lg border border-board-line p-3">
-          <summary className="cursor-pointer text-sm font-bold text-board-navy">Excluded players</summary>
-          <div className="mt-3 space-y-2">
-            {excludedPlayers.map((player) => (
-              <PlayerStateCard key={player.id} planId={planId} player={player} state={statesByPlayer.get(player.id)} excluded />
-            ))}
-          </div>
-        </details>
-      ) : null}
     </section>
   );
 }
@@ -522,12 +696,18 @@ function PlayerStateCard({
   planId,
   player,
   state,
-  excluded
+  excluded,
+  selectedSlot,
+  assignmentsSummary,
+  alreadyInSelectedSlot
 }: {
   planId: string;
   player: SquadPlayer;
   state?: TacticalPlannerData["playerStates"][number];
   excluded: boolean;
+  selectedSlot?: TacticalPlanSlot;
+  assignmentsSummary?: string;
+  alreadyInSelectedSlot?: boolean;
 }) {
   if (excluded) {
     return (
@@ -535,10 +715,16 @@ function PlayerStateCard({
         <input type="hidden" name="planId" value={planId} />
         <input type="hidden" name="playerId" value={player.id} />
         <input type="hidden" name="inclusionStatus" value="included" />
+        <input type="hidden" name="tacticalStatus" value={state?.tacticalStatus ?? ""} />
+        <input type="hidden" name="note" value={state?.note ?? ""} />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <p className="font-bold text-board-navy">{playerName(player)}</p>
-            <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}{player.playerType === "trial" ? " · Trial" : ""}</p>
+            <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <StatusChip label={tacticalRoleLabel(state?.tacticalStatus, true)} />
+              {player.playerType === "trial" ? <StatusChip label="Trial" tone="amber" /> : null}
+            </div>
             <p className="mt-2 text-xs text-red-700">{state?.exclusionReason || "Excluded from this plan."}</p>
           </div>
           <Button type="submit" variant="secondary" className="h-8 px-2 text-xs">Include</Button>
@@ -552,15 +738,35 @@ function PlayerStateCard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="font-bold text-board-navy">{playerName(player)}</p>
-          <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}{player.playerType === "trial" ? " · Trial" : ""}</p>
+          <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <StatusChip label={tacticalRoleLabel(state?.tacticalStatus, true)} />
+            <StatusChip label="Available" tone="green" />
+            {player.playerType === "trial" ? <StatusChip label="Trial" tone="amber" /> : null}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">{assignmentsSummary || "No depth assignment yet"}</p>
         </div>
-        <form action={updatePlayerPlanState}>
-          <input type="hidden" name="planId" value={planId} />
-          <input type="hidden" name="playerId" value={player.id} />
-          <input type="hidden" name="inclusionStatus" value="excluded" />
-          <input type="hidden" name="exclusionReason" value="Not in this tactical plan" />
-          <Button type="submit" variant="danger" className="h-8 px-2 text-xs">Exclude</Button>
-        </form>
+        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+          {selectedSlot ? (
+            <form action={addDepthAssignment}>
+              <input type="hidden" name="planId" value={planId} />
+              <input type="hidden" name="slotId" value={selectedSlot.id} />
+              <input type="hidden" name="playerId" value={player.id} />
+              <Button type="submit" variant="secondary" disabled={alreadyInSelectedSlot} className="h-8 px-2 text-xs">
+                {alreadyInSelectedSlot ? "Assigned" : `Add ${selectedSlot.code}`}
+              </Button>
+            </form>
+          ) : null}
+          <form action={updatePlayerPlanState}>
+            <input type="hidden" name="planId" value={planId} />
+            <input type="hidden" name="playerId" value={player.id} />
+            <input type="hidden" name="inclusionStatus" value="excluded" />
+            <input type="hidden" name="tacticalStatus" value={state?.tacticalStatus ?? ""} />
+            <input type="hidden" name="note" value={state?.note ?? ""} />
+            <input type="hidden" name="exclusionReason" value="Not in this tactical plan" />
+            <Button type="submit" variant="danger" className="h-8 px-2 text-xs">Exclude</Button>
+          </form>
+        </div>
       </div>
       <form action={updatePlayerPlanState} className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
         <input type="hidden" name="planId" value={planId} />
@@ -575,6 +781,19 @@ function PlayerStateCard({
         <Button type="submit" variant="secondary" className="h-9 px-2 text-xs">Save</Button>
       </form>
     </div>
+  );
+}
+
+function StatusChip({ label, tone = "slate" }: { label: string; tone?: "slate" | "green" | "amber" }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full border px-2 py-0.5 text-[11px] font-bold",
+        tone === "green" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : tone === "amber" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-50 text-slate-600"
+      )}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -632,6 +851,118 @@ function sortPlayersByFit(players: SquadPlayer[], slot: TacticalPlanSlot, assign
     if (fitDelta !== 0) return fitDelta;
     return playerName(a).localeCompare(playerName(b));
   });
+}
+
+function buildAutoFillPreview({
+  mode,
+  includeTrials,
+  slots,
+  players,
+  assignments,
+  playerStates
+}: {
+  mode: "empty_xi" | "xi_depth" | "rebuild_all";
+  includeTrials: boolean;
+  slots: TacticalPlanSlot[];
+  players: SquadPlayer[];
+  assignments: TacticalPlannerData["assignments"];
+  playerStates: TacticalPlannerData["playerStates"];
+}) {
+  const stateByPlayer = new Map(playerStates.map((state) => [state.playerId, state]));
+  const excludedPlayerIds = new Set(playerStates.filter((state) => state.inclusionStatus === "excluded").map((state) => state.playerId));
+  const eligiblePlayers = players
+    .filter((player) => !excludedPlayerIds.has(player.id))
+    .filter((player) => includeTrials || player.playerType !== "trial");
+  const startingRows = mode === "rebuild_all" ? [] : assignments.filter((assignment) => assignment.isPreferredStarter);
+  const usedStarterPlayerIds = new Set(startingRows.map((assignment) => assignment.playerId));
+  const filledSlotIds = new Set(startingRows.map((assignment) => assignment.slotId));
+  const rows: Array<{ slotId: string; slotCode: string; playerName: string; isExisting: boolean }> = [];
+  const messages: string[] = [];
+
+  for (const slot of slots) {
+    const existingStarter = mode === "rebuild_all" ? undefined : assignments.find((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter);
+    const existingPlayer = existingStarter ? players.find((player) => player.id === existingStarter.playerId) : undefined;
+    if (existingPlayer) {
+      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: `${playerName(existingPlayer)} · kept`, isExisting: true });
+      continue;
+    }
+    if (filledSlotIds.has(slot.id)) continue;
+    const candidate = choosePreviewPlayerForSlot(eligiblePlayers, slot, stateByPlayer, usedStarterPlayerIds);
+    if (!candidate) {
+      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: "No suitable player", isExisting: false });
+      messages.push(`No suitable ${slot.code} available`);
+      continue;
+    }
+    rows.push({ slotId: slot.id, slotCode: slot.code, playerName: playerName(candidate), isExisting: false });
+    usedStarterPlayerIds.add(candidate.id);
+  }
+
+  const filledStarters = rows.filter((row) => row.playerName !== "No suitable player").length;
+  const newStarters = rows.filter((row) => !row.isExisting && row.playerName !== "No suitable player").length;
+  const assignedPlayerIds = new Set(assignments.map((assignment) => assignment.playerId));
+  const previewStarterIds = new Set(rows.flatMap((row) => {
+    const player = eligiblePlayers.find((item) => playerName(item) === row.playerName);
+    return player ? [player.id] : [];
+  }));
+  const unassignedCount = eligiblePlayers.filter((player) => !assignedPlayerIds.has(player.id) && !previewStarterIds.has(player.id)).length;
+  const backupsAdded = mode === "xi_depth" || mode === "rebuild_all"
+    ? slots.filter((slot) => choosePreviewPlayerForSlot(eligiblePlayers, slot, stateByPlayer, new Set(assignments.filter((assignment) => assignment.slotId === slot.id).map((assignment) => assignment.playerId)))).length
+    : 0;
+
+  if (eligiblePlayers.length === 0) messages.push("No included active squad players available.");
+  return { rows, filledStarters, newStarters, backupsAdded, unassignedCount, messages: Array.from(new Set(messages)).slice(0, 4) };
+}
+
+function choosePreviewPlayerForSlot(
+  players: SquadPlayer[],
+  slot: TacticalPlanSlot,
+  stateByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>,
+  disallowedPlayerIds: Set<string>
+) {
+  return [...players]
+    .filter((player) => !disallowedPlayerIds.has(player.id))
+    .map((player) => ({ player, score: scorePreviewPlayerForSlot(player, slot, stateByPlayer.get(player.id)?.tacticalStatus) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || playerName(a.player).localeCompare(playerName(b.player)))[0]?.player;
+}
+
+function scorePreviewPlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, tacticalStatus?: string) {
+  return positionFitPreviewScore(player, slot) + tacticalRoleScore(tacticalStatus);
+}
+
+function positionFitPreviewScore(player: SquadPlayer, slot: TacticalPlanSlot) {
+  const accepted = new Set(slot.acceptedPositions.map((position) => normalizeCanonicalPosition(position) ?? position));
+  const primary = normalizeCanonicalPosition(player.position);
+  const secondary = (player.secondaryPositions ?? []).map((position) => normalizeCanonicalPosition(position)).filter(Boolean) as string[];
+  if (primary && accepted.has(primary)) return 100;
+  if (secondary.some((position) => accepted.has(position))) return 70;
+  const knownPosition = primary ?? secondary[0];
+  if (!knownPosition) return 5;
+  const acceptedFamilies = new Set(Array.from(accepted).map((position) => getPositionFamily(position)));
+  return acceptedFamilies.has(getPositionFamily(knownPosition)) ? 35 : 5;
+}
+
+function getPlayerPositionFamilies(player: SquadPlayer) {
+  const families = new Set<PositionFamily>();
+  families.add(getPositionFamily(player.position));
+  for (const position of player.secondaryPositions ?? []) families.add(getPositionFamily(position));
+  return Array.from(families);
+}
+
+function formatAssignmentsSummary(assignments: TacticalPlannerData["assignments"], slotById: Map<string, TacticalPlanSlot>) {
+  if (assignments.length === 0) return "";
+  return [...assignments]
+    .sort((a, b) => {
+      const slotDelta = (slotById.get(a.slotId)?.sortOrder ?? 999) - (slotById.get(b.slotId)?.sortOrder ?? 999);
+      return slotDelta || a.depthOrder - b.depthOrder;
+    })
+    .slice(0, 4)
+    .map((assignment) => {
+      const slot = slotById.get(assignment.slotId);
+      const prefix = slot?.code ?? "Slot";
+      return `${prefix} #${assignment.depthOrder}${assignment.isPreferredStarter ? " starter" : ""}`;
+    })
+    .join(" · ");
 }
 
 function matchesSearch(player: SquadPlayer, search: string) {

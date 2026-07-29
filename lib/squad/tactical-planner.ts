@@ -8,7 +8,7 @@ import type { Squad, SquadPlayer } from "@/types/domain";
 
 export type TacticalPlanStatus = "active" | "archived";
 export type TacticalPlayerInclusionStatus = "included" | "excluded";
-export type TacticalPlayerStatus = "core" | "rotation" | "development" | "limited" | "unavailable";
+export type TacticalPlayerStatus = "first_choice" | "regular_option" | "rotation_option" | "development_option" | "emergency_cover";
 export type TacticalFitType = "natural" | "secondary" | "out_of_position" | "no_data";
 
 export type TacticalPlan = {
@@ -193,12 +193,39 @@ export function mapTacticalPlayerStateRow(row: PlayerStateRow): TacticalPlanPlay
     planId: row.tactical_plan_id,
     playerId: row.player_id,
     inclusionStatus: row.inclusion_status === "excluded" ? "excluded" : "included",
-    tacticalStatus: row.tactical_status as TacticalPlayerStatus | undefined,
+    tacticalStatus: normalizeTacticalPlayerStatus(row.tactical_status),
     exclusionReason: row.exclusion_reason ?? undefined,
     note: row.note ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+export const tacticalPlayerRoleOptions: Array<{ value: TacticalPlayerStatus; label: string; compactLabel: string; score: number }> = [
+  { value: "first_choice", label: "First choice", compactLabel: "First choice", score: 25 },
+  { value: "regular_option", label: "Regular option", compactLabel: "Regular", score: 15 },
+  { value: "rotation_option", label: "Rotation option", compactLabel: "Rotation", score: 8 },
+  { value: "development_option", label: "Development option", compactLabel: "Development", score: 3 },
+  { value: "emergency_cover", label: "Emergency cover", compactLabel: "Emergency", score: 1 }
+];
+
+export function normalizeTacticalPlayerStatus(value?: string | null): TacticalPlayerStatus | undefined {
+  if (value === "first_choice" || value === "regular_option" || value === "rotation_option" || value === "development_option" || value === "emergency_cover") return value;
+  if (value === "core") return "first_choice";
+  if (value === "rotation") return "rotation_option";
+  if (value === "development") return "development_option";
+  if (value === "limited" || value === "unavailable") return "emergency_cover";
+  return undefined;
+}
+
+export function tacticalRoleLabel(value?: string | null, compact = false) {
+  const role = tacticalPlayerRoleOptions.find((option) => option.value === normalizeTacticalPlayerStatus(value));
+  if (!role) return "No role";
+  return compact ? role.compactLabel : role.label;
+}
+
+export function tacticalRoleScore(value?: string | null) {
+  return tacticalPlayerRoleOptions.find((option) => option.value === normalizeTacticalPlayerStatus(value))?.score ?? 0;
 }
 
 export function playerName(player: Pick<SquadPlayer, "firstName" | "lastName">) {

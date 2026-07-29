@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { PLAYER_TABLE_LAYER_CLASSES } from "@/components/squad/player-table-layers";
 import {
   bulkArchiveSquadPlayers,
   bulkPermanentlyDeleteSquadPlayers,
@@ -148,7 +149,7 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
 
   return (
     <div className="space-y-6 [--squad-controls-top:0rem]">
-      <section className="sticky top-[var(--squad-controls-top)] z-20 rounded-lg border border-board-line bg-white p-3 shadow-soft">
+      <section className={cn("sticky top-[var(--squad-controls-top)] rounded-lg border border-board-line bg-white p-3 shadow-soft", PLAYER_TABLE_LAYER_CLASSES.toolbar)}>
         <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Coach Workspace quick views">
           {quickViews.map((item) => (
             <Link
@@ -288,7 +289,7 @@ function EmailDraftDialog({ players, onClose }: { players: WorkspacePlayerSummar
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-board-navy/40 p-4" role="dialog" aria-modal="true" aria-labelledby="email-draft-title">
+    <div className={cn("fixed inset-0 flex items-center justify-center bg-board-navy/40 p-4", PLAYER_TABLE_LAYER_CLASSES.modal)} role="dialog" aria-modal="true" aria-labelledby="email-draft-title">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -417,7 +418,7 @@ function WorkspaceFilters({ data }: { data: WorkspaceData }) {
           <summary className="flex h-11 cursor-pointer list-none items-center justify-center rounded-md border border-board-line px-3 text-sm font-bold text-board-navy hover:bg-slate-50">
             View
           </summary>
-          <div className="mt-2 min-w-72 rounded-lg border border-board-line bg-white p-3 shadow-soft lg:absolute lg:right-0 lg:z-30">
+          <div className={cn("mt-2 min-w-72 rounded-lg border border-board-line bg-white p-3 shadow-soft lg:absolute lg:right-0", PLAYER_TABLE_LAYER_CLASSES.popover)}>
             <SavedViewsCompact data={data} />
           </div>
         </details>
@@ -425,7 +426,7 @@ function WorkspaceFilters({ data }: { data: WorkspaceData }) {
           <summary className="flex h-11 cursor-pointer list-none items-center justify-center rounded-md border border-board-line px-3 text-sm font-bold text-board-navy hover:bg-slate-50">
             Filters {activeFilterCount ? activeFilterCount : ""}
           </summary>
-          <div className="mt-2 grid gap-3 rounded-lg border border-board-line bg-white p-3 shadow-soft md:grid-cols-2 lg:absolute lg:right-0 lg:z-30 lg:w-[720px] xl:grid-cols-3">
+          <div className={cn("mt-2 grid gap-3 rounded-lg border border-board-line bg-white p-3 shadow-soft md:grid-cols-2 lg:absolute lg:right-0 lg:w-[720px] xl:grid-cols-3", PLAYER_TABLE_LAYER_CLASSES.popover)}>
             <Field label="Players">
               <select name="players" defaultValue={state.players} className={fieldClass()}>
                 <option value="active">All active players</option>
@@ -1049,9 +1050,9 @@ function WorkspaceTable({
           {columns.map((column) => <col key={column.id} className={column.id === "player" ? "w-[240px]" : undefined} />)}
           <col className="w-[90px]" />
         </colgroup>
-        <thead className="sticky top-0 z-30 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
+        <thead className={cn("sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm", PLAYER_TABLE_LAYER_CLASSES.headerCell)}>
           <tr className="border-b border-board-line">
-            {selectionMode ? <th scope="col" className="sticky left-0 z-40 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]">Select</th> : null}
+            {selectionMode ? <th scope="col" className={cn("sticky left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>Select</th> : null}
             {columns.map((column) => (
               <WorkspaceHeaderCell
                 key={column.id}
@@ -1137,7 +1138,7 @@ function WorkspaceRow({
       )}
     >
       {selectionMode ? (
-        <td className={cn("sticky left-0 z-20 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", selected ? "bg-green-50" : "bg-white")}>
+        <td className={cn("sticky left-0 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.frozenBodyCell, selected ? "bg-green-50" : "bg-white")}>
           <input
             type="checkbox"
             checked={checked}
@@ -1154,7 +1155,7 @@ function WorkspaceRow({
           style={column.id === "player" ? ({ left: selectionMode ? "3rem" : 0 } as CSSProperties) : undefined}
           className={cn(
             cellClass(data, column.sortable),
-            column.id === "player" && "sticky z-10 min-w-[240px] shadow-[1px_0_0_#d9e2dc]",
+            column.id === "player" && cn("sticky min-w-[240px] shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.frozenBodyCell),
             column.id === "player" && (selected ? "bg-green-50" : "bg-white"),
             draggedColumn === column.id && "bg-green-50/70 outline outline-1 outline-board-green/20"
           )}
@@ -1422,7 +1423,7 @@ function WorkspaceHeaderCell({
       style={isPlayerColumn ? ({ left: selectionMode ? "3rem" : 0 } as CSSProperties) : undefined}
       className={cn(
         "relative bg-slate-50 px-3 py-3 transition-colors",
-        isPlayerColumn && "sticky z-40 min-w-[240px] shadow-[1px_0_0_#d9e2dc]",
+        isPlayerColumn && cn("sticky min-w-[240px] shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell),
         active && "bg-green-50 text-board-green",
         locked ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing",
         isDragged && "bg-white shadow-sm ring-2 ring-board-green/30",

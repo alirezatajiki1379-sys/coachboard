@@ -2279,7 +2279,7 @@ create table if not exists public.squad_tactical_plan_player_states (
   tactical_status text
     check (
       tactical_status is null
-      or tactical_status in ('core', 'rotation', 'development', 'limited', 'unavailable')
+      or tactical_status in ('first_choice', 'regular_option', 'rotation_option', 'development_option', 'emergency_cover')
     ),
   exclusion_reason text,
   note text,
@@ -2333,6 +2333,27 @@ create index if not exists squad_tactical_player_states_plan_status_idx
 on public.squad_tactical_plan_player_states (
   tactical_plan_id,
   inclusion_status
+);
+
+update public.squad_tactical_plan_player_states
+set tactical_status = case tactical_status
+  when 'core' then 'first_choice'
+  when 'rotation' then 'rotation_option'
+  when 'development' then 'development_option'
+  when 'limited' then 'emergency_cover'
+  when 'unavailable' then 'emergency_cover'
+  else tactical_status
+end
+where tactical_status in ('core', 'rotation', 'development', 'limited', 'unavailable');
+
+alter table public.squad_tactical_plan_player_states
+drop constraint if exists squad_tactical_plan_player_states_tactical_status_check;
+
+alter table public.squad_tactical_plan_player_states
+add constraint squad_tactical_plan_player_states_tactical_status_check
+check (
+  tactical_status is null
+  or tactical_status in ('first_choice', 'regular_option', 'rotation_option', 'development_option', 'emergency_cover')
 );
 
 drop trigger if exists set_squad_tactical_plans_updated_at

@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/squad", label: "Players" },
-  { href: "/squad/attendance", label: "Attendance" },
   { href: "/squad/planner", label: "Planner" },
+  { href: "/squad/attendance", label: "Attendance" },
   { href: "/squad/ratings", label: "Ratings" },
   { href: "/squad/development", label: "Development" },
   { href: "/squad/analysis", label: "Analytics" }
