@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useFormStatus } from "react-dom";
 import { Archive, Copy, Goal, RotateCcw, Shield, Star, Trash2, Users } from "lucide-react";
 import {
   addDepthAssignment,
@@ -508,10 +509,19 @@ function AutoFillMenu({
           >
             Back
           </Button>
-          <Button type="submit">Apply Auto-fill</Button>
+          <AutoFillSubmitButton rebuild={mode === "rebuild_all" || mode === "rebuild_xi"} />
         </div>
       </form>
     </details>
+  );
+}
+
+function AutoFillSubmitButton({ rebuild }: { rebuild: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? (rebuild ? "Rebuilding..." : "Applying...") : "Apply Auto-fill"}
+    </Button>
   );
 }
 
@@ -689,14 +699,14 @@ function SlotButton({
   const rankingPreview = orderedAssignments.slice(0, 3);
   const remainingCount = Math.max(0, orderedAssignments.length - (mode === "depth" ? rankingPreview.length : 1 + alternatives.length));
   const additionalEligibleCount = Math.max(0, eligibleCount - depthCount);
-  const lowDepthTitle =
+  const depthTitle =
     depthCount === 0
-      ? "No Player ranked"
+      ? "No Player ranked for this position"
       : depthCount === 1
-        ? "Only one ranked Player"
-        : depthCount === 2
-          ? "Only two ranked Players"
-          : "";
+        ? "Only one Player ranked for this position"
+      : depthCount === 2
+        ? "Two Players ranked for this position"
+        : `${numberWord(depthCount)} Players ranked for this position`;
 
   return (
     <div
@@ -721,18 +731,16 @@ function SlotButton({
     >
       <span className="flex items-center justify-between gap-2">
         <span className="text-xs font-black uppercase text-board-green">{slot.code}</span>
-        {depthCount <= 2 ? (
-          <span
-            className={cn(
-              "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ring-1",
-              depthCount === 0 ? "bg-red-100 text-red-800 ring-red-300" : "bg-red-50 text-red-700 ring-red-200"
-            )}
-            title={lowDepthTitle}
-            aria-label={`Low depth: ${lowDepthTitle}`}
-          >
-            {depthCount}
-          </span>
-        ) : null}
+        <span
+          className={cn(
+            "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ring-1",
+            depthCount <= 1 ? "bg-red-100 text-red-800 ring-red-300" : "bg-slate-100 text-slate-700 ring-slate-200"
+          )}
+          title={depthTitle}
+          aria-label={depthCount <= 1 ? `Low depth: ${depthTitle}` : depthTitle}
+        >
+          {depthCount}
+        </span>
       </span>
       <span className="mt-1 line-clamp-2 block text-sm font-black leading-tight text-board-navy" title={displayText}>{displayText}</span>
       {!selected && mode === "formation" && alternatives.length > 0 ? (
@@ -768,6 +776,18 @@ function SlotButton({
       ) : null}
     </div>
   );
+}
+
+function numberWord(value: number) {
+  if (value === 3) return "Three";
+  if (value === 4) return "Four";
+  if (value === 5) return "Five";
+  if (value === 6) return "Six";
+  if (value === 7) return "Seven";
+  if (value === 8) return "Eight";
+  if (value === 9) return "Nine";
+  if (value === 10) return "Ten";
+  return String(value);
 }
 
 function InlineDepthControls({
@@ -858,7 +878,7 @@ function InlineDepthControls({
               <input type="hidden" name="planId" value={planId} />
               <input type="hidden" name="slotId" value={slot.id} />
               <input type="hidden" name="eligibility" value="natural_secondary" />
-              <Button type="submit" variant="secondary" className="h-8 w-full px-2 text-xs">Add all exact Players</Button>
+              <CompactSubmitButton label="Add all exact Players" pendingLabel="Adding..." className="h-8 w-full px-2 text-xs" />
             </form>
             {addablePlayers.length === 0 ? (
               <p className="px-2 py-1 text-xs font-semibold text-slate-500">No eligible players to add.</p>
@@ -868,13 +888,30 @@ function InlineDepthControls({
                 <input type="hidden" name="slotId" value={slot.id} />
                 <input type="hidden" name="playerId" value={player.id} />
                 <span className="min-w-0 truncate font-semibold text-slate-700" title={playerName(player)}>{playerName(player)} · {fitMeta[fit.fitType].label}</span>
-                <Button type="submit" variant="secondary" className="h-7 px-2 text-[11px]">Add</Button>
+                <CompactSubmitButton label="Add" pendingLabel="Adding..." className="h-7 px-2 text-[11px]" />
               </form>
             ))}
           </div>
         </details>
       ) : null}
     </div>
+  );
+}
+
+function CompactSubmitButton({
+  label,
+  pendingLabel,
+  className
+}: {
+  label: string;
+  pendingLabel: string;
+  className?: string;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="secondary" disabled={pending} className={className}>
+      {pending ? pendingLabel : label}
+    </Button>
   );
 }
 
@@ -911,10 +948,15 @@ function DepthIconAction({
           variant === "danger" ? "bg-red-50 text-red-700 hover:bg-red-100" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
         )}
       >
-        {label}
+        <DepthIconActionLabel label={label} />
       </button>
     </form>
   );
+}
+
+function DepthIconActionLabel({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return pending ? "…" : label;
 }
 
 function SlotDepthPanel({
@@ -1066,8 +1108,17 @@ function DepthAction({
       <input type="hidden" name="planId" value={planId} />
       <input type="hidden" name="assignmentId" value={assignmentId} />
       {extra ? Object.entries(extra).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />) : null}
-      <Button type="submit" variant={variant} disabled={disabled} className="h-8 px-2 text-xs">{label}</Button>
+      <DepthActionButton label={label} variant={variant} disabled={disabled} />
     </form>
+  );
+}
+
+function DepthActionButton({ label, variant, disabled }: { label: string; variant: "secondary" | "danger"; disabled?: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant={variant} disabled={disabled || pending} className="h-8 px-2 text-xs">
+      {pending ? "Saving..." : label}
+    </Button>
   );
 }
 
