@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Archive, Copy, Goal, RotateCcw, Shield, Star, Trash2, Users } from "lucide-react";
 import {
   addDepthAssignment,
+  addAllEligibleDepthAssignments,
   archiveTacticalPlan,
   autoFillTacticalPlan,
   clearStartingXi,
@@ -42,7 +43,7 @@ import { getPositionFamily, positionFamilyMeta, positionFamilyOrder, type Positi
 import type { SquadPlayer } from "@/types/domain";
 
 type PlannerMode = "formation" | "depth";
-type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_all";
+type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_xi" | "rebuild_all";
 
 const fitMeta: Record<TacticalFitType, { label: string; className: string }> = {
   natural: { label: "Natural", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
@@ -243,21 +244,15 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
             </div>
           </div>
 
-          <PlannerPitch className="mt-4 aspect-[2/3] max-h-[760px] min-h-[520px] sm:aspect-[68/105]">
-              {data.slots.map((slot) => (
-                <SlotButton
-                  key={slot.id}
-                  slot={slot}
-                  selected={selectedSlot?.id === slot.id}
-                  assignments={assignmentsBySlot.get(slot.id) ?? []}
-                  playersById={playersById}
-                  eligibleCount={includedPlayers.filter((player) => {
-                    const fit = evaluatePlayerSlotFit(player, slot, false);
-                    return isFitAllowedByAutoFillEligibility(fit.fitType, "natural_secondary", false);
-                  }).length}
-                  onSelect={() => setSelectedSlotId(slot.id)}
-                />
-              ))}
+          <PlannerPitch className="mt-4 min-h-[620px] overflow-x-auto p-4">
+            <FormationSlotRows
+              slots={data.slots}
+              selectedSlotId={selectedSlot?.id}
+              assignmentsBySlot={assignmentsBySlot}
+              playersById={playersById}
+              includedPlayers={includedPlayers}
+              onSelect={setSelectedSlotId}
+            />
           </PlannerPitch>
         </section>
 
@@ -424,14 +419,13 @@ function AutoFillMenu({
 }) {
   const [mode, setMode] = useState<AutoFillMode>("empty_xi");
   const [eligibility, setEligibility] = useState<AutoFillEligibility>("natural_secondary");
-  const [existingAssignmentsMode, setExistingAssignmentsMode] = useState<"keep_manual" | "replace_generated" | "rebuild_all">("keep_manual");
   const [includeTrials, setIncludeTrials] = useState(false);
   const [allowOutOfPosition, setAllowOutOfPosition] = useState(false);
   const preview = useMemo(
     () => buildAutoFillPreview({ mode, eligibility, includeTrials, allowOutOfPosition, slots, players, assignments, playerStates }),
     [allowOutOfPosition, assignments, eligibility, includeTrials, mode, playerStates, players, slots]
   );
-  const effectiveMode = existingAssignmentsMode === "rebuild_all" ? "rebuild_all" : mode;
+  const starterCount = assignments.filter((assignment) => assignment.isPreferredStarter).length;
   return (
     <details className="relative">
       <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded-md bg-board-green px-3 text-sm font-bold text-white shadow-sm transition hover:bg-board-green/90">
@@ -442,37 +436,38 @@ function AutoFillMenu({
         action={autoFillTacticalPlan}
         onSubmit={(event) => {
           const formData = new FormData(event.currentTarget);
-          if (formData.get("mode") === "rebuild_all" && assignments.length > 0 && !window.confirm("Rebuild everything? Existing Starting XI and depth ordering will be replaced. Excluded players stay excluded.")) {
+          const selectedMode = formData.get("mode");
+          if ((selectedMode === "rebuild_all" || selectedMode === "rebuild_xi") && assignments.length > 0 && !window.confirm(selectedMode === "rebuild_all" ? "Rebuild Starting XI and depth? Existing assignments will be replaced after you apply." : "Rebuild Starting XI? Existing starters will be replaced, but depth assignments stay available.")) {
             event.preventDefault();
           }
         }}
         className="absolute right-0 z-30 mt-2 max-h-[min(760px,calc(100vh-7rem))] w-[30rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-board-line bg-white p-4 shadow-xl"
       >
         <input type="hidden" name="planId" value={planId} />
-        <input type="hidden" name="mode" value={effectiveMode} />
+        <input type="hidden" name="mode" value={mode} />
         <input type="hidden" name="eligibility" value={eligibility} />
         <div>
           <h3 className="font-bold text-board-navy">Auto-fill tactical plan</h3>
           <p className="mt-1 text-xs text-slate-600">Choose what CoachBoard may create. Nothing changes until you apply the preview.</p>
         </div>
         <fieldset className="mt-4 space-y-2">
-          <legend className="text-xs font-black uppercase tracking-wide text-board-green">What should Auto-fill create?</legend>
+          <legend className="text-xs font-black uppercase tracking-wide text-board-green">How should Auto-fill update this plan?</legend>
           <AutoFillRadio name="modeOption" checked={mode === "empty_xi"} onChange={() => setMode("empty_xi")} label="Fill empty Starting XI positions" />
-          <AutoFillRadio name="modeOption" checked={mode === "xi_depth"} onChange={() => setMode("xi_depth")} label="Fill Starting XI and add one backup where available" />
-          <AutoFillRadio name="modeOption" checked={mode === "xi_all_depth"} onChange={() => setMode("xi_all_depth")} label="Fill Starting XI and add all eligible Players to depth" />
-          <AutoFillRadio name="modeOption" checked={mode === "rebuild_all"} onChange={() => { setMode("rebuild_all"); setExistingAssignmentsMode("rebuild_all"); }} label="Rebuild the complete Starting XI and depth" tone="danger" />
+          <AutoFillRadio name="modeOption" checked={mode === "xi_depth"} onChange={() => setMode("xi_depth")} label="Fill empty Starting XI slots and add one backup" />
+          <AutoFillRadio name="modeOption" checked={mode === "xi_all_depth"} onChange={() => setMode("xi_all_depth")} label="Fill empty Starting XI slots and add all eligible depth" />
+          <AutoFillRadio name="modeOption" checked={mode === "rebuild_xi"} onChange={() => setMode("rebuild_xi")} label="Rebuild Starting XI only" tone="danger" />
+          <AutoFillRadio name="modeOption" checked={mode === "rebuild_all"} onChange={() => setMode("rebuild_all")} label="Rebuild Starting XI and depth" tone="danger" />
         </fieldset>
+        <div className="mt-3 rounded-md border border-board-line bg-slate-50 p-3 text-xs text-slate-600">
+          <p className="font-black uppercase tracking-wide text-board-green">Current plan</p>
+          <p className="mt-1">{starterCount} of {slots.length} starters assigned · {assignments.length} depth assignments</p>
+          <p className="mt-1">{describeAutoFillMode(mode)}</p>
+        </div>
         <fieldset className="mt-4 space-y-2">
           <legend className="text-xs font-black uppercase tracking-wide text-board-green">Which Players may Auto-fill use?</legend>
           <AutoFillRadio name="eligibilityOption" checked={eligibility === "natural"} onChange={() => setEligibility("natural")} label="Natural positions only" detail="Use only Players whose primary position matches the tactical position." />
           <AutoFillRadio name="eligibilityOption" checked={eligibility === "natural_secondary"} onChange={() => setEligibility("natural_secondary")} label="Natural and secondary positions" detail="Also use positions the coach has explicitly stored as secondary positions." />
           <AutoFillRadio name="eligibilityOption" checked={eligibility === "natural_secondary_compatible"} onChange={() => setEligibility("natural_secondary_compatible")} label="Natural, secondary and compatible positions" detail="Also use explicitly related alternatives such as RWB at RB. Compatible Players are marked clearly." />
-        </fieldset>
-        <fieldset className="mt-4 space-y-2">
-          <legend className="text-xs font-black uppercase tracking-wide text-board-green">Existing assignments</legend>
-          <AutoFillRadio name="existingAssignmentsOption" checked={existingAssignmentsMode === "keep_manual"} onChange={() => setExistingAssignmentsMode("keep_manual")} label="Keep all manual assignments" detail="Default. Existing starters and depth stay in place; empty spaces can be filled." />
-          <AutoFillRadio name="existingAssignmentsOption" checked={existingAssignmentsMode === "replace_generated"} onChange={() => setExistingAssignmentsMode("replace_generated")} label="Replace only automatically generated assignments" detail="Not tracked separately yet, so this keeps current assignments for now." />
-          <AutoFillRadio name="existingAssignmentsOption" checked={existingAssignmentsMode === "rebuild_all"} onChange={() => { setExistingAssignmentsMode("rebuild_all"); setMode("rebuild_all"); }} label="Rebuild everything" tone="danger" />
         </fieldset>
         <label className="mt-3 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
           <input type="checkbox" name="includeTrials" checked={includeTrials} onChange={(event) => setIncludeTrials(event.target.checked)} />
@@ -556,6 +551,14 @@ function AutoFillRadio({
   );
 }
 
+function describeAutoFillMode(mode: AutoFillMode) {
+  if (mode === "xi_depth") return "Keeps existing assignments, fills empty starters and adds one backup where a slot has no backup yet.";
+  if (mode === "xi_all_depth") return "Keeps existing assignments, fills empty starters and appends every remaining eligible player to depth.";
+  if (mode === "rebuild_xi") return "Replaces current starters, while preserving existing depth assignments.";
+  if (mode === "rebuild_all") return "Replaces the Starting XI and ordered depth assignments.";
+  return "Keeps all existing assignments and fills only empty Starting XI slots.";
+}
+
 function IconForm({
   action,
   planId,
@@ -589,6 +592,64 @@ function IconForm({
   );
 }
 
+function FormationSlotRows({
+  slots,
+  selectedSlotId,
+  assignmentsBySlot,
+  playersById,
+  includedPlayers,
+  onSelect
+}: {
+  slots: TacticalPlanSlot[];
+  selectedSlotId?: string;
+  assignmentsBySlot: Map<string, TacticalPlannerData["assignments"]>;
+  playersById: Map<string, SquadPlayer>;
+  includedPlayers: SquadPlayer[];
+  onSelect: (slotId: string) => void;
+}) {
+  const rows = groupSlotsIntoPitchRows(slots);
+  return (
+    <div className="relative z-10 flex min-h-[590px] min-w-[720px] flex-col justify-between gap-4 py-8">
+      {rows.map((row) => (
+        <div
+          key={row.key}
+          className="grid justify-center gap-3"
+          style={{ gridTemplateColumns: `repeat(${row.slots.length}, minmax(7.75rem, 10.5rem))` }}
+        >
+          {row.slots.map((slot) => (
+            <SlotButton
+              key={slot.id}
+              slot={slot}
+              selected={selectedSlotId === slot.id}
+              assignments={assignmentsBySlot.get(slot.id) ?? []}
+              playersById={playersById}
+              eligibleCount={includedPlayers.filter((player) => {
+                const fit = evaluatePlayerSlotFit(player, slot, false);
+                return isFitAllowedByAutoFillEligibility(fit.fitType, "natural_secondary", false);
+              }).length}
+              onSelect={() => onSelect(slot.id)}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function groupSlotsIntoPitchRows(slots: TacticalPlanSlot[]) {
+  const groups = new Map<number, TacticalPlanSlot[]>();
+  for (const slot of slots) {
+    const yBand = Math.round(slot.y / 8) * 8;
+    groups.set(yBand, [...(groups.get(yBand) ?? []), slot]);
+  }
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([yBand, rowSlots]) => ({
+      key: String(yBand),
+      slots: [...rowSlots].sort((a, b) => a.x - b.x || a.sortOrder - b.sortOrder)
+    }));
+}
+
 function SlotButton({
   slot,
   selected,
@@ -614,10 +675,9 @@ function SlotButton({
       type="button"
       onClick={onSelect}
       className={cn(
-        "absolute min-h-16 w-28 -translate-x-1/2 -translate-y-1/2 rounded-lg border p-2 text-left shadow-lg transition sm:w-36",
+        "min-h-[5.25rem] w-full rounded-lg border p-2 text-left shadow-lg transition",
         selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/25" : "border-white/70 bg-white/90 text-slate-800 hover:bg-white"
       )}
-      style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
     >
       <span className="flex items-center justify-between gap-2">
         <span className="text-xs font-black uppercase text-board-green">{slot.code}</span>
@@ -625,6 +685,7 @@ function SlotButton({
       </span>
       <span className="mt-1 line-clamp-2 block text-xs font-bold sm:text-sm">{displayText}</span>
       <span className="mt-1 block text-[11px] font-semibold text-slate-500">{depthCount} assigned · {eligibleCount} eligible</span>
+      <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Manage depth</span>
     </button>
   );
 }
@@ -644,6 +705,7 @@ function SlotDepthPanel({
   availablePlayers: SquadPlayer[];
   assignedPlayerIds: Set<string>;
 }) {
+  const [managerEligibility, setManagerEligibility] = useState<AutoFillEligibility>("natural_secondary");
   if (!slot) {
     return (
       <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
@@ -655,7 +717,7 @@ function SlotDepthPanel({
   const addablePlayers = availablePlayers.filter((player) => !depth.some((assignment) => assignment.playerId === player.id));
   const availableCandidates = addablePlayers
     .map((player) => ({ player, fit: evaluatePlayerSlotFit(player, slot) }))
-    .filter((item) => item.fit.eligible)
+    .filter((item) => item.fit.eligible && isFitAllowedByAutoFillEligibility(item.fit.fitType, managerEligibility, false))
     .sort((a, b) => b.fit.baseScore - a.fit.baseScore || playerName(a.player).localeCompare(playerName(b.player)));
 
   return (
@@ -666,6 +728,22 @@ function SlotDepthPanel({
           <p className="text-sm text-slate-600">{slot.label} · accepts {slot.acceptedPositions.join(", ")}</p>
         </div>
         <Goal className="h-5 w-5 text-board-green" />
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <label className="space-y-1 text-xs font-bold text-slate-600">
+          Available filter
+          <select value={managerEligibility} onChange={(event) => setManagerEligibility(event.target.value as AutoFillEligibility)} className="h-9 w-full rounded-md border border-board-line px-2 text-xs font-semibold">
+            <option value="natural">Exact only</option>
+            <option value="natural_secondary">Natural + Secondary</option>
+            <option value="natural_secondary_compatible">Include Compatible</option>
+          </select>
+        </label>
+        <form action={addAllEligibleDepthAssignments} className="self-end">
+          <input type="hidden" name="planId" value={planId} />
+          <input type="hidden" name="slotId" value={slot.id} />
+          <input type="hidden" name="eligibility" value={managerEligibility} />
+          <Button type="submit" variant="secondary" className="h-9 px-2 text-xs">Add all eligible</Button>
+        </form>
       </div>
 
       <form action={addDepthAssignment} className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -705,6 +783,7 @@ function SlotDepthPanel({
                 <DepthAction action={setPreferredStarter} planId={planId} assignmentId={assignment.id} label="Set starter" disabled={assignment.isPreferredStarter} />
                 <DepthAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="Up" extra={{ direction: "up" }} disabled={index === 0} />
                 <DepthAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="Down" extra={{ direction: "down" }} disabled={index === depth.length - 1} />
+                <ButtonLink href={`/squad/players/${player.id}`} variant="secondary" className="h-8 px-2 text-xs">Profile</ButtonLink>
                 <DepthAction action={removeDepthAssignment} planId={planId} assignmentId={assignment.id} label="Remove" variant="danger" />
               </div>
             </div>
@@ -792,6 +871,9 @@ function UniversalSquadDepth({
   const slotForPosition = slots.find((slot) => slot.naturalPositions.includes(selectedPosition) || slot.acceptedPositions.includes(selectedPosition));
   const assignmentsByPlayer = new Map<string, TacticalPlannerData["assignments"]>();
   const slotById = new Map(slots.map((slot) => [slot.id, slot]));
+  const playersById = new Map(players.map((player) => [player.id, player]));
+  const assignedPlayerIds = new Set(assignments.map((assignment) => assignment.playerId));
+  const selectedSlotDepth = slotForPosition ? assignments.filter((assignment) => assignment.slotId === slotForPosition.id).sort((a, b) => a.depthOrder - b.depthOrder) : [];
   const assignedCountByPosition = new Map<string, number>();
   for (const assignment of assignments) {
     assignmentsByPlayer.set(assignment.playerId, [...(assignmentsByPlayer.get(assignment.playerId) ?? []), assignment]);
@@ -858,7 +940,18 @@ function UniversalSquadDepth({
         </PlannerPitch>
       </section>
 
-      <aside className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+      <aside className="space-y-4">
+        {slotForPosition ? (
+          <SlotDepthPanel
+            planId={selectedPlanId}
+            slot={slotForPosition}
+            depth={selectedSlotDepth}
+            playersById={playersById}
+            availablePlayers={scopedPlayers}
+            assignedPlayerIds={assignedPlayerIds}
+          />
+        ) : null}
+      <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
         <h3 className="font-bold text-board-navy">{squadDepthPositions.find((position) => position.code === selectedPosition)?.label ?? selectedPosition}</h3>
         <p className="text-sm text-slate-600">{selectedCandidates.length} shown · {primaryCandidates.length} primary · {secondaryCandidates.length} secondary{includeCompatible ? ` · ${compatibleCandidates.length} compatible` : ""}</p>
         {selectedCandidates.length === 0 ? (
@@ -870,6 +963,7 @@ function UniversalSquadDepth({
             {includeCompatible ? <CandidateGroup title="Compatible alternatives" candidates={compatibleCandidates} statesByPlayer={statesByPlayer} assignmentsByPlayer={assignmentsByPlayer} slotById={slotById} selectedPlanId={selectedPlanId} slot={slotForPosition} /> : null}
           </div>
         )}
+      </section>
       </aside>
     </div>
   );
@@ -895,20 +989,22 @@ function DepthPitchCard({
   const exactCount = primaryCount + secondaryCount;
   const compatibleCount = shownCandidates.filter((candidate) => candidate.fit === "compatible").length;
   const warning = exactCount === 0 ? "No exact option" : exactCount === 1 ? "Thin" : exactCount === 2 ? "Covered" : "Strong";
+  const previewCandidates = shownCandidates.slice(0, 2);
+  const hiddenCount = Math.max(0, shownCandidates.length - previewCandidates.length);
 
   return (
     <button
       type="button"
       onClick={onSelect}
       className={cn(
-        "min-h-36 w-full max-w-full rounded-lg border p-3 text-left shadow-lg transition sm:max-w-xs",
+        "min-h-32 w-full max-w-full rounded-lg border p-3 text-left shadow-lg transition sm:max-w-[12rem]",
         selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/30" : "border-white/70 bg-white/95 text-slate-800 hover:bg-white"
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase text-board-green">{position.code}</p>
-          <p className="truncate text-sm font-black text-board-navy">{position.label}</p>
+          <p className="text-xs font-black leading-tight text-board-navy">{position.label}</p>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{warning}</span>
       </div>
@@ -918,12 +1014,12 @@ function DepthPitchCard({
       <p className="mt-1 text-xs font-semibold text-slate-600">
         Assigned depth {assignedCount}{compatibleCount ? ` · Compatible ${compatibleCount}` : ""}
       </p>
-      <div className="mt-2 max-h-32 space-y-1 overflow-y-auto pr-1">
-        {shownCandidates.length === 0 ? (
+      <div className="mt-2 space-y-1">
+        {previewCandidates.length === 0 ? (
           <p className="rounded bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-500">No player yet</p>
-        ) : shownCandidates.map((candidate) => (
+        ) : previewCandidates.map((candidate) => (
           <div key={`${position.code}-${candidate.player.id}-${candidate.fit}-${candidate.matchedPosition}`} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1.5">
-            <span className="min-w-0 truncate text-xs font-bold text-board-navy">{playerName(candidate.player)}</span>
+            <span className="min-w-0 truncate text-xs font-bold text-board-navy" title={playerName(candidate.player)}>{playerName(candidate.player)}</span>
             <span
               className={cn(
                 "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black uppercase",
@@ -934,7 +1030,9 @@ function DepthPitchCard({
             </span>
           </div>
         ))}
+        {hiddenCount > 0 ? <p className="text-xs font-bold text-slate-500">+{hiddenCount} more</p> : null}
       </div>
+      <span className="mt-2 inline-flex rounded-full bg-board-navy px-2 py-1 text-[11px] font-bold text-white">Manage depth · {assignedCount}</span>
     </button>
   );
 }
@@ -1326,14 +1424,14 @@ function buildAutoFillPreview({
   const eligiblePlayers = players
     .filter((player) => !excludedPlayerIds.has(player.id))
     .filter((player) => includeTrials || player.playerType !== "trial");
-  const startingRows = mode === "rebuild_all" ? [] : assignments.filter((assignment) => assignment.isPreferredStarter);
+  const startingRows = mode === "rebuild_all" || mode === "rebuild_xi" ? [] : assignments.filter((assignment) => assignment.isPreferredStarter);
   const usedStarterPlayerIds = new Set(startingRows.map((assignment) => assignment.playerId));
   const filledSlotIds = new Set(startingRows.map((assignment) => assignment.slotId));
   const rows: Array<{ slotId: string; slotCode: string; playerName: string; detail: string; fitType?: TacticalFitType; isExisting: boolean }> = [];
   const messages: string[] = [];
   const orderedSlots = sortPreviewSlotsByScarcity(slots, eligiblePlayers, stateByPlayer, eligibility, allowOutOfPosition);
   const previewPicks = choosePreviewStarterAssignments(
-    orderedSlots.filter((slot) => mode === "rebuild_all" || !assignments.some((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter)),
+    orderedSlots.filter((slot) => mode === "rebuild_all" || mode === "rebuild_xi" || !assignments.some((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter)),
     eligiblePlayers,
     stateByPlayer,
     new Set(startingRows.map((assignment) => assignment.playerId)),
@@ -1343,7 +1441,7 @@ function buildAutoFillPreview({
   const previewPickBySlot = new Map(previewPicks.map((pick) => [pick.slot.id, pick]));
 
   for (const slot of orderedSlots) {
-    const existingStarter = mode === "rebuild_all" ? undefined : assignments.find((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter);
+    const existingStarter = mode === "rebuild_all" || mode === "rebuild_xi" ? undefined : assignments.find((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter);
     const existingPlayer = existingStarter ? players.find((player) => player.id === existingStarter.playerId) : undefined;
     if (existingPlayer) {
       rows.push({ slotId: slot.id, slotCode: slot.code, playerName: `${playerName(existingPlayer)} · kept`, detail: `${playerPositionText(existingPlayer)} · ${fitMeta[existingStarter?.fitType ?? "no_data"].label}`, fitType: existingStarter?.fitType, isExisting: true });
@@ -1377,6 +1475,7 @@ function buildAutoFillPreview({
       const assignedInSlot = new Set(assignments.filter((assignment) => assignment.slotId === slot.id).map((assignment) => assignment.playerId));
       const previewStarter = previewPickBySlot.get(slot.id);
       if (previewStarter) assignedInSlot.add(previewStarter.player.id);
+      if (mode === "xi_depth" && assignedInSlot.size >= 2) continue;
       const depthCandidates = choosePreviewPlayersForSlot(eligiblePlayers, slot, stateByPlayer, assignedInSlot, eligibility, allowOutOfPosition);
       const selectedDepth = mode === "xi_depth" ? depthCandidates.slice(0, 1) : depthCandidates;
       backupsAdded += mode === "xi_depth" ? selectedDepth.length : 0;

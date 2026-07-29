@@ -47,7 +47,7 @@ type PlayerStateActionRow = {
   tactical_status: string | null;
 };
 
-type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_all";
+type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_xi" | "rebuild_all";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -374,6 +374,51 @@ export async function addDepthAssignment(formData: FormData) {
   redirectToPlanner(planId);
 }
 
+export async function addAllEligibleDepthAssignments(formData: FormData) {
+  const { db, user } = await requireUser();
+  const planId = text(formData, "planId");
+  const slotId = text(formData, "slotId");
+  const eligibility = parseAutoFillEligibility(text(formData, "eligibility"));
+  const plan = await getOwnedPlan(db, user.id, planId);
+  const slot = await getOwnedSlot(db, user.id, slotId);
+  if (!plan || !slot) redirectToPlanner(planId);
+
+  const [playersResult, statesResult, assignmentsResult] = await Promise.all([
+    db.from("squad_players").select("*").eq("user_id", user.id).eq("squad_id", plan.squad_id).is("archived_at", null).is("deleted_at", null).order("last_name", { ascending: true, nullsFirst: false }).order("first_name", { ascending: true }),
+    db.from("squad_tactical_plan_player_states").select("player_id,inclusion_status,tactical_status").eq("user_id", user.id).eq("tactical_plan_id", planId),
+    db.from("squad_tactical_depth_assignments").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId).eq("slot_id", slotId).order("depth_order", { ascending: true })
+  ]);
+  if (playersResult.error) throw new Error(playersResult.error.message);
+  if (statesResult.error) throw new Error(statesResult.error.message);
+  if (assignmentsResult.error) throw new Error(assignmentsResult.error.message);
+
+  const states = (statesResult.data ?? []) as PlayerStateActionRow[];
+  const stateByPlayer = new Map(states.map((state) => [state.player_id, state]));
+  const excludedPlayerIds = new Set(states.filter((state) => state.inclusion_status === "excluded").map((state) => state.player_id));
+  const assignments = (assignmentsResult.data ?? []) as AssignmentRow[];
+  const assignedPlayerIds = new Set(assignments.map((assignment) => assignment.player_id));
+  let nextOrder = Math.max(0, ...assignments.map((assignment) => assignment.depth_order)) + 1;
+  const players = ((playersResult.data ?? []) as SquadPlayerRow[])
+    .map(mapSquadPlayerRow)
+    .filter((player) => !excludedPlayerIds.has(player.id));
+  const candidates = choosePlayersForSlot(players, slot, stateByPlayer, assignedPlayerIds, eligibility, false);
+  const rows = candidates.map((candidate) => ({
+    user_id: user.id,
+    tactical_plan_id: planId,
+    slot_id: slotId,
+    player_id: candidate.player.id,
+    depth_order: nextOrder++,
+    is_preferred_starter: false,
+    fit_type: candidate.fitType
+  }));
+
+  if (rows.length > 0) {
+    const { error } = await db.from("squad_tactical_depth_assignments").insert(rows);
+    if (error) throw new Error(error.message);
+  }
+  redirectToPlanner(planId);
+}
+
 export async function removeDepthAssignment(formData: FormData) {
   const { db, user } = await requireUser();
   const planId = text(formData, "planId");
@@ -425,9 +470,21 @@ export async function setPreferredStarter(formData: FormData) {
     .maybeSingle();
   if (!assignment) redirectToPlanner(planId);
   const row = assignment as { slot_id: string; player_id: string };
+  const { data: slotAssignments } = await db
+    .from("squad_tactical_depth_assignments")
+    .select("id,depth_order")
+    .eq("user_id", user.id)
+    .eq("tactical_plan_id", planId)
+    .eq("slot_id", row.slot_id)
+    .order("depth_order", { ascending: true });
+  const ordered = ((slotAssignments ?? []) as Array<{ id: string; depth_order: number }>)
+    .filter((item) => item.id !== assignmentId);
   await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: false }).eq("user_id", user.id).eq("tactical_plan_id", planId).eq("slot_id", row.slot_id);
   await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: false }).eq("user_id", user.id).eq("tactical_plan_id", planId).eq("player_id", row.player_id);
-  await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: true }).eq("id", assignmentId).eq("user_id", user.id);
+  await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: true, depth_order: 1 }).eq("id", assignmentId).eq("user_id", user.id);
+  await Promise.all(ordered.map((item, index) => (
+    db.from("squad_tactical_depth_assignments").update({ depth_order: index + 2 }).eq("id", item.id).eq("user_id", user.id)
+  )));
   redirectToPlanner(planId);
 }
 
@@ -497,6 +554,9 @@ export async function autoFillTacticalPlan(formData: FormData) {
   if (mode === "rebuild_all") {
     await db.from("squad_tactical_depth_assignments").delete().eq("user_id", user.id).eq("tactical_plan_id", planId);
     assignments = [];
+  } else if (mode === "rebuild_xi") {
+    await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: false }).eq("user_id", user.id).eq("tactical_plan_id", planId);
+    assignments = assignments.map((assignment) => ({ ...assignment, is_preferred_starter: false }));
   }
 
   const generatedRows: Array<{
@@ -509,7 +569,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
     fit_type: TacticalFitType;
   }> = [];
   const orderedSlots = sortSlotsByScarcity(slots, players, stateByPlayer, eligibility, allowOutOfPosition);
-  const preservedStarters = mode === "rebuild_all" ? [] : assignments.filter((assignment) => assignment.is_preferred_starter);
+  const preservedStarters = mode === "rebuild_all" || mode === "rebuild_xi" ? [] : assignments.filter((assignment) => assignment.is_preferred_starter);
   const usedStarterPlayerIds = new Set(preservedStarters.map((assignment) => assignment.player_id));
   const slotHasStarter = new Set(preservedStarters.map((assignment) => assignment.slot_id));
   const existingAssignmentKey = new Set(assignments.map((assignment) => assignmentKey(assignment.slot_id, assignment.player_id)));
@@ -569,6 +629,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
     ];
     for (const slot of orderedSlots) {
       const assignedInSlot = new Set(virtualAssignments.filter((assignment) => assignment.slot_id === slot.id).map((assignment) => assignment.player_id));
+      if (mode === "xi_depth" && assignedInSlot.size >= 2) continue;
       const disallowed = new Set(assignedInSlot);
       const candidates = mode === "xi_depth"
         ? choosePlayersForSlot(players, slot, stateByPlayer, disallowed, eligibility, allowOutOfPosition).slice(0, 1)
@@ -600,7 +661,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
 }
 
 function parseAutoFillMode(value: string): AutoFillMode {
-  if (value === "xi_depth" || value === "xi_all_depth" || value === "rebuild_all") return value;
+  if (value === "xi_depth" || value === "xi_all_depth" || value === "rebuild_xi" || value === "rebuild_all") return value;
   return "empty_xi";
 }
 
