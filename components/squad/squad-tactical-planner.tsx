@@ -26,12 +26,9 @@ import {
   isFitAllowedByAutoFillEligibility,
   playerName,
   playerPositionText,
-  resolveCandidatesForPosition,
-  squadDepthPositions,
   tacticalPlayerRoleOptions,
   tacticalRoleLabel,
   tacticalRoleScore,
-  type PositionCandidate,
   type AutoFillEligibility,
   type TacticalPlannerData,
   type TacticalPlanSlot,
@@ -58,26 +55,6 @@ const tacticalStatusOptions = [
   { value: "", label: "No tactical role" },
   ...tacticalPlayerRoleOptions
 ];
-
-const mirrorX = (x: number) => 100 - x;
-
-const depthPitchAnchors = [
-  { code: "ST", x: 50, y: 11, lane: "centre", line: "forward" },
-  { code: "LW", x: 13, y: 25, lane: "far-left", line: "wing" },
-  { code: "CAM", x: 50, y: 27, lane: "centre", line: "attacking-midfield" },
-  { code: "RW", x: mirrorX(13), y: 25, lane: "far-right", line: "wing" },
-  { code: "LM", x: 13, y: 43, lane: "far-left", line: "midfield" },
-  { code: "CM", x: 50, y: 43, lane: "centre", line: "midfield" },
-  { code: "RM", x: mirrorX(13), y: 43, lane: "far-right", line: "midfield" },
-  { code: "CDM", x: 50, y: 58, lane: "centre", line: "holding" },
-  { code: "LWB", x: 12, y: 67, lane: "far-left", line: "wing-back" },
-  { code: "RWB", x: mirrorX(12), y: 67, lane: "far-right", line: "wing-back" },
-  { code: "LB", x: 8, y: 80, lane: "far-left", line: "defensive" },
-  { code: "CB", x: 50, y: 80, lane: "centre", line: "defensive" },
-  { code: "RB", x: mirrorX(8), y: 80, lane: "far-right", line: "defensive" },
-  { code: "GK", x: 50, y: 93, lane: "centre", line: "goalkeeper" },
-  { code: "SS", x: 68, y: 18, lane: "right", line: "forward" }
-] as const;
 
 export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
   const [mode, setMode] = useState<PlannerMode>("formation");
@@ -226,22 +203,14 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
         </div>
       </section>
 
-      {mode === "depth" ? (
-        <UniversalSquadDepth
-          players={data.players}
-          playerStates={data.playerStates}
-          assignments={activeAssignments}
-          slots={data.slots}
-          selectedPlanId={data.selectedPlan.id}
-          excludedPlayerIds={excludedPlayerIds}
-        />
-      ) : (
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_410px]">
         <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="font-bold text-board-navy">Formation board</h3>
-              <p className="text-sm text-slate-600">Click a slot to manage starter and depth. The board does not change training sessions.</p>
+              <h3 className="font-bold text-board-navy">{mode === "depth" ? "Depth board" : "Formation board"}</h3>
+              <p className="text-sm text-slate-600">
+                {mode === "depth" ? "Same formation geometry, focused on ordered tactical depth." : "Click a slot to manage starter and depth. The board does not change training sessions."}
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <AutoFillMenu
@@ -263,6 +232,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
               assignmentsBySlot={assignmentsBySlot}
               playersById={playersById}
               includedPlayers={includedPlayers}
+              mode={mode}
               onSelect={setSelectedSlotId}
             />
           </PlannerPitch>
@@ -322,7 +292,6 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
           <ArchivedPlans plans={archivedPlans} />
         </aside>
       </div>
-      )}
     </div>
   );
 }
@@ -611,6 +580,7 @@ function FormationSlotRows({
   assignmentsBySlot,
   playersById,
   includedPlayers,
+  mode,
   onSelect
 }: {
   planId: string;
@@ -619,16 +589,17 @@ function FormationSlotRows({
   assignmentsBySlot: Map<string, TacticalPlannerData["assignments"]>;
   playersById: Map<string, SquadPlayer>;
   includedPlayers: SquadPlayer[];
+  mode: PlannerMode;
   onSelect: (slotId: string) => void;
 }) {
   const rows = groupSlotsIntoPitchRows(slots);
   return (
-    <div className="relative z-10 flex min-h-[590px] min-w-[720px] flex-col justify-between gap-4 py-8">
+    <div className="relative z-10 flex min-h-[590px] min-w-[900px] flex-col justify-between gap-4 py-8">
       {rows.map((row) => (
         <div
           key={row.key}
           className="grid justify-center gap-3"
-          style={{ gridTemplateColumns: `repeat(${row.slots.length}, minmax(7.75rem, 10.5rem))` }}
+          style={{ gridTemplateColumns: `repeat(${row.slots.length}, minmax(11.25rem, 13.75rem))` }}
         >
           {row.slots.map((slot) => (
             <SlotButton
@@ -643,6 +614,7 @@ function FormationSlotRows({
                 const fit = evaluatePlayerSlotFit(player, slot, false);
                 return isFitAllowedByAutoFillEligibility(fit.fitType, "natural_secondary", false);
               }).length}
+              mode={mode}
               onSelect={() => onSelect(slot.id)}
             />
           ))}
@@ -686,6 +658,7 @@ function SlotButton({
   playersById,
   availablePlayers,
   eligibleCount,
+  mode,
   onSelect
 }: {
   planId: string;
@@ -695,12 +668,17 @@ function SlotButton({
   playersById: Map<string, SquadPlayer>;
   availablePlayers: SquadPlayer[];
   eligibleCount: number;
+  mode: PlannerMode;
   onSelect: () => void;
 }) {
-  const starter = assignments.find((assignment) => assignment.isPreferredStarter);
+  const orderedAssignments = uniqueDepthAssignments(assignments).sort((a, b) => a.depthOrder - b.depthOrder);
+  const starter = orderedAssignments.find((assignment) => assignment.isPreferredStarter) ?? orderedAssignments[0];
   const starterPlayer = starter ? playersById.get(starter.playerId) : undefined;
-  const depthCount = assignments.length;
+  const depthCount = orderedAssignments.length;
   const displayText = starterPlayer ? playerName(starterPlayer) : "Open";
+  const alternatives = orderedAssignments.filter((assignment) => assignment.id !== starter?.id).slice(0, 2);
+  const rankingPreview = orderedAssignments.slice(0, 3);
+  const remainingCount = Math.max(0, orderedAssignments.length - (mode === "depth" ? rankingPreview.length : 1 + alternatives.length));
 
   return (
     <div
@@ -719,7 +697,28 @@ function SlotButton({
         <span className="text-xs font-black uppercase text-board-green">{slot.code}</span>
         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{depthCount}</span>
       </span>
-      <span className="mt-1 line-clamp-2 block text-xs font-bold sm:text-sm">{displayText}</span>
+      <span className="mt-1 line-clamp-2 block text-sm font-black leading-tight text-board-navy" title={displayText}>{displayText}</span>
+      {!selected && mode === "formation" && alternatives.length > 0 ? (
+        <div className="mt-1 space-y-0.5">
+          <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Alternatives</p>
+          {alternatives.map((assignment) => {
+            const player = playersById.get(assignment.playerId);
+            if (!player) return null;
+            return <p key={assignment.id} className="line-clamp-2 text-xs font-semibold leading-tight text-slate-600" title={playerName(player)}>{playerName(player)}</p>;
+          })}
+          {remainingCount > 0 ? <p className="text-xs font-bold text-slate-500">+{remainingCount} more</p> : null}
+        </div>
+      ) : null}
+      {!selected && mode === "depth" ? (
+        <div className="mt-1 space-y-0.5">
+          {rankingPreview.length === 0 ? <p className="text-xs font-semibold text-slate-500">No assigned players</p> : rankingPreview.map((assignment, index) => {
+            const player = playersById.get(assignment.playerId);
+            if (!player) return null;
+            return <p key={assignment.id} className="line-clamp-2 text-xs font-semibold leading-tight text-slate-700" title={playerName(player)}>{index + 1}. {playerName(player)}</p>;
+          })}
+          {remainingCount > 0 ? <p className="text-xs font-bold text-slate-500">+{remainingCount} more</p> : null}
+        </div>
+      ) : null}
       <span className="mt-1 block text-[11px] font-semibold text-slate-500">{depthCount} assigned · {eligibleCount} eligible</span>
       {selected ? (
         <InlineDepthControls
@@ -1035,294 +1034,6 @@ function DepthAction({
       {extra ? Object.entries(extra).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />) : null}
       <Button type="submit" variant={variant} disabled={disabled} className="h-8 px-2 text-xs">{label}</Button>
     </form>
-  );
-}
-
-function UniversalSquadDepth({
-  players,
-  playerStates,
-  assignments,
-  slots,
-  selectedPlanId,
-  excludedPlayerIds
-}: {
-  players: SquadPlayer[];
-  playerStates: TacticalPlannerData["playerStates"];
-  assignments: TacticalPlannerData["assignments"];
-  slots: TacticalPlanSlot[];
-  selectedPlanId: string;
-  excludedPlayerIds: Set<string>;
-}) {
-  const [selectedPosition, setSelectedPosition] = useState("LB");
-  const [scope, setScope] = useState<"all" | "included">("all");
-  const [includeCompatible, setIncludeCompatible] = useState(false);
-  const statesByPlayer = new Map(playerStates.map((state) => [state.playerId, state]));
-  const scopedPlayers = scope === "included" ? players.filter((player) => !excludedPlayerIds.has(player.id)) : players;
-  const selectedCandidates = resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: selectedPosition, includeCompatible });
-  const primaryCandidates = selectedCandidates.filter((candidate) => candidate.fit === "primary");
-  const secondaryCandidates = selectedCandidates.filter((candidate) => candidate.fit === "secondary");
-  const compatibleCandidates = selectedCandidates.filter((candidate) => candidate.fit === "compatible");
-  const slotForPosition = slots.find((slot) => slot.naturalPositions.includes(selectedPosition) || slot.acceptedPositions.includes(selectedPosition));
-  const assignmentsByPlayer = new Map<string, TacticalPlannerData["assignments"]>();
-  const slotById = new Map(slots.map((slot) => [slot.id, slot]));
-  const slotByPosition = new Map<string, TacticalPlanSlot>();
-  for (const slot of slots) {
-    const positionCode = slot.naturalPositions[0] ?? slot.acceptedPositions[0];
-    if (positionCode && !slotByPosition.has(positionCode)) slotByPosition.set(positionCode, slot);
-  }
-  const playersById = new Map(players.map((player) => [player.id, player]));
-  const uniqueAssignments = uniqueDepthAssignments(assignments);
-  const assignedPlayerIds = new Set(uniqueAssignments.map((assignment) => assignment.playerId));
-  const selectedSlotDepth = slotForPosition ? uniqueAssignments.filter((assignment) => assignment.slotId === slotForPosition.id).sort((a, b) => a.depthOrder - b.depthOrder) : [];
-  const assignedCountByPosition = new Map<string, number>();
-  const depthBySlot = new Map<string, TacticalPlannerData["assignments"]>();
-  for (const assignment of uniqueAssignments) {
-    assignmentsByPlayer.set(assignment.playerId, [...(assignmentsByPlayer.get(assignment.playerId) ?? []), assignment]);
-    const slot = slotById.get(assignment.slotId);
-    depthBySlot.set(assignment.slotId, [...(depthBySlot.get(assignment.slotId) ?? []), assignment]);
-    const positionCode = slot?.naturalPositions[0] ?? slot?.acceptedPositions[0];
-    if (positionCode) assignedCountByPosition.set(positionCode, (assignedCountByPosition.get(positionCode) ?? 0) + 1);
-  }
-
-  return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
-      <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h3 className="font-bold text-board-navy">Depth</h3>
-            <p className="mt-1 text-sm text-slate-600">Formation-independent pitch view. Primary and secondary candidates are listed directly for every position.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <label className="text-xs font-bold text-slate-600">
-              Scope
-              <select value={scope} onChange={(event) => setScope(event.target.value as "all" | "included")} className="mt-1 h-9 rounded-md border border-board-line px-2 text-xs">
-                <option value="all">All active squad players</option>
-                <option value="included">Included in selected tactical plan</option>
-              </select>
-            </label>
-            <label className="mt-5 flex items-center gap-2 text-xs font-semibold text-slate-700">
-              <input type="checkbox" checked={includeCompatible} onChange={(event) => setIncludeCompatible(event.target.checked)} />
-              Include compatible alternatives
-            </label>
-          </div>
-        </div>
-
-        <PlannerPitch className="mt-5 h-[980px] min-w-[980px] overflow-visible">
-          {depthPitchAnchors.map((anchor) => {
-            const position = squadDepthPositions.find((item) => item.code === anchor.code);
-            if (!position) return null;
-            const exactCandidates = resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code });
-            const shownCandidates = includeCompatible ? resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code, includeCompatible: true }) : exactCandidates;
-            const slot = slotByPosition.get(position.code);
-            return (
-              <DepthPitchCard
-                key={position.code}
-                position={position}
-                anchor={anchor}
-                exactCandidates={exactCandidates}
-                shownCandidates={shownCandidates}
-                assignedCount={assignedCountByPosition.get(position.code) ?? 0}
-                selected={selectedPosition === position.code}
-                onSelect={() => setSelectedPosition(position.code)}
-                planId={selectedPlanId}
-                slot={slot}
-                depth={slot ? (depthBySlot.get(slot.id) ?? []) : []}
-                playersById={playersById}
-                availablePlayers={scopedPlayers}
-              />
-            );
-          })}
-        </PlannerPitch>
-      </section>
-
-      <aside className="space-y-4">
-        {slotForPosition ? (
-          <SlotDepthPanel
-            planId={selectedPlanId}
-            slot={slotForPosition}
-            depth={selectedSlotDepth}
-            playersById={playersById}
-            availablePlayers={scopedPlayers}
-            assignedPlayerIds={assignedPlayerIds}
-          />
-        ) : null}
-      <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-        <h3 className="font-bold text-board-navy">{squadDepthPositions.find((position) => position.code === selectedPosition)?.label ?? selectedPosition}</h3>
-        <p className="text-sm text-slate-600">{selectedCandidates.length} shown · {primaryCandidates.length} primary · {secondaryCandidates.length} secondary{includeCompatible ? ` · ${compatibleCandidates.length} compatible` : ""}</p>
-        {selectedCandidates.length === 0 ? (
-          <p className="mt-4 rounded-md bg-slate-50 p-3 text-sm text-slate-600">No squad player has {selectedPosition} as a primary or secondary position.</p>
-        ) : (
-          <div className="mt-4 max-h-[680px] space-y-3 overflow-y-auto pr-1">
-            <CandidateGroup title="Primary options" candidates={primaryCandidates} statesByPlayer={statesByPlayer} assignmentsByPlayer={assignmentsByPlayer} slotById={slotById} selectedPlanId={selectedPlanId} slot={slotForPosition} />
-            <CandidateGroup title="Secondary options" candidates={secondaryCandidates} statesByPlayer={statesByPlayer} assignmentsByPlayer={assignmentsByPlayer} slotById={slotById} selectedPlanId={selectedPlanId} slot={slotForPosition} />
-            {includeCompatible ? <CandidateGroup title="Compatible alternatives" candidates={compatibleCandidates} statesByPlayer={statesByPlayer} assignmentsByPlayer={assignmentsByPlayer} slotById={slotById} selectedPlanId={selectedPlanId} slot={slotForPosition} /> : null}
-          </div>
-        )}
-      </section>
-      </aside>
-    </div>
-  );
-}
-
-function DepthPitchCard({
-  position,
-  anchor,
-  exactCandidates,
-  shownCandidates,
-  assignedCount,
-  selected,
-  onSelect,
-  planId,
-  slot,
-  depth,
-  playersById,
-  availablePlayers
-}: {
-  position: (typeof squadDepthPositions)[number];
-  anchor: (typeof depthPitchAnchors)[number];
-  exactCandidates: PositionCandidate[];
-  shownCandidates: PositionCandidate[];
-  assignedCount: number;
-  selected: boolean;
-  onSelect: () => void;
-  planId: string;
-  slot?: TacticalPlanSlot;
-  depth: TacticalPlannerData["assignments"];
-  playersById: Map<string, SquadPlayer>;
-  availablePlayers: SquadPlayer[];
-}) {
-  const primaryCount = exactCandidates.filter((candidate) => candidate.fit === "primary").length;
-  const secondaryCount = exactCandidates.filter((candidate) => candidate.fit === "secondary").length;
-  const exactCount = primaryCount + secondaryCount;
-  const compatibleCount = shownCandidates.filter((candidate) => candidate.fit === "compatible").length;
-  const warning = exactCount === 0 ? "No exact option" : exactCount === 1 ? "Thin" : exactCount === 2 ? "Covered" : "Strong";
-  const previewCandidates = shownCandidates.slice(0, 2);
-  const hiddenCount = Math.max(0, shownCandidates.length - previewCandidates.length);
-  const transform = anchor.lane === "far-left" ? "translate(0,-50%)" : anchor.lane === "far-right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)";
-
-  return (
-    <div
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onSelect();
-      }}
-      style={{ left: `${anchor.x}%`, top: `${anchor.y}%`, transform }}
-      className={cn(
-        "absolute rounded-lg border p-3 text-left shadow-lg transition",
-        selected ? "z-30 min-h-40 w-72" : "z-10 min-h-32 w-40",
-        selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/30" : "border-white/70 bg-white/95 text-slate-800 hover:bg-white"
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs font-black uppercase text-board-green">{position.code}</p>
-          <p className="text-xs font-black leading-tight text-board-navy">{position.label}</p>
-        </div>
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{warning}</span>
-      </div>
-      <p className="mt-2 text-xs font-semibold text-slate-600">
-        Exact {exactCount} · {primaryCount} primary · {secondaryCount} secondary
-      </p>
-      <p className="mt-1 text-xs font-semibold text-slate-600">
-        Assigned depth {assignedCount}{compatibleCount ? ` · Compatible ${compatibleCount}` : ""}
-      </p>
-      <div className="mt-2 space-y-1">
-        {previewCandidates.length === 0 ? (
-          <p className="rounded bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-500">No player yet</p>
-        ) : previewCandidates.map((candidate) => (
-          <div key={`${position.code}-${candidate.player.id}-${candidate.fit}-${candidate.matchedPosition}`} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1.5">
-            <span className="min-w-0 truncate text-xs font-bold text-board-navy" title={playerName(candidate.player)}>{playerName(candidate.player)}</span>
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black uppercase",
-                candidate.fit === "primary" ? "bg-board-green text-white" : candidate.fit === "secondary" ? "bg-white text-slate-700 ring-1 ring-slate-200" : "bg-sky-100 text-sky-700"
-              )}
-            >
-              {candidate.fit === "primary" ? "Primary" : candidate.fit === "secondary" ? "Secondary" : "Compatible"}
-            </span>
-          </div>
-        ))}
-        {hiddenCount > 0 ? <p className="text-xs font-bold text-slate-500">+{hiddenCount} more</p> : null}
-      </div>
-      {selected && slot ? (
-        <InlineDepthControls
-          planId={planId}
-          slot={slot}
-          depth={depth}
-          playersById={playersById}
-          availablePlayers={availablePlayers}
-        />
-      ) : (
-        <span className="mt-2 inline-flex rounded-full bg-board-navy px-2 py-1 text-[11px] font-bold text-white">Click to rank · {assignedCount}</span>
-      )}
-      {selected && !slot ? <p className="mt-2 rounded bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500">No matching slot in this formation.</p> : null}
-    </div>
-  );
-}
-
-function CandidateGroup({
-  title,
-  candidates,
-  statesByPlayer,
-  assignmentsByPlayer,
-  slotById,
-  selectedPlanId,
-  slot
-}: {
-  title: string;
-  candidates: PositionCandidate[];
-  statesByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>;
-  assignmentsByPlayer: Map<string, TacticalPlannerData["assignments"]>;
-  slotById: Map<string, TacticalPlanSlot>;
-  selectedPlanId: string;
-  slot?: TacticalPlanSlot;
-}) {
-  if (candidates.length === 0) return null;
-  return (
-    <section>
-      <h4 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">{title}</h4>
-      <div className="space-y-2">
-        {candidates.map((candidate) => {
-          const assignedToSlot = Boolean(slot && (assignmentsByPlayer.get(candidate.player.id) ?? []).some((assignment) => assignment.slotId === slot.id));
-          return (
-            <div
-              key={`${candidate.player.id}-${candidate.matchedPosition}-${candidate.fit}`}
-              className={cn(
-                "rounded-lg border p-3",
-                candidate.fit === "primary" ? "border-emerald-200 bg-emerald-50" : candidate.fit === "secondary" ? "border-board-line bg-white" : "border-sky-200 bg-sky-50"
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-board-navy">{playerName(candidate.player)}</p>
-                  <p className="text-xs font-semibold text-slate-600">{playerPositionText(candidate.player)}</p>
-                  <p className="mt-1 text-xs text-slate-500">{formatAssignmentsSummary(assignmentsByPlayer.get(candidate.player.id) ?? [], slotById) || "No tactical depth assignment"}</p>
-                </div>
-                <span className={cn("rounded-full px-2 py-1 text-[11px] font-black uppercase", candidate.fit === "primary" ? "bg-board-green text-white" : "bg-slate-100 text-slate-700")}>
-                  {candidate.fit}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <StatusChip label={tacticalRoleLabel(statesByPlayer.get(candidate.player.id)?.tacticalStatus, true)} />
-                <StatusChip label={`Matched ${candidate.matchedPosition}`} tone={candidate.fit === "primary" ? "green" : "slate"} />
-                {slot ? (
-                  <form action={addDepthAssignment}>
-                    <input type="hidden" name="planId" value={selectedPlanId} />
-                    <input type="hidden" name="slotId" value={slot.id} />
-                    <input type="hidden" name="playerId" value={candidate.player.id} />
-                    <Button type="submit" variant="secondary" disabled={assignedToSlot} className="h-8 px-2 text-xs">
-                      {assignedToSlot ? "In depth" : `Add to ${slot.code}`}
-                    </Button>
-                  </form>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
