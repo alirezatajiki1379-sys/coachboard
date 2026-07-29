@@ -10,6 +10,7 @@ export type TacticalPlanStatus = "active" | "archived";
 export type TacticalPlayerInclusionStatus = "included" | "excluded";
 export type TacticalPlayerStatus = "first_choice" | "regular_option" | "rotation_option" | "development_option" | "emergency_cover";
 export type TacticalFitType = "natural" | "secondary" | "compatible" | "out_of_position" | "no_data";
+export type AutoFillEligibility = "natural" | "natural_secondary" | "natural_secondary_compatible";
 
 export type TacticalPlan = {
   id: string;
@@ -364,6 +365,19 @@ export function getPlayerFitForSlot(player: Pick<SquadPlayer, "position" | "seco
 
 export function isAutoFillEligibleFit(fitType: TacticalFitType, allowOutOfPosition = false) {
   return fitType === "natural" || fitType === "secondary" || fitType === "compatible" || (allowOutOfPosition && fitType === "out_of_position");
+}
+
+export function isFitAllowedByAutoFillEligibility(fitType: TacticalFitType, eligibility: AutoFillEligibility, allowOutOfPosition = false) {
+  if (fitType === "natural") return true;
+  if (fitType === "secondary") return eligibility === "natural_secondary" || eligibility === "natural_secondary_compatible";
+  if (fitType === "compatible") return eligibility === "natural_secondary_compatible";
+  return allowOutOfPosition && fitType === "out_of_position";
+}
+
+export function autoFillEligibilityLabel(eligibility: AutoFillEligibility) {
+  if (eligibility === "natural") return "Natural positions only";
+  if (eligibility === "natural_secondary_compatible") return "Natural, secondary and compatible positions";
+  return "Natural and secondary positions";
 }
 
 export function resolveCandidatesForPosition({

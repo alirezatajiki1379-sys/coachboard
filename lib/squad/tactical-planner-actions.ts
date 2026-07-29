@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { ensureActiveSquad } from "@/lib/squad/squads";
-import { createSlotRowsForPlan, evaluatePlayerSlotFit, getPlayerFitForSlot, mapTacticalSlotRow, normalizeTacticalPlayerStatus, tacticalRoleScore, type TacticalFitType, type TacticalPlanSlot } from "@/lib/squad/tactical-planner";
+import { createSlotRowsForPlan, evaluatePlayerSlotFit, getPlayerFitForSlot, isFitAllowedByAutoFillEligibility, mapTacticalSlotRow, normalizeTacticalPlayerStatus, tacticalRoleScore, type AutoFillEligibility, type TacticalFitType, type TacticalPlanSlot } from "@/lib/squad/tactical-planner";
 import { getTacticalFormation } from "@/lib/squad/tactical-formations";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { SquadPlayer } from "@/types/domain";
@@ -47,7 +47,7 @@ type PlayerStateActionRow = {
   tactical_status: string | null;
 };
 
-type AutoFillMode = "empty_xi" | "xi_depth" | "rebuild_all";
+type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_all";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -465,6 +465,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
   const { db, user } = await requireUser();
   const planId = text(formData, "planId");
   const mode = parseAutoFillMode(text(formData, "mode"));
+  const eligibility = parseAutoFillEligibility(text(formData, "eligibility"));
   const includeTrials = formData.get("includeTrials") === "on";
   const allowOutOfPosition = formData.get("allowOutOfPosition") === "on";
   const plan = await getOwnedPlan(db, user.id, planId);
@@ -507,7 +508,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
     is_preferred_starter: boolean;
     fit_type: TacticalFitType;
   }> = [];
-  const orderedSlots = sortSlotsByScarcity(slots, players, stateByPlayer, allowOutOfPosition);
+  const orderedSlots = sortSlotsByScarcity(slots, players, stateByPlayer, eligibility, allowOutOfPosition);
   const preservedStarters = mode === "rebuild_all" ? [] : assignments.filter((assignment) => assignment.is_preferred_starter);
   const usedStarterPlayerIds = new Set(preservedStarters.map((assignment) => assignment.player_id));
   const slotHasStarter = new Set(preservedStarters.map((assignment) => assignment.slot_id));
@@ -524,6 +525,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
     players,
     stateByPlayer,
     usedStarterPlayerIds,
+    eligibility,
     allowOutOfPosition
   );
 
@@ -551,7 +553,7 @@ export async function autoFillTacticalPlan(formData: FormData) {
     usedStarterPlayerIds.add(candidate.id);
   }
 
-  if (mode === "xi_depth" || mode === "rebuild_all") {
+  if (mode === "xi_depth" || mode === "xi_all_depth" || mode === "rebuild_all") {
     const virtualAssignments: AssignmentRow[] = [
       ...assignments,
       ...generatedRows.map((row) => ({
@@ -568,20 +570,24 @@ export async function autoFillTacticalPlan(formData: FormData) {
     for (const slot of orderedSlots) {
       const assignedInSlot = new Set(virtualAssignments.filter((assignment) => assignment.slot_id === slot.id).map((assignment) => assignment.player_id));
       const disallowed = new Set(assignedInSlot);
-      const backup = choosePlayerForSlot(players, slot, stateByPlayer, disallowed, allowOutOfPosition);
-      if (!backup || existingAssignmentKey.has(assignmentKey(slot.id, backup.id))) continue;
-      const depthOrder = nextDepthOrderBySlot.get(slot.id) ?? 1;
-      generatedRows.push({
-        user_id: user.id,
-        tactical_plan_id: planId,
-        slot_id: slot.id,
-        player_id: backup.id,
-        depth_order: depthOrder,
-        is_preferred_starter: false,
-        fit_type: getPlayerFitForSlot(backup, slot)
-      });
-      nextDepthOrderBySlot.set(slot.id, depthOrder + 1);
-      existingAssignmentKey.add(assignmentKey(slot.id, backup.id));
+      const candidates = mode === "xi_depth"
+        ? choosePlayersForSlot(players, slot, stateByPlayer, disallowed, eligibility, allowOutOfPosition).slice(0, 1)
+        : choosePlayersForSlot(players, slot, stateByPlayer, disallowed, eligibility, allowOutOfPosition);
+      for (const backup of candidates) {
+        if (existingAssignmentKey.has(assignmentKey(slot.id, backup.player.id))) continue;
+        const depthOrder = nextDepthOrderBySlot.get(slot.id) ?? 1;
+        generatedRows.push({
+          user_id: user.id,
+          tactical_plan_id: planId,
+          slot_id: slot.id,
+          player_id: backup.player.id,
+          depth_order: depthOrder,
+          is_preferred_starter: false,
+          fit_type: backup.fitType
+        });
+        nextDepthOrderBySlot.set(slot.id, depthOrder + 1);
+        existingAssignmentKey.add(assignmentKey(slot.id, backup.player.id));
+      }
     }
   }
 
@@ -594,8 +600,14 @@ export async function autoFillTacticalPlan(formData: FormData) {
 }
 
 function parseAutoFillMode(value: string): AutoFillMode {
-  if (value === "xi_depth" || value === "rebuild_all") return value;
+  if (value === "xi_depth" || value === "xi_all_depth" || value === "rebuild_all") return value;
   return "empty_xi";
+}
+
+function parseAutoFillEligibility(value: string): AutoFillEligibility {
+  if (value === "natural") return "natural";
+  if (value === "natural_secondary_compatible") return "natural_secondary_compatible";
+  return "natural_secondary";
 }
 
 function assignmentKey(slotId: string, playerId: string) {
@@ -620,6 +632,7 @@ function chooseStarterAssignments(
   players: SquadPlayer[],
   stateByPlayer: Map<string, PlayerStateActionRow>,
   disallowedPlayerIds: Set<string>,
+  eligibility: AutoFillEligibility,
   allowOutOfPosition: boolean
 ) {
   const candidatesBySlot = new Map<string, StarterPick[]>();
@@ -627,12 +640,12 @@ function chooseStarterAssignments(
     const candidates = players
       .filter((player) => !disallowedPlayerIds.has(player.id))
       .map((player) => {
-        const score = scorePlayerForSlot(player, slot, stateByPlayer.get(player.id), allowOutOfPosition);
-        return { slot, player, score, fitType: evaluatePlayerSlotFit(player, slot, allowOutOfPosition).fitType };
+          const score = scorePlayerForSlot(player, slot, stateByPlayer.get(player.id), eligibility, allowOutOfPosition);
+          return { slot, player, score, fitType: evaluatePlayerSlotFit(player, slot, allowOutOfPosition).fitType };
       })
       .filter((candidate) => candidate.score > 0)
       .sort((a, b) => b.score - a.score || `${a.player.lastName ?? ""} ${a.player.firstName}`.localeCompare(`${b.player.lastName ?? ""} ${b.player.firstName}`));
-    candidatesBySlot.set(slot.id, candidates);
+    candidatesBySlot.set(slot.id, keepOutOfPositionAsLastFallback(candidates));
   }
   const orderedSlots = [...slots].sort((a, b) => (candidatesBySlot.get(a.id)?.length ?? 0) - (candidatesBySlot.get(b.id)?.length ?? 0) || a.sortOrder - b.sortOrder);
   const memo = new Map<string, MatchingResult>();
@@ -664,25 +677,34 @@ function chooseStarterAssignments(
   return solve(0, new Set(disallowedPlayerIds)).picks.sort((a, b) => a.slot.sortOrder - b.slot.sortOrder);
 }
 
-function sortSlotsByScarcity(slots: TacticalPlanSlot[], players: SquadPlayer[], stateByPlayer: Map<string, PlayerStateActionRow>, allowOutOfPosition: boolean) {
+function sortSlotsByScarcity(slots: TacticalPlanSlot[], players: SquadPlayer[], stateByPlayer: Map<string, PlayerStateActionRow>, eligibility: AutoFillEligibility, allowOutOfPosition: boolean) {
   return [...slots].sort((a, b) => {
-    const aCandidates = players.filter((player) => scorePlayerForSlot(player, a, stateByPlayer.get(player.id), allowOutOfPosition) > 0).length;
-    const bCandidates = players.filter((player) => scorePlayerForSlot(player, b, stateByPlayer.get(player.id), allowOutOfPosition) > 0).length;
+    const aCandidates = players.filter((player) => scorePlayerForSlot(player, a, stateByPlayer.get(player.id), eligibility, allowOutOfPosition) > 0).length;
+    const bCandidates = players.filter((player) => scorePlayerForSlot(player, b, stateByPlayer.get(player.id), eligibility, allowOutOfPosition) > 0).length;
     return aCandidates - bCandidates || a.sortOrder - b.sortOrder;
   });
 }
 
-function choosePlayerForSlot(players: SquadPlayer[], slot: TacticalPlanSlot, stateByPlayer: Map<string, PlayerStateActionRow>, disallowedPlayerIds: Set<string>, allowOutOfPosition: boolean) {
-  return [...players]
+function choosePlayersForSlot(players: SquadPlayer[], slot: TacticalPlanSlot, stateByPlayer: Map<string, PlayerStateActionRow>, disallowedPlayerIds: Set<string>, eligibility: AutoFillEligibility, allowOutOfPosition: boolean) {
+  const candidates = [...players]
     .filter((player) => !disallowedPlayerIds.has(player.id))
-    .map((player) => ({ player, score: scorePlayerForSlot(player, slot, stateByPlayer.get(player.id), allowOutOfPosition) }))
+    .map((player) => {
+      const fit = evaluatePlayerSlotFit(player, slot, allowOutOfPosition);
+      return { player, fitType: fit.fitType, score: scorePlayerForSlot(player, slot, stateByPlayer.get(player.id), eligibility, allowOutOfPosition) };
+    })
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score || `${a.player.lastName ?? ""} ${a.player.firstName}`.localeCompare(`${b.player.lastName ?? ""} ${b.player.firstName}`))[0]?.player;
+    .sort((a, b) => b.score - a.score || `${a.player.lastName ?? ""} ${a.player.firstName}`.localeCompare(`${b.player.lastName ?? ""} ${b.player.firstName}`));
+  return keepOutOfPositionAsLastFallback(candidates);
 }
 
-function scorePlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, state: PlayerStateActionRow | undefined, allowOutOfPosition: boolean) {
+function keepOutOfPositionAsLastFallback<T extends { fitType: TacticalFitType }>(candidates: T[]) {
+  const positioned = candidates.filter((candidate) => candidate.fitType !== "out_of_position");
+  return positioned.length > 0 ? positioned : candidates;
+}
+
+function scorePlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, state: PlayerStateActionRow | undefined, eligibility: AutoFillEligibility, allowOutOfPosition: boolean) {
   const fit = evaluatePlayerSlotFit(player, slot, allowOutOfPosition);
-  if (!fit.eligible) return 0;
+  if (!fit.eligible || !isFitAllowedByAutoFillEligibility(fit.fitType, eligibility, allowOutOfPosition)) return 0;
   return fit.baseScore + tacticalRoleScore(state?.tactical_status) * 2;
 }
 

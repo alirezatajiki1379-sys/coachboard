@@ -20,6 +20,8 @@ import {
 } from "@/lib/squad/tactical-planner-actions";
 import {
   evaluatePlayerSlotFit,
+  autoFillEligibilityLabel,
+  isFitAllowedByAutoFillEligibility,
   playerName,
   playerPositionText,
   resolveCandidatesForPosition,
@@ -28,6 +30,7 @@ import {
   tacticalRoleLabel,
   tacticalRoleScore,
   type PositionCandidate,
+  type AutoFillEligibility,
   type TacticalPlannerData,
   type TacticalPlanSlot,
   type TacticalFitType
@@ -39,6 +42,7 @@ import { getPositionFamily, positionFamilyMeta, positionFamilyOrder, type Positi
 import type { SquadPlayer } from "@/types/domain";
 
 type PlannerMode = "formation" | "depth";
+type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_all";
 
 const fitMeta: Record<TacticalFitType, { label: string; className: string }> = {
   natural: { label: "Natural", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
@@ -239,10 +243,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
             </div>
           </div>
 
-          <div className="mt-4 aspect-[2/3] max-h-[760px] min-h-[520px] overflow-hidden rounded-lg border border-emerald-900/20 bg-emerald-700 p-3 sm:aspect-[16/10] sm:min-h-[520px]">
-            <div className="relative h-full rounded-md border-2 border-white/70 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_50%,transparent_50%),linear-gradient(0deg,rgba(255,255,255,0.05)_50%,transparent_50%)] bg-[length:28px_28px]">
-              <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/50" />
-              <div className="absolute left-0 top-1/2 h-px w-full bg-white/50" />
+          <PlannerPitch className="mt-4 aspect-[2/3] max-h-[760px] min-h-[520px] sm:aspect-[68/105]">
               {data.slots.map((slot) => (
                 <SlotButton
                   key={slot.id}
@@ -250,11 +251,14 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
                   selected={selectedSlot?.id === slot.id}
                   assignments={assignmentsBySlot.get(slot.id) ?? []}
                   playersById={playersById}
+                  eligibleCount={includedPlayers.filter((player) => {
+                    const fit = evaluatePlayerSlotFit(player, slot, false);
+                    return isFitAllowedByAutoFillEligibility(fit.fitType, "natural_secondary", false);
+                  }).length}
                   onSelect={() => setSelectedSlotId(slot.id)}
                 />
               ))}
-            </div>
-          </div>
+          </PlannerPitch>
         </section>
 
         <aside className="space-y-4">
@@ -350,6 +354,61 @@ function PlanSelect({ plans, selectedPlanId }: { plans: TacticalPlannerData["pla
   );
 }
 
+function PlannerPitch({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-xl border border-emerald-950/20 bg-emerald-800 shadow-inner",
+        "bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_50%,transparent_50%)] bg-[length:44px_44px]",
+        className
+      )}
+      role="img"
+      aria-label="Football pitch planner surface with tactical position cards"
+    >
+      <FootballPitchSvg />
+      <div className="relative z-10 h-full">{children}</div>
+    </div>
+  );
+}
+
+function FootballPitchSvg() {
+  return (
+    <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full text-white/65" viewBox="0 0 68 105" preserveAspectRatio="none">
+      <defs>
+        <pattern id="planner-net" width="1.2" height="1.2" patternUnits="userSpaceOnUse">
+          <path d="M 1.2 0 L 0 0 0 1.2" fill="none" stroke="currentColor" strokeWidth="0.08" opacity="0.35" />
+        </pattern>
+      </defs>
+      <rect x="2" y="2" width="64" height="101" rx="0.5" fill="none" stroke="currentColor" strokeWidth="0.55" />
+      <line x1="2" y1="52.5" x2="66" y2="52.5" stroke="currentColor" strokeWidth="0.45" />
+      <circle cx="34" cy="52.5" r="9.15" fill="none" stroke="currentColor" strokeWidth="0.45" />
+      <circle cx="34" cy="52.5" r="0.55" fill="currentColor" opacity="0.9" />
+
+      <rect x="13.84" y="2" width="40.32" height="16.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
+      <rect x="24.84" y="2" width="18.32" height="5.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
+      <circle cx="34" cy="13" r="0.45" fill="currentColor" />
+      <path d="M 26.7 18.5 A 9.15 9.15 0 0 0 41.3 18.5" fill="none" stroke="currentColor" strokeWidth="0.35" opacity="0.65" />
+
+      <rect x="13.84" y="86.5" width="40.32" height="16.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
+      <rect x="24.84" y="97.5" width="18.32" height="5.5" fill="none" stroke="currentColor" strokeWidth="0.45" />
+      <circle cx="34" cy="92" r="0.45" fill="currentColor" />
+      <path d="M 26.7 86.5 A 9.15 9.15 0 0 1 41.3 86.5" fill="none" stroke="currentColor" strokeWidth="0.35" opacity="0.65" />
+
+      <path d="M 2 5 A 3 3 0 0 0 5 2" fill="none" stroke="currentColor" strokeWidth="0.32" opacity="0.7" />
+      <path d="M 63 2 A 3 3 0 0 0 66 5" fill="none" stroke="currentColor" strokeWidth="0.32" opacity="0.7" />
+      <path d="M 5 103 A 3 3 0 0 0 2 100" fill="none" stroke="currentColor" strokeWidth="0.32" opacity="0.7" />
+      <path d="M 66 100 A 3 3 0 0 0 63 103" fill="none" stroke="currentColor" strokeWidth="0.32" opacity="0.7" />
+
+      <g opacity="0.8">
+        <rect x="29" y="-1.6" width="10" height="3.6" rx="0.35" fill="none" stroke="currentColor" strokeWidth="0.45" />
+        <rect x="30" y="-5" width="8" height="3.4" fill="url(#planner-net)" stroke="currentColor" strokeWidth="0.28" />
+        <rect x="29" y="103" width="10" height="3.6" rx="0.35" fill="none" stroke="currentColor" strokeWidth="0.45" />
+        <rect x="30" y="106.6" width="8" height="3.4" fill="url(#planner-net)" stroke="currentColor" strokeWidth="0.28" />
+      </g>
+    </svg>
+  );
+}
+
 function AutoFillMenu({
   planId,
   slots,
@@ -363,13 +422,16 @@ function AutoFillMenu({
   assignments: TacticalPlannerData["assignments"];
   playerStates: TacticalPlannerData["playerStates"];
 }) {
-  const [mode, setMode] = useState<"empty_xi" | "xi_depth" | "rebuild_all">("empty_xi");
+  const [mode, setMode] = useState<AutoFillMode>("empty_xi");
+  const [eligibility, setEligibility] = useState<AutoFillEligibility>("natural_secondary");
+  const [existingAssignmentsMode, setExistingAssignmentsMode] = useState<"keep_manual" | "replace_generated" | "rebuild_all">("keep_manual");
   const [includeTrials, setIncludeTrials] = useState(false);
   const [allowOutOfPosition, setAllowOutOfPosition] = useState(false);
   const preview = useMemo(
-    () => buildAutoFillPreview({ mode, includeTrials, allowOutOfPosition, slots, players, assignments, playerStates }),
-    [allowOutOfPosition, assignments, includeTrials, mode, playerStates, players, slots]
+    () => buildAutoFillPreview({ mode, eligibility, includeTrials, allowOutOfPosition, slots, players, assignments, playerStates }),
+    [allowOutOfPosition, assignments, eligibility, includeTrials, mode, playerStates, players, slots]
   );
+  const effectiveMode = existingAssignmentsMode === "rebuild_all" ? "rebuild_all" : mode;
   return (
     <details className="relative">
       <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded-md bg-board-green px-3 text-sm font-bold text-white shadow-sm transition hover:bg-board-green/90">
@@ -380,21 +442,38 @@ function AutoFillMenu({
         action={autoFillTacticalPlan}
         onSubmit={(event) => {
           const formData = new FormData(event.currentTarget);
-          if (formData.get("mode") === "rebuild_all" && assignments.length > 0 && !window.confirm("Rebuild all assignments? Existing Starting XI and depth ordering will be replaced. Excluded players stay excluded.")) {
+          if (formData.get("mode") === "rebuild_all" && assignments.length > 0 && !window.confirm("Rebuild everything? Existing Starting XI and depth ordering will be replaced. Excluded players stay excluded.")) {
             event.preventDefault();
           }
         }}
-        className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-board-line bg-white p-3 shadow-xl"
+        className="absolute right-0 z-30 mt-2 max-h-[min(760px,calc(100vh-7rem))] w-[30rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-board-line bg-white p-4 shadow-xl"
       >
         <input type="hidden" name="planId" value={planId} />
-        <label className="space-y-1 text-xs font-bold text-slate-700">
-          Mode
-          <select name="mode" value={mode} onChange={(event) => setMode(event.target.value as "empty_xi" | "xi_depth" | "rebuild_all")} className="h-10 w-full rounded-md border border-board-line px-3 text-sm font-semibold">
-            <option value="empty_xi">Fill empty Starting XI slots</option>
-            <option value="xi_depth">Fill XI + basic depth</option>
-            <option value="rebuild_all">Rebuild all assignments</option>
-          </select>
-        </label>
+        <input type="hidden" name="mode" value={effectiveMode} />
+        <input type="hidden" name="eligibility" value={eligibility} />
+        <div>
+          <h3 className="font-bold text-board-navy">Auto-fill tactical plan</h3>
+          <p className="mt-1 text-xs text-slate-600">Choose what CoachBoard may create. Nothing changes until you apply the preview.</p>
+        </div>
+        <fieldset className="mt-4 space-y-2">
+          <legend className="text-xs font-black uppercase tracking-wide text-board-green">What should Auto-fill create?</legend>
+          <AutoFillRadio name="modeOption" checked={mode === "empty_xi"} onChange={() => setMode("empty_xi")} label="Fill empty Starting XI positions" />
+          <AutoFillRadio name="modeOption" checked={mode === "xi_depth"} onChange={() => setMode("xi_depth")} label="Fill Starting XI and add one backup where available" />
+          <AutoFillRadio name="modeOption" checked={mode === "xi_all_depth"} onChange={() => setMode("xi_all_depth")} label="Fill Starting XI and add all eligible Players to depth" />
+          <AutoFillRadio name="modeOption" checked={mode === "rebuild_all"} onChange={() => { setMode("rebuild_all"); setExistingAssignmentsMode("rebuild_all"); }} label="Rebuild the complete Starting XI and depth" tone="danger" />
+        </fieldset>
+        <fieldset className="mt-4 space-y-2">
+          <legend className="text-xs font-black uppercase tracking-wide text-board-green">Which Players may Auto-fill use?</legend>
+          <AutoFillRadio name="eligibilityOption" checked={eligibility === "natural"} onChange={() => setEligibility("natural")} label="Natural positions only" detail="Use only Players whose primary position matches the tactical position." />
+          <AutoFillRadio name="eligibilityOption" checked={eligibility === "natural_secondary"} onChange={() => setEligibility("natural_secondary")} label="Natural and secondary positions" detail="Also use positions the coach has explicitly stored as secondary positions." />
+          <AutoFillRadio name="eligibilityOption" checked={eligibility === "natural_secondary_compatible"} onChange={() => setEligibility("natural_secondary_compatible")} label="Natural, secondary and compatible positions" detail="Also use explicitly related alternatives such as RWB at RB. Compatible Players are marked clearly." />
+        </fieldset>
+        <fieldset className="mt-4 space-y-2">
+          <legend className="text-xs font-black uppercase tracking-wide text-board-green">Existing assignments</legend>
+          <AutoFillRadio name="existingAssignmentsOption" checked={existingAssignmentsMode === "keep_manual"} onChange={() => setExistingAssignmentsMode("keep_manual")} label="Keep all manual assignments" detail="Default. Existing starters and depth stay in place; empty spaces can be filled." />
+          <AutoFillRadio name="existingAssignmentsOption" checked={existingAssignmentsMode === "replace_generated"} onChange={() => setExistingAssignmentsMode("replace_generated")} label="Replace only automatically generated assignments" detail="Not tracked separately yet, so this keeps current assignments for now." />
+          <AutoFillRadio name="existingAssignmentsOption" checked={existingAssignmentsMode === "rebuild_all"} onChange={() => { setExistingAssignmentsMode("rebuild_all"); setMode("rebuild_all"); }} label="Rebuild everything" tone="danger" />
+        </fieldset>
         <label className="mt-3 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
           <input type="checkbox" name="includeTrials" checked={includeTrials} onChange={(event) => setIncludeTrials(event.target.checked)} />
           Include trial players
@@ -409,10 +488,12 @@ function AutoFillMenu({
         <div className="mt-3 rounded-md border border-board-line bg-slate-50 p-3">
           <p className="text-xs font-black uppercase text-board-green">Preview</p>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-700">
-            <span>{preview.filledStarters}/11 starters</span>
+            <span>{preview.filledStarters}/{slots.length} starters</span>
             <span>{preview.newStarters} new starters</span>
             <span>{preview.backupsAdded} backups</span>
+            <span>{preview.allDepthAdded} depth additions</span>
             <span>{preview.unassignedCount} unassigned</span>
+            <span>{preview.compatibleCount} compatible used</span>
             <span className="col-span-2 text-red-700">{preview.outOfPositionCount} out of position</span>
           </div>
           <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1 text-xs">
@@ -432,10 +513,46 @@ function AutoFillMenu({
             </div>
           ) : null}
         </div>
-        <p className="mt-2 text-xs text-slate-500">Uses natural position fit first, then tactical role, then backup depth.</p>
-        <Button type="submit" className="mt-3 w-full">Apply auto-fill</Button>
+        <p className="mt-2 text-xs text-slate-500">Position fit is ranked before tactical role. Compatible and out-of-position players are only used when explicitly allowed.</p>
+        <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="secondary" onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")}>Cancel</Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={(event) => event.currentTarget.closest("form")?.querySelector("fieldset")?.scrollIntoView({ block: "nearest" })}
+          >
+            Back
+          </Button>
+          <Button type="submit">Apply Auto-fill</Button>
+        </div>
       </form>
     </details>
+  );
+}
+
+function AutoFillRadio({
+  name,
+  checked,
+  onChange,
+  label,
+  detail,
+  tone = "default"
+}: {
+  name: string;
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  detail?: string;
+  tone?: "default" | "danger";
+}) {
+  return (
+    <label className={cn("flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-xs", checked ? "border-board-green bg-green-50" : "border-board-line bg-white", tone === "danger" ? "text-red-800" : "text-slate-700")}>
+      <input type="radio" name={name} checked={checked} onChange={onChange} className="mt-0.5" />
+      <span>
+        <span className="block font-bold">{label}</span>
+        {detail ? <span className="mt-0.5 block text-slate-500">{detail}</span> : null}
+      </span>
+    </label>
   );
 }
 
@@ -477,12 +594,14 @@ function SlotButton({
   selected,
   assignments,
   playersById,
+  eligibleCount,
   onSelect
 }: {
   slot: TacticalPlanSlot;
   selected: boolean;
   assignments: TacticalPlannerData["assignments"];
   playersById: Map<string, SquadPlayer>;
+  eligibleCount: number;
   onSelect: () => void;
 }) {
   const starter = assignments.find((assignment) => assignment.isPreferredStarter);
@@ -505,6 +624,7 @@ function SlotButton({
         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{depthCount}</span>
       </span>
       <span className="mt-1 line-clamp-2 block text-xs font-bold sm:text-sm">{displayText}</span>
+      <span className="mt-1 block text-[11px] font-semibold text-slate-500">{depthCount} assigned · {eligibleCount} eligible</span>
     </button>
   );
 }
@@ -672,8 +792,12 @@ function UniversalSquadDepth({
   const slotForPosition = slots.find((slot) => slot.naturalPositions.includes(selectedPosition) || slot.acceptedPositions.includes(selectedPosition));
   const assignmentsByPlayer = new Map<string, TacticalPlannerData["assignments"]>();
   const slotById = new Map(slots.map((slot) => [slot.id, slot]));
+  const assignedCountByPosition = new Map<string, number>();
   for (const assignment of assignments) {
     assignmentsByPlayer.set(assignment.playerId, [...(assignmentsByPlayer.get(assignment.playerId) ?? []), assignment]);
+    const slot = slotById.get(assignment.slotId);
+    const positionCode = slot?.naturalPositions[0] ?? slot?.acceptedPositions[0];
+    if (positionCode) assignedCountByPosition.set(positionCode, (assignedCountByPosition.get(positionCode) ?? 0) + 1);
   }
 
   return (
@@ -699,11 +823,8 @@ function UniversalSquadDepth({
           </div>
         </div>
 
-        <div className="mt-5 rounded-xl border border-emerald-900/20 bg-emerald-700 p-3 shadow-inner">
-          <div className="relative overflow-hidden rounded-lg border-2 border-white/70 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_50%,transparent_50%),linear-gradient(0deg,rgba(255,255,255,0.05)_50%,transparent_50%)] bg-[length:32px_32px] p-3 sm:p-4">
-            <div className="pointer-events-none absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/35" />
-            <div className="pointer-events-none absolute left-0 top-1/2 h-px w-full bg-white/35" />
-            <div className="relative space-y-3">
+        <PlannerPitch className="mt-5 min-h-[760px] overflow-y-auto p-4 sm:p-5">
+            <div className="space-y-3">
               {depthPitchRows.map((row) => (
                 <div
                   key={row.join("-")}
@@ -725,6 +846,7 @@ function UniversalSquadDepth({
                         position={position}
                         exactCandidates={exactCandidates}
                         shownCandidates={shownCandidates}
+                        assignedCount={assignedCountByPosition.get(position.code) ?? 0}
                         selected={selectedPosition === position.code}
                         onSelect={() => setSelectedPosition(position.code)}
                       />
@@ -733,8 +855,7 @@ function UniversalSquadDepth({
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+        </PlannerPitch>
       </section>
 
       <aside className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
@@ -758,12 +879,14 @@ function DepthPitchCard({
   position,
   exactCandidates,
   shownCandidates,
+  assignedCount,
   selected,
   onSelect
 }: {
   position: (typeof squadDepthPositions)[number];
   exactCandidates: PositionCandidate[];
   shownCandidates: PositionCandidate[];
+  assignedCount: number;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -790,7 +913,10 @@ function DepthPitchCard({
         <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{warning}</span>
       </div>
       <p className="mt-2 text-xs font-semibold text-slate-600">
-        {exactCount} exact · {primaryCount} primary · {secondaryCount} secondary{compatibleCount ? ` · ${compatibleCount} compatible` : ""}
+        Exact {exactCount} · {primaryCount} primary · {secondaryCount} secondary
+      </p>
+      <p className="mt-1 text-xs font-semibold text-slate-600">
+        Assigned depth {assignedCount}{compatibleCount ? ` · Compatible ${compatibleCount}` : ""}
       </p>
       <div className="mt-2 max-h-32 space-y-1 overflow-y-auto pr-1">
         {shownCandidates.length === 0 ? (
@@ -1178,6 +1304,7 @@ function sortPlayersByFit(players: SquadPlayer[], slot: TacticalPlanSlot, assign
 
 function buildAutoFillPreview({
   mode,
+  eligibility,
   includeTrials,
   allowOutOfPosition,
   slots,
@@ -1185,7 +1312,8 @@ function buildAutoFillPreview({
   assignments,
   playerStates
 }: {
-  mode: "empty_xi" | "xi_depth" | "rebuild_all";
+  mode: AutoFillMode;
+  eligibility: AutoFillEligibility;
   includeTrials: boolean;
   allowOutOfPosition: boolean;
   slots: TacticalPlanSlot[];
@@ -1203,12 +1331,13 @@ function buildAutoFillPreview({
   const filledSlotIds = new Set(startingRows.map((assignment) => assignment.slotId));
   const rows: Array<{ slotId: string; slotCode: string; playerName: string; detail: string; fitType?: TacticalFitType; isExisting: boolean }> = [];
   const messages: string[] = [];
-  const orderedSlots = sortPreviewSlotsByScarcity(slots, eligiblePlayers, stateByPlayer, allowOutOfPosition);
+  const orderedSlots = sortPreviewSlotsByScarcity(slots, eligiblePlayers, stateByPlayer, eligibility, allowOutOfPosition);
   const previewPicks = choosePreviewStarterAssignments(
     orderedSlots.filter((slot) => mode === "rebuild_all" || !assignments.some((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter)),
     eligiblePlayers,
     stateByPlayer,
     new Set(startingRows.map((assignment) => assignment.playerId)),
+    eligibility,
     allowOutOfPosition
   );
   const previewPickBySlot = new Map(previewPicks.map((pick) => [pick.slot.id, pick]));
@@ -1223,7 +1352,7 @@ function buildAutoFillPreview({
     if (filledSlotIds.has(slot.id)) continue;
     const pick = previewPickBySlot.get(slot.id);
     if (!pick) {
-      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: "No suitable player", detail: `No natural, secondary or compatible ${slot.label} option found.`, isExisting: false });
+      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: "No suitable player", detail: `No ${autoFillEligibilityLabel(eligibility).toLowerCase()} option found.`, isExisting: false });
       messages.push(`No suitable ${slot.label} available`);
       continue;
     }
@@ -1233,30 +1362,44 @@ function buildAutoFillPreview({
 
   const filledStarters = rows.filter((row) => row.playerName !== "No suitable player").length;
   const newStarters = rows.filter((row) => !row.isExisting && row.playerName !== "No suitable player").length;
-  const outOfPositionCount = rows.filter((row) => row.fitType === "out_of_position").length;
+  let outOfPositionCount = rows.filter((row) => row.fitType === "out_of_position").length;
+  let compatibleCount = rows.filter((row) => row.fitType === "compatible").length;
   const assignedPlayerIds = new Set(assignments.map((assignment) => assignment.playerId));
   const previewStarterIds = new Set(rows.flatMap((row) => {
     const player = eligiblePlayers.find((item) => playerName(item) === row.playerName);
     return player ? [player.id] : [];
   }));
   const unassignedCount = eligiblePlayers.filter((player) => !assignedPlayerIds.has(player.id) && !previewStarterIds.has(player.id)).length;
-  const backupsAdded = mode === "xi_depth" || mode === "rebuild_all"
-    ? slots.filter((slot) => choosePreviewPlayerForSlot(eligiblePlayers, slot, stateByPlayer, new Set(assignments.filter((assignment) => assignment.slotId === slot.id).map((assignment) => assignment.playerId)), allowOutOfPosition)).length
-    : 0;
+  let backupsAdded = 0;
+  let allDepthAdded = 0;
+  if (mode === "xi_depth" || mode === "xi_all_depth" || mode === "rebuild_all") {
+    for (const slot of slots) {
+      const assignedInSlot = new Set(assignments.filter((assignment) => assignment.slotId === slot.id).map((assignment) => assignment.playerId));
+      const previewStarter = previewPickBySlot.get(slot.id);
+      if (previewStarter) assignedInSlot.add(previewStarter.player.id);
+      const depthCandidates = choosePreviewPlayersForSlot(eligiblePlayers, slot, stateByPlayer, assignedInSlot, eligibility, allowOutOfPosition);
+      const selectedDepth = mode === "xi_depth" ? depthCandidates.slice(0, 1) : depthCandidates;
+      backupsAdded += mode === "xi_depth" ? selectedDepth.length : 0;
+      allDepthAdded += selectedDepth.length;
+      compatibleCount += selectedDepth.filter((candidate) => candidate.fitType === "compatible").length;
+      outOfPositionCount += selectedDepth.filter((candidate) => candidate.fitType === "out_of_position").length;
+    }
+  }
 
   if (eligiblePlayers.length === 0) messages.push("No included active squad players available.");
-  return { rows, filledStarters, newStarters, backupsAdded, unassignedCount, outOfPositionCount, messages: Array.from(new Set(messages)).slice(0, 4) };
+  return { rows, filledStarters, newStarters, backupsAdded, allDepthAdded, unassignedCount, compatibleCount, outOfPositionCount, messages: Array.from(new Set(messages)).slice(0, 4) };
 }
 
 function sortPreviewSlotsByScarcity(
   slots: TacticalPlanSlot[],
   players: SquadPlayer[],
   stateByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>,
+  eligibility: AutoFillEligibility,
   allowOutOfPosition: boolean
 ) {
   return [...slots].sort((a, b) => {
-    const aCandidates = players.filter((player) => scorePreviewPlayerForSlot(player, a, stateByPlayer.get(player.id)?.tacticalStatus, allowOutOfPosition) > 0).length;
-    const bCandidates = players.filter((player) => scorePreviewPlayerForSlot(player, b, stateByPlayer.get(player.id)?.tacticalStatus, allowOutOfPosition) > 0).length;
+    const aCandidates = players.filter((player) => scorePreviewPlayerForSlot(player, a, stateByPlayer.get(player.id)?.tacticalStatus, eligibility, allowOutOfPosition) > 0).length;
+    const bCandidates = players.filter((player) => scorePreviewPlayerForSlot(player, b, stateByPlayer.get(player.id)?.tacticalStatus, eligibility, allowOutOfPosition) > 0).length;
     return aCandidates - bCandidates || a.sortOrder - b.sortOrder;
   });
 }
@@ -1280,6 +1423,7 @@ function choosePreviewStarterAssignments(
   players: SquadPlayer[],
   stateByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>,
   disallowedPlayerIds: Set<string>,
+  eligibility: AutoFillEligibility,
   allowOutOfPosition: boolean
 ) {
   const candidatesBySlot = new Map<string, PreviewStarterPick[]>();
@@ -1295,12 +1439,13 @@ function choosePreviewStarterAssignments(
             player,
             fitType: fit.fitType,
             matchedPosition: fit.matchedPosition,
-            score: fit.eligible ? fit.baseScore + tacticalRoleScore(stateByPlayer.get(player.id)?.tacticalStatus) * 2 : 0
+            score: scorePreviewPlayerForSlot(player, slot, stateByPlayer.get(player.id)?.tacticalStatus, eligibility, allowOutOfPosition)
           };
         })
         .filter((candidate) => candidate.score > 0)
         .sort((a, b) => b.score - a.score || playerName(a.player).localeCompare(playerName(b.player)))
     );
+    candidatesBySlot.set(slot.id, keepPreviewOutOfPositionAsFallback(candidatesBySlot.get(slot.id) ?? []));
   }
   const orderedSlots = [...slots].sort((a, b) => (candidatesBySlot.get(a.id)?.length ?? 0) - (candidatesBySlot.get(b.id)?.length ?? 0) || a.sortOrder - b.sortOrder);
   const memo = new Map<string, PreviewMatchingResult>();
@@ -1329,24 +1474,34 @@ function choosePreviewStarterAssignments(
   return solve(0, new Set(disallowedPlayerIds)).picks;
 }
 
-function choosePreviewPlayerForSlot(
+function choosePreviewPlayersForSlot(
   players: SquadPlayer[],
   slot: TacticalPlanSlot,
   stateByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>,
   disallowedPlayerIds: Set<string>,
+  eligibility: AutoFillEligibility,
   allowOutOfPosition: boolean
 ) {
-  return [...players]
+  const candidates = [...players]
     .filter((player) => !disallowedPlayerIds.has(player.id))
-    .map((player) => ({ player, score: scorePreviewPlayerForSlot(player, slot, stateByPlayer.get(player.id)?.tacticalStatus, allowOutOfPosition) }))
+    .map((player) => {
+      const fit = evaluatePlayerSlotFit(player, slot, allowOutOfPosition);
+      return { player, fitType: fit.fitType, score: scorePreviewPlayerForSlot(player, slot, stateByPlayer.get(player.id)?.tacticalStatus, eligibility, allowOutOfPosition) };
+    })
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score || playerName(a.player).localeCompare(playerName(b.player)))[0]?.player;
+    .sort((a, b) => b.score - a.score || playerName(a.player).localeCompare(playerName(b.player)));
+  return keepPreviewOutOfPositionAsFallback(candidates);
 }
 
-function scorePreviewPlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, tacticalStatus: string | undefined, allowOutOfPosition: boolean) {
+function scorePreviewPlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, tacticalStatus: string | undefined, eligibility: AutoFillEligibility, allowOutOfPosition: boolean) {
   const fit = evaluatePlayerSlotFit(player, slot, allowOutOfPosition);
-  if (!fit.eligible) return 0;
+  if (!fit.eligible || !isFitAllowedByAutoFillEligibility(fit.fitType, eligibility, allowOutOfPosition)) return 0;
   return fit.baseScore + tacticalRoleScore(tacticalStatus) * 2;
+}
+
+function keepPreviewOutOfPositionAsFallback<T extends { fitType: TacticalFitType }>(candidates: T[]) {
+  const positioned = candidates.filter((candidate) => candidate.fitType !== "out_of_position");
+  return positioned.length > 0 ? positioned : candidates;
 }
 
 function getPlayerPositionFamilies(player: SquadPlayer) {
