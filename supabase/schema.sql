@@ -2172,6 +2172,338 @@ for each row
 execute function public.handle_new_user();
 
 
+-- SQUAD TACTICAL PLANNER
+
+create table if not exists public.squad_tactical_plans (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null
+    references auth.users(id)
+    on delete cascade,
+
+  squad_id uuid not null
+    references public.squads(id)
+    on delete cascade,
+
+  name text not null,
+  formation_code text not null default '4-3-3',
+  is_default boolean not null default false,
+  include_new_players_automatically boolean not null default true,
+  notes text,
+  status text not null default 'active'
+    check (
+      status in ('active', 'archived')
+    ),
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.squad_tactical_plan_slots (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null
+    references auth.users(id)
+    on delete cascade,
+
+  tactical_plan_id uuid not null
+    references public.squad_tactical_plans(id)
+    on delete cascade,
+
+  slot_key text not null,
+  code text not null,
+  label text not null,
+  family text not null,
+  x numeric not null,
+  y numeric not null,
+  accepted_positions text[] not null default '{}',
+  sort_order integer not null default 0,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  unique(tactical_plan_id, slot_key)
+);
+
+create table if not exists public.squad_tactical_depth_assignments (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null
+    references auth.users(id)
+    on delete cascade,
+
+  tactical_plan_id uuid not null
+    references public.squad_tactical_plans(id)
+    on delete cascade,
+
+  slot_id uuid not null
+    references public.squad_tactical_plan_slots(id)
+    on delete cascade,
+
+  player_id uuid not null
+    references public.squad_players(id)
+    on delete cascade,
+
+  depth_order integer not null default 1,
+  is_preferred_starter boolean not null default false,
+  fit_type text not null default 'no_data'
+    check (
+      fit_type in ('natural', 'secondary', 'out_of_position', 'no_data')
+    ),
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  unique(tactical_plan_id, slot_id, player_id)
+);
+
+create table if not exists public.squad_tactical_plan_player_states (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null
+    references auth.users(id)
+    on delete cascade,
+
+  tactical_plan_id uuid not null
+    references public.squad_tactical_plans(id)
+    on delete cascade,
+
+  player_id uuid not null
+    references public.squad_players(id)
+    on delete cascade,
+
+  inclusion_status text not null default 'included'
+    check (
+      inclusion_status in ('included', 'excluded')
+    ),
+  tactical_status text
+    check (
+      tactical_status is null
+      or tactical_status in ('core', 'rotation', 'development', 'limited', 'unavailable')
+    ),
+  exclusion_reason text,
+  note text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  unique(tactical_plan_id, player_id)
+);
+
+create index if not exists squad_tactical_plans_user_squad_status_idx
+on public.squad_tactical_plans (
+  user_id,
+  squad_id,
+  status
+);
+
+create unique index if not exists squad_tactical_plans_one_default_per_squad_idx
+on public.squad_tactical_plans (
+  squad_id
+)
+where is_default = true and status = 'active';
+
+create index if not exists squad_tactical_plan_slots_plan_order_idx
+on public.squad_tactical_plan_slots (
+  tactical_plan_id,
+  sort_order
+);
+
+create index if not exists squad_tactical_depth_assignments_plan_slot_order_idx
+on public.squad_tactical_depth_assignments (
+  tactical_plan_id,
+  slot_id,
+  depth_order
+);
+
+create unique index if not exists squad_tactical_depth_assignments_one_starter_per_slot_idx
+on public.squad_tactical_depth_assignments (
+  slot_id
+)
+where is_preferred_starter = true;
+
+create unique index if not exists squad_tactical_depth_assignments_one_starter_slot_per_player_idx
+on public.squad_tactical_depth_assignments (
+  tactical_plan_id,
+  player_id
+)
+where is_preferred_starter = true;
+
+create index if not exists squad_tactical_player_states_plan_status_idx
+on public.squad_tactical_plan_player_states (
+  tactical_plan_id,
+  inclusion_status
+);
+
+drop trigger if exists set_squad_tactical_plans_updated_at
+on public.squad_tactical_plans;
+
+create trigger set_squad_tactical_plans_updated_at
+before update on public.squad_tactical_plans
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_squad_tactical_plan_slots_updated_at
+on public.squad_tactical_plan_slots;
+
+create trigger set_squad_tactical_plan_slots_updated_at
+before update on public.squad_tactical_plan_slots
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_squad_tactical_depth_assignments_updated_at
+on public.squad_tactical_depth_assignments;
+
+create trigger set_squad_tactical_depth_assignments_updated_at
+before update on public.squad_tactical_depth_assignments
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists set_squad_tactical_plan_player_states_updated_at
+on public.squad_tactical_plan_player_states;
+
+create trigger set_squad_tactical_plan_player_states_updated_at
+before update on public.squad_tactical_plan_player_states
+for each row
+execute function public.set_updated_at();
+
+alter table public.squad_tactical_plans
+enable row level security;
+
+alter table public.squad_tactical_plan_slots
+enable row level security;
+
+alter table public.squad_tactical_depth_assignments
+enable row level security;
+
+alter table public.squad_tactical_plan_player_states
+enable row level security;
+
+drop policy if exists "squad tactical plans are owned by the user"
+on public.squad_tactical_plans;
+
+create policy "squad tactical plans are owned by the user"
+on public.squad_tactical_plans
+for all
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squads
+    where squads.id = squad_tactical_plans.squad_id
+    and squads.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squads
+    where squads.id = squad_tactical_plans.squad_id
+    and squads.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "squad tactical slots are owned by the user"
+on public.squad_tactical_plan_slots;
+
+create policy "squad tactical slots are owned by the user"
+on public.squad_tactical_plan_slots
+for all
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_tactical_plans
+    where squad_tactical_plans.id = squad_tactical_plan_slots.tactical_plan_id
+    and squad_tactical_plans.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_tactical_plans
+    where squad_tactical_plans.id = squad_tactical_plan_slots.tactical_plan_id
+    and squad_tactical_plans.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "squad tactical depth assignments are owned by the user"
+on public.squad_tactical_depth_assignments;
+
+create policy "squad tactical depth assignments are owned by the user"
+on public.squad_tactical_depth_assignments
+for all
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_tactical_plans
+    where squad_tactical_plans.id = squad_tactical_depth_assignments.tactical_plan_id
+    and squad_tactical_plans.user_id = auth.uid()
+  )
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = squad_tactical_depth_assignments.player_id
+    and squad_players.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_tactical_plans
+    where squad_tactical_plans.id = squad_tactical_depth_assignments.tactical_plan_id
+    and squad_tactical_plans.user_id = auth.uid()
+  )
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = squad_tactical_depth_assignments.player_id
+    and squad_players.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "squad tactical player states are owned by the user"
+on public.squad_tactical_plan_player_states;
+
+create policy "squad tactical player states are owned by the user"
+on public.squad_tactical_plan_player_states
+for all
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_tactical_plans
+    where squad_tactical_plans.id = squad_tactical_plan_player_states.tactical_plan_id
+    and squad_tactical_plans.user_id = auth.uid()
+  )
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = squad_tactical_plan_player_states.player_id
+    and squad_players.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.squad_tactical_plans
+    where squad_tactical_plans.id = squad_tactical_plan_player_states.tactical_plan_id
+    and squad_tactical_plans.user_id = auth.uid()
+  )
+  and exists (
+    select 1
+    from public.squad_players
+    where squad_players.id = squad_tactical_plan_player_states.player_id
+    and squad_players.user_id = auth.uid()
+  )
+);
+
+
 -- =========================================================
 -- 18. ENABLE ROW LEVEL SECURITY
 -- =========================================================
