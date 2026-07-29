@@ -18,11 +18,11 @@ import {
   updatePlayerPlanState,
   updateTacticalPlan
 } from "@/lib/squad/tactical-planner-actions";
-import { getPlayerFitForSlot, playerName, playerPositionText, tacticalPlayerRoleOptions, tacticalRoleLabel, tacticalRoleScore, type TacticalPlannerData, type TacticalPlanSlot, type TacticalFitType } from "@/lib/squad/tactical-planner";
+import { getPlayerFitForSlot, isAutoFillEligibleFit, playerName, playerPositionText, tacticalPlayerRoleOptions, tacticalRoleLabel, tacticalRoleScore, type TacticalPlannerData, type TacticalPlanSlot, type TacticalFitType } from "@/lib/squad/tactical-planner";
 import { tacticalFormations } from "@/lib/squad/tactical-formations";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getPositionFamily, normalizeCanonicalPosition, positionFamilyMeta, positionFamilyOrder, type PositionFamily } from "@/lib/squad/positions";
+import { getPositionFamily, positionFamilyMeta, positionFamilyOrder, type PositionFamily } from "@/lib/squad/positions";
 import type { SquadPlayer } from "@/types/domain";
 
 type PlannerMode = "starting" | "depth" | "pool";
@@ -30,6 +30,7 @@ type PlannerMode = "starting" | "depth" | "pool";
 const fitMeta: Record<TacticalFitType, { label: string; className: string }> = {
   natural: { label: "Natural", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
   secondary: { label: "Secondary", className: "border-amber-200 bg-amber-50 text-amber-800" },
+  compatible: { label: "Compatible", className: "border-sky-200 bg-sky-50 text-sky-800" },
   out_of_position: { label: "Out of position", className: "border-red-200 bg-red-50 text-red-700" },
   no_data: { label: "No data", className: "border-slate-200 bg-slate-50 text-slate-600" }
 };
@@ -167,9 +168,22 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
           </form>
           </details>
             <CreatePlanForm compact />
-            <IconForm action={setDefaultTacticalPlan} planId={data.selectedPlan.id} label="Default" icon={<Star className="h-4 w-4" />} disabled={data.selectedPlan.isDefault} />
-            <IconForm action={duplicateTacticalPlan} planId={data.selectedPlan.id} label="Duplicate" icon={<Copy className="h-4 w-4" />} />
-            <IconForm action={archiveTacticalPlan} planId={data.selectedPlan.id} label="Archive" icon={<Archive className="h-4 w-4" />} confirmMessage="Archive this tactical plan?" />
+            <details className="relative rounded-md border border-board-line bg-slate-50 px-3 py-2">
+              <summary className="cursor-pointer text-sm font-bold text-board-navy">More</summary>
+              <div className="absolute left-0 z-30 mt-2 w-56 space-y-2 rounded-lg border border-board-line bg-white p-3 shadow-xl">
+                <IconForm action={setDefaultTacticalPlan} planId={data.selectedPlan.id} label="Set default" icon={<Star className="h-4 w-4" />} disabled={data.selectedPlan.isDefault} />
+                <IconForm action={duplicateTacticalPlan} planId={data.selectedPlan.id} label="Duplicate" icon={<Copy className="h-4 w-4" />} />
+                <IconForm action={archiveTacticalPlan} planId={data.selectedPlan.id} label="Archive" icon={<Archive className="h-4 w-4" />} confirmMessage="Archive this tactical plan?" />
+                <IconForm
+                  action={deleteTacticalPlan}
+                  planId={data.selectedPlan.id}
+                  label="Delete tactical plan"
+                  icon={<Trash2 className="h-4 w-4" />}
+                  variant="danger"
+                  confirmMessage={`Delete "${data.selectedPlan.name}"?\n\nThis permanently removes this tactical plan, formation slots, Starting XI assignments, depth assignments, inclusion/exclusion decisions, tactical roles and plan notes.\n\nPlayers, squad data, trainings, sessions and drills are not affected.`}
+                />
+              </div>
+            </details>
         </div>
       </section>
 
@@ -319,9 +333,10 @@ function AutoFillMenu({
 }) {
   const [mode, setMode] = useState<"empty_xi" | "xi_depth" | "rebuild_all">("empty_xi");
   const [includeTrials, setIncludeTrials] = useState(false);
+  const [allowOutOfPosition, setAllowOutOfPosition] = useState(false);
   const preview = useMemo(
-    () => buildAutoFillPreview({ mode, includeTrials, slots, players, assignments, playerStates }),
-    [assignments, includeTrials, mode, playerStates, players, slots]
+    () => buildAutoFillPreview({ mode, includeTrials, allowOutOfPosition, slots, players, assignments, playerStates }),
+    [allowOutOfPosition, assignments, includeTrials, mode, playerStates, players, slots]
   );
   return (
     <details className="relative">
@@ -352,6 +367,13 @@ function AutoFillMenu({
           <input type="checkbox" name="includeTrials" checked={includeTrials} onChange={(event) => setIncludeTrials(event.target.checked)} />
           Include trial players
         </label>
+        <label className="mt-2 flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+          <input type="checkbox" name="allowOutOfPosition" checked={allowOutOfPosition} onChange={(event) => setAllowOutOfPosition(event.target.checked)} className="mt-0.5" />
+          <span>
+            Allow out-of-position assignments when no suitable player exists
+            <span className="mt-1 block font-normal text-red-700">These assignments are clearly marked and are off by default.</span>
+          </span>
+        </label>
         <div className="mt-3 rounded-md border border-board-line bg-slate-50 p-3">
           <p className="text-xs font-black uppercase text-board-green">Preview</p>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-700">
@@ -359,13 +381,17 @@ function AutoFillMenu({
             <span>{preview.newStarters} new starters</span>
             <span>{preview.backupsAdded} backups</span>
             <span>{preview.unassignedCount} unassigned</span>
+            <span className="col-span-2 text-red-700">{preview.outOfPositionCount} out of position</span>
           </div>
           <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1 text-xs">
             {preview.rows.map((row) => (
-              <p key={row.slotId} className="flex justify-between gap-2 rounded bg-white px-2 py-1">
-                <span className="font-bold text-slate-700">{row.slotCode}</span>
-                <span className="truncate text-slate-600">{row.playerName}</span>
-              </p>
+              <div key={row.slotId} className="rounded bg-white px-2 py-1">
+                <p className="flex justify-between gap-2">
+                  <span className="font-bold text-slate-700">{row.slotCode}</span>
+                  <span className={cn("truncate", row.fitType === "out_of_position" ? "text-red-700" : "text-slate-600")}>{row.playerName}</span>
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-500">{row.detail}</p>
+              </div>
             ))}
           </div>
           {preview.messages.length > 0 ? (
@@ -387,7 +413,8 @@ function IconForm({
   label,
   icon,
   disabled,
-  confirmMessage
+  confirmMessage,
+  variant = "secondary"
 }: {
   action: (formData: FormData) => void | Promise<void>;
   planId: string;
@@ -395,6 +422,7 @@ function IconForm({
   icon: ReactNode;
   disabled?: boolean;
   confirmMessage?: string;
+  variant?: "secondary" | "danger";
 }) {
   return (
     <form
@@ -404,7 +432,7 @@ function IconForm({
       }}
     >
       <input type="hidden" name="planId" value={planId} />
-      <Button type="submit" variant="secondary" disabled={disabled} className="px-3">
+      <Button type="submit" variant={variant} disabled={disabled} className="w-full justify-start px-3">
         {icon}
         {label}
       </Button>
@@ -843,7 +871,7 @@ function PlannerHelp() {
 }
 
 function sortPlayersByFit(players: SquadPlayer[], slot: TacticalPlanSlot, assignedPlayerIds: Set<string>) {
-  const fitOrder: Record<TacticalFitType, number> = { natural: 0, secondary: 1, out_of_position: 2, no_data: 3 };
+  const fitOrder: Record<TacticalFitType, number> = { natural: 0, secondary: 1, compatible: 2, out_of_position: 3, no_data: 4 };
   return [...players].sort((a, b) => {
     const assignedDelta = Number(assignedPlayerIds.has(a.id)) - Number(assignedPlayerIds.has(b.id));
     if (assignedDelta !== 0) return assignedDelta;
@@ -856,6 +884,7 @@ function sortPlayersByFit(players: SquadPlayer[], slot: TacticalPlanSlot, assign
 function buildAutoFillPreview({
   mode,
   includeTrials,
+  allowOutOfPosition,
   slots,
   players,
   assignments,
@@ -863,6 +892,7 @@ function buildAutoFillPreview({
 }: {
   mode: "empty_xi" | "xi_depth" | "rebuild_all";
   includeTrials: boolean;
+  allowOutOfPosition: boolean;
   slots: TacticalPlanSlot[];
   players: SquadPlayer[];
   assignments: TacticalPlannerData["assignments"];
@@ -876,29 +906,32 @@ function buildAutoFillPreview({
   const startingRows = mode === "rebuild_all" ? [] : assignments.filter((assignment) => assignment.isPreferredStarter);
   const usedStarterPlayerIds = new Set(startingRows.map((assignment) => assignment.playerId));
   const filledSlotIds = new Set(startingRows.map((assignment) => assignment.slotId));
-  const rows: Array<{ slotId: string; slotCode: string; playerName: string; isExisting: boolean }> = [];
+  const rows: Array<{ slotId: string; slotCode: string; playerName: string; detail: string; fitType?: TacticalFitType; isExisting: boolean }> = [];
   const messages: string[] = [];
+  const orderedSlots = sortPreviewSlotsByScarcity(slots, eligiblePlayers, stateByPlayer, allowOutOfPosition);
 
-  for (const slot of slots) {
+  for (const slot of orderedSlots) {
     const existingStarter = mode === "rebuild_all" ? undefined : assignments.find((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter);
     const existingPlayer = existingStarter ? players.find((player) => player.id === existingStarter.playerId) : undefined;
     if (existingPlayer) {
-      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: `${playerName(existingPlayer)} · kept`, isExisting: true });
+      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: `${playerName(existingPlayer)} · kept`, detail: `${playerPositionText(existingPlayer)} · ${fitMeta[existingStarter?.fitType ?? "no_data"].label}`, fitType: existingStarter?.fitType, isExisting: true });
       continue;
     }
     if (filledSlotIds.has(slot.id)) continue;
-    const candidate = choosePreviewPlayerForSlot(eligiblePlayers, slot, stateByPlayer, usedStarterPlayerIds);
+    const candidate = choosePreviewPlayerForSlot(eligiblePlayers, slot, stateByPlayer, usedStarterPlayerIds, allowOutOfPosition);
     if (!candidate) {
-      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: "No suitable player", isExisting: false });
-      messages.push(`No suitable ${slot.code} available`);
+      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: "No suitable player", detail: `No natural, secondary or compatible ${slot.label} option found.`, isExisting: false });
+      messages.push(`No suitable ${slot.label} available`);
       continue;
     }
-    rows.push({ slotId: slot.id, slotCode: slot.code, playerName: playerName(candidate), isExisting: false });
+    const fitType = getPlayerFitForSlot(candidate, slot);
+    rows.push({ slotId: slot.id, slotCode: slot.code, playerName: playerName(candidate), detail: `${playerPositionText(candidate)} · ${fitMeta[fitType].label} · ${tacticalRoleLabel(stateByPlayer.get(candidate.id)?.tacticalStatus, true)}`, fitType, isExisting: false });
     usedStarterPlayerIds.add(candidate.id);
   }
 
   const filledStarters = rows.filter((row) => row.playerName !== "No suitable player").length;
   const newStarters = rows.filter((row) => !row.isExisting && row.playerName !== "No suitable player").length;
+  const outOfPositionCount = rows.filter((row) => row.fitType === "out_of_position").length;
   const assignedPlayerIds = new Set(assignments.map((assignment) => assignment.playerId));
   const previewStarterIds = new Set(rows.flatMap((row) => {
     const player = eligiblePlayers.find((item) => playerName(item) === row.playerName);
@@ -906,40 +939,52 @@ function buildAutoFillPreview({
   }));
   const unassignedCount = eligiblePlayers.filter((player) => !assignedPlayerIds.has(player.id) && !previewStarterIds.has(player.id)).length;
   const backupsAdded = mode === "xi_depth" || mode === "rebuild_all"
-    ? slots.filter((slot) => choosePreviewPlayerForSlot(eligiblePlayers, slot, stateByPlayer, new Set(assignments.filter((assignment) => assignment.slotId === slot.id).map((assignment) => assignment.playerId)))).length
+    ? slots.filter((slot) => choosePreviewPlayerForSlot(eligiblePlayers, slot, stateByPlayer, new Set(assignments.filter((assignment) => assignment.slotId === slot.id).map((assignment) => assignment.playerId)), allowOutOfPosition)).length
     : 0;
 
   if (eligiblePlayers.length === 0) messages.push("No included active squad players available.");
-  return { rows, filledStarters, newStarters, backupsAdded, unassignedCount, messages: Array.from(new Set(messages)).slice(0, 4) };
+  return { rows, filledStarters, newStarters, backupsAdded, unassignedCount, outOfPositionCount, messages: Array.from(new Set(messages)).slice(0, 4) };
+}
+
+function sortPreviewSlotsByScarcity(
+  slots: TacticalPlanSlot[],
+  players: SquadPlayer[],
+  stateByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>,
+  allowOutOfPosition: boolean
+) {
+  return [...slots].sort((a, b) => {
+    const aCandidates = players.filter((player) => scorePreviewPlayerForSlot(player, a, stateByPlayer.get(player.id)?.tacticalStatus, allowOutOfPosition) > 0).length;
+    const bCandidates = players.filter((player) => scorePreviewPlayerForSlot(player, b, stateByPlayer.get(player.id)?.tacticalStatus, allowOutOfPosition) > 0).length;
+    return aCandidates - bCandidates || a.sortOrder - b.sortOrder;
+  });
 }
 
 function choosePreviewPlayerForSlot(
   players: SquadPlayer[],
   slot: TacticalPlanSlot,
   stateByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>,
-  disallowedPlayerIds: Set<string>
+  disallowedPlayerIds: Set<string>,
+  allowOutOfPosition: boolean
 ) {
   return [...players]
     .filter((player) => !disallowedPlayerIds.has(player.id))
-    .map((player) => ({ player, score: scorePreviewPlayerForSlot(player, slot, stateByPlayer.get(player.id)?.tacticalStatus) }))
+    .map((player) => ({ player, score: scorePreviewPlayerForSlot(player, slot, stateByPlayer.get(player.id)?.tacticalStatus, allowOutOfPosition) }))
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score || playerName(a.player).localeCompare(playerName(b.player)))[0]?.player;
 }
 
-function scorePreviewPlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, tacticalStatus?: string) {
-  return positionFitPreviewScore(player, slot) + tacticalRoleScore(tacticalStatus);
+function scorePreviewPlayerForSlot(player: SquadPlayer, slot: TacticalPlanSlot, tacticalStatus: string | undefined, allowOutOfPosition: boolean) {
+  const fitType = getPlayerFitForSlot(player, slot);
+  if (!isAutoFillEligibleFit(fitType, allowOutOfPosition)) return 0;
+  return positionFitPreviewScore(fitType) + tacticalRoleScore(tacticalStatus) * 2;
 }
 
-function positionFitPreviewScore(player: SquadPlayer, slot: TacticalPlanSlot) {
-  const accepted = new Set(slot.acceptedPositions.map((position) => normalizeCanonicalPosition(position) ?? position));
-  const primary = normalizeCanonicalPosition(player.position);
-  const secondary = (player.secondaryPositions ?? []).map((position) => normalizeCanonicalPosition(position)).filter(Boolean) as string[];
-  if (primary && accepted.has(primary)) return 100;
-  if (secondary.some((position) => accepted.has(position))) return 70;
-  const knownPosition = primary ?? secondary[0];
-  if (!knownPosition) return 5;
-  const acceptedFamilies = new Set(Array.from(accepted).map((position) => getPositionFamily(position)));
-  return acceptedFamilies.has(getPositionFamily(knownPosition)) ? 35 : 5;
+function positionFitPreviewScore(fitType: TacticalFitType) {
+  if (fitType === "natural") return 1000;
+  if (fitType === "secondary") return 750;
+  if (fitType === "compatible") return 400;
+  if (fitType === "out_of_position") return 25;
+  return 0;
 }
 
 function getPlayerPositionFamilies(player: SquadPlayer) {

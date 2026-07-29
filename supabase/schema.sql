@@ -2248,7 +2248,7 @@ create table if not exists public.squad_tactical_depth_assignments (
   is_preferred_starter boolean not null default false,
   fit_type text not null default 'no_data'
     check (
-      fit_type in ('natural', 'secondary', 'out_of_position', 'no_data')
+      fit_type in ('natural', 'secondary', 'compatible', 'out_of_position', 'no_data')
     ),
 
   created_at timestamptz not null default now(),
@@ -2354,6 +2354,15 @@ add constraint squad_tactical_plan_player_states_tactical_status_check
 check (
   tactical_status is null
   or tactical_status in ('first_choice', 'regular_option', 'rotation_option', 'development_option', 'emergency_cover')
+);
+
+alter table public.squad_tactical_depth_assignments
+drop constraint if exists squad_tactical_depth_assignments_fit_type_check;
+
+alter table public.squad_tactical_depth_assignments
+add constraint squad_tactical_depth_assignments_fit_type_check
+check (
+  fit_type in ('natural', 'secondary', 'compatible', 'out_of_position', 'no_data')
 );
 
 drop trigger if exists set_squad_tactical_plans_updated_at

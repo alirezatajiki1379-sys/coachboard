@@ -22,6 +22,8 @@ export type TacticalSlotDefinition = {
   family: PositionFamily;
   x: number;
   y: number;
+  naturalPositions: string[];
+  compatiblePositions: string[];
   acceptedPositions: string[];
   sortOrder: number;
 };
@@ -56,9 +58,38 @@ const roleAcceptedPositions: Record<string, string[]> = {
   RW: ["RW", "RM", "ST"],
   LW: ["LW", "LM", "ST"],
   SS: ["SS", "CAM", "ST"],
-  ST: ["ST", "SS", "CAM"],
+  ST: ["ST", "SS"],
   RST: ["ST", "SS", "RW"],
   LST: ["ST", "SS", "LW"]
+};
+
+const roleNaturalPositions: Record<string, string[]> = {
+  GK: ["GK"],
+  RB: ["RB"],
+  LB: ["LB"],
+  CB: ["CB"],
+  RCB: ["CB"],
+  LCB: ["CB"],
+  CCB: ["CB"],
+  RWB: ["RWB"],
+  LWB: ["LWB"],
+  CDM: ["CDM"],
+  RDM: ["CDM"],
+  LDM: ["CDM"],
+  CM: ["CM"],
+  RCM: ["CM"],
+  LCM: ["CM"],
+  CAM: ["CAM"],
+  RAM: ["CAM"],
+  LAM: ["CAM"],
+  RM: ["RM"],
+  LM: ["LM"],
+  RW: ["RW"],
+  LW: ["LW"],
+  SS: ["SS"],
+  ST: ["ST"],
+  RST: ["ST"],
+  LST: ["ST"]
 };
 
 const roleLabels: Record<string, string> = {
@@ -78,6 +109,8 @@ const roleLabels: Record<string, string> = {
 function slot(slotKey: string, code: string, x: number, y: number, sortOrder: number): TacticalSlotDefinition {
   const baseCode = roleAcceptedPositions[code] ? code : code.replace(/^[RLC]/, "");
   const acceptedPositions = roleAcceptedPositions[code] ?? roleAcceptedPositions[baseCode] ?? [code];
+  const naturalPositions = roleNaturalPositions[code] ?? roleNaturalPositions[baseCode] ?? [acceptedPositions[0]];
+  const compatiblePositions = acceptedPositions.filter((position) => !naturalPositions.includes(position));
   const canonicalCode = acceptedPositions[0];
 
   return {
@@ -87,6 +120,8 @@ function slot(slotKey: string, code: string, x: number, y: number, sortOrder: nu
     family: getPositionFamily(canonicalCode),
     x,
     y,
+    naturalPositions,
+    compatiblePositions,
     acceptedPositions,
     sortOrder
   };

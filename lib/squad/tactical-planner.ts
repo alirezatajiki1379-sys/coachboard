@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
 import { ensureActiveSquad } from "@/lib/squad/squads";
-import { formatPositionLabel, getPositionFamily, normalizeCanonicalPosition } from "@/lib/squad/positions";
+import { formatPositionLabel, normalizeCanonicalPosition } from "@/lib/squad/positions";
 import { getTacticalFormation, type TacticalFormationCode } from "@/lib/squad/tactical-formations";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { Squad, SquadPlayer } from "@/types/domain";
@@ -9,7 +9,7 @@ import type { Squad, SquadPlayer } from "@/types/domain";
 export type TacticalPlanStatus = "active" | "archived";
 export type TacticalPlayerInclusionStatus = "included" | "excluded";
 export type TacticalPlayerStatus = "first_choice" | "regular_option" | "rotation_option" | "development_option" | "emergency_cover";
-export type TacticalFitType = "natural" | "secondary" | "out_of_position" | "no_data";
+export type TacticalFitType = "natural" | "secondary" | "compatible" | "out_of_position" | "no_data";
 
 export type TacticalPlan = {
   id: string;
@@ -35,6 +35,8 @@ export type TacticalPlanSlot = {
   family: string;
   x: number;
   y: number;
+  naturalPositions: string[];
+  compatiblePositions: string[];
   acceptedPositions: string[];
   sortOrder: number;
 };
@@ -153,6 +155,8 @@ export function mapTacticalPlanRow(row: PlanRow): TacticalPlan {
 }
 
 export function mapTacticalSlotRow(row: SlotRow): TacticalPlanSlot {
+  const acceptedPositions = row.accepted_positions ?? [];
+  const naturalPositions = getNaturalPositionsForSlot(row.code, acceptedPositions);
   return {
     id: row.id,
     userId: row.user_id,
@@ -163,13 +167,15 @@ export function mapTacticalSlotRow(row: SlotRow): TacticalPlanSlot {
     family: row.family,
     x: Number(row.x),
     y: Number(row.y),
-    acceptedPositions: row.accepted_positions ?? [],
+    naturalPositions,
+    compatiblePositions: acceptedPositions.filter((position) => !naturalPositions.includes(position)),
+    acceptedPositions,
     sortOrder: row.sort_order
   };
 }
 
 export function mapTacticalAssignmentRow(row: AssignmentRow): TacticalDepthAssignment {
-  const fitType = ["natural", "secondary", "out_of_position", "no_data"].includes(row.fit_type)
+  const fitType = ["natural", "secondary", "compatible", "out_of_position", "no_data"].includes(row.fit_type)
     ? (row.fit_type as TacticalFitType)
     : "no_data";
   return {
@@ -238,16 +244,53 @@ export function playerPositionText(player: Pick<SquadPlayer, "position" | "secon
   return [primary, ...secondary].filter(Boolean).join(" / ") || "No position";
 }
 
-export function getPlayerFitForSlot(player: Pick<SquadPlayer, "position" | "secondaryPositions">, slot: Pick<TacticalPlanSlot, "acceptedPositions">): TacticalFitType {
+export function getPlayerFitForSlot(player: Pick<SquadPlayer, "position" | "secondaryPositions">, slot: Pick<TacticalPlanSlot, "acceptedPositions"> & Partial<Pick<TacticalPlanSlot, "naturalPositions">>): TacticalFitType {
   const accepted = new Set(slot.acceptedPositions.map((position) => normalizeCanonicalPosition(position) ?? position));
+  const natural = new Set((slot.naturalPositions ?? Array.from(accepted).slice(0, 1)).map((position) => normalizeCanonicalPosition(position) ?? position));
   const primary = normalizeCanonicalPosition(player.position);
   const secondary = (player.secondaryPositions ?? []).map((position) => normalizeCanonicalPosition(position)).filter(Boolean) as string[];
   if (!primary && secondary.length === 0) return "no_data";
-  if (primary && accepted.has(primary)) return "natural";
-  if (secondary.some((position) => accepted.has(position))) return "secondary";
-  const acceptedFamilies = new Set(Array.from(accepted).map((position) => getPositionFamily(position)));
-  const playerFamily = getPositionFamily(primary ?? secondary[0]);
-  return acceptedFamilies.has(playerFamily) ? "secondary" : "out_of_position";
+  if (primary && natural.has(primary)) return "natural";
+  if (secondary.some((position) => natural.has(position))) return "secondary";
+  if ((primary && accepted.has(primary)) || secondary.some((position) => accepted.has(position))) return "compatible";
+  return "out_of_position";
+}
+
+export function isAutoFillEligibleFit(fitType: TacticalFitType, allowOutOfPosition = false) {
+  return fitType === "natural" || fitType === "secondary" || fitType === "compatible" || (allowOutOfPosition && fitType === "out_of_position");
+}
+
+function getNaturalPositionsForSlot(code: string, acceptedPositions: string[]) {
+  const naturalByCode: Record<string, string[]> = {
+    GK: ["GK"],
+    RB: ["RB"],
+    LB: ["LB"],
+    CB: ["CB"],
+    RCB: ["CB"],
+    LCB: ["CB"],
+    CCB: ["CB"],
+    RWB: ["RWB"],
+    LWB: ["LWB"],
+    CDM: ["CDM"],
+    RDM: ["CDM"],
+    LDM: ["CDM"],
+    CM: ["CM"],
+    RCM: ["CM"],
+    LCM: ["CM"],
+    CAM: ["CAM"],
+    RAM: ["CAM"],
+    LAM: ["CAM"],
+    RM: ["RM"],
+    LM: ["LM"],
+    RW: ["RW"],
+    LW: ["LW"],
+    SS: ["SS"],
+    ST: ["ST"],
+    RST: ["ST"],
+    LST: ["ST"]
+  };
+  const baseCode = code.replace(/^[RLC]/, "");
+  return naturalByCode[code] ?? naturalByCode[baseCode] ?? acceptedPositions.slice(0, 1);
 }
 
 export async function getTacticalPlannerData(
