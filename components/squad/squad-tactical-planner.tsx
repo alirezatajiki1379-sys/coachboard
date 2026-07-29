@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { getPositionFamily, positionFamilyMeta, positionFamilyOrder, type PositionFamily } from "@/lib/squad/positions";
 import type { SquadPlayer } from "@/types/domain";
 
-type PlannerMode = "squadDepth" | "starting" | "depth" | "pool";
+type PlannerMode = "formation" | "depth";
 
 const fitMeta: Record<TacticalFitType, { label: string; className: string }> = {
   natural: { label: "Natural", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
@@ -53,8 +53,18 @@ const tacticalStatusOptions = [
   ...tacticalPlayerRoleOptions
 ];
 
+const depthPitchRows = [
+  ["ST"],
+  ["SS"],
+  ["LW", "CAM", "RW"],
+  ["LM", "CM", "RM"],
+  ["CDM"],
+  ["LWB", "LB", "CB", "RB", "RWB"],
+  ["GK"]
+];
+
 export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
-  const [mode, setMode] = useState<PlannerMode>("squadDepth");
+  const [mode, setMode] = useState<PlannerMode>("formation");
   const [selectedSlotId, setSelectedSlotId] = useState(data.slots[0]?.id ?? "");
   const [showTrials, setShowTrials] = useState(false);
   const [search, setSearch] = useState("");
@@ -143,7 +153,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
                 </select>
               </label>
             </form>
-            {(["squadDepth", "starting", "depth", "pool"] as PlannerMode[]).map((item) => (
+            {(["formation", "depth"] as PlannerMode[]).map((item) => (
               <button
                 key={item}
                 type="button"
@@ -153,7 +163,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
                   mode === item ? "bg-board-navy text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 )}
               >
-                {item === "squadDepth" ? "Squad Depth" : item === "starting" ? "Formation" : item === "depth" ? "Tactical Depth" : "Player pool"}
+                {item === "formation" ? "Formation" : "Depth"}
               </button>
             ))}
           </div>
@@ -200,7 +210,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
         </div>
       </section>
 
-      {mode === "squadDepth" ? (
+      {mode === "depth" ? (
         <UniversalSquadDepth
           players={data.players}
           playerStates={data.playerStates}
@@ -240,7 +250,6 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
                   selected={selectedSlot?.id === slot.id}
                   assignments={assignmentsBySlot.get(slot.id) ?? []}
                   playersById={playersById}
-                  mode={mode}
                   onSelect={() => setSelectedSlotId(slot.id)}
                 />
               ))}
@@ -267,7 +276,6 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
             statesByPlayer={statesByPlayer}
             showTrials={showTrials}
             search={search}
-            mode={mode}
             selectedSlot={selectedSlot}
             assignments={activeAssignments}
             slots={data.slots}
@@ -469,20 +477,18 @@ function SlotButton({
   selected,
   assignments,
   playersById,
-  mode,
   onSelect
 }: {
   slot: TacticalPlanSlot;
   selected: boolean;
   assignments: TacticalPlannerData["assignments"];
   playersById: Map<string, SquadPlayer>;
-  mode: PlannerMode;
   onSelect: () => void;
 }) {
   const starter = assignments.find((assignment) => assignment.isPreferredStarter);
   const starterPlayer = starter ? playersById.get(starter.playerId) : undefined;
   const depthCount = assignments.length;
-  const displayText = mode === "starting" ? (starterPlayer ? playerName(starterPlayer) : "Open") : `${depthCount} option${depthCount === 1 ? "" : "s"}`;
+  const displayText = starterPlayer ? playerName(starterPlayer) : "Open";
 
   return (
     <button
@@ -675,8 +681,8 @@ function UniversalSquadDepth({
       <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h3 className="font-bold text-board-navy">Squad Depth</h3>
-            <p className="mt-1 text-sm text-slate-600">Formation-independent position depth. Players may appear in more than one position.</p>
+            <h3 className="font-bold text-board-navy">Depth</h3>
+            <p className="mt-1 text-sm text-slate-600">Formation-independent pitch view. Primary and secondary candidates are listed directly for every position.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <label className="text-xs font-bold text-slate-600">
@@ -693,40 +699,41 @@ function UniversalSquadDepth({
           </div>
         </div>
 
-        <div className="mt-5 space-y-5">
-          {(["goalkeeper", "defensive", "midfield", "attacking"] as const).map((family) => {
-            const positions = squadDepthPositions.filter((position) => position.family === family);
-            return (
-              <section key={family}>
-                <h4 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">{positionFamilyMeta[family].sectionLabel}</h4>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {positions.map((position) => {
-                    const exact = resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code });
-                    const primary = exact.filter((candidate) => candidate.fit === "primary").length;
-                    const secondary = exact.filter((candidate) => candidate.fit === "secondary").length;
-                    const total = primary + secondary;
-                    const warning = total === 0 ? "No exact option" : total === 1 ? "Thin" : total === 2 ? "Covered" : "Strong";
+        <div className="mt-5 rounded-xl border border-emerald-900/20 bg-emerald-700 p-3 shadow-inner">
+          <div className="relative overflow-hidden rounded-lg border-2 border-white/70 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_50%,transparent_50%),linear-gradient(0deg,rgba(255,255,255,0.05)_50%,transparent_50%)] bg-[length:32px_32px] p-3 sm:p-4">
+            <div className="pointer-events-none absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/35" />
+            <div className="pointer-events-none absolute left-0 top-1/2 h-px w-full bg-white/35" />
+            <div className="relative space-y-3">
+              {depthPitchRows.map((row) => (
+                <div
+                  key={row.join("-")}
+                  className={cn(
+                    "grid gap-3",
+                    row.length === 1 ? "grid-cols-1 justify-items-center" : "",
+                    row.length === 3 ? "grid-cols-1 sm:grid-cols-3" : "",
+                    row.length === 5 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-5" : ""
+                  )}
+                >
+                  {row.map((code) => {
+                    const position = squadDepthPositions.find((item) => item.code === code);
+                    if (!position) return null;
+                    const exactCandidates = resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code });
+                    const shownCandidates = includeCompatible ? resolveCandidatesForPosition({ players: scopedPlayers, canonicalPosition: position.code, includeCompatible: true }) : exactCandidates;
                     return (
-                      <button
+                      <DepthPitchCard
                         key={position.code}
-                        type="button"
-                        onClick={() => setSelectedPosition(position.code)}
-                        className={cn(
-                          "rounded-lg border p-3 text-left transition",
-                          selectedPosition === position.code ? "border-board-green bg-green-50 ring-2 ring-board-green/20" : "border-board-line bg-white hover:bg-slate-50"
-                        )}
-                      >
-                        <p className="text-xs font-black uppercase text-board-green">{position.label} · {position.code}</p>
-                        <p className="mt-1 text-lg font-black text-board-navy">{total} option{total === 1 ? "" : "s"}</p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">{primary} primary · {secondary} secondary</p>
-                        <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{warning}</span>
-                      </button>
+                        position={position}
+                        exactCandidates={exactCandidates}
+                        shownCandidates={shownCandidates}
+                        selected={selectedPosition === position.code}
+                        onSelect={() => setSelectedPosition(position.code)}
+                      />
                     );
                   })}
                 </div>
-              </section>
-            );
-          })}
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -744,6 +751,65 @@ function UniversalSquadDepth({
         )}
       </aside>
     </div>
+  );
+}
+
+function DepthPitchCard({
+  position,
+  exactCandidates,
+  shownCandidates,
+  selected,
+  onSelect
+}: {
+  position: (typeof squadDepthPositions)[number];
+  exactCandidates: PositionCandidate[];
+  shownCandidates: PositionCandidate[];
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const primaryCount = exactCandidates.filter((candidate) => candidate.fit === "primary").length;
+  const secondaryCount = exactCandidates.filter((candidate) => candidate.fit === "secondary").length;
+  const exactCount = primaryCount + secondaryCount;
+  const compatibleCount = shownCandidates.filter((candidate) => candidate.fit === "compatible").length;
+  const warning = exactCount === 0 ? "No exact option" : exactCount === 1 ? "Thin" : exactCount === 2 ? "Covered" : "Strong";
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "min-h-36 w-full max-w-full rounded-lg border p-3 text-left shadow-lg transition sm:max-w-xs",
+        selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/30" : "border-white/70 bg-white/95 text-slate-800 hover:bg-white"
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase text-board-green">{position.code}</p>
+          <p className="truncate text-sm font-black text-board-navy">{position.label}</p>
+        </div>
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{warning}</span>
+      </div>
+      <p className="mt-2 text-xs font-semibold text-slate-600">
+        {exactCount} exact · {primaryCount} primary · {secondaryCount} secondary{compatibleCount ? ` · ${compatibleCount} compatible` : ""}
+      </p>
+      <div className="mt-2 max-h-32 space-y-1 overflow-y-auto pr-1">
+        {shownCandidates.length === 0 ? (
+          <p className="rounded bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-500">No player yet</p>
+        ) : shownCandidates.map((candidate) => (
+          <div key={`${position.code}-${candidate.player.id}-${candidate.fit}-${candidate.matchedPosition}`} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1.5">
+            <span className="min-w-0 truncate text-xs font-bold text-board-navy">{playerName(candidate.player)}</span>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black uppercase",
+                candidate.fit === "primary" ? "bg-board-green text-white" : candidate.fit === "secondary" ? "bg-white text-slate-700 ring-1 ring-slate-200" : "bg-sky-100 text-sky-700"
+              )}
+            >
+              {candidate.fit === "primary" ? "Primary" : candidate.fit === "secondary" ? "Secondary" : "Compatible"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </button>
   );
 }
 
@@ -820,7 +886,6 @@ function PlayerPoolPanel({
   statesByPlayer,
   showTrials,
   search,
-  mode,
   selectedSlot,
   assignments,
   slots,
@@ -841,7 +906,6 @@ function PlayerPoolPanel({
   statesByPlayer: Map<string, TacticalPlannerData["playerStates"][number]>;
   showTrials: boolean;
   search: string;
-  mode: PlannerMode;
   selectedSlot?: TacticalPlanSlot;
   assignments: TacticalPlannerData["assignments"];
   slots: TacticalPlanSlot[];
@@ -860,7 +924,7 @@ function PlayerPoolPanel({
   for (const assignment of assignments) {
     assignmentsByPlayer.set(assignment.playerId, [...(assignmentsByPlayer.get(assignment.playerId) ?? []), assignment]);
   }
-  const baseList = poolFilter === "excluded" ? excludedPlayers : poolFilter === "all" || mode === "pool" ? includedPlayers : unassignedPlayers;
+  const baseList = poolFilter === "excluded" ? excludedPlayers : poolFilter === "all" ? includedPlayers : unassignedPlayers;
   const filteredList = baseList.filter((player) => {
     const state = statesByPlayer.get(player.id);
     if (roleFilter === "none" && state?.tacticalStatus) return false;
@@ -1236,7 +1300,6 @@ function choosePreviewStarterAssignments(
         })
         .filter((candidate) => candidate.score > 0)
         .sort((a, b) => b.score - a.score || playerName(a.player).localeCompare(playerName(b.player)))
-        .slice(0, 18)
     );
   }
   const orderedSlots = [...slots].sort((a, b) => (candidatesBySlot.get(a.id)?.length ?? 0) - (candidatesBySlot.get(b.id)?.length ?? 0) || a.sortOrder - b.sortOrder);

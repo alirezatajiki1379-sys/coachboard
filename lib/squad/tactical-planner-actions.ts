@@ -631,8 +631,7 @@ function chooseStarterAssignments(
         return { slot, player, score, fitType: evaluatePlayerSlotFit(player, slot, allowOutOfPosition).fitType };
       })
       .filter((candidate) => candidate.score > 0)
-      .sort((a, b) => b.score - a.score || `${a.player.lastName ?? ""} ${a.player.firstName}`.localeCompare(`${b.player.lastName ?? ""} ${b.player.firstName}`))
-      .slice(0, 18);
+      .sort((a, b) => b.score - a.score || `${a.player.lastName ?? ""} ${a.player.firstName}`.localeCompare(`${b.player.lastName ?? ""} ${b.player.firstName}`));
     candidatesBySlot.set(slot.id, candidates);
   }
   const orderedSlots = [...slots].sort((a, b) => (candidatesBySlot.get(a.id)?.length ?? 0) - (candidatesBySlot.get(b.id)?.length ?? 0) || a.sortOrder - b.sortOrder);
