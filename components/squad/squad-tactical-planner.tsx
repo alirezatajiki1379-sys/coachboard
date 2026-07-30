@@ -43,6 +43,13 @@ import type { SquadPlayer } from "@/types/domain";
 
 type PlannerMode = "formation" | "depth";
 type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_xi" | "rebuild_all";
+type TacticalAssignment = TacticalPlannerData["assignments"][number];
+type OptimisticSlotUpdate =
+  | { type: "remove"; assignmentId: string }
+  | { type: "move"; assignmentId: string; direction: "up" | "down" }
+  | { type: "moveToRank"; assignmentId: string; targetRank: number }
+  | { type: "starter"; assignmentId: string }
+  | { type: "add"; slot: TacticalPlanSlot; player: SquadPlayer };
 
 const fitMeta: Record<TacticalFitType, { label: string; className: string }> = {
   natural: { label: "Natural", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
@@ -73,7 +80,14 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
     () => new Set(data.playerStates.filter((state) => state.inclusionStatus === "excluded").map((state) => state.playerId)),
     [data.playerStates]
   );
-  const activeAssignments = uniqueDepthAssignments(data.assignments.filter((assignment) => !excludedPlayerIds.has(assignment.playerId) && playersById.has(assignment.playerId)));
+  const serverActiveAssignments = useMemo(
+    () => uniqueDepthAssignments(data.assignments.filter((assignment) => !excludedPlayerIds.has(assignment.playerId) && playersById.has(assignment.playerId))),
+    [data.assignments, excludedPlayerIds, playersById]
+  );
+  const [activeAssignments, setActiveAssignments] = useState(serverActiveAssignments);
+  useEffect(() => {
+    setActiveAssignments(serverActiveAssignments);
+  }, [serverActiveAssignments]);
   const assignmentsBySlot = new Map<string, typeof data.assignments>();
   for (const assignment of activeAssignments) {
     assignmentsBySlot.set(assignment.slotId, [...(assignmentsBySlot.get(assignment.slotId) ?? []), assignment]);
@@ -92,6 +106,9 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
   const starters = activeAssignments.filter((assignment) => assignment.isPreferredStarter);
   const activePlans = data.plans.filter((plan) => plan.status === "active");
   const archivedPlans = data.plans.filter((plan) => plan.status === "archived");
+  const applyOptimisticUpdate = (update: OptimisticSlotUpdate) => {
+    setActiveAssignments((current) => applyOptimisticSlotUpdate(current, data.selectedPlan?.id ?? "", update));
+  };
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -168,6 +185,9 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
                 {item === "formation" ? "Formation" : "Depth"}
               </button>
             ))}
+            <span className="self-center rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500" aria-live="polite">
+              Saved
+            </span>
           </div>
         </div>
 
@@ -242,6 +262,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
               playersById={playersById}
               includedPlayers={includedPlayers}
               mode={mode}
+              onOptimisticUpdate={applyOptimisticUpdate}
               onSelect={(slotId) => setSelectedSlotId((current) => (current === slotId ? null : slotId))}
             />
           </PlannerPitch>
@@ -600,6 +621,7 @@ function FormationSlotRows({
   playersById,
   includedPlayers,
   mode,
+  onOptimisticUpdate,
   onSelect
 }: {
   planId: string;
@@ -609,6 +631,7 @@ function FormationSlotRows({
   playersById: Map<string, SquadPlayer>;
   includedPlayers: SquadPlayer[];
   mode: PlannerMode;
+  onOptimisticUpdate: (update: OptimisticSlotUpdate) => void;
   onSelect: (slotId: string) => void;
 }) {
   const rows = groupSlotsIntoPitchRows(slots);
@@ -656,6 +679,7 @@ function FormationSlotRows({
           playersById={playersById}
           availablePlayers={includedPlayers}
           eligibleCount={selectedEligibleCount}
+          onOptimisticUpdate={onOptimisticUpdate}
         />
       ) : null}
     </div>
@@ -694,6 +718,90 @@ function uniqueDepthAssignments(assignments: TacticalPlannerData["assignments"])
     }
   }
   return Array.from(best.values()).sort((a, b) => a.depthOrder - b.depthOrder);
+}
+
+function applyOptimisticSlotUpdate(assignments: TacticalAssignment[], planId: string, update: OptimisticSlotUpdate) {
+  if (update.type === "add") {
+    if (assignments.some((assignment) => assignment.slotId === update.slot.id && assignment.playerId === update.player.id)) return assignments;
+    const slotAssignments = assignments.filter((assignment) => assignment.slotId === update.slot.id);
+    const fit = evaluatePlayerSlotFit(update.player, update.slot);
+    const now = new Date().toISOString();
+    return normalizeSlotDepth([
+      ...assignments,
+      {
+        id: `optimistic-${update.slot.id}-${update.player.id}`,
+        userId: update.slot.userId,
+        planId,
+        slotId: update.slot.id,
+        playerId: update.player.id,
+        depthOrder: slotAssignments.length + 1,
+        isPreferredStarter: slotAssignments.length === 0,
+        fitType: fit.fitType,
+        createdAt: now,
+        updatedAt: now
+      }
+    ], update.slot.id);
+  }
+
+  const target = assignments.find((assignment) => assignment.id === update.assignmentId);
+  if (!target) return assignments;
+
+  if (update.type === "remove") {
+    return normalizeSlotDepth(assignments.filter((assignment) => assignment.id !== update.assignmentId), target.slotId);
+  }
+
+  if (update.type === "starter") {
+    const slotAssignments = assignments
+      .filter((assignment) => assignment.slotId === target.slotId)
+      .sort((a, b) => a.depthOrder - b.depthOrder)
+      .filter((assignment) => assignment.id !== target.id);
+    const reordered = [target, ...slotAssignments];
+    return assignments.map((assignment) => {
+      const nextIndex = reordered.findIndex((item) => item.id === assignment.id);
+      if (assignment.slotId === target.slotId && nextIndex >= 0) {
+        return { ...assignment, depthOrder: nextIndex + 1, isPreferredStarter: nextIndex === 0 };
+      }
+      if (assignment.playerId === target.playerId) return { ...assignment, isPreferredStarter: false };
+      return assignment;
+    });
+  }
+
+  if (update.type === "move" || update.type === "moveToRank") {
+    const slotAssignments = assignments
+      .filter((assignment) => assignment.slotId === target.slotId)
+      .sort((a, b) => a.depthOrder - b.depthOrder);
+    const currentIndex = slotAssignments.findIndex((assignment) => assignment.id === target.id);
+    if (currentIndex < 0) return assignments;
+    const next = slotAssignments.filter((assignment) => assignment.id !== target.id);
+    const targetIndex = update.type === "move"
+      ? Math.max(0, Math.min(next.length, currentIndex + (update.direction === "down" ? 1 : -1)))
+      : Math.max(0, Math.min(next.length, update.targetRank - 1));
+    next.splice(targetIndex, 0, target);
+    return assignments.map((assignment) => {
+      const nextIndex = next.findIndex((item) => item.id === assignment.id);
+      if (assignment.slotId === target.slotId && nextIndex >= 0) {
+        return { ...assignment, depthOrder: nextIndex + 1, isPreferredStarter: nextIndex === 0 };
+      }
+      return assignment;
+    });
+  }
+
+  return assignments;
+}
+
+function normalizeSlotDepth(assignments: TacticalAssignment[], slotId: string) {
+  const slotAssignments = uniqueDepthAssignments(assignments.filter((assignment) => assignment.slotId === slotId))
+    .sort((a, b) => Number(b.isPreferredStarter) - Number(a.isPreferredStarter) || a.depthOrder - b.depthOrder);
+  const slotIds = new Set(slotAssignments.map((assignment) => assignment.id));
+  return assignments
+    .filter((assignment) => assignment.slotId !== slotId || slotIds.has(assignment.id))
+    .map((assignment) => {
+      const nextIndex = slotAssignments.findIndex((item) => item.id === assignment.id);
+      if (assignment.slotId === slotId && nextIndex >= 0) {
+        return { ...assignment, depthOrder: nextIndex + 1, isPreferredStarter: nextIndex === 0 };
+      }
+      return assignment;
+    });
 }
 
 function SlotButton({
@@ -797,7 +905,8 @@ function SlotEditorOverlay({
   depth,
   playersById,
   availablePlayers,
-  eligibleCount
+  eligibleCount,
+  onOptimisticUpdate
 }: {
   planId: string;
   slot: TacticalPlanSlot;
@@ -805,6 +914,7 @@ function SlotEditorOverlay({
   playersById: Map<string, SquadPlayer>;
   availablePlayers: SquadPlayer[];
   eligibleCount: number;
+  onOptimisticUpdate: (update: OptimisticSlotUpdate) => void;
 }) {
   const left = Math.min(Math.max(slot.x, 18), 82);
   const top = Math.min(Math.max(slot.y + 6, 14), 76);
@@ -837,6 +947,7 @@ function SlotEditorOverlay({
         depth={depth}
         playersById={playersById}
         availablePlayers={availablePlayers}
+        onOptimisticUpdate={onOptimisticUpdate}
         compact
       />
     </div>
@@ -861,6 +972,7 @@ function InlineDepthControls({
   depth,
   playersById,
   availablePlayers,
+  onOptimisticUpdate,
   compact = false
 }: {
   planId: string;
@@ -868,6 +980,7 @@ function InlineDepthControls({
   depth: TacticalPlannerData["assignments"];
   playersById: Map<string, SquadPlayer>;
   availablePlayers?: SquadPlayer[];
+  onOptimisticUpdate: (update: OptimisticSlotUpdate) => void;
   compact?: boolean;
 }) {
   const reorderFormRef = useRef<HTMLFormElement>(null);
@@ -912,6 +1025,7 @@ function InlineDepthControls({
               if (!sourceId || sourceId === assignment.id) return;
               setDraggedAssignmentId(sourceId);
               setDropRank(index + 1);
+              onOptimisticUpdate({ type: "moveToRank", assignmentId: sourceId, targetRank: index + 1 });
               window.setTimeout(() => reorderFormRef.current?.requestSubmit(), 0);
             }}
             className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto_auto_auto] items-center gap-1 rounded bg-slate-50 px-1.5 py-1"
@@ -919,9 +1033,9 @@ function InlineDepthControls({
             <span className="font-black text-board-green">{index + 1}</span>
             <span className="cursor-grab text-slate-400" aria-hidden="true">⋮⋮</span>
             <span className="truncate font-bold text-board-navy" title={playerName(player)}>{playerName(player)}{index === 0 ? " · Starter" : ""}</span>
-            <DepthIconAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="↑" title="Move up" extra={{ direction: "up" }} disabled={index === 0} />
-            <DepthIconAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="↓" title="Move down" extra={{ direction: "down" }} disabled={index === sortedDepth.length - 1} />
-            <DepthIconAction action={removeDepthAssignment} planId={planId} assignmentId={assignment.id} label="×" title="Remove from depth" variant="danger" />
+            <DepthIconAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="↑" title="Move up" extra={{ direction: "up" }} disabled={index === 0} onOptimisticSubmit={() => onOptimisticUpdate({ type: "move", assignmentId: assignment.id, direction: "up" })} />
+            <DepthIconAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="↓" title="Move down" extra={{ direction: "down" }} disabled={index === sortedDepth.length - 1} onOptimisticSubmit={() => onOptimisticUpdate({ type: "move", assignmentId: assignment.id, direction: "down" })} />
+            <DepthIconAction action={removeDepthAssignment} planId={planId} assignmentId={assignment.id} label="×" title="Remove from depth" variant="danger" onOptimisticSubmit={() => onOptimisticUpdate({ type: "remove", assignmentId: assignment.id })} />
           </div>
         );
       })}
@@ -930,7 +1044,7 @@ function InlineDepthControls({
           {sortedDepth.slice(1).map((assignment) => {
             const player = playersById.get(assignment.playerId);
             return (
-              <DepthAction key={assignment.id} action={setPreferredStarter} planId={planId} assignmentId={assignment.id} label={`Set ${player ? playerName(player).split(" ")[0] : "player"} starter`} />
+              <DepthAction key={assignment.id} action={setPreferredStarter} planId={planId} assignmentId={assignment.id} label={`Set ${player ? playerName(player).split(" ")[0] : "player"} starter`} onOptimisticSubmit={() => onOptimisticUpdate({ type: "starter", assignmentId: assignment.id })} />
             );
           })}
         </div>
@@ -948,7 +1062,12 @@ function InlineDepthControls({
             {addablePlayers.length === 0 ? (
               <p className="px-2 py-1 text-xs font-semibold text-slate-500">No eligible players to add.</p>
             ) : addablePlayers.map(({ player, fit }) => (
-              <form key={player.id} action={addDepthAssignment} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1">
+              <form
+                key={player.id}
+                action={addDepthAssignment}
+                className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1"
+                onSubmit={() => onOptimisticUpdate({ type: "add", slot, player })}
+              >
                 <input type="hidden" name="planId" value={planId} />
                 <input type="hidden" name="slotId" value={slot.id} />
                 <input type="hidden" name="playerId" value={player.id} />
@@ -988,7 +1107,8 @@ function DepthIconAction({
   title,
   disabled,
   variant = "secondary",
-  extra
+  extra,
+  onOptimisticSubmit
 }: {
   action: (formData: FormData) => void | Promise<void>;
   planId: string;
@@ -998,9 +1118,10 @@ function DepthIconAction({
   disabled?: boolean;
   variant?: "secondary" | "danger";
   extra?: Record<string, string>;
+  onOptimisticSubmit?: () => void;
 }) {
   return (
-    <form action={action}>
+    <form action={action} onSubmit={onOptimisticSubmit}>
       <input type="hidden" name="planId" value={planId} />
       <input type="hidden" name="assignmentId" value={assignmentId} />
       {extra ? Object.entries(extra).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />) : null}
@@ -1158,7 +1279,8 @@ function DepthAction({
   label,
   disabled,
   variant = "secondary",
-  extra
+  extra,
+  onOptimisticSubmit
 }: {
   action: (formData: FormData) => void | Promise<void>;
   planId: string;
@@ -1167,9 +1289,10 @@ function DepthAction({
   disabled?: boolean;
   variant?: "secondary" | "danger";
   extra?: Record<string, string>;
+  onOptimisticSubmit?: () => void;
 }) {
   return (
-    <form action={action}>
+    <form action={action} onSubmit={onOptimisticSubmit}>
       <input type="hidden" name="planId" value={planId} />
       <input type="hidden" name="assignmentId" value={assignmentId} />
       {extra ? Object.entries(extra).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />) : null}
