@@ -10,9 +10,10 @@ import type { Squad } from "@/types/domain";
 type TeamSwitcherProps = {
   teams: Squad[];
   returnTo?: string;
+  compact?: boolean;
 };
 
-export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherProps) {
+export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }: TeamSwitcherProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTeam = teams.find((team) => team.isActive) ?? teams[0];
@@ -28,6 +29,52 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
           <Plus className="h-4 w-4" />
           Create first team
         </ButtonLink>
+      </div>
+    );
+  }
+
+  if (compact) {
+    return (
+      <div className="relative text-white">
+        <details className="group">
+          <summary
+            className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-md border border-white/10 bg-white/5 text-xs font-black text-white outline-none transition hover:border-white/20 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-board-green/40"
+            title={`Active Team: ${activeTeam.name}`}
+            aria-label={`Active Team: ${activeTeam.name}`}
+          >
+            {compactTeamName(activeTeam.name)}
+          </summary>
+          <div className="absolute left-full top-0 z-[90] ml-3 w-72 max-w-[calc(100vw-5rem)] rounded-lg border border-board-line bg-board-navy p-3 text-white shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Active Team</p>
+            <p className="mt-1 truncate text-sm font-bold text-white" title={activeTeam.name}>{activeTeam.name}</p>
+            <div className="mt-3 space-y-2">
+              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Switch team</p>
+              {teams.map((team) => (
+                <form key={team.id} action={switchTeam}>
+                  <input type="hidden" name="teamId" value={team.id} />
+                  <input type="hidden" name="returnTo" value={switchReturnTo.replace("__TEAM_ID__", team.id)} />
+                  <Button
+                    type="submit"
+                    variant={team.id === activeTeam.id ? "primary" : "ghost"}
+                    className={`h-9 w-full justify-start px-3 text-xs ${team.id === activeTeam.id ? "" : "text-slate-200 hover:bg-white/10 hover:text-white"}`}
+                    disabled={team.id === activeTeam.id}
+                  >
+                    {team.id === activeTeam.id ? "✓" : ""}
+                    <span className="truncate">{team.name}</span>
+                  </Button>
+                </form>
+              ))}
+              <ButtonLink href="/teams" variant="ghost" className="h-9 w-full justify-start px-3 text-xs text-slate-200 hover:bg-white/10 hover:text-white">
+                <UsersRound className="h-4 w-4" />
+                All teams
+              </ButtonLink>
+              <ButtonLink href={`/teams/${activeTeam.id}/settings`} variant="ghost" className="h-9 w-full justify-start px-3 text-xs text-slate-200 hover:bg-white/10 hover:text-white">
+                <Settings className="h-4 w-4" />
+                Team settings
+              </ButtonLink>
+            </div>
+          </div>
+        </details>
       </div>
     );
   }
@@ -122,6 +169,13 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard" }: TeamSwitcherPro
       </div>
     </div>
   );
+}
+
+function compactTeamName(name: string) {
+  const trimmed = name.trim();
+  const shortAgeGroup = trimmed.match(/U\s?\d{1,2}/i)?.[0]?.replace(/\s+/g, "");
+  if (shortAgeGroup) return shortAgeGroup.toUpperCase();
+  return trimmed.slice(0, 1).toUpperCase();
 }
 
 function teamSwitchReturnTo(pathname: string, searchParams: ReturnType<typeof useSearchParams>, fallback: string) {
