@@ -13,7 +13,10 @@ export type DrillFormField =
   | "variations"
   | "easierVersion"
   | "harderVersion"
+  | "ageMode"
   | "ageGroups"
+  | "minimumAge"
+  | "maximumAge"
   | "mainFocus"
   | "subFocus"
   | "trainingBlocks"
@@ -35,7 +38,10 @@ export type DrillFormValues = {
   variations: string;
   easierVersion: string;
   harderVersion: string;
+  ageMode: string;
   ageGroups: string[];
+  minimumAge: string;
+  maximumAge: string;
   mainFocus: string;
   subFocus: string;
   trainingBlocks: string[];
@@ -89,7 +95,10 @@ export function snapshotDrillFormValues(formData: FormData): DrillFormValues {
     variations: text(formData, "variations"),
     easierVersion: text(formData, "easierVersion"),
     harderVersion: text(formData, "harderVersion"),
+    ageMode: text(formData, "ageMode") || "all_ages",
     ageGroups: formData.getAll("ageGroups").filter((value): value is string => typeof value === "string"),
+    minimumAge: text(formData, "minimumAge"),
+    maximumAge: text(formData, "maximumAge"),
     mainFocus: text(formData, "mainFocus"),
     subFocus: text(formData, "subFocus"),
     trainingBlocks: formData.getAll("trainingBlocks").filter((value): value is string => typeof value === "string"),
@@ -113,7 +122,7 @@ export function parseDrillForm(formData: FormData): DrillFormResult {
   const title = text(formData, "title");
   const mainFocus = text(formData, "mainFocus");
   const drillType = text(formData, "drillType");
-  const ageGroupValues = checkedValues<AgeGroup>(formData, "ageGroups", ageGroups);
+  const ageSuitability = parseAgeSuitability(formData);
   const blockValues = checkedValues<TrainingBlock>(formData, "trainingBlocks", trainingBlocks);
   const duration = numberValue(formData, "durationMinutes", 10);
   const minPlayers = numberValue(formData, "minPlayers", 1);
@@ -124,7 +133,7 @@ export function parseDrillForm(formData: FormData): DrillFormResult {
   if (!title) fieldErrors.title = "Give this drill a clear title.";
   if (!mainFocuses.includes(mainFocus as MainFocus)) fieldErrors.mainFocus = "Choose the main coaching focus.";
   if (!drillTypes.includes(drillType as DrillType)) fieldErrors.drillType = "Choose the drill type.";
-  if (!ageGroupValues.length) fieldErrors.ageGroups = "Select at least one age group for this drill.";
+  Object.assign(fieldErrors, ageSuitability.fieldErrors);
   if (!blockValues.length) fieldErrors.trainingBlocks = "Select at least one training block.";
   if (duration <= 0) fieldErrors.durationMinutes = "Duration must be at least 1 minute.";
   if (minPlayers <= 0) fieldErrors.minPlayers = "Minimum players must be at least 1.";
@@ -159,7 +168,10 @@ export function parseDrillForm(formData: FormData): DrillFormResult {
       variations: optionalText(text(formData, "variations")),
       easier_version: optionalText(text(formData, "easierVersion")),
       harder_version: optionalText(text(formData, "harderVersion")),
-      age_groups: ageGroupValues,
+      age_mode: ageSuitability.ageMode,
+      age_groups: ageSuitability.ageGroups,
+      minimum_age: ageSuitability.minimumAge,
+      maximum_age: ageSuitability.maximumAge,
       main_focus: mainFocus as MainFocus,
       sub_focus: optionalText(text(formData, "subFocus")),
       training_blocks: blockValues,
@@ -183,7 +195,7 @@ export function parseDrillDraftForm(formData: FormData): { data: Omit<DrillInser
   const title = text(formData, "title") || "Untitled Drill";
   const mainFocus = mainFocuses.includes(values.mainFocus as MainFocus) ? values.mainFocus as MainFocus : mainFocuses[0];
   const drillType = drillTypes.includes(values.drillType as DrillType) ? values.drillType as DrillType : drillTypes[0];
-  const ageGroupValues = checkedValues<AgeGroup>(formData, "ageGroups", ageGroups);
+  const ageSuitability = parseAgeSuitability(formData, { allowFallback: true });
   const blockValues = checkedValues<TrainingBlock>(formData, "trainingBlocks", trainingBlocks);
   const duration = Math.max(1, numberValue(formData, "durationMinutes", 10));
   const minPlayers = Math.max(1, numberValue(formData, "minPlayers", 1));
@@ -209,7 +221,10 @@ export function parseDrillDraftForm(formData: FormData): { data: Omit<DrillInser
       variations: optionalText(text(formData, "variations")),
       easier_version: optionalText(text(formData, "easierVersion")),
       harder_version: optionalText(text(formData, "harderVersion")),
-      age_groups: ageGroupValues,
+      age_mode: ageSuitability.ageMode,
+      age_groups: ageSuitability.ageGroups,
+      minimum_age: ageSuitability.minimumAge,
+      maximum_age: ageSuitability.maximumAge,
       main_focus: mainFocus,
       sub_focus: optionalText(text(formData, "subFocus")),
       training_blocks: blockValues,
@@ -230,4 +245,54 @@ export function parseDrillDraftForm(formData: FormData): { data: Omit<DrillInser
 
 export function toDrillUpdate(data: Omit<DrillInsert, "user_id">): DrillUpdate {
   return data;
+}
+
+function parseAgeSuitability(formData: FormData, options: { allowFallback?: boolean } = {}) {
+  const fieldErrors: Partial<Record<DrillFormField, string>> = {};
+  const rawMode = text(formData, "ageMode");
+  const ageMode = rawMode === "preset" || rawMode === "custom_range" ? rawMode : "all_ages";
+  const minText = text(formData, "minimumAge");
+  const maxText = text(formData, "maximumAge");
+  const presetGroups = checkedValues<AgeGroup>(formData, "ageGroups", ageGroups);
+
+  if (ageMode === "all_ages") {
+    return { ageMode: "all_ages" as const, ageGroups: ["all_ages"] as AgeGroup[], minimumAge: null, maximumAge: null, fieldErrors };
+  }
+
+  if (ageMode === "preset") {
+    const nextGroups = presetGroups.length ? presetGroups : options.allowFallback ? [ageGroups[0]] : [];
+    if (!nextGroups.length) fieldErrors.ageGroups = "Select at least one age preset or choose All ages.";
+    return { ageMode: "preset" as const, ageGroups: nextGroups, minimumAge: null, maximumAge: null, fieldErrors };
+  }
+
+  const minimumAge = parseOptionalAge(minText, "minimumAge", fieldErrors);
+  const maximumAge = parseOptionalAge(maxText, "maximumAge", fieldErrors);
+  if (minimumAge == null && maximumAge == null) {
+    fieldErrors.ageGroups = "Enter at least a minimum or maximum age.";
+  }
+  if (minimumAge != null && maximumAge != null && minimumAge > maximumAge) {
+    fieldErrors.maximumAge = "Minimum age cannot be greater than maximum age.";
+  }
+
+  return {
+    ageMode: "custom_range" as const,
+    ageGroups: [] as AgeGroup[],
+    minimumAge,
+    maximumAge,
+    fieldErrors
+  };
+}
+
+function parseOptionalAge(value: string, field: "minimumAge" | "maximumAge", fieldErrors: Partial<Record<DrillFormField, string>>) {
+  if (!value) return null;
+  if (!/^\d+$/.test(value)) {
+    fieldErrors[field] = "Use a whole number.";
+    return null;
+  }
+  const age = Number.parseInt(value, 10);
+  if (age < 3 || age > 99) {
+    fieldErrors[field] = "Use an age from 3 to 99.";
+    return null;
+  }
+  return age;
 }

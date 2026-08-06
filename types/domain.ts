@@ -1,4 +1,5 @@
 export type AgeGroup =
+  | "all_ages"
   | "Bambini / U6"
   | "U7"
   | "U8"
@@ -12,8 +13,9 @@ export type AgeGroup =
   | "U16"
   | "U17"
   | "U19"
-  | "Adults"
-  | "Custom";
+  | "Adults";
+
+export type DrillAgeMode = "all_ages" | "preset" | "custom_range";
 
 export type MainFocus =
   | "Passing"
@@ -117,7 +119,10 @@ export type Drill = {
   variations?: string;
   easierVersion?: string;
   harderVersion?: string;
+  ageMode: DrillAgeMode;
   ageGroups: AgeGroup[];
+  minimumAge?: number;
+  maximumAge?: number;
   mainFocus: MainFocus;
   subFocus?: string;
   trainingBlocks: TrainingBlock[];

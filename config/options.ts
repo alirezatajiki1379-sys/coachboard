@@ -14,8 +14,7 @@ export const ageGroups: AgeGroup[] = [
   "U16",
   "U17",
   "U19",
-  "Adults",
-  "Custom"
+  "Adults"
 ];
 
 export const mainFocuses: MainFocus[] = [

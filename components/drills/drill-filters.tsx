@@ -1,7 +1,8 @@
 import { Filter, Search } from "lucide-react";
-import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
+import { drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
 import type { DrillFilters } from "@/lib/drills/queries";
+import { ageFilterOptions } from "@/lib/drills/age-suitability";
 
 type DrillFiltersProps = {
   filters: DrillFilters;
@@ -22,7 +23,7 @@ export function DrillFilters({ filters }: DrillFiltersProps) {
           />
         </label>
 
-        <Select name="ageGroup" label="Age group" value={filters.ageGroup} options={ageGroups} />
+        <Select name="ageGroup" label="Any age" value={filters.ageGroup} options={ageFilterOptions()} />
         <Select name="mainFocus" label="Main focus" value={filters.mainFocus} options={mainFocuses} />
         <Select name="trainingBlock" label="Block" value={filters.trainingBlock} options={trainingBlocks} />
         <Select name="drillType" label="Drill type" value={filters.drillType} options={drillTypes} />
@@ -70,7 +71,7 @@ function Select({
   name: string;
   label: string;
   value?: string;
-  options: readonly string[];
+  options: readonly (string | { value: string; label: string })[];
 }) {
   return (
     <label className="block">
@@ -81,11 +82,15 @@ function Select({
         className="h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
       >
         <option value="">{label}</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
+        {options.map((option) => {
+          const value = typeof option === "string" ? option : option.value;
+          const optionLabel = typeof option === "string" ? option : option.label;
+          return (
+          <option key={value} value={value}>
+            {optionLabel}
           </option>
-        ))}
+          );
+        })}
       </select>
     </label>
   );

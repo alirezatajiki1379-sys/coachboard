@@ -6,6 +6,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { DrillActions } from "@/components/drills/drill-actions";
 import { SessionDrillPreview } from "@/components/sessions/session-drill-preview";
 import { materialLineLabel } from "@/lib/drills/materials";
+import { formatDrillAgeSuitability } from "@/lib/drills/age-suitability";
 import type { Drill } from "@/types/domain";
 import type { DrillEditorState } from "@/types/editor";
 
@@ -67,7 +68,7 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-            <span className="rounded-md bg-slate-100 px-2 py-1">{drill.ageGroups.join(", ")}</span>
+            <span className="rounded-md bg-slate-100 px-2 py-1">{formatDrillAgeSuitability(drill)}</span>
             <span className="rounded-md bg-slate-100 px-2 py-1">{drill.trainingBlocks.join(", ")}</span>
             <span className="rounded-md bg-slate-100 px-2 py-1">{drill.drillType}</span>
           </div>

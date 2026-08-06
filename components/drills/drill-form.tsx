@@ -12,6 +12,7 @@ import { parseEditorJsonString } from "@/lib/drills/editor";
 import { detectMaterialsFromGraphic, materialCategoryLabel, materialDisplayGroups, materialLineLabel, materialsToJson, parseMaterials, serializeMaterials } from "@/lib/drills/materials";
 import type { DrillActionState } from "@/lib/drills/actions";
 import { snapshotDrillFormValues, type DrillFormField, type DrillFormValues } from "@/lib/drills/form";
+import { formatCustomAgeRange } from "@/lib/drills/age-suitability";
 import type { Drill, MaterialColor, MaterialItem, MaterialType } from "@/types/domain";
 
 type DrillFormProps = {
@@ -211,13 +212,15 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-bold text-board-navy">Categorization</h2>
         <div className="mt-4 grid gap-6 lg:grid-cols-2">
-          <CheckboxGroup
-            name="ageGroups"
-            label="Age groups"
-            required
-            options={ageGroups}
-            selected={values.ageGroups}
+          <AgeSuitabilityInput
+            selectedMode={values.ageMode}
+            selectedPresets={values.ageGroups ?? []}
+            minimumAge={values.minimumAge ?? ""}
+            maximumAge={values.maximumAge ?? ""}
             error={fieldErrors.ageGroups}
+            minimumError={fieldErrors.minimumAge}
+            maximumError={fieldErrors.maximumAge}
+            onDirty={markDirty}
           />
           <CheckboxGroup
             name="trainingBlocks"
@@ -604,7 +607,10 @@ function getInitialValues(drill?: Drill, graphicJson = ""): DrillFormValues {
     variations: drill?.variations ?? "",
     easierVersion: drill?.easierVersion ?? "",
     harderVersion: drill?.harderVersion ?? "",
-    ageGroups: drill?.ageGroups ?? [],
+    ageMode: drill?.ageMode ?? "all_ages",
+    ageGroups: drill?.ageMode === "preset" ? drill.ageGroups : [],
+    minimumAge: drill?.minimumAge ? String(drill.minimumAge) : "",
+    maximumAge: drill?.maximumAge ? String(drill.maximumAge) : "",
     mainFocus: drill?.mainFocus ?? "",
     subFocus: drill?.subFocus ?? "",
     trainingBlocks: drill?.trainingBlocks ?? [],
@@ -620,6 +626,125 @@ function getInitialValues(drill?: Drill, graphicJson = ""): DrillFormValues {
     isFavorite: drill?.isFavorite ?? false,
     graphicJson
   };
+}
+
+function AgeSuitabilityInput({
+  selectedMode,
+  selectedPresets,
+  minimumAge,
+  maximumAge,
+  error,
+  minimumError,
+  maximumError,
+  onDirty
+}: {
+  selectedMode?: string;
+  selectedPresets: readonly string[];
+  minimumAge?: string;
+  maximumAge?: string;
+  error?: string;
+  minimumError?: string;
+  maximumError?: string;
+  onDirty: () => void;
+}) {
+  const [mode, setMode] = useState(() => selectedMode === "preset" || selectedMode === "custom_range" ? selectedMode : "all_ages");
+  const [minAge, setMinAge] = useState(minimumAge ?? "");
+  const [maxAge, setMaxAge] = useState(maximumAge ?? "");
+  const rangeSummary = mode === "custom_range" ? formatCustomAgeRange(Number(minAge) || null, Number(maxAge) || null) : null;
+
+  function selectMode(nextMode: "all_ages" | "preset" | "custom_range") {
+    setMode(nextMode);
+    onDirty();
+  }
+
+  return (
+    <fieldset aria-describedby="age-suitability-help age-suitability-error">
+      <legend className="text-sm font-semibold text-slate-700">
+        Age suitability
+        <RequiredMark />
+      </legend>
+      <p id="age-suitability-help" className="mt-1 text-xs text-slate-500">Choose which age groups this Drill is suitable for.</p>
+      <input type="hidden" name="ageMode" value={mode} readOnly />
+      <div className="mt-3 grid gap-2">
+        <label className={`rounded-md border px-3 py-2 text-sm ${mode === "all_ages" ? "border-board-green bg-green-50 text-board-navy" : "border-board-line text-slate-700"}`}>
+          <span className="flex items-start gap-2">
+            <input type="radio" name="ageModeOption" checked={mode === "all_ages"} onChange={() => selectMode("all_ages")} className="mt-0.5 h-4 w-4 border-board-line text-board-green" />
+            <span>
+              <span className="block font-bold">All ages</span>
+              <span className="block text-xs text-slate-500">Suitable for Players of any age.</span>
+            </span>
+          </span>
+        </label>
+
+        <label className={`rounded-md border px-3 py-2 text-sm ${mode === "preset" ? "border-board-green bg-green-50 text-board-navy" : "border-board-line text-slate-700"}`}>
+          <span className="flex items-start gap-2">
+            <input type="radio" name="ageModeOption" checked={mode === "preset"} onChange={() => selectMode("preset")} className="mt-0.5 h-4 w-4 border-board-line text-board-green" />
+            <span className="font-bold">Age presets</span>
+          </span>
+        </label>
+        {mode === "preset" ? (
+          <div className="grid gap-2 rounded-md border border-board-line bg-slate-50 p-3 sm:grid-cols-2">
+            {ageGroups.map((option) => (
+              <label key={option} className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-board-line">
+                <input
+                  type="checkbox"
+                  name="ageGroups"
+                  value={option}
+                  defaultChecked={selectedPresets.includes(option)}
+                  onChange={onDirty}
+                  className="h-4 w-4 rounded border-board-line text-board-green"
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+        ) : null}
+
+        <label className={`rounded-md border px-3 py-2 text-sm ${mode === "custom_range" ? "border-board-green bg-green-50 text-board-navy" : "border-board-line text-slate-700"}`}>
+          <span className="flex items-start gap-2">
+            <input type="radio" name="ageModeOption" checked={mode === "custom_range"} onChange={() => selectMode("custom_range")} className="mt-0.5 h-4 w-4 border-board-line text-board-green" />
+            <span className="font-bold">Custom range</span>
+          </span>
+        </label>
+        {mode === "custom_range" ? (
+          <div className="rounded-md border border-board-line bg-slate-50 p-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <AgeNumberInput name="minimumAge" label="Minimum age" value={minAge} error={minimumError} onChange={(value) => { setMinAge(value); onDirty(); }} />
+              <AgeNumberInput name="maximumAge" label="Maximum age" value={maxAge} error={maximumError} onChange={(value) => { setMaxAge(value); onDirty(); }} />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-board-navy ring-1 ring-board-line">{rangeSummary}</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div id="age-suitability-error">
+        <FieldError error={error} />
+      </div>
+    </fieldset>
+  );
+}
+
+function AgeNumberInput({ name, label, value, error, onChange }: { name: "minimumAge" | "maximumAge"; label: string; value: string; error?: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <input
+        name={name}
+        type="number"
+        min={3}
+        max={99}
+        step={1}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={Boolean(error)}
+        className={`mt-1 h-11 w-full rounded-md border bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 ${
+          error ? "border-red-300 ring-1 ring-red-100" : "border-board-line"
+        }`}
+      />
+      <FieldError error={error} />
+    </label>
+  );
 }
 
 function RequiredMark() {

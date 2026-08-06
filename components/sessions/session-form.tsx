@@ -3,6 +3,7 @@
 import { useActionState, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ArrowDown, ArrowUp, Loader2, Plus, Save, Search, Trash2 } from "lucide-react";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
+import { drillMatchesAgeFilter } from "@/lib/drills/age-suitability";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { SessionDrillPreview } from "@/components/sessions/session-drill-preview";
 import { MaterialSummaryList } from "@/components/sessions/material-summary-list";
@@ -160,7 +161,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
     const matchesSearch = !search || drill.title.toLowerCase().includes(search.toLowerCase());
     return (
       matchesSearch &&
-      (!ageGroup || drill.ageGroups.includes(ageGroup as Drill["ageGroups"][number])) &&
+      (!ageGroup || drillMatchesAgeFilter(drill, ageGroup)) &&
       (!mainFocus || drill.mainFocus === mainFocus) &&
       (!trainingBlock || drill.trainingBlocks.includes(trainingBlock as Drill["trainingBlocks"][number])) &&
       (!drillType || drill.drillType === drillType)

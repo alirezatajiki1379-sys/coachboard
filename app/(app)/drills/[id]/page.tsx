@@ -9,6 +9,7 @@ import { getDrillGraphic } from "@/lib/drills/graphics";
 import { createClient } from "@/lib/supabase/server";
 import { getUserDrill } from "@/lib/drills/queries";
 import { materialSummary } from "@/lib/drills/materials";
+import { formatDrillAgeSuitability } from "@/lib/drills/age-suitability";
 
 type DrillDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -99,7 +100,8 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
         </div>
 
         <aside className="space-y-4">
-          <InfoCard title="Categories" items={[drill.drillType, drill.subFocus, ...drill.ageGroups, ...drill.trainingBlocks]} />
+          <InfoCard title="Age suitability" items={[formatDrillAgeSuitability(drill)]} />
+          <InfoCard title="Categories" items={[drill.drillType, drill.subFocus, ...drill.trainingBlocks]} />
           <InfoCard title="Materials" items={[materialSummary(drill.materials)]} />
           <InfoCard title="Tags" items={drill.tags.length ? drill.tags : ["No tags"]} />
         </aside>

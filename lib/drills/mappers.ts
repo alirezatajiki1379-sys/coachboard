@@ -15,6 +15,13 @@ function toLevel(value: number): 1 | 2 | 3 | 4 | 5 {
 }
 
 export function mapDrillRow(row: DrillRow): Drill {
+  const rawAgeGroups = row.age_groups ?? [];
+  const legacyCustomOnly = rawAgeGroups.length === 1 && rawAgeGroups[0] === "Custom";
+  const ageMode = row.age_mode ?? (legacyCustomOnly || rawAgeGroups.length === 0 ? "all_ages" : "preset");
+  const ageGroups = ageMode === "all_ages"
+    ? ["all_ages"]
+    : rawAgeGroups.filter((group) => group !== "Custom" && group !== "all_ages");
+
   return {
     id: row.id,
     userId: row.user_id,
@@ -25,7 +32,10 @@ export function mapDrillRow(row: DrillRow): Drill {
     variations: row.variations ?? undefined,
     easierVersion: row.easier_version ?? undefined,
     harderVersion: row.harder_version ?? undefined,
-    ageGroups: row.age_groups as Drill["ageGroups"],
+    ageMode: ageMode as Drill["ageMode"],
+    ageGroups: ageGroups as Drill["ageGroups"],
+    minimumAge: row.minimum_age ?? undefined,
+    maximumAge: row.maximum_age ?? undefined,
     mainFocus: row.main_focus as Drill["mainFocus"],
     subFocus: row.sub_focus ?? undefined,
     trainingBlocks: row.training_blocks as Drill["trainingBlocks"],
@@ -58,6 +68,9 @@ export function mapDrillToDuplicateInsert(drill: Drill, userId: string): DrillIn
     easier_version: drill.easierVersion ?? null,
     harder_version: drill.harderVersion ?? null,
     age_groups: drill.ageGroups,
+    age_mode: drill.ageMode,
+    minimum_age: drill.ageMode === "custom_range" ? drill.minimumAge ?? null : null,
+    maximum_age: drill.ageMode === "custom_range" ? drill.maximumAge ?? null : null,
     main_focus: drill.mainFocus,
     sub_focus: drill.subFocus ?? null,
     training_blocks: drill.trainingBlocks,

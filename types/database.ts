@@ -57,7 +57,10 @@ export type Database = {
           variations: string | null;
           easier_version: string | null;
           harder_version: string | null;
+          age_mode: "all_ages" | "preset" | "custom_range";
           age_groups: string[];
+          minimum_age: number | null;
+          maximum_age: number | null;
           main_focus: string;
           sub_focus: string | null;
           training_blocks: string[];
@@ -87,7 +90,10 @@ export type Database = {
           variations?: string | null;
           easier_version?: string | null;
           harder_version?: string | null;
+          age_mode?: "all_ages" | "preset" | "custom_range";
           age_groups?: string[];
+          minimum_age?: number | null;
+          maximum_age?: number | null;
           main_focus: string;
           sub_focus?: string | null;
           training_blocks?: string[];
@@ -117,7 +123,10 @@ export type Database = {
           variations?: string | null;
           easier_version?: string | null;
           harder_version?: string | null;
+          age_mode?: "all_ages" | "preset" | "custom_range";
           age_groups?: string[];
+          minimum_age?: number | null;
+          maximum_age?: number | null;
           main_focus?: string;
           sub_focus?: string | null;
           training_blocks?: string[];

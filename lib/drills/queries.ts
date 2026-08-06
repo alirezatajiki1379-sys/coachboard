@@ -1,6 +1,7 @@
 import type { Drill } from "@/types/domain";
 import type { createClient } from "@/lib/supabase/server";
 import { mapDrillRow, type DrillRow } from "@/lib/drills/mappers";
+import { drillMatchesAgeFilter } from "@/lib/drills/age-suitability";
 import { parseEditorState } from "@/lib/drills/editor";
 import type { Json } from "@/types/database";
 import type { DrillEditorState } from "@/types/editor";
@@ -12,7 +13,10 @@ const drillLibraryColumns = [
   "user_id",
   "title",
   "short_description",
+  "age_mode",
   "age_groups",
+  "minimum_age",
+  "maximum_age",
   "main_focus",
   "sub_focus",
   "training_blocks",
@@ -96,7 +100,6 @@ export async function listUserDrills(
     query = query.or(`title.ilike.%${search}%,short_description.ilike.%${search}%,sub_focus.ilike.%${search}%`);
   }
 
-  if (filters.ageGroup) query = query.contains("age_groups", [filters.ageGroup]);
   if (filters.mainFocus) query = query.eq("main_focus", filters.mainFocus);
   if (filters.subFocus) query = query.ilike("sub_focus", `%${filters.subFocus}%`);
   if (filters.trainingBlock) query = query.contains("training_blocks", [filters.trainingBlock]);
@@ -111,7 +114,7 @@ export async function listUserDrills(
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []) as Partial<DrillRow>[];
-  const drills = rows.map(mapDrillListRow);
+  const drills = rows.map(mapDrillListRow).filter((drill) => drillMatchesAgeFilter(drill, filters.ageGroup));
   const graphics = await getGraphicsByDrillId(supabase, userId, drills.map((drill) => drill.id));
   const drillsWithGraphics = drills.map((drill) => ({ ...drill, graphic: graphics.get(drill.id) }));
 
@@ -136,7 +139,10 @@ function mapDrillListRow(row: Partial<DrillRow>): Drill {
     variations: null,
     easier_version: null,
     harder_version: null,
+    age_mode: row.age_mode ?? "all_ages",
     age_groups: row.age_groups ?? [],
+    minimum_age: row.minimum_age ?? null,
+    maximum_age: row.maximum_age ?? null,
     main_focus: row.main_focus ?? "Technical",
     sub_focus: row.sub_focus ?? null,
     training_blocks: row.training_blocks ?? [],

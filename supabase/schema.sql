@@ -107,7 +107,13 @@ create table if not exists public.drills (
   easier_version text,
   harder_version text,
 
+  age_mode text not null default 'all_ages'
+    check (age_mode in ('all_ages', 'preset', 'custom_range')),
   age_groups text[] not null default '{}',
+  minimum_age integer
+    check (minimum_age is null or minimum_age between 3 and 99),
+  maximum_age integer
+    check (maximum_age is null or maximum_age between 3 and 99),
   main_focus text not null,
   sub_focus text,
   training_blocks text[] not null default '{}',
@@ -157,11 +163,84 @@ alter table public.drills
 add column if not exists status text not null default 'published';
 
 alter table public.drills
+add column if not exists age_mode text not null default 'all_ages';
+
+alter table public.drills
+add column if not exists minimum_age integer;
+
+alter table public.drills
+add column if not exists maximum_age integer;
+
+alter table public.drills
 drop constraint if exists drills_status_check;
 
 alter table public.drills
 add constraint drills_status_check
 check (status in ('draft', 'published'));
+
+alter table public.drills
+drop constraint if exists drills_age_mode_check;
+
+alter table public.drills
+add constraint drills_age_mode_check
+check (age_mode in ('all_ages', 'preset', 'custom_range'));
+
+alter table public.drills
+drop constraint if exists drills_minimum_age_check;
+
+alter table public.drills
+add constraint drills_minimum_age_check
+check (minimum_age is null or minimum_age between 3 and 99);
+
+alter table public.drills
+drop constraint if exists drills_maximum_age_check;
+
+alter table public.drills
+add constraint drills_maximum_age_check
+check (maximum_age is null or maximum_age between 3 and 99);
+
+alter table public.drills
+drop constraint if exists drills_custom_age_range_check;
+
+alter table public.drills
+add constraint drills_custom_age_range_check
+check (
+  age_mode <> 'custom_range'
+  or (
+    (minimum_age is not null or maximum_age is not null)
+    and (minimum_age is null or maximum_age is null or minimum_age <= maximum_age)
+  )
+);
+
+update public.drills
+set
+  age_mode = case
+    when age_mode = 'custom_range' then 'custom_range'
+    when coalesce(age_groups, '{}'::text[]) = '{}'::text[] then 'all_ages'
+    when age_groups = array['Custom']::text[] then 'all_ages'
+    when 'all_ages' = any(age_groups) then 'all_ages'
+    else 'preset'
+  end,
+  age_groups = case
+    when coalesce(age_groups, '{}'::text[]) = '{}'::text[] then array['all_ages']::text[]
+    when age_groups = array['Custom']::text[] then array['all_ages']::text[]
+    when 'Custom' = any(age_groups) then array_remove(age_groups, 'Custom')
+    else age_groups
+  end,
+  minimum_age = case when age_mode <> 'custom_range' then null else minimum_age end,
+  maximum_age = case when age_mode <> 'custom_range' then null else maximum_age end
+where
+  coalesce(age_mode, '') = ''
+  or coalesce(age_groups, '{}'::text[]) = '{}'::text[]
+  or 'Custom' = any(age_groups)
+  or 'all_ages' = any(age_groups);
+
+update public.drills
+set age_mode = 'preset'
+where
+  age_mode = 'all_ages'
+  and coalesce(age_groups, '{}'::text[]) <> '{}'::text[]
+  and not ('all_ages' = any(age_groups));
 
 
 -- =========================================================
