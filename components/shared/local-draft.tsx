@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 
 const draftVersion = 1;
 const autosaveDelayMs = 2000;
+const draftExpirationMs = 30 * 24 * 60 * 60 * 1000;
 
 type DraftRecord<TData> = {
   version: number;
@@ -26,6 +27,11 @@ type UseLocalDraftOptions<TData> = {
   initialData: TData;
   getData: () => TData;
   onRecover: (data: TData) => void;
+  hasMeaningfulDraft?: (draftData: TData, initialData: TData) => boolean;
+  recoveryTitle?: string;
+  recoveryDescription?: string;
+  recoverLabel?: string;
+  discardLabel?: string;
 };
 
 export function useLocalDraft<TData>({
@@ -36,7 +42,12 @@ export function useLocalDraft<TData>({
   isDirty,
   initialData,
   getData,
-  onRecover
+  onRecover,
+  hasMeaningfulDraft,
+  recoveryTitle,
+  recoveryDescription,
+  recoverLabel,
+  discardLabel
 }: UseLocalDraftOptions<TData>) {
   const [pendingDraft, setPendingDraft] = useState<DraftRecord<TData> | null>(null);
   const [status, setStatus] = useState<DraftStatus>("idle");
@@ -53,6 +64,12 @@ export function useLocalDraft<TData>({
   }, [draftKey]);
 
   const saveDraftNow = useCallback(() => {
+    const data = getData();
+    if (hasMeaningfulDraft && !hasMeaningfulDraft(data, initialData)) {
+      clearDraft();
+      return false;
+    }
+
     const nextSavedAt = new Date().toISOString();
     const record: DraftRecord<TData> = {
       version: draftVersion,
@@ -60,7 +77,7 @@ export function useLocalDraft<TData>({
       entityId,
       baseUpdatedAt,
       savedAt: nextSavedAt,
-      data: getData()
+      data
     };
 
     try {
@@ -72,7 +89,7 @@ export function useLocalDraft<TData>({
       setStatus("error");
       return false;
     }
-  }, [baseUpdatedAt, draftKey, entityId, entityType, getData]);
+  }, [baseUpdatedAt, clearDraft, draftKey, entityId, entityType, getData, hasMeaningfulDraft, initialData]);
 
   useEffect(() => {
     let stored: string | null = null;
@@ -98,7 +115,16 @@ export function useLocalDraft<TData>({
         return;
       }
 
-      if (stableStringify(parsed.data) === stableStringify(initialData)) {
+      if (Date.now() - new Date(parsed.savedAt).getTime() > draftExpirationMs) {
+        window.localStorage.removeItem(draftKey);
+        return;
+      }
+
+      const meaningful = hasMeaningfulDraft
+        ? hasMeaningfulDraft(parsed.data, initialData)
+        : stableStringify(parsed.data) !== stableStringify(initialData);
+
+      if (!meaningful) {
         window.localStorage.removeItem(draftKey);
         return;
       }
@@ -114,7 +140,7 @@ export function useLocalDraft<TData>({
       }
       setStatus("error");
     }
-  }, [draftKey, entityType, initialData]);
+  }, [draftKey, entityType, hasMeaningfulDraft, initialData]);
 
   useEffect(() => {
     if (!isDirty) return;
@@ -155,6 +181,10 @@ export function useLocalDraft<TData>({
     indicator: <AutosaveIndicator isDirty={isDirty} status={status} savedAt={savedAt} />,
     recoveryDialog: pendingDraft ? (
       <DraftRecoveryDialog
+        title={recoveryTitle}
+        description={recoveryDescription}
+        recoverLabel={recoverLabel}
+        discardLabel={discardLabel}
         savedAt={pendingDraft.savedAt}
         hasConflict={hasConflict}
         onRecover={recoverDraft}
@@ -203,12 +233,20 @@ function AutosaveIndicator({
 }
 
 function DraftRecoveryDialog({
+  title,
+  description,
+  recoverLabel,
+  discardLabel,
   savedAt,
   hasConflict,
   onRecover,
   onDiscard,
   onKeepCurrent
 }: {
+  title?: string;
+  description?: string;
+  recoverLabel?: string;
+  discardLabel?: string;
   savedAt: string;
   hasConflict: boolean;
   onRecover: () => void;
@@ -218,9 +256,9 @@ function DraftRecoveryDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
       <div className="w-full max-w-lg rounded-lg border border-board-line bg-white p-4 shadow-2xl sm:p-5">
-        <h2 className="text-lg font-bold text-board-navy">Recover unsaved draft?</h2>
+        <h2 className="text-lg font-bold text-board-navy">{title ?? "Recover unsaved draft?"}</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Unsaved work from an earlier visit was found. Draft saved at{" "}
+          {description ?? "Unsaved work from an earlier visit was found."} Draft saved at{" "}
           <span className="font-semibold text-board-navy">{formatDraftTime(savedAt)}</span>.
         </p>
         {hasConflict ? (
@@ -230,10 +268,10 @@ function DraftRecoveryDialog({
         ) : null}
         <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <Button type="button" className="w-full justify-center sm:w-auto" onClick={onRecover}>
-            Recover draft
+            {recoverLabel ?? "Recover draft"}
           </Button>
           <Button type="button" variant="danger" className="w-full justify-center sm:w-auto" onClick={onDiscard}>
-            Discard draft
+            {discardLabel ?? "Discard draft"}
           </Button>
           <Button type="button" variant="secondary" className="w-full justify-center sm:w-auto" onClick={onKeepCurrent}>
             Keep current version

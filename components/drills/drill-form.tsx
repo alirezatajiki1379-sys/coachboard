@@ -1,7 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { useLocalDraft } from "@/components/shared/local-draft";
 import { parseEditorJsonString } from "@/lib/drills/editor";
 import { detectMaterialsFromGraphic, materialCategoryLabel, materialDisplayGroups, materialLineLabel, materialsToJson, parseMaterials, serializeMaterials } from "@/lib/drills/materials";
 import type { DrillActionState } from "@/lib/drills/actions";
-import { snapshotDrillFormValues, type DrillFormField, type DrillFormValues } from "@/lib/drills/form";
+import { snapshotDrillFormValues, validateDrillFormFields, type DrillFormField, type DrillFormValues, type DrillValidationErrors } from "@/lib/drills/form";
 import { formatCustomAgeRange } from "@/lib/drills/age-suitability";
 import type { Drill, MaterialColor, MaterialItem, MaterialType } from "@/types/domain";
 
@@ -36,6 +36,45 @@ const materialVariantOptions: Partial<Record<MaterialType, string[]>> = {
   goals: ["normal goal", "youth goal"]
 };
 
+const validationFieldOrder: DrillFormField[] = [
+  "title",
+  "subFocus",
+  "mainFocus",
+  "drillType",
+  "durationMinutes",
+  "minPlayers",
+  "maxPlayers",
+  "shortDescription",
+  "ageGroups",
+  "minimumAge",
+  "maximumAge",
+  "trainingBlocks",
+  "organization",
+  "coachingPoints",
+  "variations",
+  "easierVersion",
+  "harderVersion",
+  "materials",
+  "difficultyLevel",
+  "intensityLevel",
+  "tags",
+  "isFavorite"
+];
+
+const fieldLabels: Partial<Record<DrillFormField, string>> = {
+  title: "Drill title",
+  mainFocus: "Main focus",
+  drillType: "Drill type",
+  durationMinutes: "Duration",
+  minPlayers: "Minimum players",
+  maxPlayers: "Maximum players",
+  ageGroups: "Age suitability",
+  minimumAge: "Minimum age",
+  maximumAge: "Maximum age",
+  trainingBlocks: "Training section",
+  tags: "Tags"
+};
+
 export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = "", cancelHref, hiddenFields, contextBanner }: DrillFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialActionState);
   const initialValues = useMemo(() => getInitialValues(drill, graphicJson), [drill, graphicJson]);
@@ -44,9 +83,12 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
   const [isDirty, setIsDirty] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [returnTo, setReturnTo] = useState(defaultReturnTo);
+  const [clientErrors, setClientErrors] = useState<DrillValidationErrors | null>(null);
+  const [validationMessage, setValidationMessage] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const returnToInputRef = useRef<HTMLInputElement>(null);
-  const fieldErrors = state.fieldErrors ?? {};
+  const fieldErrors = clientErrors ?? state.fieldErrors ?? {};
+  const orderedErrorEntries = orderedDrillErrorEntries(fieldErrors);
   const draftKey = `coachboard:draft:drill:${drill?.id ?? "new"}`;
 
   const readDraftData = useCallback(
@@ -67,6 +109,11 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
     isDirty,
     initialData: initialValues,
     getData: readDraftData,
+    hasMeaningfulDraft: hasMeaningfulDrillDraft,
+    recoveryTitle: "Continue your unfinished Drill?",
+    recoveryDescription: "CoachBoard found unsaved changes from your previous Drill editing session.",
+    recoverLabel: "Continue draft",
+    discardLabel: "Discard draft",
     onRecover: (draftValues) => {
       setValues(draftValues);
       setFormRevision((current) => current + 1);
@@ -100,6 +147,14 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
   }, [initialValues, state.values]);
 
   useEffect(() => {
+    const nextErrors = state.fieldErrors;
+    if (!nextErrors) return;
+    setClientErrors(nextErrors);
+    setValidationMessage(validationSummaryMessage(nextErrors, mode));
+    window.setTimeout(() => navigateToFirstValidationError(formRef.current, nextErrors), 0);
+  }, [mode, state.fieldErrors, state.submissionId]);
+
+  useEffect(() => {
     if (state.error) {
       setIsSubmitting(false);
       setIsDirty(true);
@@ -123,6 +178,41 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
     setIsDirty(true);
   }
 
+  function refreshValidationErrors() {
+    const form = formRef.current;
+    if (!form || !clientErrors) return;
+    window.setTimeout(() => {
+      const nextErrors = validateDrillFormFields(new FormData(form));
+      setClientErrors(Object.keys(nextErrors).length ? nextErrors : {});
+      setValidationMessage(Object.keys(nextErrors).length ? validationSummaryMessage(nextErrors, mode) : "");
+    }, 0);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const intent = submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement ? submitter.value : "";
+    if (intent === "saveDraft") {
+      setIsSubmitting(true);
+      return;
+    }
+
+    const form = event.currentTarget;
+    const nextErrors = validateDrillFormFields(new FormData(form));
+    if (Object.keys(nextErrors).length) {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsSubmitting(false);
+      setClientErrors(nextErrors);
+      setValidationMessage(validationSummaryMessage(nextErrors, mode));
+      window.setTimeout(() => navigateToFirstValidationError(form, nextErrors), 0);
+      return;
+    }
+
+    setClientErrors({});
+    setValidationMessage("");
+    setIsSubmitting(true);
+  }
+
   return (
     <form
       key={`${state.submissionId ?? 0}-${formRevision}-${drill?.id ?? "new-drill"}`}
@@ -130,9 +220,15 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
       action={formAction}
       noValidate
       className="space-y-6"
-      onInputCapture={markDirty}
-      onChangeCapture={markDirty}
-      onSubmitCapture={() => setIsSubmitting(true)}
+      onInputCapture={() => {
+        markDirty();
+        refreshValidationErrors();
+      }}
+      onChangeCapture={() => {
+        markDirty();
+        refreshValidationErrors();
+      }}
+      onSubmit={handleSubmit}
     >
       {drill ? <input type="hidden" name="drillId" value={drill.id} /> : null}
       <input ref={returnToInputRef} type="hidden" name="returnTo" value={returnTo} readOnly />
@@ -156,6 +252,14 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
         <div className="sr-only" role="alert">
           {state.error}
         </div>
+      ) : null}
+
+      {orderedErrorEntries.length ? (
+        <ValidationSummary
+          message={validationMessage || validationSummaryMessage(fieldErrors, mode)}
+          errors={orderedErrorEntries}
+          onNavigate={(field) => navigateToValidationField(formRef.current, field)}
+        />
       ) : null}
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
@@ -300,6 +404,159 @@ type MaterialRow = MaterialItem & { id: string };
 function getCurrentDrillFormValues(form: HTMLFormElement | null, fallback: DrillFormValues) {
   if (!form) return fallback;
   return snapshotDrillFormValues(new FormData(form));
+}
+
+function hasMeaningfulDrillDraft(draft: DrillFormValues, initial: DrillFormValues) {
+  return stableDraftString(normalizeDrillDraftValues(draft, initial)) !== stableDraftString(normalizeDrillDraftValues(initial, initial));
+}
+
+function normalizeDrillDraftValues(values: DrillFormValues, fallback: DrillFormValues) {
+  const ageMode = values.ageMode === "preset" || values.ageMode === "custom_range" ? values.ageMode : "all_ages";
+  const graphic = parseEditorJsonString(values.graphicJson);
+
+  return {
+    title: normalizedText(values.title),
+    shortDescription: normalizedText(values.shortDescription),
+    organization: normalizedText(values.organization),
+    coachingPoints: normalizedText(values.coachingPoints),
+    variations: normalizedText(values.variations),
+    easierVersion: normalizedText(values.easierVersion),
+    harderVersion: normalizedText(values.harderVersion),
+    ageMode,
+    ageGroups: ageMode === "preset" ? normalizedList(values.ageGroups) : [],
+    minimumAge: ageMode === "custom_range" ? normalizedOptionalAge(values.minimumAge) : null,
+    maximumAge: ageMode === "custom_range" ? normalizedOptionalAge(values.maximumAge) : null,
+    mainFocus: normalizedText(values.mainFocus),
+    subFocus: normalizedText(values.subFocus),
+    trainingBlocks: normalizedList(values.trainingBlocks),
+    drillType: normalizedText(values.drillType),
+    durationMinutes: normalizedNumber(values.durationMinutes, normalizedNumber(fallback.durationMinutes, 10)),
+    minPlayers: normalizedNumber(values.minPlayers, normalizedNumber(fallback.minPlayers, 1)),
+    maxPlayers: normalizedNumber(values.maxPlayers, normalizedNumber(fallback.maxPlayers, 12)),
+    materials: normalizedMaterials(values),
+    difficultyLevel: normalizedNumber(values.difficultyLevel, normalizedNumber(fallback.difficultyLevel, 3)),
+    intensityLevel: normalizedNumber(values.intensityLevel, normalizedNumber(fallback.intensityLevel, 3)),
+    tags: parseTagInput(values.tags).map((tag) => tag.toLowerCase()).sort(),
+    isFavorite: Boolean(values.isFavorite),
+    graphic: {
+      pitch: graphic.pitch,
+      pitchStyle: graphic.pitchStyle,
+      objects: graphic.objects.map((object) => {
+        const normalized: Record<string, unknown> = { ...object };
+        delete normalized.id;
+        delete normalized.groupId;
+        return normalized;
+      })
+    }
+  };
+}
+
+function normalizedText(value: string | undefined) {
+  return value?.trim() ?? "";
+}
+
+function normalizedList(values: readonly string[] | undefined) {
+  return Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean))).sort();
+}
+
+function normalizedNumber(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value?.trim() ?? "", 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizedOptionalAge(value: string | undefined) {
+  const parsed = Number.parseInt(value?.trim() ?? "", 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizedMaterials(values: DrillFormValues) {
+  return materialsToJson(parseMaterialsJsonSafe(values.materialsJson) ?? parseMaterials(values.materials));
+}
+
+function stableDraftString(value: unknown) {
+  return JSON.stringify(value);
+}
+
+function ValidationSummary({
+  message,
+  errors,
+  onNavigate
+}: {
+  message: string;
+  errors: Array<{ field: DrillFormField; label: string; message: string }>;
+  onNavigate: (field: DrillFormField) => void;
+}) {
+  return (
+    <section
+      role="alert"
+      aria-live="polite"
+      className="scroll-mt-28 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 shadow-soft"
+    >
+      <h2 className="font-bold text-red-900">{message}</h2>
+      <ul className="mt-2 space-y-1">
+        {errors.map((error) => (
+          <li key={error.field}>
+            <button
+              type="button"
+              onClick={() => onNavigate(error.field)}
+              className="rounded text-left font-medium underline decoration-red-300 underline-offset-4 outline-none transition hover:text-red-950 focus:ring-2 focus:ring-red-300"
+            >
+              {error.label}: {error.message}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function orderedDrillErrorEntries(errors: DrillValidationErrors) {
+  return validationFieldOrder
+    .filter((field) => Boolean(errors[field]))
+    .map((field) => ({
+      field,
+      label: fieldLabels[field] ?? "Field",
+      message: errors[field] ?? ""
+    }));
+}
+
+function validationSummaryMessage(errors: DrillValidationErrors, mode: "create" | "edit") {
+  const count = orderedDrillErrorEntries(errors).length;
+  const action = mode === "create" ? "creating" : "saving";
+  return `Please correct ${count} ${count === 1 ? "field" : "fields"} before ${action} this Drill.`;
+}
+
+function navigateToFirstValidationError(form: HTMLFormElement | null, errors: DrillValidationErrors) {
+  const firstField = orderedDrillErrorEntries(errors)[0]?.field;
+  if (firstField) navigateToValidationField(form, firstField);
+}
+
+function navigateToValidationField(form: HTMLFormElement | null, field: DrillFormField) {
+  if (!form) return;
+  const target = validationTarget(form, field);
+  if (!target) return;
+
+  target.container.scrollIntoView({
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    block: "center"
+  });
+
+  window.setTimeout(() => target.control.focus({ preventScroll: true }), 250);
+}
+
+function validationTarget(form: HTMLFormElement, field: DrillFormField) {
+  const fieldsToTry = targetFieldCandidates(field);
+  for (const targetField of fieldsToTry) {
+    const container = form.querySelector<HTMLElement>(`[data-validation-field="${targetField}"]`);
+    const control = container?.querySelector<HTMLElement>("[data-validation-control]");
+    if (container && control) return { container, control };
+  }
+  return null;
+}
+
+function targetFieldCandidates(field: DrillFormField): DrillFormField[] {
+  if (field === "ageGroups") return ["minimumAge", "ageGroups"];
+  return [field];
 }
 
 function MaterialListEditor({
@@ -651,6 +908,7 @@ function AgeSuitabilityInput({
   const [minAge, setMinAge] = useState(minimumAge ?? "");
   const [maxAge, setMaxAge] = useState(maximumAge ?? "");
   const rangeSummary = mode === "custom_range" ? formatCustomAgeRange(Number(minAge) || null, Number(maxAge) || null) : null;
+  const groupErrorId = fieldErrorId("ageGroups");
 
   function selectMode(nextMode: "all_ages" | "preset" | "custom_range") {
     setMode(nextMode);
@@ -658,7 +916,7 @@ function AgeSuitabilityInput({
   }
 
   return (
-    <fieldset aria-describedby="age-suitability-help age-suitability-error">
+    <fieldset data-validation-field="ageGroups" className="scroll-mt-28" aria-describedby={`age-suitability-help ${groupErrorId}`}>
       <legend className="text-sm font-semibold text-slate-700">
         Age suitability
         <RequiredMark />
@@ -668,7 +926,7 @@ function AgeSuitabilityInput({
       <div className="mt-3 grid gap-2">
         <label className={`rounded-md border px-3 py-2 text-sm ${mode === "all_ages" ? "border-board-green bg-green-50 text-board-navy" : "border-board-line text-slate-700"}`}>
           <span className="flex items-start gap-2">
-            <input type="radio" name="ageModeOption" checked={mode === "all_ages"} onChange={() => selectMode("all_ages")} className="mt-0.5 h-4 w-4 border-board-line text-board-green" />
+            <input data-validation-control type="radio" name="ageModeOption" checked={mode === "all_ages"} onChange={() => selectMode("all_ages")} className="mt-0.5 h-4 w-4 border-board-line text-board-green" />
             <span>
               <span className="block font-bold">All ages</span>
               <span className="block text-xs text-slate-500">Suitable for Players of any age.</span>
@@ -718,18 +976,18 @@ function AgeSuitabilityInput({
           </div>
         ) : null}
       </div>
-      <div id="age-suitability-error">
-        <FieldError error={error} />
-      </div>
+      <FieldError id={groupErrorId} error={error} />
     </fieldset>
   );
 }
 
 function AgeNumberInput({ name, label, value, error, onChange }: { name: "minimumAge" | "maximumAge"; label: string; value: string; error?: string; onChange: (value: string) => void }) {
+  const errorId = fieldErrorId(name);
   return (
-    <label className="block">
+    <label data-validation-field={name} className="block scroll-mt-28">
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <input
+        data-validation-control
         name={name}
         type="number"
         min={3}
@@ -738,11 +996,12 @@ function AgeNumberInput({ name, label, value, error, onChange }: { name: "minimu
         value={value}
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         className={`mt-1 h-11 w-full rounded-md border bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 ${
           error ? "border-red-300 ring-1 ring-red-100" : "border-board-line"
         }`}
       />
-      <FieldError error={error} />
+      <FieldError id={errorId} error={error} />
     </label>
   );
 }
@@ -755,14 +1014,19 @@ function RequiredMark() {
   );
 }
 
-function FieldError({ error }: { error?: string }) {
-  return error ? <p className="mt-1 text-sm font-medium text-red-700">{error}</p> : null;
+function fieldErrorId(field: DrillFormField) {
+  return `drill-form-${field}-error`;
+}
+
+function FieldError({ id, error }: { id?: string; error?: string }) {
+  return error ? <p id={id} className="mt-1 text-sm font-medium text-red-700">{error}</p> : null;
 }
 
 function TagsInput({ defaultValue, error, onDirty }: { defaultValue?: string; error?: string; onDirty: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [tags, setTags] = useState(() => parseTagInput(defaultValue ?? ""));
   const [draft, setDraft] = useState("");
+  const errorId = fieldErrorId("tags");
 
   function addTag() {
     const nextTag = draft.trim();
@@ -788,11 +1052,12 @@ function TagsInput({ defaultValue, error, onDirty }: { defaultValue?: string; er
   }
 
   return (
-    <div>
+    <div data-validation-field="tags" className="scroll-mt-28">
       <input type="hidden" name="tags" value={tags.join(", ")} readOnly />
       <label className="block">
         <span className="text-sm font-medium text-slate-700">Tags</span>
         <input
+          data-validation-control
           ref={inputRef}
           value={draft}
           onChange={(event) => {
@@ -809,6 +1074,7 @@ function TagsInput({ defaultValue, error, onDirty }: { defaultValue?: string; er
             if (draft.trim()) addTag();
           }}
           aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           placeholder="Type tag and press Enter"
           className={`mt-1 h-11 w-full rounded-md border bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 ${
             error ? "border-red-300 ring-1 ring-red-100" : "border-board-line"
@@ -832,7 +1098,7 @@ function TagsInput({ defaultValue, error, onDirty }: { defaultValue?: string; er
       ) : (
         <p className="mt-2 text-xs text-slate-500">Add tags one by one with Enter.</p>
       )}
-      <FieldError error={error} />
+      <FieldError id={errorId} error={error} />
     </div>
   );
 }
@@ -866,23 +1132,26 @@ function TextInput({
   placeholder?: string;
   error?: string;
 }) {
+  const errorId = fieldErrorId(name);
   return (
-    <label className="block">
+    <label data-validation-field={name} className="block scroll-mt-28">
       <span className="text-sm font-medium text-slate-700">
         {label}
         {required ? <RequiredMark /> : null}
       </span>
       <input
+        data-validation-control
         name={name}
         aria-required={required}
         aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         defaultValue={defaultValue}
         placeholder={placeholder}
         className={`mt-1 h-11 w-full rounded-md border bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 ${
           error ? "border-red-300 ring-1 ring-red-100" : "border-board-line"
         }`}
       />
-      <FieldError error={error} />
+      <FieldError id={errorId} error={error} />
     </label>
   );
 }
@@ -904,25 +1173,28 @@ function NumberInput({
   required?: boolean;
   error?: string;
 }) {
+  const errorId = fieldErrorId(name);
   return (
-    <label className="block">
+    <label data-validation-field={name} className="block scroll-mt-28">
       <span className="text-sm font-medium text-slate-700">
         {label}
         {required ? <RequiredMark /> : null}
       </span>
       <input
+        data-validation-control
         name={name}
         type="number"
         min={min}
         max={max}
         aria-required={required}
         aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         defaultValue={defaultValue}
         className={`mt-1 h-11 w-full rounded-md border bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 ${
           error ? "border-red-300 ring-1 ring-red-100" : "border-board-line"
         }`}
       />
-      <FieldError error={error} />
+      <FieldError id={errorId} error={error} />
     </label>
   );
 }
@@ -942,16 +1214,19 @@ function SelectInput({
   required?: boolean;
   error?: string;
 }) {
+  const errorId = fieldErrorId(name);
   return (
-    <label className="block">
+    <label data-validation-field={name} className="block scroll-mt-28">
       <span className="text-sm font-medium text-slate-700">
         {label}
         {required ? <RequiredMark /> : null}
       </span>
       <select
+        data-validation-control
         name={name}
         aria-required={required}
         aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         defaultValue={defaultValue ?? ""}
         className={`mt-1 h-11 w-full rounded-md border bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 ${
           error ? "border-red-300 ring-1 ring-red-100" : "border-board-line"
@@ -964,7 +1239,7 @@ function SelectInput({
           </option>
         ))}
       </select>
-      <FieldError error={error} />
+      <FieldError id={errorId} error={error} />
     </label>
   );
 }
@@ -983,9 +1258,10 @@ function TextArea({
   help?: string;
 }) {
   return (
-    <label className="mt-4 block">
+    <label data-validation-field={name} className="mt-4 block scroll-mt-28">
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <textarea
+        data-validation-control
         name={name}
         rows={rows}
         defaultValue={defaultValue}
@@ -1011,8 +1287,9 @@ function CheckboxGroup({
   required?: boolean;
   error?: string;
 }) {
+  const errorId = fieldErrorId(name);
   return (
-    <fieldset>
+    <fieldset data-validation-field={name} className="scroll-mt-28" aria-describedby={error ? errorId : undefined}>
       <legend className="text-sm font-semibold text-slate-700">
         {label}
         {required ? <RequiredMark /> : null}
@@ -1026,10 +1303,12 @@ function CheckboxGroup({
             }`}
           >
             <input
+              data-validation-control={option === options[0] ? "" : undefined}
               type="checkbox"
               name={name}
               value={option}
               aria-invalid={Boolean(error)}
+              aria-describedby={error ? errorId : undefined}
               defaultChecked={selected.includes(option)}
               className="h-4 w-4 rounded border-board-line text-board-green"
             />
@@ -1037,7 +1316,7 @@ function CheckboxGroup({
           </label>
         ))}
       </div>
-      <FieldError error={error} />
+      <FieldError id={errorId} error={error} />
     </fieldset>
   );
 }

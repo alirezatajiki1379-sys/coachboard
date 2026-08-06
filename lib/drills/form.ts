@@ -67,6 +67,8 @@ export type DrillFormResult =
       values: DrillFormValues;
     };
 
+export type DrillValidationErrors = Partial<Record<DrillFormField, string>>;
+
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
@@ -118,7 +120,7 @@ export function snapshotDrillFormValues(formData: FormData): DrillFormValues {
 
 export function parseDrillForm(formData: FormData): DrillFormResult {
   const values = snapshotDrillFormValues(formData);
-  const fieldErrors: Partial<Record<DrillFormField, string>> = {};
+  const fieldErrors = validateDrillFormFields(formData);
   const title = text(formData, "title");
   const mainFocus = text(formData, "mainFocus");
   const drillType = text(formData, "drillType");
@@ -129,16 +131,6 @@ export function parseDrillForm(formData: FormData): DrillFormResult {
   const maxPlayers = numberValue(formData, "maxPlayers", Math.max(minPlayers, 1));
   const difficulty = numberValue(formData, "difficultyLevel", 3);
   const intensity = numberValue(formData, "intensityLevel", 3);
-
-  if (!title) fieldErrors.title = "Give this drill a clear title.";
-  if (!mainFocuses.includes(mainFocus as MainFocus)) fieldErrors.mainFocus = "Choose the main coaching focus.";
-  if (!drillTypes.includes(drillType as DrillType)) fieldErrors.drillType = "Choose the drill type.";
-  Object.assign(fieldErrors, ageSuitability.fieldErrors);
-  if (!blockValues.length) fieldErrors.trainingBlocks = "Select at least one training block.";
-  if (duration <= 0) fieldErrors.durationMinutes = "Duration must be at least 1 minute.";
-  if (minPlayers <= 0) fieldErrors.minPlayers = "Minimum players must be at least 1.";
-  if (maxPlayers <= 0) fieldErrors.maxPlayers = "Maximum players must be at least 1.";
-  if (maxPlayers < minPlayers) fieldErrors.maxPlayers = "Maximum players must be the same as or higher than minimum players.";
 
   const firstError = Object.values(fieldErrors)[0];
   if (firstError) {
@@ -188,6 +180,30 @@ export function parseDrillForm(formData: FormData): DrillFormResult {
     },
     graphic
   };
+}
+
+export function validateDrillFormFields(formData: FormData): DrillValidationErrors {
+  const fieldErrors: DrillValidationErrors = {};
+  const title = text(formData, "title");
+  const mainFocus = text(formData, "mainFocus");
+  const drillType = text(formData, "drillType");
+  const ageSuitability = parseAgeSuitability(formData);
+  const blockValues = checkedValues<TrainingBlock>(formData, "trainingBlocks", trainingBlocks);
+  const duration = numberValue(formData, "durationMinutes", 10);
+  const minPlayers = numberValue(formData, "minPlayers", 1);
+  const maxPlayers = numberValue(formData, "maxPlayers", Math.max(minPlayers, 1));
+
+  if (!title) fieldErrors.title = "Enter a Drill title.";
+  if (!mainFocuses.includes(mainFocus as MainFocus)) fieldErrors.mainFocus = "Choose the main coaching focus.";
+  if (!drillTypes.includes(drillType as DrillType)) fieldErrors.drillType = "Choose the drill type.";
+  Object.assign(fieldErrors, ageSuitability.fieldErrors);
+  if (!blockValues.length) fieldErrors.trainingBlocks = "Choose which part of the training this Drill belongs to.";
+  if (duration <= 0) fieldErrors.durationMinutes = "Duration must be at least 1 minute.";
+  if (minPlayers <= 0) fieldErrors.minPlayers = "Minimum players must be at least 1.";
+  if (maxPlayers <= 0) fieldErrors.maxPlayers = "Maximum players must be at least 1.";
+  if (maxPlayers < minPlayers) fieldErrors.maxPlayers = "Maximum players must be the same as or higher than minimum players.";
+
+  return fieldErrors;
 }
 
 export function parseDrillDraftForm(formData: FormData): { data: Omit<DrillInsert, "user_id">; graphic: DrillEditorState; values: DrillFormValues } {
@@ -271,7 +287,7 @@ function parseAgeSuitability(formData: FormData, options: { allowFallback?: bool
     fieldErrors.ageGroups = "Enter at least a minimum or maximum age.";
   }
   if (minimumAge != null && maximumAge != null && minimumAge > maximumAge) {
-    fieldErrors.maximumAge = "Minimum age cannot be greater than maximum age.";
+    fieldErrors.minimumAge = "Minimum age cannot be greater than maximum age.";
   }
 
   return {
