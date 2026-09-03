@@ -5,6 +5,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { TrainingBulkManager } from "@/components/squad/training-bulk-manager";
 import { createClient } from "@/lib/supabase/server";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
+import { listTrainingSessionReviewSummaries } from "@/lib/squad/session-review";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { filterTrainings, parseTrainingFilter, sortTrainings, type TrainingFilter } from "@/lib/trainings/utils";
 
@@ -37,6 +38,7 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
     squadId: activeTeam.id,
     onlyDeleted: filter === "trash"
   });
+  const reviewSummaries = await listTrainingSessionReviewSummaries(supabase, user.id, allEvents.map((event) => event.id));
   const events = sortTrainings(filterTrainings(allEvents, filter));
   const upcomingCount = filterTrainings(allEvents, "upcoming").length;
   const pastCount = filterTrainings(allEvents, "past").length;
@@ -86,6 +88,7 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
           activeTeamName={activeTeam.name}
           filterLabel={filters.find((item) => item.id === filter)?.label ?? "Current filter"}
           isTrash={filter === "trash"}
+          reviewedEventIds={Array.from(reviewSummaries.keys())}
         />
       </section>
     </PageContainer>

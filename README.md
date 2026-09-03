@@ -11,6 +11,7 @@ CoachBoard is a football training planner for coaches. It helps a coach build a 
 - Automatic material detection from drill graphics plus editable material rows
 - Training Session Builder with blocks, drag/drop ordering, station sets, player groups, smart duration calculation, and material summaries
 - Session detail and print-friendly session plan with timeline, drill graphics, block materials, player groups, and print/save-as-PDF support
+- Squad training calendar with attendance, ratings, player observations, and session-level coach reviews
 
 ## Tech Stack
 
@@ -72,6 +73,14 @@ The schema includes:
 - `materials`
 - `training_sessions`
 - `training_session_drills`
+- `squads`
+- `squad_players`
+- `squad_training_events`
+- `squad_attendance_records`
+- `training_session_plan_instances`
+- `training_session_drill_instances`
+- `training_session_reviews`
+- `training_session_drill_reviews`
 - `tags`
 
 Important newer columns/features:
@@ -85,8 +94,10 @@ Important newer columns/features:
 - `training_session_drills.participating_groups`
 - `training_session_drills.starting_group`
 - `drill_graphic_templates.template_json`
+- training session reviews linked to concrete `squad_training_events`
+- drill feedback linked to concrete `training_session_drill_instances`
 
-The schema also enables RLS and policies so users can only access their own profiles, drills, drill graphics, drill graphic templates, materials, sessions, session drills, and tags.
+The schema also enables RLS and policies so users can only access their own profiles, drills, drill graphics, drill graphic templates, materials, sessions, session drills, squad players, training events, attendance records, training plans, session reviews, and tags.
 
 If an older Supabase project is missing one of these tables, columns, triggers, indexes, or RLS policies, rerun the relevant part of [supabase/schema.sql](supabase/schema.sql).
 

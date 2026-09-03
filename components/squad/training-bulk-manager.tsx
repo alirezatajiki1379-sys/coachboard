@@ -20,12 +20,14 @@ type TrainingBulkManagerProps = {
   activeTeamName: string;
   filterLabel: string;
   isTrash: boolean;
+  reviewedEventIds?: string[];
 };
 
 type BulkAction = "trash" | "restore" | "permanent";
 
-export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamName, filterLabel, isTrash }: TrainingBulkManagerProps) {
+export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamName, filterLabel, isTrash, reviewedEventIds = [] }: TrainingBulkManagerProps) {
   const [events, setEvents] = useState(initialEvents);
+  const reviewedIds = useMemo(() => new Set(reviewedEventIds), [reviewedEventIds]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string>();
@@ -169,7 +171,7 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
                 onToggle={() => toggle(event.id)}
               />
             ) : (
-              <TrainingEventCard key={event.id} event={event} attendance={event.attendance} hrefBase="/trainings" />
+              <TrainingEventCard key={event.id} event={event} attendance={event.attendance} hrefBase="/trainings" hasReview={reviewedIds.has(event.id)} />
             )
           )}
         </section>

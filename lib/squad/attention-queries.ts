@@ -18,6 +18,7 @@ import {
 } from "@/lib/squad/attention";
 import { getCoachWorkspaceData, parseWorkspaceState } from "@/lib/squad/workspace";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
+import { listTrainingSessionReviewSummaries } from "@/lib/squad/session-review";
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -37,9 +38,10 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
     getCoachWorkspaceData(supabase, userId, workspaceState, { includeAttention: false }),
     listTrainingEventDetails(supabase, userId)
   ]);
+  const reviewSummaries = await listTrainingSessionReviewSummaries(supabase, userId, trainingEvents.map((event) => event.id));
   const today = new Date().toISOString().slice(0, 10);
   const candidateItems = [
-    ...getTrainingAttentionItems(trainingEvents, { today }),
+    ...getTrainingAttentionItems(trainingEvents.map((event) => ({ ...event, reviewCompleted: reviewSummaries.has(event.id) })), { today }),
     ...workspace.allPlayers.flatMap((player) => getPlayerAttentionItems(player, preferences, {
       today,
       periodLabel: workspace.periodRangeLabel || workspace.periodLabel

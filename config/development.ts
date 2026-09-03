@@ -1,16 +1,11 @@
 import type { PlayerDevelopmentGoalCategory, PlayerDevelopmentGoalPriority, PlayerDevelopmentGoalStatus, PlayerDevelopmentProgress } from "@/types/domain";
 
 export const developmentGoalCategories: Array<{ value: PlayerDevelopmentGoalCategory; label: string }> = [
-  { value: "technique", label: "Technique" },
-  { value: "tactical_understanding", label: "Tactical understanding" },
-  { value: "decision_making", label: "Decision making" },
+  { value: "technical", label: "Technical" },
+  { value: "tactical", label: "Tactical" },
   { value: "physical", label: "Physical" },
   { value: "mental", label: "Mental" },
-  { value: "communication", label: "Communication" },
-  { value: "leadership", label: "Leadership" },
-  { value: "goalkeeping", label: "Goalkeeping" },
-  { value: "behaviour", label: "Behaviour" },
-  { value: "individual", label: "Individual" }
+  { value: "other", label: "Other" }
 ];
 
 export const developmentGoalPriorities: Array<{ value: PlayerDevelopmentGoalPriority; label: string }> = [
@@ -20,21 +15,21 @@ export const developmentGoalPriorities: Array<{ value: PlayerDevelopmentGoalPrio
 ];
 
 export const developmentGoalStatuses: Array<{ value: PlayerDevelopmentGoalStatus; label: string }> = [
-  { value: "active", label: "Active" },
-  { value: "completed", label: "Completed" },
-  { value: "paused", label: "Paused" },
-  { value: "cancelled", label: "Cancelled" }
+  { value: "identified", label: "Identified" },
+  { value: "in_progress", label: "In progress" },
+  { value: "achieved", label: "Achieved" },
+  { value: "paused", label: "Paused" }
 ];
 
 export const developmentProgressOptions: Array<{ value: PlayerDevelopmentProgress; label: string }> = [
-  { value: "not_started", label: "Not started" },
-  { value: "in_progress", label: "In progress" },
-  { value: "almost_there", label: "Almost there" },
-  { value: "completed", label: "Completed" }
+  { value: "needs_attention", label: "Needs attention" },
+  { value: "developing", label: "Developing" },
+  { value: "consistent", label: "Consistent" },
+  { value: "achieved", label: "Achieved" }
 ];
 
 export function developmentCategoryLabel(value?: string | null) {
-  return developmentGoalCategories.find((item) => item.value === value)?.label ?? "Individual";
+  return developmentGoalCategories.find((item) => item.value === value)?.label ?? "Other";
 }
 
 export function developmentPriorityLabel(value?: string | null) {
@@ -42,9 +37,9 @@ export function developmentPriorityLabel(value?: string | null) {
 }
 
 export function developmentStatusLabel(value?: string | null) {
-  return developmentGoalStatuses.find((item) => item.value === value)?.label ?? "Active";
+  return developmentGoalStatuses.find((item) => item.value === value)?.label ?? "In progress";
 }
 
 export function developmentProgressLabel(value?: string | null) {
-  return developmentProgressOptions.find((item) => item.value === value)?.label ?? "In progress";
+  return developmentProgressOptions.find((item) => item.value === value)?.label ?? "Developing";
 }

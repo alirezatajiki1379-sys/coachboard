@@ -29,7 +29,7 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
 
   return (
     <div className="space-y-5">
-      <Link href={`/squad/attendance/${event.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
+      <Link href={`/trainings/${event.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
         <ArrowLeft className="h-4 w-4" />
         Back to event
       </Link>

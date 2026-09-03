@@ -11,9 +11,10 @@ import { syncTrainingWithCurrentSquad } from "@/lib/squad/attendance-actions";
 import { applyTrainingPlanTemplate, createBlankSessionPlan } from "@/lib/squad/training-plan-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
+import { countTrainingObservations, getTrainingSessionReview, objectiveOutcomeLabels } from "@/lib/squad/session-review";
 import { createClient } from "@/lib/supabase/server";
-import { seasonLabelForDate, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
-import type { SquadAttendanceEntry } from "@/types/domain";
+import { seasonLabelForDate, todayDateString, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
+import type { SquadAttendanceEntry, SquadTrainingEventDetail } from "@/types/domain";
 
 type TrainingPageProps = {
   params: Promise<{ id: string }>;
@@ -30,15 +31,24 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
 
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
-  const [planInstance, planDrills, planTemplates, trainingGroups] = await Promise.all([
+  const [planInstance, planDrills, planTemplates, trainingGroups, review, observationCount] = await Promise.all([
     loadPlanInstance(supabase, user.id, event.id),
     loadTrainingDrillInstances(supabase, user.id, event.id),
     loadPlanTemplates(supabase, user.id),
-    loadTrainingGroups(supabase, user.id, event.id)
+    loadTrainingGroups(supabase, user.id, event.id),
+    getTrainingSessionReview(supabase, user.id, event.id),
+    countTrainingObservations(supabase, user.id, event.id)
   ]);
   const { plannedAttendance, finalAttendance } = trainingSummaryCounts(event);
   const ratings = trainingRatingStats(event);
   const groupLabelsByPlayerId = buildTrainingGroupLabels(trainingGroups);
+  const primaryAction = getPrimaryTrainingAction(event, Boolean(planInstance || planDrills.length), ratings, finalAttendance.unresolved, Boolean(review));
+  const secondaryActions = [
+    { href: `/trainings/${event.id}/plan`, label: planInstance || planDrills.length ? "Open Plan" : "Create Plan" },
+    { href: `/trainings/${event.id}/check-in`, label: "Quick Check-in" },
+    { href: `/trainings/${event.id}/ratings`, label: "Ratings" },
+    { href: `/trainings/${event.id}/review`, label: review ? "View/Edit Review" : "Review Session" }
+  ].filter((action) => !event.deletedAt && action.href !== primaryAction?.href);
 
   return (
     <div className="space-y-6">
@@ -63,10 +73,13 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
             </div>
             {event.generalNotes ? <p className="mt-3 whitespace-pre-line text-sm text-slate-600">{event.generalNotes}</p> : null}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/check-in`} className="h-10 justify-center px-4">Quick check-in</ButtonLink> : null}
-            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/plan`} variant="secondary" className="h-10 justify-center px-4">Plan</ButtonLink> : null}
-            {!event.deletedAt ? <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="h-10 justify-center px-4">Ratings</ButtonLink> : null}
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            {primaryAction ? <ButtonLink href={primaryAction.href} className="h-10 justify-center px-4">{primaryAction.label}</ButtonLink> : null}
+            {secondaryActions.map((action) => (
+              <ButtonLink key={action.href} href={action.href} variant="secondary" className="h-10 justify-center px-4">
+                {action.label}
+              </ButtonLink>
+            ))}
             {!event.deletedAt ? <CompleteEventButton eventId={event.id} /> : null}
             {!event.deletedAt && event.participantSourceMode === "current_squad_sync" && !event.participantsLockedAt ? (
               <form action={syncTrainingWithCurrentSquad} className="flex flex-wrap gap-2">
@@ -78,6 +91,11 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
             <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} isTrash={Boolean(event.deletedAt)} isRecurring={Boolean(event.recurrenceSeriesId)} />
           </div>
         </div>
+        {primaryAction ? (
+          <div className="mt-5 rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800">
+            Next action: {primaryAction.reason}
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-3">
@@ -119,6 +137,25 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
           <p className="text-sm font-semibold text-slate-700">{ratings.rated} of {ratings.rateable} present players rated</p>
           <p className="mt-2 text-sm text-slate-500">Unrated players stay unrated. CoachBoard never creates automatic 3 ratings.</p>
           <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="mt-4 justify-center">Open ratings</ButtonLink>
+        </Panel>
+
+        <Panel title="Session review" icon={<ClipboardList className="h-5 w-5" />}>
+          {review ? (
+            <div>
+              <p className="text-sm font-semibold text-slate-700">
+                Objective {objectiveOutcomeLabels[review.objectiveOutcome].toLowerCase()} · Quality {review.overallQuality}/5 · Intensity {review.intensity}/5
+              </p>
+              <p className="mt-2 text-sm text-slate-500">{observationCount} linked player observation{observationCount === 1 ? "" : "s"}</p>
+              {review.nextTrainingNote ? <p className="mt-3 rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800">{review.nextTrainingNote}</p> : null}
+              <ButtonLink href={`/trainings/${event.id}/review`} variant="secondary" className="mt-4 justify-center">View/Edit Review</ButtonLink>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm font-semibold text-slate-700">No coach reflection saved yet.</p>
+              <p className="mt-2 text-sm text-slate-500">Record what worked, what to adjust and what belongs in the next session.</p>
+              <ButtonLink href={`/trainings/${event.id}/review`} className="mt-4 justify-center">Review Session</ButtonLink>
+            </div>
+          )}
         </Panel>
       </section>
 
@@ -245,6 +282,67 @@ function buildTrainingGroupLabels(groups: TrainingGroup[]) {
     }
   }
   return labels;
+}
+
+function getPrimaryTrainingAction(
+  event: SquadTrainingEventDetail,
+  hasPlan: boolean,
+  ratings: ReturnType<typeof trainingRatingStats>,
+  unresolvedFinalStatuses: number,
+  hasReview: boolean
+) {
+  if (event.deletedAt) return null;
+  const today = todayDateString();
+  const isPast = event.date < today || event.status === "completed" || event.status === "rating_open";
+  const isLive = !isPast && (event.date === today || event.status === "in_progress");
+
+  if (isLive) {
+    return {
+      href: `/trainings/${event.id}/check-in`,
+      label: "Quick Check-in",
+      reason: "Training is active today. Record attendance first."
+    };
+  }
+
+  if (isPast && unresolvedFinalStatuses > 0) {
+    return {
+      href: `/trainings/${event.id}/check-in`,
+      label: "Complete Attendance",
+      reason: `${unresolvedFinalStatuses} player${unresolvedFinalStatuses === 1 ? "" : "s"} still need an actual attendance status.`
+    };
+  }
+
+  if (isPast && !hasReview) {
+    return {
+      href: `/trainings/${event.id}/review`,
+      label: "Review Session",
+      reason: ratings.rateable > ratings.rated
+        ? `${ratings.rated} of ${ratings.rateable} present players are rated. You can still review the session now.`
+        : "Attendance is complete. Add the coach reflection for this training."
+    };
+  }
+
+  if (isPast && ratings.rateable > ratings.rated) {
+    return {
+      href: `/trainings/${event.id}/ratings`,
+      label: "Open Ratings",
+      reason: `${ratings.rated} of ${ratings.rateable} present players are rated.`
+    };
+  }
+
+  if (!hasPlan) {
+    return {
+      href: `/trainings/${event.id}/plan`,
+      label: "Create Training Plan",
+      reason: "No Session Plan is prepared yet."
+    };
+  }
+
+  return {
+    href: `/trainings/${event.id}/plan`,
+    label: "Open Training Plan",
+    reason: "Plan is available. Review the session content and groups."
+  };
 }
 
 type TrainingDrillInstance = {

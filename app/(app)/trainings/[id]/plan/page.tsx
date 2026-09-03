@@ -40,7 +40,18 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
     loadTrainingGroups(supabase, user.id, event.id)
   ]);
   const boardPlayers = toBoardPlayers(event.attendance);
-  const expected = event.attendance.filter((entry) => !entry.plannedStatus || entry.plannedStatus === "expected").length;
+  const expectedEntries = event.attendance.filter((entry) => !entry.plannedStatus || entry.plannedStatus === "expected");
+  const expected = expectedEntries.length;
+  const composition = expectedEntries.reduce(
+    (totals, entry) => {
+      const family = getPositionFamily(entry.player?.position);
+      if (family === "goalkeeper") totals.goalkeepers += 1;
+      else if (family === "unassigned") totals.positionMissing += 1;
+      else totals.fieldPlayers += 1;
+      return totals;
+    },
+    { goalkeepers: 0, fieldPlayers: 0, positionMissing: 0 }
+  );
   const plannedDuration = planDrills.reduce((sum, drill) => sum + (drill.plannedDurationMinutes ?? 0), 0);
   const scheduledDuration = scheduledDurationMinutes(event.startTime, event.endTime);
   const drillsByPhase = groupDrillsByPhase(planDrills);
@@ -66,13 +77,33 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                 <UsersRound className="h-4 w-4" />
                 {event.squadName ?? "Active Team"}
               </span>
+              <span className="rounded-md bg-green-50 px-2 py-1 text-green-800">
+                {expected} expected
+              </span>
+              <span className={composition.goalkeepers === 0 ? "rounded-md bg-red-50 px-2 py-1 text-red-700" : "rounded-md bg-slate-100 px-2 py-1"}>
+                {composition.goalkeepers} GK
+              </span>
+              <span className="rounded-md bg-slate-100 px-2 py-1">
+                {composition.fieldPlayers} field
+              </span>
+              {composition.positionMissing ? (
+                <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">
+                  {composition.positionMissing} position missing
+                </span>
+              ) : null}
               {plan?.sourceTrainingSessionId ? <span className="rounded-md bg-green-50 px-2 py-1 text-green-800">Template copy</span> : <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-800">Session-only plan</span>}
             </div>
           </div>
-          <form action={createBlankSessionPlan}>
-            <input type="hidden" name="eventId" value={event.id} />
-            <Button type="submit" variant="secondary" className="justify-center">Ensure Plan exists</Button>
-          </form>
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink href={`/trainings/${event.id}`} variant="secondary" className="justify-center">Training Hub</ButtonLink>
+            <ButtonLink href={`/trainings/${event.id}/check-in`} variant="secondary" className="justify-center">Quick Check-in</ButtonLink>
+            {!plan ? (
+              <form action={createBlankSessionPlan}>
+                <input type="hidden" name="eventId" value={event.id} />
+                <Button type="submit" className="justify-center">Create Plan</Button>
+              </form>
+            ) : null}
+          </div>
         </div>
       </section>
 

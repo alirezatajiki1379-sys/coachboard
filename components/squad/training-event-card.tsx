@@ -6,7 +6,7 @@ import { attendanceCounts } from "@/lib/squad/attendance-format";
 import { formatDateLabel, todayDateString, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingTimeRange, weekdayLabel } from "@/lib/trainings/utils";
 import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
 
-export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/attendance" }: { event: SquadTrainingEvent; attendance?: SquadAttendanceEntry[]; hrefBase?: string }) {
+export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/attendance", hasReview = false }: { event: SquadTrainingEvent; attendance?: SquadAttendanceEntry[]; hrefBase?: string; hasReview?: boolean }) {
   const counts = attendanceCounts(attendance);
   const ratings = trainingRatingStats({ ...event, attendance });
   const today = todayDateString();
@@ -40,6 +40,7 @@ export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/a
             isLive={isLive}
             counts={counts}
             ratings={ratings}
+            hasReview={hasReview}
           />
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
             <span className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-board-green">
@@ -76,12 +77,14 @@ function TrainingStatusSummary({
   isPast,
   isLive,
   counts,
-  ratings
+  ratings,
+  hasReview
 }: {
   isPast: boolean;
   isLive: boolean;
   counts: TrainingCounts;
   ratings: RatingCounts;
+  hasReview: boolean;
 }) {
   if (isPast) {
     return (
@@ -90,6 +93,9 @@ function TrainingStatusSummary({
         <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.absent} absence</span>
         <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{counts.late} late</span>
         <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-700">{ratings.rated} of {ratings.rateable} rated</span>
+        <span className={hasReview ? "rounded-md bg-green-50 px-2 py-1 text-green-700" : "rounded-md bg-amber-50 px-2 py-1 text-amber-700"}>
+          {hasReview ? "Review saved" : "Review missing"}
+        </span>
       </div>
     );
   }

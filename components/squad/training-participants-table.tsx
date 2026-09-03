@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent } from "react";
 import { ArrowDown, ArrowUp, CheckSquare, Columns3, GripVertical, Search, Settings2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { PlannedAttendanceControls } from "@/components/squad/attendance-controls";
 import { PLAYER_TABLE_LAYER_CLASSES } from "@/components/squad/player-table-layers";
 import { attendanceDisplayName, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
 import { effectiveParticipantPositionFamily, effectiveParticipantPositionLabel } from "@/lib/squad/attendance-utils";
@@ -384,7 +385,7 @@ function ParticipantCell({ eventId, entry, columnId, groupLabels }: { eventId: s
     );
   }
   if (columnId === "position") return <PositionCell entry={entry} />;
-  if (columnId === "planned") return <PlannedBadge entry={entry} />;
+  if (columnId === "planned") return <PlannedAttendanceControls entry={entry} eventId={eventId} returnTo={`/trainings/${eventId}`} />;
   if (columnId === "reason") return <span className="font-semibold text-slate-600">{entry.plannedReason ? plannedReasonLabel(entry.plannedReason) : "-"}</span>;
   if (columnId === "group") return <GroupCell eventId={eventId} labels={groupLabels} />;
   if (columnId === "age") return <span className="font-semibold text-slate-700">{calculateAge(player?.dateOfBirth) ?? "-"}</span>;
@@ -625,15 +626,6 @@ function PositionCell({ entry }: { entry: SquadAttendanceEntry }) {
       <span className="font-semibold text-slate-700">{effectiveParticipantPositionLabel(entry)}</span>
       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{familyLabel}</span>
     </div>
-  );
-}
-
-function PlannedBadge({ entry }: { entry: SquadAttendanceEntry }) {
-  const notExpected = entry.plannedStatus === "unavailable" || entry.plannedStatus === "unclear";
-  return (
-    <span className={cn("inline-flex w-fit rounded-full px-2 py-1 text-xs font-bold", notExpected ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700")}>
-      {plannedStatusLabel(entry.plannedStatus)}{notExpected && entry.plannedReason ? ` · ${plannedReasonLabel(entry.plannedReason)}` : ""}
-    </span>
   );
 }
 

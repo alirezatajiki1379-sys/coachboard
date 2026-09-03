@@ -59,6 +59,22 @@ export type AttendanceMutationResult =
       message: string;
     };
 
+export type PlannedAttendanceMutationResult =
+  | {
+      ok: true;
+      attendanceId: string;
+      playerId: string;
+      plannedStatus: (typeof plannedStatuses)[number];
+      plannedReason: (typeof plannedReasons)[number] | null;
+      plannedReasonNote: string | null;
+      updatedAt: string;
+    }
+  | {
+      ok: false;
+      code: string;
+      message: string;
+    };
+
 async function requireUser() {
   const supabase = await createClient();
   const {
@@ -135,7 +151,7 @@ function boundedRating(value: string) {
 }
 
 function eventPath(eventId: string, suffix = "") {
-  return `/squad/attendance/${eventId}${suffix}`;
+  return `/trainings/${eventId}${suffix}`;
 }
 
 function revalidateEvent(eventId: string) {
@@ -876,6 +892,53 @@ export async function updatePlannedAttendance(formData: FormData) {
   redirect(formString(formData, "returnTo") || eventPath(eventId));
 }
 
+export async function updatePlannedAttendanceInline(formData: FormData): Promise<PlannedAttendanceMutationResult> {
+  const eventId = formString(formData, "eventId");
+  const attendanceId = formString(formData, "attendanceId");
+  const plannedStatus = formString(formData, "plannedStatus");
+  if (!plannedStatuses.includes(plannedStatus as (typeof plannedStatuses)[number])) {
+    return plannedAttendanceMutationError("invalid_status", "Planned participation could not be updated.");
+  }
+  const plannedReason = formString(formData, "plannedReason");
+  const safeReason =
+    plannedStatus === "unavailable" && plannedReasons.includes(plannedReason as (typeof plannedReasons)[number])
+      ? plannedReason as (typeof plannedReasons)[number]
+      : null;
+  const plannedReasonNote = plannedStatus === "unavailable" ? optional(formString(formData, "plannedReasonNote")) : null;
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const validation = await validateAttendanceMutation(db, user.id, eventId, attendanceId);
+  if (!validation.ok) return validation;
+
+  const { data, error } = await db
+    .from("squad_attendance_records")
+    .update({
+      planned_status: plannedStatus,
+      planned_reason: safeReason,
+      planned_reason_note: plannedReasonNote,
+      planned_status_source: "manual"
+    })
+    .select("id, player_id, updated_at")
+    .eq("id", attendanceId)
+    .eq("event_id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error) return plannedAttendanceMutationError("database_error", "Planned participation could not be updated.");
+  if (!data) return plannedAttendanceMutationError("not_found", "Attendance record not found.");
+
+  await markEventPrepared(db, user.id, eventId);
+  return {
+    ok: true,
+    attendanceId: data.id,
+    playerId: data.player_id,
+    plannedStatus: plannedStatus as (typeof plannedStatuses)[number],
+    plannedReason: safeReason,
+    plannedReasonNote,
+    updatedAt: data.updated_at
+  };
+}
+
 export async function markAllExpected(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const { supabase, user } = await requireUser();
@@ -1418,6 +1481,10 @@ async function markEventInProgress(db: SupabaseClient, userId: string, eventId: 
     .eq("id", eventId)
     .eq("user_id", userId)
     .neq("status", "completed");
+}
+
+function plannedAttendanceMutationError(code: string, message: string): PlannedAttendanceMutationResult {
+  return { ok: false, code, message };
 }
 
 function attendanceMutationError(code: string, message: string): AttendanceMutationResult {

@@ -615,6 +615,7 @@ export function getTrainingAttentionItems(
     linkedTrainingSessionId?: string;
     linkedTrainingSessionTitle?: string;
     status: string;
+    reviewCompleted?: boolean;
     attendance: Array<{ plannedStatus?: string; finalStatus?: string; overallRating?: number }>;
   }>,
   context: { today: string }
@@ -679,14 +680,10 @@ export function getTrainingAttentionItems(
     }
 
     if (!isPastOrToday || event.status === "draft") continue;
-    const attended = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
     const missingAttendance = event.attendance.filter((entry) => !entry.finalStatus).length;
-    const missingRatings = attended.filter((entry) => !entry.overallRating).length;
-    if (missingAttendance || missingRatings) {
-      const details = [
-        missingAttendance ? `Attendance missing for ${missingAttendance} player${missingAttendance === 1 ? "" : "s"}` : "",
-        missingRatings ? `Ratings missing for ${missingRatings} player${missingRatings === 1 ? "" : "s"}` : ""
-      ].filter(Boolean);
+    if (missingAttendance || !event.reviewCompleted) {
+      const title = missingAttendance ? "Complete Training attendance" : "Complete Training review";
+      const primaryHref = missingAttendance ? `/trainings/${event.id}/check-in` : `/trainings/${event.id}/review`;
       items.push({
         key: `training-review-incomplete:${event.id}`,
         targetKind: "training",
@@ -695,20 +692,21 @@ export function getTrainingAttentionItems(
         playerPosition: event.date,
         playerType: "roster",
         type: "training-review-incomplete",
-        category: "attendance",
+        category: missingAttendance ? "attendance" : "review",
         priority: event.date === context.today ? "critical" : "high",
-        title: "Complete Training review",
-        explanation: `${trainingLabel(event)} needs one training-level review. ${details.join(" · ")}.`,
+        title,
+        explanation: missingAttendance
+          ? `${trainingLabel(event)} still needs final attendance before the session review.`
+          : `${trainingLabel(event)} needs one coach reflection.`,
         evidence: evidence([
           ["Training date", formatEventDate(event.date)],
           ["Attendance missing", missingAttendance],
-          ["Ratings missing", missingRatings],
-          ["Affected players", missingAttendance + missingRatings]
+          ["Session review", event.reviewCompleted ? "Saved" : "Missing"]
         ]),
-        thresholdLabel: "Past or current training has incomplete attendance or ratings.",
+        thresholdLabel: missingAttendance ? "Past or current training has incomplete attendance." : "Past or current training has no session review.",
         dueDate: event.date,
         detectedAt: context.today,
-        suggestedActions: [{ label: "Open Training review", href: `/trainings/${event.id}/ratings`, primary: true }],
+        suggestedActions: [{ label: missingAttendance ? "Complete Attendance" : "Review Session", href: primaryHref, primary: true }],
         dismissible: true,
         snoozeable: true
       });

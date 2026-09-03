@@ -14,9 +14,10 @@ import {
   updateAttendanceRating,
   updateFinalAttendance,
   updateFinalAttendanceInline,
+  updatePlannedAttendanceInline,
   updatePlannedAttendance
 } from "@/lib/squad/attendance-actions";
-import type { AttendanceMutationResult } from "@/lib/squad/attendance-actions";
+import type { AttendanceMutationResult, PlannedAttendanceMutationResult } from "@/lib/squad/attendance-actions";
 import { updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
@@ -124,38 +125,97 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
 }
 
 export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry: SquadAttendanceEntry; eventId: string; returnTo: string }) {
+  const [currentEntry, setCurrentEntry] = useState(entry);
+  const [reason, setReason] = useState(entry.plannedReason ?? "");
+  const [reasonNote, setReasonNote] = useState(entry.plannedReasonNote ?? "");
+  const [error, setError] = useState("");
+  const [savedMessage, setSavedMessage] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setCurrentEntry(entry);
+    setReason(entry.plannedReason ?? "");
+    setReasonNote(entry.plannedReasonNote ?? "");
+  }, [entry]);
+
+  function applyPlannedStatus(status: SquadPlannedAttendanceStatus, nextReason = reason, nextReasonNote = reasonNote) {
+    if (isPending) return;
+    const previous = currentEntry;
+    const optimistic: SquadAttendanceEntry = {
+      ...currentEntry,
+      plannedStatus: status,
+      plannedReason: status === "unavailable" ? nextReason as SquadAttendanceEntry["plannedReason"] : undefined,
+      plannedReasonNote: status === "unavailable" ? nextReasonNote || undefined : undefined,
+      plannedStatusSource: "manual"
+    };
+    setError("");
+    setSavedMessage("");
+    setCurrentEntry(optimistic);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set("eventId", eventId);
+      formData.set("attendanceId", currentEntry.id);
+      formData.set("plannedStatus", status);
+      if (status === "unavailable") {
+        if (nextReason) formData.set("plannedReason", nextReason);
+        if (nextReasonNote) formData.set("plannedReasonNote", nextReasonNote);
+      }
+      const result = await updatePlannedAttendanceInline(formData) as PlannedAttendanceMutationResult;
+      if (!result.ok) {
+        setCurrentEntry(previous);
+        setError(result.message || "Planned participation could not be updated.");
+        return;
+      }
+      setCurrentEntry({
+        ...optimistic,
+        plannedStatus: result.plannedStatus,
+        plannedReason: result.plannedReason ?? undefined,
+        plannedReasonNote: result.plannedReasonNote ?? undefined,
+        plannedStatusSource: "manual"
+      });
+      setReason(result.plannedReason ?? "");
+      setReasonNote(result.plannedReasonNote ?? "");
+      setSavedMessage("Saved");
+    });
+  }
+
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-3 gap-2">
         {plannedButtons.map((button) => {
           const Icon = button.icon;
-          const active = entry.plannedStatus === button.status;
+          const active = currentEntry.plannedStatus === button.status;
           return (
-            <form key={button.status} action={updatePlannedAttendance}>
-              <input type="hidden" name="eventId" value={eventId} />
-              <input type="hidden" name="attendanceId" value={entry.id} />
-              <input type="hidden" name="plannedStatus" value={button.status} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <button
-                type="submit"
-                className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition ${active ? button.className : "bg-white text-board-navy ring-1 ring-board-line hover:bg-slate-50"}`}
-              >
-                <Icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{button.label}</span>
-              </button>
-            </form>
+            <button
+              key={button.status}
+              type="button"
+              disabled={isPending && !active}
+              onClick={() => applyPlannedStatus(button.status)}
+              className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${active ? button.className : "bg-white text-board-navy ring-1 ring-board-line hover:bg-slate-50"}`}
+            >
+              <Icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{isPending && active ? "Saving..." : button.label}</span>
+            </button>
           );
         })}
       </div>
-      {entry.plannedStatus === "unavailable" ? (
-        <form action={updatePlannedAttendance} className="grid gap-2 sm:grid-cols-[160px_1fr_auto]">
+      {currentEntry.plannedStatus === "unavailable" ? (
+        <form
+          action={updatePlannedAttendance}
+          onSubmit={(event) => {
+            event.preventDefault();
+            applyPlannedStatus("unavailable", reason, reasonNote);
+          }}
+          className="grid gap-2 sm:grid-cols-[160px_1fr_auto]"
+        >
           <input type="hidden" name="eventId" value={eventId} />
-          <input type="hidden" name="attendanceId" value={entry.id} />
+          <input type="hidden" name="attendanceId" value={currentEntry.id} />
           <input type="hidden" name="plannedStatus" value="unavailable" />
           <input type="hidden" name="returnTo" value={returnTo} />
           <select
             name="plannedReason"
-            defaultValue={entry.plannedReason ?? ""}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
             className="h-10 rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
             aria-label="Not expected reason"
           >
@@ -166,22 +226,26 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
           </select>
           <input
             name="plannedReasonNote"
-            defaultValue={entry.plannedReasonNote ?? ""}
+            value={reasonNote}
+            onChange={(event) => setReasonNote(event.target.value)}
             placeholder="Reason note optional"
             className="h-10 min-w-0 flex-1 rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
           />
-          <Button type="submit" variant="secondary" className="h-10 px-3">Save reason</Button>
+          <Button type="submit" variant="secondary" disabled={isPending} className="h-10 px-3">{isPending ? "Saving..." : "Save reason"}</Button>
         </form>
       ) : null}
-      {entry.medicalAvailability ? (
+      <div aria-live="polite" className="min-h-4 text-xs font-semibold">
+        {error ? <span className="text-red-700">{error}</span> : savedMessage ? <span className="text-board-green">{savedMessage}</span> : null}
+      </div>
+      {currentEntry.medicalAvailability ? (
         <div className="inline-flex flex-wrap items-center gap-2 rounded-md bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
           <span className="inline-flex items-center gap-2">
             <Stethoscope className="h-3.5 w-3.5" />
-            Medical status: {entry.medicalAvailability.label}
-            {entry.medicalAvailability.until ? ` until ${entry.medicalAvailability.until}` : " until further notice"}
+            Medical status: {currentEntry.medicalAvailability.label}
+            {currentEntry.medicalAvailability.until ? ` until ${currentEntry.medicalAvailability.until}` : " until further notice"}
           </span>
-          {entry.medicalAvailability.needsReview ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Return needs review</span> : null}
-          {entry.plannedStatusSource === "manual" ? <span>Attendance override active</span> : null}
+          {currentEntry.medicalAvailability.needsReview ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Return needs review</span> : null}
+          {currentEntry.plannedStatusSource === "manual" ? <span>Attendance override active</span> : null}
         </div>
       ) : null}
     </div>

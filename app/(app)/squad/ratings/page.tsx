@@ -28,7 +28,7 @@ export default async function RatingsPage() {
                 <p className="text-sm font-bold text-board-navy">{eventTitle(event)}</p>
                 <p className="text-sm text-slate-600">{formatEventDate(event.date)} · {eventTimeRange(event)}</p>
               </div>
-              <ButtonLink href={`/squad/attendance/${event.id}/ratings`} variant="secondary" className="h-9 px-3">
+              <ButtonLink href={`/trainings/${event.id}/ratings`} variant="secondary" className="h-9 px-3">
                 Open ratings
               </ButtonLink>
             </article>

@@ -395,6 +395,37 @@ export type SquadTrainingEventDetail = SquadTrainingEvent & {
   attendance: SquadAttendanceEntry[];
 };
 
+export type TrainingSessionObjectiveOutcome = "achieved" | "partly_achieved" | "not_achieved";
+export type TrainingSessionDrillFeedbackStatus = "worked_well" | "needs_adjustment" | "not_effective";
+
+export type TrainingSessionDrillReview = {
+  id: string;
+  userId: string;
+  sessionReviewId: string;
+  sessionDrillInstanceId: string;
+  feedbackStatus?: TrainingSessionDrillFeedbackStatus;
+  effectivenessRating?: number;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TrainingSessionReview = {
+  id: string;
+  userId: string;
+  squadId: string;
+  eventId: string;
+  objectiveOutcome: TrainingSessionObjectiveOutcome;
+  overallQuality: number;
+  intensity: number;
+  workedWell?: string;
+  needsImprovement?: string;
+  nextTrainingNote?: string;
+  drillReviews: TrainingSessionDrillReview[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PlayerCoachAssessmentValue =
   | "decision_open"
   | "continue_observing"
@@ -416,27 +447,25 @@ export type PlayerCoachAssessment = {
 };
 
 export type PlayerDevelopmentGoalCategory =
-  | "technique"
-  | "tactical_understanding"
-  | "decision_making"
+  | "technical"
+  | "tactical"
   | "physical"
   | "mental"
-  | "communication"
-  | "leadership"
-  | "goalkeeping"
-  | "behaviour"
-  | "individual";
+  | "other";
 
 export type PlayerDevelopmentGoalPriority = "low" | "medium" | "high";
-export type PlayerDevelopmentGoalStatus = "active" | "completed" | "paused" | "cancelled";
-export type PlayerDevelopmentProgress = "not_started" | "in_progress" | "almost_there" | "completed";
+export type PlayerDevelopmentGoalStatus = "identified" | "in_progress" | "achieved" | "paused";
+export type PlayerDevelopmentProgress = "needs_attention" | "developing" | "consistent" | "achieved";
 
 export type PlayerDevelopmentGoal = {
   id: string;
   userId: string;
+  squadId: string;
   playerId: string;
   title: string;
   description?: string;
+  successCriteria: string;
+  coachNotes?: string;
   category: PlayerDevelopmentGoalCategory;
   priority: PlayerDevelopmentGoalPriority;
   status: PlayerDevelopmentGoalStatus;
@@ -445,10 +474,28 @@ export type PlayerDevelopmentGoal = {
   targetDate?: string;
   reviewDate?: string;
   completedAt?: string;
+  achievedAt?: string;
   createdAt: string;
   updatedAt: string;
   actions: PlayerGoalAction[];
   observations: PlayerObservation[];
+  progressUpdates: PlayerDevelopmentProgressUpdate[];
+};
+
+export type PlayerDevelopmentProgressUpdate = {
+  id: string;
+  userId: string;
+  squadId: string;
+  playerId: string;
+  goalId: string;
+  trainingEventId?: string;
+  trainingLabel?: string;
+  trainingDate?: string;
+  progressLevel: PlayerDevelopmentProgress;
+  note: string;
+  recordedAt: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PlayerGoalAction = {
