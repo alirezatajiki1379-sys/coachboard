@@ -147,7 +147,14 @@ export async function getDevelopmentOverview(
       playerIds.length
         ? db.from("player_development_progress").select("*, squad_training_events(label,date)").eq("user_id", userId).eq("squad_id", activeSquad.id).in("player_id", playerIds).order("recorded_at", { ascending: false }).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
-      db.from("player_observations").select("id", { count: "exact", head: true }).eq("user_id", userId).gte("observation_date", startOfWeekDate())
+      db
+        .from("player_observations")
+        .select("id, squad_players!inner(squad_id,archived_at,deleted_at)", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("squad_players.squad_id", activeSquad.id)
+        .is("squad_players.archived_at", null)
+        .is("squad_players.deleted_at", null)
+        .gte("observation_date", startOfWeekDate())
     ]);
     if (goalsResult.error || progressResult.error || observationsResult.error) return { players: [], stats: emptyDashboardSummary() };
 

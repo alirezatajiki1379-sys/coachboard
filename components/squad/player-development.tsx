@@ -1,6 +1,5 @@
 import { CalendarDays, ClipboardCheck, Eye, Plus, Target } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import {
   developmentCategoryLabel,
   developmentGoalCategories,
@@ -11,21 +10,36 @@ import {
   developmentProgressOptions,
   developmentStatusLabel
 } from "@/config/development";
-import { createDevelopmentGoal, createGoalAction, createPlayerObservation, updateDevelopmentGoal, updateGoalActionCompletion } from "@/lib/squad/development-actions";
-import type { PlayerDevelopmentProfile } from "@/lib/squad/development";
+import {
+  createDevelopmentGoal,
+  createDevelopmentProgressUpdate,
+  createGoalAction,
+  createPlayerObservation,
+  updateDevelopmentGoal,
+  updateGoalActionCompletion
+} from "@/lib/squad/development-actions";
+import { isActiveGoal, type PlayerDevelopmentProfile } from "@/lib/squad/development";
 import { formatEventDate } from "@/lib/squad/attendance-format";
 import type { PlayerDevelopmentGoal } from "@/types/domain";
 
 export function PlayerDevelopmentSection({ playerId, development }: { playerId: string; development: PlayerDevelopmentProfile }) {
-  const activeGoals = development.goals.filter((goal) => goal.status !== "completed" && goal.status !== "cancelled");
+  const activeGoals = development.goals.filter(isActiveGoal);
+  const highPriorityGoals = activeGoals.filter((goal) => goal.priority === "high");
+  const dueGoals = activeGoals.filter((goal) => goal.reviewDate && goal.reviewDate <= new Date().toISOString().slice(0, 10));
   return (
     <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Target className="h-5 w-5" />Development</h2>
-          <p className="mt-1 text-sm text-slate-600">Manage goals, actions and observations for this player.</p>
+          <p className="mt-1 text-sm text-slate-600">Connect observations to long-term player development goals.</p>
         </div>
         <ButtonLink href="/squad/development" variant="secondary" className="h-9 px-3">Development overview</ButtonLink>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
+        <span className="rounded-md bg-slate-100 px-3 py-2 text-slate-700">{activeGoals.length} active goal{activeGoals.length === 1 ? "" : "s"}</span>
+        <span className="rounded-md bg-amber-50 px-3 py-2 text-amber-700">{highPriorityGoals.length} high priority</span>
+        <span className={dueGoals.length ? "rounded-md bg-red-50 px-3 py-2 text-red-700" : "rounded-md bg-green-50 px-3 py-2 text-green-700"}>{dueGoals.length} due for review</span>
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
@@ -40,7 +54,7 @@ export function PlayerDevelopmentSection({ playerId, development }: { playerId: 
           ) : (
             <div className="rounded-md border border-dashed border-board-line p-5">
               <p className="font-bold text-board-navy">No development goals yet.</p>
-              <p className="mt-1 text-sm text-slate-600">Add one clear focus area, then attach actions and observations over time.</p>
+              <p className="mt-1 text-sm text-slate-600">Add one observable focus area, then record progress and evidence over time.</p>
             </div>
           )}
         </div>
@@ -48,6 +62,7 @@ export function PlayerDevelopmentSection({ playerId, development }: { playerId: 
         <aside className="space-y-4">
           <div className="rounded-md bg-slate-50 p-4">
             <p className="text-sm font-bold text-board-navy">Quick observation</p>
+            {activeGoals.length ? <p className="mt-1 text-xs text-slate-500">Active goals: {activeGoals.map((goal) => goal.title).join(", ")}</p> : null}
             <ObservationForm playerId={playerId} goals={activeGoals} compact />
           </div>
           <DevelopmentTimeline development={development} />
@@ -112,27 +127,27 @@ function DevelopmentGoalForm({ playerId }: { playerId: string }) {
     <form action={createDevelopmentGoal} className="mt-4 grid gap-3 md:grid-cols-2">
       <input type="hidden" name="playerId" value={playerId} />
       <label className="md:col-span-2">
-        <span className="text-xs font-bold uppercase text-slate-500">Title</span>
-        <input name="title" required placeholder="Improve scanning before receiving" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+        <span className="text-xs font-bold uppercase text-slate-500">Goal title</span>
+        <input name="title" required maxLength={120} placeholder="Scanning before receiving" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
       </label>
       <label className="md:col-span-2">
-        <span className="text-xs font-bold uppercase text-slate-500">Description</span>
-        <textarea name="description" rows={2} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+        <span className="text-xs font-bold uppercase text-slate-500">Success criteria</span>
+        <textarea name="successCriteria" required rows={2} placeholder="What improved behaviour should be visible?" className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
       </label>
-      <SelectField name="category" label="Category" options={developmentGoalCategories} defaultValue="individual" />
+      <label className="md:col-span-2">
+        <span className="text-xs font-bold uppercase text-slate-500">Coach notes</span>
+        <textarea name="coachNotes" rows={2} placeholder="Why was this goal created?" className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+      </label>
+      <SelectField name="category" label="Category" options={developmentGoalCategories} defaultValue="technical" />
       <SelectField name="priority" label="Priority" options={developmentGoalPriorities} defaultValue="medium" />
-      <SelectField name="status" label="Status" options={developmentGoalStatuses} defaultValue="active" />
-      <SelectField name="progress" label="Progress" options={developmentProgressOptions} defaultValue="in_progress" />
+      <SelectField name="status" label="Status" options={developmentGoalStatuses} defaultValue="in_progress" />
+      <SelectField name="progress" label="Latest progress" options={developmentProgressOptions} defaultValue="developing" />
       <label>
         <span className="text-xs font-bold uppercase text-slate-500">Start date</span>
         <input name="startDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
       </label>
       <label>
-        <span className="text-xs font-bold uppercase text-slate-500">Target date</span>
-        <input name="targetDate" type="date" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-      </label>
-      <label>
-        <span className="text-xs font-bold uppercase text-slate-500">Review date</span>
+        <span className="text-xs font-bold uppercase text-slate-500">Target review date</span>
         <input name="reviewDate" type="date" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
       </label>
       <div className="md:col-span-2">
@@ -144,17 +159,19 @@ function DevelopmentGoalForm({ playerId }: { playerId: string }) {
 
 function DevelopmentGoalCard({ goal, playerId }: { goal: PlayerDevelopmentGoal; playerId: string }) {
   const recentObservations = goal.observations.slice(0, 2);
+  const latestProgress = goal.progressUpdates[0];
   return (
     <article className="rounded-md border border-board-line bg-white p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-lg font-bold text-board-navy">{goal.title}</h3>
-          {goal.description ? <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{goal.description}</p> : null}
+          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{goal.successCriteria}</p>
+          {goal.coachNotes ? <p className="mt-2 whitespace-pre-wrap text-xs font-semibold text-slate-500">Coach context: {goal.coachNotes}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
             <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{developmentCategoryLabel(goal.category)}</span>
             <span className={priorityTone(goal.priority)}>{developmentPriorityLabel(goal.priority)}</span>
             <span className="rounded-full bg-green-50 px-2 py-1 text-green-700">{developmentStatusLabel(goal.status)}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{developmentProgressLabel(goal.progress)}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Latest: {latestProgress ? developmentProgressLabel(latestProgress.progressLevel) : developmentProgressLabel(goal.progress)}</span>
           </div>
         </div>
         <div className="text-sm text-slate-600 sm:text-right">
@@ -163,18 +180,62 @@ function DevelopmentGoalCard({ goal, playerId }: { goal: PlayerDevelopmentGoal; 
         </div>
       </div>
 
-      <form action={updateDevelopmentGoal} className="mt-4 grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
-        <input type="hidden" name="goalId" value={goal.id} />
-        <SelectField name="status" label="Status" options={developmentGoalStatuses} defaultValue={goal.status} compact />
-        <SelectField name="progress" label="Progress" options={developmentProgressOptions} defaultValue={goal.progress} compact />
-        <label>
-          <span className="text-xs font-bold uppercase text-slate-500">Review</span>
-          <input name="reviewDate" type="date" defaultValue={goal.reviewDate ?? ""} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-        </label>
-        <Button type="submit" variant="secondary" className="h-10 px-3">Update</Button>
-      </form>
+      <details className="mt-4 rounded-md bg-slate-50 p-3">
+        <summary className="cursor-pointer text-sm font-bold text-board-navy">Edit goal</summary>
+        <form action={updateDevelopmentGoal} className="mt-3 grid gap-2 lg:grid-cols-3">
+          <input type="hidden" name="goalId" value={goal.id} />
+          <label className="lg:col-span-3">
+            <span className="text-xs font-bold uppercase text-slate-500">Title</span>
+            <input name="title" defaultValue={goal.title} maxLength={120} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+          </label>
+          <label className="lg:col-span-3">
+            <span className="text-xs font-bold uppercase text-slate-500">Success criteria</span>
+            <textarea name="successCriteria" required rows={2} defaultValue={goal.successCriteria} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+          </label>
+          <SelectField name="category" label="Category" options={developmentGoalCategories} defaultValue={goal.category} compact />
+          <SelectField name="priority" label="Priority" options={developmentGoalPriorities} defaultValue={goal.priority} compact />
+          <SelectField name="status" label="Status" options={developmentGoalStatuses} defaultValue={goal.status} compact />
+          <SelectField name="progress" label="Latest progress" options={developmentProgressOptions} defaultValue={goal.progress} compact />
+          <label>
+            <span className="text-xs font-bold uppercase text-slate-500">Target review</span>
+            <input name="reviewDate" type="date" defaultValue={goal.reviewDate ?? ""} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+          </label>
+          <label className="lg:col-span-3">
+            <span className="text-xs font-bold uppercase text-slate-500">Coach notes</span>
+            <textarea name="coachNotes" rows={2} defaultValue={goal.coachNotes ?? ""} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+          </label>
+          <div className="lg:col-span-3">
+            <Button type="submit" variant="secondary" className="h-10 px-3">Update goal</Button>
+          </div>
+        </form>
+      </details>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-bold text-board-navy"><Target className="h-4 w-4" />Progress history</p>
+          <div className="mt-2 space-y-2">
+            {goal.progressUpdates.length ? goal.progressUpdates.slice(0, 4).map((progress) => (
+              <div key={progress.id} className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+                <p className="text-xs font-bold uppercase text-slate-500">{formatEventDate(progress.recordedAt)} · {developmentProgressLabel(progress.progressLevel)}</p>
+                <p className="mt-1 whitespace-pre-wrap">{progress.note}</p>
+                {progress.trainingLabel || progress.trainingDate ? <p className="mt-1 text-xs font-semibold text-slate-500">Training: {progress.trainingLabel ?? progress.trainingDate}</p> : null}
+              </div>
+            )) : <p className="rounded-md border border-dashed border-board-line p-3 text-sm text-slate-500">No progress updates yet.</p>}
+          </div>
+          <form action={createDevelopmentProgressUpdate} className="mt-3 grid gap-2 rounded-md bg-board-paper p-3">
+            <input type="hidden" name="goalId" value={goal.id} />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <SelectField name="progressLevel" label="Progress" options={developmentProgressOptions} defaultValue={goal.progress} compact />
+              <label>
+                <span className="text-xs font-bold uppercase text-slate-500">Date</span>
+                <input name="recordedAt" type="date" defaultValue={new Date().toISOString().slice(0, 10)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+              </label>
+            </div>
+            <textarea name="note" required rows={2} placeholder="What changed since the last review?" className="w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+            <Button type="submit" variant="secondary" className="h-10 px-3">Add progress update</Button>
+          </form>
+        </div>
+
         <div>
           <p className="flex items-center gap-2 text-sm font-bold text-board-navy"><ClipboardCheck className="h-4 w-4" />Coach actions</p>
           <div className="mt-2 space-y-2">
@@ -204,7 +265,7 @@ function DevelopmentGoalCard({ goal, playerId }: { goal: PlayerDevelopmentGoal; 
         </div>
 
         <div>
-          <p className="flex items-center gap-2 text-sm font-bold text-board-navy"><Eye className="h-4 w-4" />Recent observations</p>
+          <p className="flex items-center gap-2 text-sm font-bold text-board-navy"><Eye className="h-4 w-4" />Linked observations</p>
           <div className="mt-2 space-y-2">
             {recentObservations.length ? recentObservations.map((observation) => (
               <div key={observation.id} className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">

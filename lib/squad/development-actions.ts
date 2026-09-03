@@ -11,19 +11,23 @@ export async function createDevelopmentGoal(formData: FormData) {
   const userId = await requireUserId(supabase as unknown as SupabaseClient);
   const playerId = stringValue(formData.get("playerId"));
   const title = stringValue(formData.get("title"));
-  if (!playerId || !title) return;
-  await assertPlayerOwner(supabase as unknown as SupabaseClient, userId, playerId);
+  const successCriteria = stringValue(formData.get("successCriteria"));
+  if (!playerId || !title || !successCriteria) return;
+  const player = await assertPlayerOwner(supabase as unknown as SupabaseClient, userId, playerId);
 
-  const category = isGoalCategory(formData.get("category")) ? formData.get("category") : "individual";
+  const category = isGoalCategory(formData.get("category")) ? formData.get("category") : "technical";
   const priority = isGoalPriority(formData.get("priority")) ? formData.get("priority") : "medium";
-  const status = isGoalStatus(formData.get("status")) ? formData.get("status") : "active";
-  const progress = isGoalProgress(formData.get("progress")) ? formData.get("progress") : "in_progress";
+  const status = isGoalStatus(formData.get("status")) ? formData.get("status") : "in_progress";
+  const progress = isGoalProgress(formData.get("progress")) ? formData.get("progress") : "developing";
 
   await (supabase as unknown as SupabaseClient).from("player_development_goals").insert({
     user_id: userId,
+    squad_id: player.squad_id,
     player_id: playerId,
-    title,
+    title: title.slice(0, 120),
     description: nullableString(formData.get("description")),
+    success_criteria: successCriteria,
+    coach_notes: nullableString(formData.get("coachNotes")),
     category,
     priority,
     status,
@@ -44,18 +48,54 @@ export async function updateDevelopmentGoal(formData: FormData) {
   const goal = await assertGoalOwner(supabase as unknown as SupabaseClient, userId, goalId);
   const status = isGoalStatus(formData.get("status")) ? formData.get("status") : goal.status;
   const progress = isGoalProgress(formData.get("progress")) ? formData.get("progress") : goal.progress;
+  const title = stringValue(formData.get("title"));
+  const successCriteria = stringValue(formData.get("successCriteria"));
 
   await (supabase as unknown as SupabaseClient)
     .from("player_development_goals")
     .update({
+      ...(title ? { title: title.slice(0, 120) } : {}),
+      ...(isGoalCategory(formData.get("category")) ? { category: formData.get("category") } : {}),
+      ...(isGoalPriority(formData.get("priority")) ? { priority: formData.get("priority") } : {}),
+      ...(successCriteria ? { success_criteria: successCriteria } : {}),
+      coach_notes: formData.has("coachNotes") ? nullableString(formData.get("coachNotes")) : goal.coach_notes,
       status,
       progress,
+      target_date: nullableString(formData.get("targetDate")),
       review_date: nullableString(formData.get("reviewDate")),
-      completed_at: status === "completed" && !goal.completed_at ? new Date().toISOString() : status !== "completed" ? null : goal.completed_at
+      completed_at: status === "achieved" && !goal.completed_at ? new Date().toISOString() : status !== "achieved" ? null : goal.completed_at,
+      achieved_at: status === "achieved" && !goal.achieved_at ? new Date().toISOString() : status !== "achieved" ? null : goal.achieved_at
     })
     .eq("user_id", userId)
     .eq("id", goalId);
 
+  revalidateDevelopment(goal.player_id);
+}
+
+export async function createDevelopmentProgressUpdate(formData: FormData) {
+  const supabase = await createClient();
+  const db = supabase as unknown as SupabaseClient;
+  const userId = await requireUserId(db);
+  const goalId = stringValue(formData.get("goalId"));
+  const note = stringValue(formData.get("note"));
+  const progressLevel = isGoalProgress(formData.get("progressLevel")) ? formData.get("progressLevel") : "developing";
+  if (!goalId || !note) return;
+  const goal = await assertGoalOwner(db, userId, goalId);
+  const trainingEventId = nullableString(formData.get("trainingEventId"));
+  if (trainingEventId) await assertTrainingOwner(db, userId, trainingEventId, goal.squad_id);
+
+  await db.from("player_development_progress").insert({
+    user_id: userId,
+    squad_id: goal.squad_id,
+    player_id: goal.player_id,
+    goal_id: goalId,
+    training_event_id: trainingEventId,
+    progress_level: progressLevel,
+    note,
+    recorded_at: stringValue(formData.get("recordedAt")) || new Date().toISOString().slice(0, 10)
+  });
+
+  await db.from("player_development_goals").update({ progress: progressLevel }).eq("user_id", userId).eq("id", goalId);
   revalidateDevelopment(goal.player_id);
 }
 
@@ -105,7 +145,10 @@ export async function createPlayerObservation(formData: FormData) {
   if (!playerId || !note) return;
   await assertPlayerOwner(supabase as unknown as SupabaseClient, userId, playerId);
   const goalId = nullableString(formData.get("goalId"));
-  if (goalId) await assertGoalOwner(supabase as unknown as SupabaseClient, userId, goalId);
+  if (goalId) {
+    const goal = await assertGoalOwner(supabase as unknown as SupabaseClient, userId, goalId);
+    if (goal.player_id !== playerId) throw new Error("Development goal does not belong to this player.");
+  }
 
   const category = isGoalCategory(formData.get("category")) ? formData.get("category") : null;
   const eventId = nullableString(formData.get("eventId"));
@@ -133,14 +176,21 @@ async function requireUserId(supabase: SupabaseClient) {
 }
 
 async function assertPlayerOwner(supabase: SupabaseClient, userId: string, playerId: string) {
-  const { data, error } = await supabase.from("squad_players").select("id").eq("user_id", userId).eq("id", playerId).maybeSingle();
+  const { data, error } = await supabase.from("squad_players").select("id,squad_id").eq("user_id", userId).eq("id", playerId).maybeSingle();
   if (error || !data) throw new Error("Player not found.");
+  if (!data.squad_id) throw new Error("Player is not assigned to a Team.");
+  return data as { id: string; squad_id: string };
 }
 
 async function assertGoalOwner(supabase: SupabaseClient, userId: string, goalId: string) {
-  const { data, error } = await supabase.from("player_development_goals").select("id, player_id, status, progress, completed_at").eq("user_id", userId).eq("id", goalId).maybeSingle();
+  const { data, error } = await supabase.from("player_development_goals").select("id, player_id, squad_id, status, progress, completed_at, achieved_at, coach_notes").eq("user_id", userId).eq("id", goalId).maybeSingle();
   if (error || !data) throw new Error("Development goal not found.");
-  return data as { id: string; player_id: string; status: string; progress: string; completed_at: string | null };
+  return data as { id: string; player_id: string; squad_id: string; status: string; progress: string; completed_at: string | null; achieved_at: string | null; coach_notes: string | null };
+}
+
+async function assertTrainingOwner(supabase: SupabaseClient, userId: string, eventId: string, squadId: string) {
+  const { data, error } = await supabase.from("squad_training_events").select("id").eq("user_id", userId).eq("id", eventId).eq("squad_id", squadId).maybeSingle();
+  if (error || !data) throw new Error("Training not found.");
 }
 
 function revalidateDevelopment(playerId?: string) {

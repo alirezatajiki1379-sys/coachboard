@@ -133,7 +133,7 @@ export async function getPlayerHubData(
       trainings: records.length,
       ratings: records.filter((record) => record.overallRating).length,
       observations: development.observations.length,
-      completedGoals: development.goals.filter((goal) => goal.status === "completed").length,
+      completedGoals: development.goals.filter((goal) => goal.status === "achieved").length,
       coachAssessments: assessments.length
     }
   };

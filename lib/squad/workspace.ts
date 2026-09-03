@@ -695,7 +695,7 @@ function sortWorkspacePlayers(players: WorkspacePlayerSummary[], sort: Workspace
 
 function getReviewState(goals: PlayerDevelopmentGoal[], assessment?: PlayerCoachAssessment): ReviewState {
   const dates = [
-    ...goals.filter((goal) => goal.status === "active" && goal.reviewDate).map((goal) => goal.reviewDate as string),
+    ...goals.filter((goal) => (goal.status === "identified" || goal.status === "in_progress") && goal.reviewDate).map((goal) => goal.reviewDate as string),
     assessment?.reviewDate
   ].filter((date): date is string => Boolean(date)).sort();
   const dueDate = dates[0];
@@ -900,10 +900,10 @@ async function listLatestAssessments(db: SupabaseClient, userId: string): Promis
 
 async function listActiveGoals(db: SupabaseClient, userId: string) {
   const result = new Map<string, PlayerDevelopmentGoal[]>();
-  const { data, error } = await db.from("player_development_goals").select("*").eq("user_id", userId).eq("status", "active");
+  const { data, error } = await db.from("player_development_goals").select("*").eq("user_id", userId).in("status", ["identified", "in_progress"]);
   if (error) return result;
   for (const row of (data ?? []) as GoalRow[]) {
-    const goal = { ...mapGoalRow(row), actions: [], observations: [] };
+    const goal = { ...mapGoalRow(row), actions: [], observations: [], progressUpdates: [] };
     result.set(goal.playerId, [...(result.get(goal.playerId) ?? []), goal]);
   }
   return result;

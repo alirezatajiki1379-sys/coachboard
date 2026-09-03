@@ -219,7 +219,7 @@ function PlayerHubTabs({ playerId, activeTab, period, customFrom, customTo }: { 
 
 function OverviewTab({ hub, period, attentionItems }: { hub: PlayerHubData; period: AnalyticsPeriod; attentionItems: AttentionItem[] }) {
   const { summary } = hub.analytics;
-  const highestGoal = hub.development.goals.find((goal) => goal.status === "active" && goal.priority === "high") ?? hub.development.goals.find((goal) => goal.status === "active");
+  const highestGoal = hub.development.goals.find((goal) => goal.status === "in_progress" && goal.priority === "high") ?? hub.development.goals.find((goal) => goal.status === "in_progress" || goal.status === "identified");
   const latestObservation = hub.development.observations[0];
   return (
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">

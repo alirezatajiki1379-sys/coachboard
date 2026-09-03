@@ -215,8 +215,8 @@ export default async function DashboardPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <Link href="/squad?view=reviews-due" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
               <p className="text-xs font-bold uppercase text-slate-500">Review</p>
-              <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.playersNeedingReview}</p>
-              <p className="mt-1 text-xs text-slate-500">players need review</p>
+              <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.goalsDueForReview}</p>
+              <p className="mt-1 text-xs text-slate-500">goals need review</p>
             </Link>
             <Link href="/squad?view=development&developmentStatus=high-priority" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
               <p className="text-xs font-bold uppercase text-slate-500">High priority</p>
