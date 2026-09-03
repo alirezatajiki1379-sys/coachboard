@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, Loader2, RotateCcw, Upload } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { STICKY_TABLE_HEADER_CLASS } from "@/components/squad/player-table-layers";
 import { confirmPlayerImport, refreshPlayerImportDuplicateCheck, undoPlayerImport, type PlayerImportActionState, type PlayerImportBatchSummary } from "@/lib/squad/import-actions";
 import {
   buildReviewedRows,
@@ -195,10 +196,10 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
             <table className="min-w-full divide-y divide-board-line text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Source column</th>
-                  <th className="px-3 py-2">Sample values</th>
-                  <th className="px-3 py-2">CoachBoard field</th>
-                  <th className="px-3 py-2">Status</th>
+                  <th className={`${STICKY_TABLE_HEADER_CLASS} px-3 py-2`}>Source column</th>
+                  <th className={`${STICKY_TABLE_HEADER_CLASS} px-3 py-2`}>Sample values</th>
+                  <th className={`${STICKY_TABLE_HEADER_CLASS} px-3 py-2`}>CoachBoard field</th>
+                  <th className={`${STICKY_TABLE_HEADER_CLASS} px-3 py-2`}>Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-board-line bg-white">

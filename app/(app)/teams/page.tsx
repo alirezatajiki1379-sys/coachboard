@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Archive, CalendarOff, MapPin, Plus, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
+import { TeamDeleteForm } from "@/components/squad/team-delete-form";
 import { Button, ButtonLink } from "@/components/ui/button";
 import {
   archiveTeam,
@@ -63,6 +64,14 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
       ) : null}
       {params.error === "calendar" ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">Calendar settings could not be saved. Please check the highlighted values and try again.</p>
+      ) : null}
+      {params.deleteError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{deleteErrorMessage(params.deleteError)}</p>
+      ) : null}
+      {params.teamDeleted ? (
+        <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+          {params.teamDeleted === "final" ? "Team deleted. Create or rename the current Team workspace to continue." : "Team deleted."}
+        </p>
       ) : null}
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
@@ -249,6 +258,14 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
                     </div>
                   </div>
                 </details>
+                <details className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4">
+                  <summary className="cursor-pointer list-none text-sm font-bold text-red-800">
+                    Danger zone
+                  </summary>
+                  <div className="mt-4">
+                    <TeamDeleteForm teamId={team.id} teamName={team.name} returnTo="/teams" compact />
+                  </div>
+                </details>
               </article>
             );
           })
@@ -324,4 +341,12 @@ function formatDateRange(startsOn: string, endsOn: string) {
 function formatDate(date: string) {
   const [year, month, day] = date.split("-");
   return year && month && day ? `${day}.${month}.${year}` : date;
+}
+
+function deleteErrorMessage(value: string | string[]) {
+  const error = Array.isArray(value) ? value[0] : value;
+  if (error === "confirm") return "Type the Team name exactly before deleting permanently.";
+  if (error === "not-found") return "Team could not be found or is no longer available.";
+  if (error === "failed") return "Team could not be deleted. Check that the Supabase migration has been applied, then try again.";
+  return "Team deletion could not be completed.";
 }

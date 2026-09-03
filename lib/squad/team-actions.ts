@@ -206,3 +206,43 @@ export async function restoreTeam(formData: FormData) {
   revalidatePath("/teams");
   redirect("/teams");
 }
+
+export async function permanentlyDeleteTeam(formData: FormData) {
+  const teamId = formString(formData, "teamId");
+  const confirmationName = formString(formData, "confirmationName");
+  const returnTo = formString(formData, "returnTo") || "/teams";
+  if (!teamId) redirect("/teams?deleteError=missing");
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { data: team, error: teamError } = await db
+    .from("squads")
+    .select("id,name,is_active")
+    .eq("id", teamId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (teamError) throw new Error(teamError.message);
+  if (!team) redirect("/teams?deleteError=not-found");
+  if (confirmationName !== team.name) redirect(withQuery(returnTo, "deleteError", "confirm"));
+
+  const { data: fallbackTeamId, error } = await db.rpc("delete_squad_permanently", {
+    target_squad_id: teamId,
+    confirmation_name: confirmationName
+  });
+
+  if (error) redirect(withQuery(returnTo, "deleteError", "failed"));
+
+  revalidateTeamScopedPages();
+  revalidatePath("/teams");
+  revalidatePath(`/teams/${teamId}/settings`);
+  if (returnTo.startsWith("/teams")) {
+    redirect(typeof fallbackTeamId === "string" && fallbackTeamId ? "/teams?teamDeleted=1" : "/teams?teamDeleted=final");
+  }
+  redirect(typeof fallbackTeamId === "string" && fallbackTeamId ? "/dashboard?teamDeleted=1" : "/teams?teamDeleted=final");
+}
+
+function withQuery(path: string, key: string, value: string) {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+}

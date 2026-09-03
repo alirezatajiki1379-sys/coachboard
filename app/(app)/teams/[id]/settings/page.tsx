@@ -1,25 +1,18 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { FileSpreadsheet, MapPin, Plus, Save, UsersRound } from "lucide-react";
+import { Archive, AlertTriangle, FileSpreadsheet, MapPin, Plus, Save, UsersRound } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
+import { TeamDeleteForm } from "@/components/squad/team-delete-form";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { renameTeam, switchTeam, updateTeamCalendarSettings } from "@/lib/squad/team-actions";
+import { archiveTeam, renameTeam, switchTeam, updateTeamCalendarSettings } from "@/lib/squad/team-actions";
 import { federalStateName, germanFederalStates } from "@/lib/squad/regional-calendar";
-import { mapSquadRow } from "@/lib/squad/squads";
+import { getActiveSquadPlayerCounts, mapSquadRow, type ActiveSquadPlayerCounts } from "@/lib/squad/squads";
 import { createClient } from "@/lib/supabase/server";
 import type { Squad } from "@/types/domain";
 
 type TeamSettingsPageProps = {
   params: Promise<{ id: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
-
-type SquadPlayerCountRow = {
-  id: string;
-  player_type: "roster" | "trial";
-  position: string | null;
-  archived_at: string | null;
-  deleted_at: string | null;
 };
 
 export default async function TeamSettingsPage({ params, searchParams }: TeamSettingsPageProps) {
@@ -43,7 +36,7 @@ export default async function TeamSettingsPage({ params, searchParams }: TeamSet
   if (!teamRow) notFound();
 
   const team = mapSquadRow(teamRow);
-  const counts = await getSquadCounts(supabase, user.id, team.id);
+  const counts = await getActiveSquadPlayerCounts(supabase, user.id, team.id);
 
   return (
     <PageContainer width="standard">
@@ -72,6 +65,12 @@ export default async function TeamSettingsPage({ params, searchParams }: TeamSet
         <SettingsTab href={`/teams/${team.id}/settings?tab=squad`} active={tab === "squad"}>Squad</SettingsTab>
       </nav>
 
+      {rawSearchParams.deleteError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {deleteErrorMessage(rawSearchParams.deleteError)}
+        </p>
+      ) : null}
+
       {tab === "general" ? <GeneralSettings team={team} /> : <SquadSettings team={team} counts={counts} />}
     </PageContainer>
   );
@@ -91,69 +90,91 @@ function SettingsTab({ href, active, children }: { href: string; active: boolean
 
 function GeneralSettings({ team }: { team: Squad }) {
   return (
-    <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-      <h2 className="text-lg font-bold text-board-navy">General</h2>
-      <p className="mt-1 text-sm text-slate-600">These settings apply only to this Team.</p>
+    <div className="space-y-6">
+      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+        <h2 className="text-lg font-bold text-board-navy">General</h2>
+        <p className="mt-1 text-sm text-slate-600">These settings apply only to this Team.</p>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <form action={renameTeam} className="rounded-lg border border-board-line bg-board-paper p-4">
-          <input type="hidden" name="teamId" value={team.id} />
-          <input type="hidden" name="returnTo" value={`/teams/${team.id}/settings`} />
-          <label className="block">
-            <span className="text-sm font-bold text-slate-700">Team name</span>
-            <input
-              name="name"
-              required
-              defaultValue={team.name}
-              className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
-            />
-          </label>
-          <Button type="submit" className="mt-4">
-            <Save className="h-4 w-4" />
-            Save team name
-          </Button>
-        </form>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <form action={renameTeam} className="rounded-lg border border-board-line bg-board-paper p-4">
+            <input type="hidden" name="teamId" value={team.id} />
+            <input type="hidden" name="returnTo" value={`/teams/${team.id}/settings`} />
+            <label className="block">
+              <span className="text-sm font-bold text-slate-700">Team name</span>
+              <input
+                name="name"
+                required
+                defaultValue={team.name}
+                className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
+              />
+            </label>
+            <Button type="submit" className="mt-4">
+              <Save className="h-4 w-4" />
+              Save team name
+            </Button>
+          </form>
 
-        <form action={updateTeamCalendarSettings} className="rounded-lg border border-board-line bg-board-paper p-4">
-          <input type="hidden" name="teamId" value={team.id} />
-          <input type="hidden" name="returnTo" value={`/teams/${team.id}/settings`} />
-          <input type="hidden" name="countryCode" value="DE" />
-          <h3 className="font-bold text-board-navy">Location and calendar</h3>
-          <p className="mt-1 text-sm text-slate-600">Used for regional calendar checks when creating recurring Trainings.</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <label>
-              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Country</span>
-              <select disabled defaultValue="DE" className="mt-1 h-10 w-full rounded-md border border-board-line bg-slate-50 px-3 text-sm text-board-navy">
-                <option value="DE">Germany</option>
-              </select>
-            </label>
-            <label>
-              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Bundesland *</span>
-              <select name="federalStateCode" required defaultValue={team.federalStateCode ?? ""} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                <option value="" disabled>Choose Bundesland</option>
-                {germanFederalStates.map((state) => <option key={state.code} value={state.code}>{state.name}</option>)}
-              </select>
-            </label>
-            <label className="md:col-span-2">
-              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">City / municipality</span>
-              <input name="city" defaultValue={team.city ?? ""} placeholder="optional, e.g. Solingen" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-            </label>
-            <input type="hidden" name="publicHolidays" value={preferenceValue(team, "publicHolidays", "ask")} />
-            <input type="hidden" name="schoolHolidays" value={preferenceValue(team, "schoolHolidays", "ask")} />
-            <input type="hidden" name="localMovableHolidays" value={preferenceValue(team, "localMovableHolidays", "confirmed_only")} />
-            <input type="hidden" name="customExclusions" value={preferenceValue(team, "customExclusions", "exclude")} />
-          </div>
-          <Button type="submit" className="mt-4">
-            <MapPin className="h-4 w-4" />
-            Save location
-          </Button>
-        </form>
-      </div>
-    </section>
+          <form action={updateTeamCalendarSettings} className="rounded-lg border border-board-line bg-board-paper p-4">
+            <input type="hidden" name="teamId" value={team.id} />
+            <input type="hidden" name="returnTo" value={`/teams/${team.id}/settings`} />
+            <input type="hidden" name="countryCode" value="DE" />
+            <h3 className="font-bold text-board-navy">Location and calendar</h3>
+            <p className="mt-1 text-sm text-slate-600">Used for regional calendar checks when creating recurring Trainings.</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label>
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Country</span>
+                <select disabled defaultValue="DE" className="mt-1 h-10 w-full rounded-md border border-board-line bg-slate-50 px-3 text-sm text-board-navy">
+                  <option value="DE">Germany</option>
+                </select>
+              </label>
+              <label>
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Bundesland *</span>
+                <select name="federalStateCode" required defaultValue={team.federalStateCode ?? ""} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+                  <option value="" disabled>Choose Bundesland</option>
+                  {germanFederalStates.map((state) => <option key={state.code} value={state.code}>{state.name}</option>)}
+                </select>
+              </label>
+              <label className="md:col-span-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">City / municipality</span>
+                <input name="city" defaultValue={team.city ?? ""} placeholder="optional, e.g. Solingen" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+              </label>
+              <input type="hidden" name="publicHolidays" value={preferenceValue(team, "publicHolidays", "ask")} />
+              <input type="hidden" name="schoolHolidays" value={preferenceValue(team, "schoolHolidays", "ask")} />
+              <input type="hidden" name="localMovableHolidays" value={preferenceValue(team, "localMovableHolidays", "confirmed_only")} />
+              <input type="hidden" name="customExclusions" value={preferenceValue(team, "customExclusions", "exclude")} />
+            </div>
+            <Button type="submit" className="mt-4">
+              <MapPin className="h-4 w-4" />
+              Save location
+            </Button>
+          </form>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-red-200 bg-white p-5 shadow-soft">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-red-800">
+          <AlertTriangle className="h-5 w-5" />
+          Danger zone
+        </h2>
+        <p className="mt-1 text-sm text-slate-600">Archive is reversible. Permanent deletion removes this Team workspace and its Team-specific operational data.</p>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <form action={archiveTeam} className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <input type="hidden" name="teamId" value={team.id} />
+            <h3 className="font-bold text-amber-900">Archive Team</h3>
+            <p className="mt-1 text-sm text-amber-800">Hide this Team from active use while preserving its data.</p>
+            <Button type="submit" variant="danger" className="mt-3 bg-amber-100 text-amber-900 hover:bg-amber-200">
+              <Archive className="h-4 w-4" />
+              Archive Team
+            </Button>
+          </form>
+          <TeamDeleteForm teamId={team.id} teamName={team.name} returnTo={`/teams/${team.id}/settings`} />
+        </div>
+      </section>
+    </div>
   );
 }
 
-function SquadSettings({ team, counts }: { team: Squad; counts: Awaited<ReturnType<typeof getSquadCounts>> }) {
+function SquadSettings({ team, counts }: { team: Squad; counts: ActiveSquadPlayerCounts }) {
   return (
     <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy">
@@ -236,27 +257,17 @@ function Stat({ label, value, tone = "neutral" }: { label: string; value: number
   );
 }
 
-async function getSquadCounts(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, teamId: string) {
-  const { data, error } = await supabase
-    .from("squad_players")
-    .select("id,player_type,position,archived_at,deleted_at")
-    .eq("user_id", userId)
-    .eq("squad_id", teamId);
-  if (error) throw new Error(error.message);
-  const players = (data ?? []) as SquadPlayerCountRow[];
-  const active = players.filter((player) => !player.archived_at && !player.deleted_at);
-  return {
-    active: active.length,
-    roster: active.filter((player) => player.player_type === "roster").length,
-    trial: active.filter((player) => player.player_type === "trial").length,
-    archived: players.filter((player) => player.archived_at && !player.deleted_at).length,
-    withoutPosition: active.filter((player) => !player.position).length
-  };
-}
-
 function preferenceValue(team: Squad, key: string, fallback: string) {
   const value = team.calendarPreferences?.[key];
   return typeof value === "string" ? value : fallback;
+}
+
+function deleteErrorMessage(value: string | string[]) {
+  const error = Array.isArray(value) ? value[0] : value;
+  if (error === "confirm") return "Type the Team name exactly before deleting permanently.";
+  if (error === "not-found") return "Team could not be found or is no longer available.";
+  if (error === "failed") return "Team could not be deleted. Check that the Supabase migration has been applied, then try again.";
+  return "Team deletion could not be completed.";
 }
 
 function locationSummary(team: Squad) {

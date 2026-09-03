@@ -9,6 +9,12 @@
   --app-mobile-header-height: 7.25rem;
   --app-sidebar-width: 18rem;
   --page-section-gap: 1.5rem;
+  --table-sticky-top: 0rem;
+  --table-header-z: 20;
+  --table-sticky-column-z: 10;
+  --table-corner-z: 30;
+  --table-toolbar-z: 40;
+  --table-popover-z: 60;
 }
 
 * {

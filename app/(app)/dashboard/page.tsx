@@ -10,6 +10,7 @@ import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import { attentionPriorityLabels, attentionTone } from "@/lib/squad/attention";
 import { getDashboardAttentionData } from "@/lib/squad/attention-queries";
 import { getDevelopmentDashboardSummary } from "@/lib/squad/development";
+import { ensureActiveSquad, getActiveSquadPlayerCounts } from "@/lib/squad/squads";
 import { sortTrainings, trainingDisplayTitle, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
 
 type RecentDrill = {
@@ -39,26 +40,15 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const [planCount, playerCount, trialCount, recentDrills, recentSessions] = await Promise.all([
+  const activeTeam = await ensureActiveSquad(supabase, user.id);
+  const [planCount, playerCounts, recentDrills, recentSessions] = await Promise.all([
     supabase
       .from("training_sessions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .is("archived_at", null)
       .is("deleted_at", null),
-    supabase
-      .from("squad_players")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .is("archived_at", null)
-      .is("deleted_at", null),
-    supabase
-      .from("squad_players")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("player_type", "trial")
-      .is("archived_at", null)
-      .is("deleted_at", null),
+    getActiveSquadPlayerCounts(supabase, user.id, activeTeam.id),
     supabase
       .from("drills")
       .select("id,title,main_focus,duration_minutes,updated_at")
@@ -77,7 +67,7 @@ export default async function DashboardPage() {
       .limit(5)
   ]);
   const [developmentSummary, attentionData] = await Promise.all([
-    getDevelopmentDashboardSummary(supabase, user.id),
+    getDevelopmentDashboardSummary(supabase, user.id, activeTeam.id),
     getDashboardAttentionData(supabase, user.id)
   ]);
   const trainingEvents = sortTrainings(await listTrainingEventDetails(supabase, user.id));
@@ -183,8 +173,8 @@ export default async function DashboardPage() {
         />
         <StatCard
           label="Squad"
-          value={playerCount.count ?? 0}
-          detail={`${trialCount.count ?? 0} Trial Players · active team scope`}
+          value={playerCounts.active}
+          detail={`${playerCounts.trial} Trial Players · ${activeTeam.name}`}
           icon={<UsersRound className="h-5 w-5" />}
           href="/squad"
         />

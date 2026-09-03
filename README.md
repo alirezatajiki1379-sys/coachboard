@@ -41,12 +41,13 @@ CoachBoard is a football training planner for coaches. It helps a coach build a 
    ```bash
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   NEXT_PUBLIC_SITE_URL=http://localhost:3000
    SUPABASE_SERVICE_ROLE_KEY=
    COACHBOARD_API_KEY=
    COACHBOARD_DASHBOARD_OWNER_ID=
    ```
 
-   Find the public Supabase values in Supabase under **Project Settings -> API**. `SUPABASE_SERVICE_ROLE_KEY`, `COACHBOARD_API_KEY`, and `COACHBOARD_DASHBOARD_OWNER_ID` are server-only values for the optional read-only external dashboard API. Never expose them in client-side code and never prefix them with `NEXT_PUBLIC_`.
+   Find the public Supabase values in Supabase under **Project Settings -> API**. `NEXT_PUBLIC_SITE_URL` should be `http://localhost:3000` locally and your Vercel production URL in production so password-reset links return to the right app. `SUPABASE_SERVICE_ROLE_KEY`, `COACHBOARD_API_KEY`, and `COACHBOARD_DASHBOARD_OWNER_ID` are server-only values for the optional read-only external dashboard API. Never expose them in client-side code and never prefix them with `NEXT_PUBLIC_`.
 
 5. Run the SQL in [supabase/schema.sql](supabase/schema.sql) in the Supabase SQL Editor.
 
@@ -93,9 +94,22 @@ If an older Supabase project is missing one of these tables, columns, triggers, 
 
 ```bash
 npm run dev      # Start local development
+npm run db:check # Compare app Supabase column usage against supabase/schema.sql
+npm run typecheck
 npm run build    # Production build and type check
 npm run lint     # Lint project
 ```
+
+Before deploying code that uses new database fields, run:
+
+```bash
+npm run db:check
+npm run typecheck
+npm run lint
+npm run build
+```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the production database migration workflow and rollback notes.
 
 ## Demo Data
 
@@ -165,12 +179,13 @@ The app is Vercel-ready.
    ```bash
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   NEXT_PUBLIC_SITE_URL=https://your-vercel-domain.vercel.app
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
    COACHBOARD_API_KEY=your-dashboard-api-key
    COACHBOARD_DASHBOARD_OWNER_ID=your-supabase-user-uuid
    ```
 
-5. In Supabase, run [supabase/schema.sql](supabase/schema.sql) in the SQL Editor before testing the deployed app.
+5. In Supabase, run [supabase/schema.sql](supabase/schema.sql) for a new project. For an existing production project, apply new files from `supabase/migrations` before deploying code that depends on them.
 6. Deploy from Vercel.
 7. If using Supabase email confirmation or OAuth later, add the Vercel production URL to Supabase Auth redirect/site URL settings.
 

@@ -1050,9 +1050,9 @@ function WorkspaceTable({
           {columns.map((column) => <col key={column.id} className={column.id === "player" ? "w-[240px]" : undefined} />)}
           <col className="w-[90px]" />
         </colgroup>
-        <thead className={cn("sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm", PLAYER_TABLE_LAYER_CLASSES.headerCell)}>
+        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
           <tr className="border-b border-board-line">
-            {selectionMode ? <th scope="col" className={cn("sticky left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>Select</th> : null}
+            {selectionMode ? <th scope="col" className={cn("left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>Select</th> : null}
             {columns.map((column) => (
               <WorkspaceHeaderCell
                 key={column.id}
@@ -1075,7 +1075,7 @@ function WorkspaceTable({
                 }}
               />
             ))}
-            <th scope="col" className="bg-slate-50 px-3 py-3">Action</th>
+            <th scope="col" className={cn("bg-slate-50 px-3 py-3", PLAYER_TABLE_LAYER_CLASSES.headerCell)}>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -1423,7 +1423,7 @@ function WorkspaceHeaderCell({
       style={isPlayerColumn ? ({ left: selectionMode ? "3rem" : 0 } as CSSProperties) : undefined}
       className={cn(
         "relative bg-slate-50 px-3 py-3 transition-colors",
-        isPlayerColumn && cn("sticky min-w-[240px] shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell),
+        isPlayerColumn ? cn("left-0 min-w-[240px] shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell) : PLAYER_TABLE_LAYER_CLASSES.headerCell,
         active && "bg-green-50 text-board-green",
         locked ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing",
         isDragged && "bg-white shadow-sm ring-2 ring-board-green/30",

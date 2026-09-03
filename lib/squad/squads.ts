@@ -98,3 +98,50 @@ export async function listAllTeams(db: DatabaseClient, userId: string): Promise<
   if (error) throw new Error(error.message);
   return ((data ?? []) as SquadRow[]).map(mapSquadRow);
 }
+
+export type ActiveSquadPlayerCounts = {
+  active: number;
+  roster: number;
+  trial: number;
+  archived: number;
+  withoutPosition: number;
+};
+
+type SquadPlayerCountRow = {
+  id: string;
+  player_type: "roster" | "trial";
+  position: string | null;
+  archived_at: string | null;
+  deleted_at: string | null;
+};
+
+export async function getActiveSquadPlayerCounts(
+  db: DatabaseClient,
+  userId: string,
+  squadId: string
+): Promise<ActiveSquadPlayerCounts> {
+  const dynamicDb = db as unknown as SupabaseClient;
+  const { data, error } = await dynamicDb
+    .from("squad_players")
+    .select("id,player_type,position,archived_at,deleted_at")
+    .eq("user_id", userId)
+    .eq("squad_id", squadId);
+
+  if (error) throw new Error(error.message);
+
+  const uniquePlayers = new Map<string, SquadPlayerCountRow>();
+  for (const player of (data ?? []) as SquadPlayerCountRow[]) {
+    uniquePlayers.set(player.id, player);
+  }
+
+  const players = Array.from(uniquePlayers.values());
+  const active = players.filter((player) => !player.archived_at && !player.deleted_at);
+
+  return {
+    active: active.length,
+    roster: active.filter((player) => player.player_type === "roster").length,
+    trial: active.filter((player) => player.player_type === "trial").length,
+    archived: players.filter((player) => player.archived_at && !player.deleted_at).length,
+    withoutPosition: active.filter((player) => !player.position).length
+  };
+}

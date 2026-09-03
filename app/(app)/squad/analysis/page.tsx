@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { ArrowUpDown, CalendarCheck, Filter, Info, Minus, Printer, Star, TrendingDown, TrendingUp, UserCheck, Users } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
+import { STICKY_TABLE_HEADER_CLASS } from "@/components/squad/player-table-layers";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
 import {
@@ -179,9 +180,9 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
 
       {summaries.length ? (
         <>
-          <section className="hidden overflow-hidden rounded-lg border border-board-line bg-white shadow-soft lg:block">
+          <section className="hidden overflow-x-auto rounded-lg border border-board-line bg-white shadow-soft lg:block">
             <table className="w-full border-collapse text-left text-sm">
-              <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <SortableHeader label="Player" sortKey="name" filters={filters} />
                   <SortableHeader label="Position" sortKey="position" filters={filters} />
@@ -385,7 +386,7 @@ function SortableHeader({
 }) {
   const active = sortKey === filters.sort;
   return (
-    <th aria-sort={active ? (filters.direction === "asc" ? "ascending" : "descending") : "none"} className={cn("px-0 py-0 font-bold", active && "bg-green-50 text-board-green")}>
+    <th aria-sort={active ? (filters.direction === "asc" ? "ascending" : "descending") : "none"} className={cn(STICKY_TABLE_HEADER_CLASS, "px-0 py-0 font-bold", active && "bg-green-50 text-board-green")}>
       <Link
         href={hrefFor({ ...filters, sort: sortKey, direction: nextSortDirection(filters.sort, filters.direction, sortKey) })}
         className={cn(

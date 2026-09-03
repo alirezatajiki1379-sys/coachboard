@@ -66,9 +66,7 @@ type DebugResponse = {
 type TrainingEventRow = Pick<
   Database["public"]["Tables"]["squad_training_events"]["Row"],
   "id" | "date" | "start_time" | "end_time" | "location" | "squad_id"
-> & {
-  squads?: { name: string | null } | { name: string | null }[] | null;
-};
+>;
 
 type AttendanceRow = Pick<
   Database["public"]["Tables"]["squad_attendance_records"]["Row"],
@@ -122,7 +120,7 @@ export async function GET(request: NextRequest) {
 
     const { data: todayRows, error: todayError } = await supabase
       .from("squad_training_events")
-      .select("id,date,start_time,end_time,location,squad_id,squads(name)")
+      .select("id,date,start_time,end_time,location,squad_id")
       .eq("user_id", ownerId)
       .eq("date", todayDate)
       .is("archived_at", null)
@@ -133,7 +131,7 @@ export async function GET(request: NextRequest) {
 
     const { data: futureRows, error: futureError } = await supabase
       .from("squad_training_events")
-      .select("id,date,start_time,end_time,location,squad_id,squads(name)")
+      .select("id,date,start_time,end_time,location,squad_id")
       .eq("user_id", ownerId)
       .gte("date", todayDate)
       .is("archived_at", null)
@@ -144,16 +142,20 @@ export async function GET(request: NextRequest) {
 
     if (futureError) throw futureError;
 
-    const todayEvents = ((todayRows ?? []) as TrainingEventRow[]).sort(compareEventStart);
-    const nextEvent = ((futureRows ?? []) as TrainingEventRow[]).find((event) => {
+    const todayEvents = (todayRows ?? []).sort(compareEventStart);
+    const nextEvent = (futureRows ?? []).find((event) => {
       if (event.date > todayDate) return true;
       return event.date === todayDate && toTime(event.start_time) > nowTime;
     }) ?? null;
 
     const eventIds = Array.from(new Set([...todayEvents.map((event) => event.id), ...(nextEvent ? [nextEvent.id] : [])]));
-    const [attendanceByEvent, planEventIds] = await Promise.all([
+    const squadIds = Array.from(
+      new Set([...todayEvents.map((event) => event.squad_id), nextEvent?.squad_id].filter((id): id is string => Boolean(id)))
+    );
+    const [attendanceByEvent, planEventIds, squadNamesById] = await Promise.all([
       loadAttendanceCounts(supabase, ownerId, eventIds),
-      loadPlanEventIds(supabase, ownerId, eventIds)
+      loadPlanEventIds(supabase, ownerId, eventIds),
+      loadSquadNamesById(supabase, ownerId, squadIds)
     ]);
 
     const response: DashboardResponse = {
@@ -162,7 +164,7 @@ export async function GET(request: NextRequest) {
         date: todayDate,
         hasTraining: todayEvents.length > 0,
         sessions: todayEvents.map((event) => ({
-          team: teamName(event),
+          team: teamName(event, squadNamesById),
           role: "",
           start: toTime(event.start_time),
           end: event.end_time ? toTime(event.end_time) : "",
@@ -173,7 +175,7 @@ export async function GET(request: NextRequest) {
       },
       next: nextEvent ? {
         date: nextEvent.date,
-        team: teamName(nextEvent),
+        team: teamName(nextEvent, squadNamesById),
         start: toTime(nextEvent.start_time)
       } : null
     };
@@ -286,6 +288,27 @@ async function loadPlayersById(
   return players;
 }
 
+async function loadSquadNamesById(
+  supabase: ReturnType<typeof createAdminClient>,
+  ownerId: string,
+  squadIds: string[]
+) {
+  const squads = new Map<string, string>();
+  if (!squadIds.length) return squads;
+
+  const { data, error } = await supabase
+    .from("squads")
+    .select("id,name")
+    .eq("user_id", ownerId)
+    .in("id", squadIds);
+
+  if (error) throw error;
+  for (const row of data ?? []) {
+    squads.set(row.id, row.name);
+  }
+  return squads;
+}
+
 async function loadPlanEventIds(
   supabase: ReturnType<typeof createAdminClient>,
   ownerId: string,
@@ -326,9 +349,8 @@ function emptyCounts() {
   };
 }
 
-function teamName(event: TrainingEventRow) {
-  const squad = Array.isArray(event.squads) ? event.squads[0] : event.squads;
-  return squad?.name ?? "";
+function teamName(event: TrainingEventRow, squadNamesById: Map<string, string>) {
+  return event.squad_id ? squadNamesById.get(event.squad_id) ?? "" : "";
 }
 
 function compareEventStart(a: TrainingEventRow, b: TrainingEventRow) {

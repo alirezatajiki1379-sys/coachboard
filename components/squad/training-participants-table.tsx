@@ -240,7 +240,7 @@ export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPl
         Defensive: {summary.defensive} · Midfield: {summary.midfield} · Attacking: {summary.attacking} · Groups: {new Set(groupLabelsByPlayerId.flatMap(([, labels]) => labels)).size} · No group: {attendance.filter((entry) => entry.player && !(groupLabels.get(entry.player.id)?.length)).length}
       </p>
 
-      <div className={cn("sticky top-0 rounded-lg border border-board-line bg-white p-3 shadow-soft", PLAYER_TABLE_LAYER_CLASSES.toolbar)}>
+      <div className={cn("sticky top-[var(--table-sticky-top)] rounded-lg border border-board-line bg-white p-3 shadow-soft", PLAYER_TABLE_LAYER_CLASSES.toolbar)}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="font-bold text-board-navy">Training participants</h3>
@@ -314,9 +314,9 @@ export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPl
                   {selectionMode ? <col className="w-12" /> : null}
                   {shownColumns.map((column) => <col key={column.id} className={column.id === "player" ? "w-[240px]" : undefined} />)}
                 </colgroup>
-                <thead className={cn("sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm", PLAYER_TABLE_LAYER_CLASSES.headerCell)}>
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
                   <tr className="border-b border-board-line">
-                    {selectionMode ? <th scope="col" className={cn("sticky left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>Select</th> : null}
+                    {selectionMode ? <th scope="col" className={cn("left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>Select</th> : null}
                     {shownColumns.map((column) => (
                       <ParticipantHeaderCell
                         key={column.id}
@@ -422,7 +422,7 @@ function ParticipantHeaderCell({ column, selectionMode, sort, onSort, onMoveColu
       style={column.id === "player" ? ({ left: selectionMode ? "3rem" : 0 } as CSSProperties) : undefined}
       className={cn(
         "relative bg-slate-50 px-3 py-3",
-        column.id === "player" && cn("sticky min-w-[240px] shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell),
+        column.id === "player" ? cn("min-w-[240px] shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell) : PLAYER_TABLE_LAYER_CLASSES.headerCell,
         active && "bg-green-50 text-board-green",
         dropSide === "before" && "before:absolute before:inset-y-1 before:left-0 before:w-1 before:rounded-full before:bg-board-green",
         dropSide === "after" && "after:absolute after:inset-y-1 after:right-0 after:w-1 after:rounded-full after:bg-board-green"

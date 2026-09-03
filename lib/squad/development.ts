@@ -141,15 +141,45 @@ export async function getActiveDevelopmentGoalsForPlayers(
   }
 }
 
-export async function getDevelopmentDashboardSummary(supabase: SupabaseServerClient, userId: string): Promise<DevelopmentDashboardSummary> {
+export async function getDevelopmentDashboardSummary(supabase: SupabaseServerClient, userId: string, squadId?: string): Promise<DevelopmentDashboardSummary> {
   const db = supabase as unknown as SupabaseClient;
   try {
     const today = todayDate();
     const weekStart = startOfWeekDate();
+    const reviewQuery = db
+      .from("player_development_goals")
+      .select("player_id, squad_players!inner(squad_id,archived_at,deleted_at)", { count: "exact", head: false })
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .lte("review_date", today)
+      .is("squad_players.archived_at", null)
+      .is("squad_players.deleted_at", null);
+    const highQuery = db
+      .from("player_development_goals")
+      .select("id, squad_players!inner(squad_id,archived_at,deleted_at)", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .eq("priority", "high")
+      .is("squad_players.archived_at", null)
+      .is("squad_players.deleted_at", null);
+    const observationsQuery = db
+      .from("player_observations")
+      .select("id, squad_players!inner(squad_id,archived_at,deleted_at)", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("observation_date", weekStart)
+      .is("squad_players.archived_at", null)
+      .is("squad_players.deleted_at", null);
+
+    if (squadId) {
+      reviewQuery.eq("squad_players.squad_id", squadId);
+      highQuery.eq("squad_players.squad_id", squadId);
+      observationsQuery.eq("squad_players.squad_id", squadId);
+    }
+
     const [reviewResult, highResult, observationsResult] = await Promise.all([
-      db.from("player_development_goals").select("player_id", { count: "exact", head: false }).eq("user_id", userId).eq("status", "active").lte("review_date", today),
-      db.from("player_development_goals").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "active").eq("priority", "high"),
-      db.from("player_observations").select("id", { count: "exact", head: true }).eq("user_id", userId).gte("observation_date", weekStart)
+      reviewQuery,
+      highQuery,
+      observationsQuery
     ]);
     const reviewedPlayers = new Set(((reviewResult.data ?? []) as Array<{ player_id: string }>).map((row) => row.player_id));
     return {
