@@ -1,19 +1,28 @@
+"use client";
+
 import Link from "next/link";
 import { PageTabs } from "@/components/layout/page";
+import { useOptionalI18n } from "@/components/i18n/i18n-provider";
+import { getMessages, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-const items = [
-  { href: "/squad", label: "Players" },
-  { href: "/squad/planner", label: "Planner" },
-  { href: "/squad/attendance", label: "Attendance" },
-  { href: "/squad/ratings", label: "Ratings" },
-  { href: "/squad/development", label: "Development" },
-  { href: "/squad/analysis", label: "Analytics" }
-];
+type SquadNavProps = {
+  locale?: Locale;
+};
 
-export function SquadNav() {
+export function SquadNav({ locale }: SquadNavProps) {
+  const context = useOptionalI18n();
+  const messages = context?.messages ?? getMessages(locale ?? "en");
+  const items = [
+    { href: "/squad", label: messages.squad.nav.players },
+    { href: "/squad/planner", label: messages.squad.nav.planner },
+    { href: "/squad/attendance", label: messages.squad.nav.attendance },
+    { href: "/squad/ratings", label: messages.squad.nav.ratings },
+    { href: "/squad/development", label: messages.squad.nav.development },
+    { href: "/squad/analysis", label: messages.squad.nav.analytics }
+  ];
   return (
-    <PageTabs label="Squad sections" className="flex-wrap">
+    <PageTabs label={messages.squad.nav.label} className="flex-wrap">
       {items.map((item) => (
         <Link
           key={item.href}

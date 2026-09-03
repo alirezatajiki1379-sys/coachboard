@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "i18n:check": "node scripts/check-i18n.mjs",
+    "i18n:audit": "node scripts/audit-i18n.mjs",
+    "i18n:audit:strict": "COACHBOARD_I18N_STRICT=1 node scripts/audit-i18n.mjs",
     "db:check": "node scripts/check-supabase-schema.mjs",
     "test:recurrence": "node --experimental-strip-types scripts/recurrence-regression.mjs",
     "test:calendar": "node --experimental-strip-types scripts/calendar-regression.mjs",

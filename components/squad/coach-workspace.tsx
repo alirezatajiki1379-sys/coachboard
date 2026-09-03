@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, X } from "lucide-react";
+import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { formatMessage, getMessages, type Locale, type Messages } from "@/lib/i18n";
 import { PLAYER_TABLE_LAYER_CLASSES } from "@/components/squad/player-table-layers";
 import {
   bulkArchiveSquadPlayers,
@@ -38,32 +40,36 @@ import {
   type WorkspaceData,
   type WorkspaceColumnDefinition,
   type WorkspacePlayerSummary,
-  type WorkspaceSortKey
+  type WorkspaceSortKey,
+  type WorkspaceView
 } from "@/lib/squad/workspace";
 
-const sortLabels: Array<{ value: WorkspaceSortKey; label: string }> = [
-  { value: "name", label: "Name" },
-  { value: "position", label: "Primary position" },
-  { value: "age", label: "Age" },
-  { value: "availability", label: "Availability" },
-  { value: "lastTraining", label: "Last training" },
-  { value: "attendance", label: "Attendance" },
-  { value: "average", label: "Average rating" },
-  { value: "latestRating", label: "Latest rating" },
-  { value: "trend", label: "Trend" },
-  { value: "reliability", label: "Reliability" },
-  { value: "activeGoals", label: "Active goals" },
-  { value: "goalPriority", label: "Goal priority" },
-  { value: "reviewDate", label: "Review date" },
-  { value: "lastObservation", label: "Last observation" },
-  { value: "coachAssessment", label: "Coach assessment" }
+const sortLabels: Array<{ value: WorkspaceSortKey; labelKey: WorkspaceColumnDefinition["id"] | "age" }> = [
+  { value: "name", labelKey: "player" },
+  { value: "position", labelKey: "position" },
+  { value: "age", labelKey: "age" },
+  { value: "availability", labelKey: "availability" },
+  { value: "lastTraining", labelKey: "lastTraining" },
+  { value: "attendance", labelKey: "attendance" },
+  { value: "average", labelKey: "average" },
+  { value: "latestRating", labelKey: "latestRating" },
+  { value: "trend", labelKey: "trend" },
+  { value: "reliability", labelKey: "reliability" },
+  { value: "activeGoals", labelKey: "activeGoals" },
+  { value: "goalPriority", labelKey: "goalPriority" },
+  { value: "reviewDate", labelKey: "review" },
+  { value: "lastObservation", labelKey: "lastObservation" },
+  { value: "coachAssessment", labelKey: "coachAssessment" }
 ];
 
 const positionGroups = ["Goalkeepers", "Defenders", "Midfielders", "Attackers", "Other"] as const;
 
-export function CoachWorkspace({ data }: { data: WorkspaceData }) {
-  const view = quickViews.find((item) => item.id === data.state.view) ?? quickViews[0];
-  const grouped = groupWorkspacePlayers(data);
+export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?: Locale }) {
+  const context = useOptionalI18n();
+  const activeLocale = context?.locale ?? locale ?? "en";
+  const messages = context?.messages ?? getMessages(activeLocale);
+  const view = localizedQuickView(messages, data.state.view);
+  const grouped = groupWorkspacePlayers(data, messages);
   const [columnOrder, setColumnOrder] = useState(data.configuration.columnOrder);
   const [columnOrderMessage, setColumnOrderMessage] = useState("");
   const [selectionMode, setSelectionMode] = useState(false);
@@ -72,7 +78,7 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   const [emailComposerOpen, setEmailComposerOpen] = useState(false);
   const [isBulkPending, startBulkTransition] = useTransition();
   const [isSavingColumnOrder, startColumnOrderSave] = useTransition();
-  const columns = useMemo(() => visibleDesktopColumns(data, columnOrder), [data, columnOrder]);
+  const columns = useMemo(() => visibleDesktopColumns(data, columnOrder).map((column) => localizeColumn(column, messages)), [data, columnOrder, messages]);
   const visiblePlayerIds = useMemo(() => data.players.map((player) => player.analytics.player.id), [data.players]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedPlayers = useMemo(() => data.players.filter((player) => selectedIdSet.has(player.analytics.player.id)), [data.players, selectedIdSet]);
@@ -150,7 +156,7 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
   return (
     <div className="space-y-6 [--squad-controls-top:0rem]">
       <section className={cn("sticky top-[var(--squad-controls-top)] rounded-lg border border-board-line bg-white p-3 shadow-soft", PLAYER_TABLE_LAYER_CLASSES.toolbar)}>
-        <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Coach Workspace quick views">
+        <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label={messages.squad.nav.label}>
           {quickViews.map((item) => (
             <Link
               key={item.id}
@@ -162,15 +168,15 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
                 item.id === data.state.view ? "bg-board-green text-white" : "text-slate-600 hover:bg-green-50 hover:text-board-green"
               )}
             >
-              {item.label}
+              {localizedQuickView(messages, item.id).label}
             </Link>
           ))}
         </div>
         <p className="mt-2 px-1 text-xs font-semibold text-slate-500">{view.description}</p>
-        <WorkspaceFilters data={data} />
+        <WorkspaceFilters data={data} messages={messages} />
       </section>
 
-      {data.state.customize ? <CustomizeWorkspacePanel data={data} /> : null}
+      {data.state.customize ? <CustomizeWorkspacePanel data={data} messages={messages} /> : null}
 
       <section className={cn("grid gap-6", selectedPlayer && data.configuration.inspectorMode === "open" && "xl:grid-cols-[minmax(0,1fr)_340px]")}>
         <div className="space-y-4">
@@ -180,13 +186,13 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
               <p className="text-sm text-slate-600">{data.periodLabel} · {data.periodRangeLabel}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{data.players.length} shown</p>
+              <p className="rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{formatMessage(messages.squad.filters.shown, { count: data.players.length })}</p>
               <Button type="button" variant={selectionMode ? "secondary" : "ghost"} className="h-9 px-3" onClick={() => {
                 setSelectionMode((current) => !current);
                 setBulkMessage("");
               }}>
                 <CheckSquare className="h-4 w-4" />
-                {selectionMode ? "Selection on" : "Select"}
+                {selectionMode ? messages.squad.actions.selectionOn : messages.squad.actions.select}
               </Button>
             </div>
           </div>
@@ -194,34 +200,34 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
           {selectionMode ? (
             <section className="rounded-lg border border-board-line bg-white p-3 shadow-soft">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <p className="text-sm font-bold text-board-navy">{selectedIds.length} selected</p>
+                <p className="text-sm font-bold text-board-navy">{selectedIds.length} {messages.squad.actions.select.toLowerCase()}</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" className="h-9 px-3" onClick={selectAllVisible} disabled={!visiblePlayerIds.length || isBulkPending}>Select visible</Button>
-                  <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => setSelectedIds([])} disabled={!selectedIds.length || isBulkPending}>Clear</Button>
+                  <Button type="button" variant="secondary" className="h-9 px-3" onClick={selectAllVisible} disabled={!visiblePlayerIds.length || isBulkPending}>{messages.squad.actions.selectVisible}</Button>
+                  <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => setSelectedIds([])} disabled={!selectedIds.length || isBulkPending}>{messages.squad.actions.clear}</Button>
                   <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => setEmailComposerOpen(true)} disabled={!selectedIds.length || isBulkPending}>
                     <Mail className="h-4 w-4" />
-                    Email
+                    {messages.squad.actions.email}
                   </Button>
                   {data.state.players === "trash" ? (
                     <>
                       <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => runBulkAction("restore")} disabled={!selectedIds.length || isBulkPending}>
                         <RotateCcw className="h-4 w-4" />
-                        Restore
+                        {messages.squad.actions.restore}
                       </Button>
                       <Button type="button" variant="danger" className="h-9 px-3" onClick={() => runBulkAction("permanent")} disabled={!selectedIds.length || isBulkPending}>
                         <Trash2 className="h-4 w-4" />
-                        Delete permanently
+                        {messages.squad.actions.deletePermanently}
                       </Button>
                     </>
                   ) : (
                     <>
                       <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => runBulkAction("archive")} disabled={!selectedIds.length || isBulkPending}>
                         <Archive className="h-4 w-4" />
-                        Archive
+                        {messages.squad.actions.archive}
                       </Button>
                       <Button type="button" variant="danger" className="h-9 px-3" onClick={() => runBulkAction("trash")} disabled={!selectedIds.length || isBulkPending}>
                         <Trash2 className="h-4 w-4" />
-                        Move to Trash
+                        {messages.squad.actions.moveToTrash}
                       </Button>
                     </>
                   )}
@@ -238,28 +244,28 @@ export function CoachWorkspace({ data }: { data: WorkspaceData }) {
                   {grouped.map((group) => (
                     <section key={group.label} className="rounded-lg border border-board-line bg-white shadow-soft">
                       <h3 className="border-b border-board-line px-4 py-3 text-sm font-bold uppercase tracking-wide text-slate-500">{group.label}</h3>
-                      <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={toggleInspector} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} />
+                      <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={toggleInspector} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} messages={messages} />
                     </section>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-lg border border-board-line bg-white shadow-soft">
-                  <WorkspaceTable data={data} players={data.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={toggleInspector} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} />
+                  <WorkspaceTable data={data} players={data.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={toggleInspector} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} messages={messages} />
                 </div>
               )
             ) : (
-              <WorkspaceEmpty data={data} />
+              <WorkspaceEmpty data={data} messages={messages} />
             )}
           </div>
 
           <div className="space-y-3 xl:hidden">
-            {data.players.length ? data.players.map((player) => <WorkspaceMobileCard key={player.analytics.player.id} data={data} player={player} selected={selectedPlayer?.analytics.player.id === player.analytics.player.id} onSelectPlayer={toggleInspector} selectionMode={selectionMode} checked={selectedIdSet.has(player.analytics.player.id)} onToggleSelected={toggleSelectedPlayer} />) : <WorkspaceEmpty data={data} />}
+            {data.players.length ? data.players.map((player) => <WorkspaceMobileCard key={player.analytics.player.id} data={data} player={player} selected={selectedPlayer?.analytics.player.id === player.analytics.player.id} onSelectPlayer={toggleInspector} selectionMode={selectionMode} checked={selectedIdSet.has(player.analytics.player.id)} onToggleSelected={toggleSelectedPlayer} messages={messages} />) : <WorkspaceEmpty data={data} messages={messages} />}
           </div>
         </div>
 
         {selectedPlayer && data.configuration.inspectorMode === "open" ? <aside className="hidden xl:block">
           <div>
-            <InspectorPanel player={selectedPlayer} returnTo={workspaceHref(data.state, { selectedPlayer: selectedPlayer.analytics.player.id })} onClose={() => setSelectedPlayerId(null)} />
+            <InspectorPanel player={selectedPlayer} returnTo={workspaceHref(data.state, { selectedPlayer: selectedPlayer.analytics.player.id })} onClose={() => setSelectedPlayerId(null)} messages={messages} />
           </div>
         </aside> : null}
       </section>
@@ -391,7 +397,7 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-function WorkspaceFilters({ data }: { data: WorkspaceData }) {
+function WorkspaceFilters({ data, messages }: { data: WorkspaceData; messages: Messages }) {
   const state = data.state;
   const activeFilterCount = [
     state.players !== "active",
@@ -408,104 +414,104 @@ function WorkspaceFilters({ data }: { data: WorkspaceData }) {
     <div className="mt-3 border-t border-board-line pt-3">
       <form action="/squad" className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto_auto] lg:items-end">
         <input type="hidden" name="view" value={state.view} />
-        <Field label="Search">
+        <Field label={messages.squad.filters.search}>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input name="search" defaultValue={state.search} className={cn(fieldClass(), "pl-9")} placeholder="Name, club, position..." />
+            <input name="search" defaultValue={state.search} className={cn(fieldClass(), "pl-9")} placeholder={messages.squad.filters.searchPlaceholder} />
           </div>
         </Field>
         <details className="relative">
           <summary className="flex h-11 cursor-pointer list-none items-center justify-center rounded-md border border-board-line px-3 text-sm font-bold text-board-navy hover:bg-slate-50">
-            View
+            {messages.squad.filters.view}
           </summary>
           <div className={cn("mt-2 min-w-72 rounded-lg border border-board-line bg-white p-3 shadow-soft lg:absolute lg:right-0", PLAYER_TABLE_LAYER_CLASSES.popover)}>
-            <SavedViewsCompact data={data} />
+            <SavedViewsCompact data={data} messages={messages} />
           </div>
         </details>
         <details className="relative">
           <summary className="flex h-11 cursor-pointer list-none items-center justify-center rounded-md border border-board-line px-3 text-sm font-bold text-board-navy hover:bg-slate-50">
-            Filters {activeFilterCount ? activeFilterCount : ""}
+            {messages.squad.filters.filters} {activeFilterCount ? activeFilterCount : ""}
           </summary>
           <div className={cn("mt-2 grid gap-3 rounded-lg border border-board-line bg-white p-3 shadow-soft md:grid-cols-2 lg:absolute lg:right-0 lg:w-[720px] xl:grid-cols-3", PLAYER_TABLE_LAYER_CLASSES.popover)}>
-            <Field label="Players">
+            <Field label={messages.squad.filters.players}>
               <select name="players" defaultValue={state.players} className={fieldClass()}>
-                <option value="active">All active players</option>
-                <option value="roster">Roster players</option>
-                <option value="trial">Trial players</option>
-                <option value="archived">Archived players</option>
-                <option value="trash">Player Trash</option>
+                <option value="active">{messages.squad.filters.allActivePlayers}</option>
+                <option value="roster">{messages.squad.filters.rosterPlayers}</option>
+                <option value="trial">{messages.squad.filters.trialPlayers}</option>
+                <option value="archived">{messages.squad.filters.archivedPlayers}</option>
+                <option value="trash">{messages.squad.filters.playerTrash}</option>
               </select>
             </Field>
-            <Field label="Position">
+            <Field label={messages.squad.filters.position}>
               <select name="position" defaultValue={state.position ?? ""} className={fieldClass()}>
-                <option value="">All positions</option>
+                <option value="">{messages.squad.filters.allPositions}</option>
                 {data.positions.map((position) => <option key={position} value={position}>{position}</option>)}
               </select>
             </Field>
-            <Field label="Availability">
+            <Field label={messages.squad.filters.availability}>
               <select name="availability" defaultValue={state.availability} className={fieldClass()}>
-                <option value="all">All</option>
-                <option value="available">Available</option>
-                <option value="injured">Injured</option>
-                <option value="sick">Sick</option>
-                <option value="medical-review">Needs medical review</option>
+                <option value="all">{messages.squad.filters.all}</option>
+                <option value="available">{messages.squad.filters.available}</option>
+                <option value="injured">{messages.squad.filters.injured}</option>
+                <option value="sick">{messages.squad.filters.sick}</option>
+                <option value="medical-review">{messages.squad.filters.medicalReview}</option>
               </select>
             </Field>
-            <Field label="Period">
+            <Field label={messages.squad.filters.period}>
               <select name="period" defaultValue={state.period} className={fieldClass()}>
-                <option value="last5">Last 5 trainings</option>
-                <option value="last10">Last 10 trainings</option>
-                <option value="30d">Last 30 days</option>
-                <option value="90d">Last 90 days</option>
-                <option value="season">This season</option>
-                <option value="all">All time</option>
-                <option value="custom">Custom range</option>
+                <option value="last5">{messages.squad.filters.last5}</option>
+                <option value="last10">{messages.squad.filters.last10}</option>
+                <option value="30d">{messages.squad.filters.last30}</option>
+                <option value="90d">{messages.squad.filters.last90}</option>
+                <option value="season">{messages.squad.filters.season}</option>
+                <option value="all">{messages.squad.filters.allTime}</option>
+                <option value="custom">{messages.squad.filters.custom}</option>
               </select>
             </Field>
-            <Field label="Sort">
+            <Field label={messages.squad.filters.sort}>
               <select name="sort" defaultValue={state.sort} className={fieldClass()}>
-                {sortLabels.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                {sortLabels.map((item) => <option key={item.value} value={item.value}>{columnLabel(messages, item.labelKey)}</option>)}
               </select>
             </Field>
             {state.period === "custom" ? (
               <>
-                <Field label="From">
+                <Field label={messages.squad.filters.from}>
                   <input name="from" defaultValue={state.customFrom ?? ""} type="date" className={fieldClass()} />
                 </Field>
-                <Field label="To">
+                <Field label={messages.squad.filters.to}>
                   <input name="to" defaultValue={state.customTo ?? ""} type="date" className={fieldClass()} />
                 </Field>
               </>
             ) : null}
-            <Field label="Coach assessment">
+            <Field label={messages.squad.filters.coachAssessment}>
               <select name="coachAssessment" defaultValue={state.coachAssessment ?? ""} className={fieldClass()}>
-                <option value="">Any assessment</option>
+                <option value="">{messages.squad.filters.anyAssessment}</option>
                 {Object.entries(coachAssessmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </Field>
-            <Field label="Development">
+            <Field label={messages.squad.nav.development}>
               <select name="developmentStatus" defaultValue={state.developmentStatus ?? ""} className={fieldClass()}>
-                <option value="">Any status</option>
-                <option value="active-goals">Has active goals</option>
-                <option value="high-priority">Has high-priority goal</option>
+                <option value="">{messages.squad.filters.anyStatus}</option>
+                <option value="active-goals">{messages.squad.labels.activeGoals}</option>
+                <option value="high-priority">{messages.squad.labels.highPriority}</option>
                 <option value="no-active-goals">No active goals</option>
                 <option value="review-overdue">Review overdue</option>
                 <option value="review-due">Review due</option>
               </select>
             </Field>
-            <Field label="Review">
+            <Field label={messages.squad.labels.review}>
               <select name="reviewStatus" defaultValue={state.reviewStatus ?? ""} className={fieldClass()}>
-                <option value="">Any review</option>
+                <option value="">{messages.squad.filters.anyReview}</option>
                 <option value="overdue">Overdue</option>
                 <option value="today">Due today</option>
                 <option value="week">Due this week</option>
                 <option value="upcoming">Upcoming</option>
-                <option value="none">No review date</option>
+                <option value="none">{messages.squad.labels.noReviewDate}</option>
               </select>
             </Field>
-            <Field label="Evidence">
+            <Field label={messages.squad.labels.evidence}>
               <select name="evidenceBase" defaultValue={state.evidenceBase ?? ""} className={fieldClass()}>
-                <option value="">Any evidence</option>
+                <option value="">{messages.squad.filters.anyEvidence}</option>
                 <option value="No performance data">No data</option>
                 <option value="First impressions">First impressions</option>
                 <option value="Early tendency">Early tendency</option>
@@ -513,31 +519,31 @@ function WorkspaceFilters({ data }: { data: WorkspaceData }) {
                 <option value="Stronger evidence base">Stronger evidence</option>
               </select>
             </Field>
-            <Field label="Rating">
+            <Field label={messages.common.entities.rating}>
               <select name="ratingStatus" defaultValue={state.ratingStatus ?? ""} className={fieldClass()}>
-                <option value="">Any rating status</option>
-                <option value="rated">Rated in period</option>
-                <option value="unrated">No ratings in period</option>
+                <option value="">{messages.squad.filters.anyRatingStatus}</option>
+                <option value="rated">{messages.squad.filters.rated}</option>
+                <option value="unrated">{messages.squad.filters.unrated}</option>
               </select>
             </Field>
           </div>
         </details>
         <div className="flex gap-2">
-          <Button type="submit" className="h-11">Apply</Button>
+          <Button type="submit" className="h-11">{messages.squad.filters.apply}</Button>
           <ButtonLink href={workspaceHref(state, { direction: state.direction === "asc" ? "desc" : "asc" })} variant="secondary" className="h-11">
             {state.direction === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-            {state.direction === "asc" ? "Asc" : "Desc"}
+            {state.direction === "asc" ? messages.squad.filters.directionAsc : messages.squad.filters.directionDesc}
           </ButtonLink>
         </div>
         <ButtonLink href={workspaceHref({ ...state, view: "all", players: "active", availability: "all", period: "season", sort: "position", direction: "asc", search: "" }, { selectedPlayer: undefined })} variant="ghost" className="h-11">
-          Reset
+          {messages.squad.filters.reset}
         </ButtonLink>
         <ButtonLink href={workspaceHref(state, { customize: !state.customize })} variant={state.customize ? "primary" : "secondary"} className="h-11" aria-expanded={state.customize} aria-controls="squad-columns-panel">
-          {state.customize ? "Close columns" : "Columns"}
+          {state.customize ? messages.squad.filters.closeColumns : messages.squad.filters.columns}
         </ButtonLink>
         {activeFilterCount || state.search ? (
           <div className="flex flex-wrap gap-2 lg:col-span-5">
-            {state.search ? <Chip label={`Search: ${state.search}`} /> : null}
+            {state.search ? <Chip label={formatMessage(messages.squad.filters.searchChip, { query: state.search })} /> : null}
             {state.position ? <Chip label={state.position} /> : null}
             {state.players !== "active" ? <Chip label={state.players} /> : null}
             {state.availability !== "all" ? <Chip label={state.availability} /> : null}
@@ -549,11 +555,11 @@ function WorkspaceFilters({ data }: { data: WorkspaceData }) {
   );
 }
 
-function SavedViewsCompact({ data }: { data: WorkspaceData }) {
+function SavedViewsCompact({ data, messages }: { data: WorkspaceData; messages: Messages }) {
   const savedViews = data.savedViews.filter((view) => view.kind === "saved");
   return (
     <div>
-      <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Saved Views</h2>
+      <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">{messages.squad.filters.view}</h2>
       <p className="mt-1 text-sm text-slate-600">
         {data.activeSavedView ? `${data.activeSavedView.name}${data.activeSavedView.isDefault ? " · Default" : ""}` : "Default Squad View"}
       </p>
@@ -583,7 +589,7 @@ function SavedViewsCompact({ data }: { data: WorkspaceData }) {
   );
 }
 
-function CustomizeWorkspacePanel({ data }: { data: WorkspaceData }) {
+function CustomizeWorkspacePanel({ data, messages }: { data: WorkspaceData; messages: Messages }) {
   const config = data.configuration;
   const [customVisibleColumns, setCustomVisibleColumns] = useState<WorkspaceColumnDefinition["id"][]>(config.visibleColumns);
   const [customColumnOrder, setCustomColumnOrder] = useState<WorkspaceColumnDefinition["id"][]>(normalizeWorkspaceColumnOrder(config.columnOrder));
@@ -680,7 +686,7 @@ function CustomizeWorkspacePanel({ data }: { data: WorkspaceData }) {
         <div>
           <p className="hidden text-sm font-semibold uppercase text-board-green xl:block">Customize columns</p>
           <p className="text-sm font-semibold uppercase text-board-green xl:hidden">Customize mobile metrics</p>
-          <h2 className="mt-1 text-xl font-bold text-board-navy">{data.activeSavedView?.name ?? quickViews.find((view) => view.id === data.state.view)?.label ?? "System Quick View"}</h2>
+          <h2 className="mt-1 text-xl font-bold text-board-navy">{data.activeSavedView?.name ?? localizedQuickView(messages, data.state.view).label ?? messages.squad.labels.systemQuickView}</h2>
           <p className="mt-1 hidden text-sm text-slate-600 xl:block">Choose desktop table columns and order. Mobile card metrics are configured separately on smaller screens.</p>
           <p className="mt-1 text-sm text-slate-600 xl:hidden">Choose up to four mobile card metrics. Desktop columns are configured separately on table layouts.</p>
         </div>
@@ -1018,7 +1024,8 @@ function WorkspaceTable({
   isSavingColumnOrder,
   selectionMode,
   selectedIds,
-  onToggleSelected
+  onToggleSelected,
+  messages
 }: {
   data: WorkspaceData;
   players: WorkspacePlayerSummary[];
@@ -1031,6 +1038,7 @@ function WorkspaceTable({
   selectionMode: boolean;
   selectedIds: Set<string>;
   onToggleSelected: (playerId: string) => void;
+  messages: Messages;
 }) {
   const [draggedColumn, setDraggedColumn] = useState<WorkspaceColumnDefinition["id"] | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: WorkspaceColumnDefinition["id"]; side: "before" | "after" } | null>(null);
@@ -1052,7 +1060,7 @@ function WorkspaceTable({
         </colgroup>
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
           <tr className="border-b border-board-line">
-            {selectionMode ? <th scope="col" className={cn("left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>Select</th> : null}
+            {selectionMode ? <th scope="col" className={cn("left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>{messages.squad.actions.select}</th> : null}
             {columns.map((column) => (
               <WorkspaceHeaderCell
                 key={column.id}
@@ -1075,7 +1083,7 @@ function WorkspaceTable({
                 }}
               />
             ))}
-            <th scope="col" className={cn("bg-slate-50 px-3 py-3", PLAYER_TABLE_LAYER_CLASSES.headerCell)}>Action</th>
+            <th scope="col" className={cn("bg-slate-50 px-3 py-3", PLAYER_TABLE_LAYER_CLASSES.headerCell)}>{messages.squad.columns.action}</th>
           </tr>
         </thead>
         <tbody>
@@ -1091,6 +1099,7 @@ function WorkspaceTable({
               selectionMode={selectionMode}
               checked={selectedIds.has(player.analytics.player.id)}
               onToggleSelected={onToggleSelected}
+              messages={messages}
             />
           ))}
         </tbody>
@@ -1108,7 +1117,8 @@ function WorkspaceRow({
   onSelectPlayer,
   selectionMode,
   checked,
-  onToggleSelected
+  onToggleSelected,
+  messages
 }: {
   data: WorkspaceData;
   player: WorkspacePlayerSummary;
@@ -1119,6 +1129,7 @@ function WorkspaceRow({
   selectionMode: boolean;
   checked: boolean;
   onToggleSelected: (playerId: string) => void;
+  messages: Messages;
 }) {
   const summary = player.analytics;
   return (
@@ -1142,7 +1153,7 @@ function WorkspaceRow({
           <input
             type="checkbox"
             checked={checked}
-            aria-label={`Select ${playerName(summary.player)}`}
+            aria-label={`${messages.squad.actions.select} ${playerName(summary.player)}`}
             className="h-4 w-4 rounded border-board-line text-board-green"
             onClick={(event) => event.stopPropagation()}
             onChange={() => onToggleSelected(summary.player.id)}
@@ -1160,14 +1171,14 @@ function WorkspaceRow({
             draggedColumn === column.id && "bg-green-50/70 outline outline-1 outline-board-green/20"
           )}
         >
-          {renderColumnCell(column.id, data, player)}
+          {renderColumnCell(column.id, data, player, messages)}
         </td>
       ))}
       <td className="px-3 py-3">
         <Button type="button" variant="secondary" className="h-8 px-2" onClick={(event) => {
           event.stopPropagation();
           onSelectPlayer(summary.player.id);
-        }}>Select</Button>
+        }}>{messages.squad.actions.select}</Button>
       </td>
     </tr>
   );
@@ -1180,7 +1191,8 @@ function WorkspaceMobileCard({
   onSelectPlayer,
   selectionMode,
   checked,
-  onToggleSelected
+  onToggleSelected,
+  messages
 }: {
   data: WorkspaceData;
   player: WorkspacePlayerSummary;
@@ -1189,9 +1201,10 @@ function WorkspaceMobileCard({
   selectionMode: boolean;
   checked: boolean;
   onToggleSelected: (playerId: string) => void;
+  messages: Messages;
 }) {
   const summary = player.analytics;
-  const priority = data.configuration.mobileMetrics.map((metric) => mobileMetric(metric, player)).filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 4);
+  const priority = data.configuration.mobileMetrics.map((metric) => mobileMetric(metric, player, messages)).filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 4);
   return (
     <article
       role="button"
@@ -1214,13 +1227,13 @@ function WorkspaceMobileCard({
           {selectionMode ? (
             <label className="mb-3 flex items-center gap-2 text-sm font-bold text-board-navy" onClick={(event) => event.stopPropagation()}>
               <input type="checkbox" checked={checked} className="h-4 w-4 rounded border-board-line text-board-green" onChange={() => onToggleSelected(summary.player.id)} />
-              Select player
+              {messages.squad.actions.selectPlayer}
             </label>
           ) : null}
           <h2 className="text-lg font-bold text-board-navy">
             <Link
               href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))}
-              aria-label={`Open ${playerName(summary.player)} profile`}
+              aria-label={formatMessage(messages.squad.actions.openProfile, { name: playerName(summary.player) })}
               className="rounded underline-offset-4 hover:text-board-green hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-board-green/30"
               onClick={(event) => event.stopPropagation()}
             >
@@ -1228,12 +1241,12 @@ function WorkspaceMobileCard({
             </Link>
           </h2>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Badge tone={summary.player.playerType === "trial" ? "amber" : "neutral"}>{summary.player.playerType === "trial" ? "Trial" : "Roster"}</Badge>
-            <Badge>{summary.player.position ?? "No position"}</Badge>
-            <StatusDot player={player} compact />
+            <Badge tone={summary.player.playerType === "trial" ? "amber" : "neutral"}>{playerTypeLabel(summary.player.playerType, messages)}</Badge>
+            <Badge>{summary.player.position ?? messages.squad.labels.noPosition}</Badge>
+            <StatusDot player={player} compact messages={messages} />
           </div>
         </div>
-        <Link href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))} onClick={(event) => event.stopPropagation()} className="rounded-md bg-board-green px-3 py-2 text-sm font-bold text-white">Open</Link>
+        <Link href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))} onClick={(event) => event.stopPropagation()} className="rounded-md bg-board-green px-3 py-2 text-sm font-bold text-white">{messages.squad.actions.open}</Link>
       </div>
       {(data.configuration.showAttentionIndicators || data.state.view === "needs-attention") && player.attention.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -1258,11 +1271,11 @@ function Chip({ label }: { label: string }) {
   return <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{label}</span>;
 }
 
-function InspectorPanel({ player, returnTo, onClose }: { player?: WorkspacePlayerSummary; returnTo: string; onClose: () => void }) {
+function InspectorPanel({ player, returnTo, onClose, messages }: { player?: WorkspacePlayerSummary; returnTo: string; onClose: () => void; messages: Messages }) {
   if (!player) {
     return (
       <section className="rounded-lg border border-dashed border-board-line bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-bold text-board-navy">Inspector</h2>
+        <h2 className="text-lg font-bold text-board-navy">{messages.squad.actions.openPlayerHub}</h2>
         <p className="mt-2 text-sm text-slate-600">Select a player to see a quick overview. Open the full Player Hub for complete Analytics, Development, Medical and History information.</p>
       </section>
     );
@@ -1274,69 +1287,69 @@ function InspectorPanel({ player, returnTo, onClose }: { player?: WorkspacePlaye
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-board-navy">{playerName(summary.player)}</h2>
-          <p className="mt-1 text-sm text-slate-600">{summary.player.position ?? "No position"} · {calculateAge(summary.player.dateOfBirth) ?? "-"} years · {summary.player.playerType === "trial" ? "Trial" : "Roster"}</p>
+          <p className="mt-1 text-sm text-slate-600">{summary.player.position ?? messages.squad.labels.noPosition} · {calculateAge(summary.player.dateOfBirth) ?? "-"} {messages.squad.labels.years} · {playerTypeLabel(summary.player.playerType, messages)}</p>
         </div>
-        <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Close Player details">
+        <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label={messages.common.actions.close}>
           <X className="h-5 w-5" />
         </button>
       </div>
       <div className="mt-4 space-y-4">
-        <InspectorSection title="Availability" icon={<Stethoscope className="h-4 w-4" />}>
-          <StatusDot player={player} />
+        <InspectorSection title={messages.squad.columns.availability} icon={<Stethoscope className="h-4 w-4" />}>
+          <StatusDot player={player} messages={messages} />
           <p className="mt-1 text-sm text-slate-600">{availabilityDetail(player)}</p>
         </InspectorSection>
-        <InspectorSection title="Performance" icon={<BarChart3 className="h-4 w-4" />}>
+        <InspectorSection title={messages.squad.views.performance.label} icon={<BarChart3 className="h-4 w-4" />}>
           <InspectorGrid items={[
-            ["Average", formatWorkspaceRating(summary.averageRating)],
-            ["Rated", String(summary.rated)],
-            ["Trend", summary.trend.value === null ? summary.trend.label : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`],
-            ["Latest", summary.latestRating ? String(summary.latestRating) : "-"]
+            [messages.squad.labels.average, formatWorkspaceRating(summary.averageRating)],
+            [messages.squad.labels.rated, String(summary.rated)],
+            [messages.squad.labels.trend, summary.trend.value === null ? localizedTrend(summary.trend.label, messages) : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`],
+            [messages.squad.labels.latest, summary.latestRating ? String(summary.latestRating) : "-"]
           ]} />
           <p className="mt-2 text-xs font-semibold text-slate-500">{summary.evidenceBase.label}</p>
         </InspectorSection>
-        <InspectorSection title="Attendance" icon={<CalendarDays className="h-4 w-4" />}>
+        <InspectorSection title={messages.squad.labels.attendance} icon={<CalendarDays className="h-4 w-4" />}>
           <InspectorGrid items={[
-            ["Attendance", formatWorkspacePercent(summary.attendanceRate)],
-            ["Attended", `${summary.attended}/${summary.trainings}`],
-            ["Reliability", summary.reliabilityPenalty.toFixed(1)],
-            ["Late", String(summary.late)]
+            [messages.squad.labels.attendance, formatWorkspacePercent(summary.attendanceRate)],
+            [messages.squad.columns.attendedTrainings, `${summary.attended}/${summary.trainings}`],
+            [messages.squad.labels.reliability, summary.reliabilityPenalty.toFixed(1)],
+            [messages.squad.labels.late, String(summary.late)]
           ]} />
         </InspectorSection>
-        <InspectorSection title="Development" icon={<Target className="h-4 w-4" />}>
-          <p className="text-sm font-bold text-board-navy">{player.activeGoals.length} active goals</p>
-          {player.activeGoals[0] ? <p className="mt-1 text-sm text-slate-600">{player.activeGoals[0].title} · {player.activeGoals[0].priority}</p> : <p className="mt-1 text-sm text-slate-600">No active goals.</p>}
+        <InspectorSection title={messages.squad.nav.development} icon={<Target className="h-4 w-4" />}>
+          <p className="text-sm font-bold text-board-navy">{player.activeGoals.length} {messages.squad.labels.activeGoals}</p>
+          {player.activeGoals[0] ? <p className="mt-1 text-sm text-slate-600">{player.activeGoals[0].title} · {localizedPriority(player.activeGoals[0].priority, messages)}</p> : <p className="mt-1 text-sm text-slate-600">No active goals.</p>}
           <p className={cn("mt-2 text-sm font-bold", toneText(player.review.tone))}>{player.review.label}</p>
-          <p className="mt-2 text-sm text-slate-600">Assessment: {coachAssessmentLabels[summary.assessment?.assessment ?? "decision_open"]}</p>
+          <p className="mt-2 text-sm text-slate-600">{messages.squad.labels.assessment}: {coachAssessmentLabels[summary.assessment?.assessment ?? "decision_open"]}</p>
         </InspectorSection>
-        <InspectorSection title="Latest observation" icon={<Eye className="h-4 w-4" />}>
+        <InspectorSection title={messages.squad.labels.observation} icon={<Eye className="h-4 w-4" />}>
           {observation ? (
             <p className="text-sm text-slate-600">{formatEventDate(observation.observationDate)} · {observation.note.slice(0, 120)}{observation.note.length > 120 ? "..." : ""}</p>
           ) : (
-            <p className="text-sm text-slate-600">No observation yet.</p>
+            <p className="text-sm text-slate-600">-</p>
           )}
         </InspectorSection>
-        <InspectorSection title="Attention reasons" icon={<AlertTriangle className="h-4 w-4" />}>
+        <InspectorSection title={messages.squad.views.needsAttention.label} icon={<AlertTriangle className="h-4 w-4" />}>
           {player.attention.length ? (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">{player.attention.map((indicator) => <AttentionBadge key={indicator.id} indicator={indicator} />)}</div>
-              <ButtonLink href={`/actions?player=${summary.player.id}`} variant="secondary" className="h-9 justify-center px-3">Review in Action Center</ButtonLink>
+              <ButtonLink href={`/actions?player=${summary.player.id}`} variant="secondary" className="h-9 justify-center px-3">{messages.squad.actions.reviewInActionCenter}</ButtonLink>
             </div>
           ) : (
-            <p className="text-sm text-slate-600">No current attention indicators.</p>
+            <p className="text-sm text-slate-600">-</p>
           )}
         </InspectorSection>
         <div className="grid gap-2">
-          <ButtonLink href={playerHubHref(summary.player.id, returnTo)} className="justify-center">Open Player Hub</ButtonLink>
-          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "development")} variant="secondary" className="justify-center">Add observation or goal</ButtonLink>
-          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "medical")} variant="secondary" className="justify-center">Add injury or sickness</ButtonLink>
-          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "analytics")} variant="secondary" className="justify-center">Update assessment</ButtonLink>
+          <ButtonLink href={playerHubHref(summary.player.id, returnTo)} className="justify-center">{messages.squad.actions.openPlayerHub}</ButtonLink>
+          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "development")} variant="secondary" className="justify-center">{messages.squad.actions.addObservationOrGoal}</ButtonLink>
+          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "medical")} variant="secondary" className="justify-center">{messages.squad.actions.addInjuryOrSickness}</ButtonLink>
+          <ButtonLink href={playerHubHref(summary.player.id, returnTo, "analytics")} variant="secondary" className="justify-center">{messages.squad.actions.updateAssessment}</ButtonLink>
         </div>
       </div>
     </section>
   );
 }
 
-function WorkspaceEmpty({ data }: { data: WorkspaceData }) {
+function WorkspaceEmpty({ data, messages }: { data: WorkspaceData; messages: Messages }) {
   const hasSearchOrFilters = Boolean(
     data.state.search ||
     data.state.position ||
@@ -1348,33 +1361,33 @@ function WorkspaceEmpty({ data }: { data: WorkspaceData }) {
     data.state.ratingStatus ||
     data.state.importBatch
   );
-  const messages: Record<string, string> = {
-    "players:active": "No active Players in this Squad.",
-    "players:roster": "No active Players in this Squad.",
-    "players:trial": "No Trial Players.",
-    "players:archived": "No archived Players.",
-    "players:trash": "No Players in Trash.",
-    "view:trial-players": "No Trial Players.",
-    "view:reviews-due": "No reviews are currently due.",
-    "view:unavailable": "All active Players are currently available.",
-    "view:needs-attention": "No Players currently match the selected attention criteria."
+  const emptyMessages: Record<string, string> = {
+    "players:active": messages.squad.empty.active,
+    "players:roster": messages.squad.empty.roster,
+    "players:trial": messages.squad.empty.trial,
+    "players:archived": messages.squad.empty.archived,
+    "players:trash": messages.squad.empty.trash,
+    "view:trial-players": messages.squad.empty.trial,
+    "view:reviews-due": messages.squad.empty.reviewsDue,
+    "view:unavailable": messages.squad.empty.unavailable,
+    "view:needs-attention": messages.squad.empty.needsAttention
   };
-  const categoryMessage = messages[`players:${data.state.players}`] ?? messages[`view:${data.state.view}`] ?? "No Players to show in this category.";
+  const categoryMessage = emptyMessages[`players:${data.state.players}`] ?? emptyMessages[`view:${data.state.view}`] ?? messages.squad.empty.category;
   const message = data.allPlayers.length
-    ? hasSearchOrFilters ? "No Players match the current filters." : categoryMessage
-    : "No players in the squad yet. Add one player manually or import an entire squad from Excel, CSV or a copied table.";
+    ? hasSearchOrFilters ? messages.squad.empty.filtered : categoryMessage
+    : messages.squad.empty.newSquad;
   return (
     <div key={`${data.state.view}:${data.state.players}`} className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-      <h2 className="text-lg font-bold text-board-navy">Nothing to show</h2>
+      <h2 className="text-lg font-bold text-board-navy">{messages.squad.empty.title}</h2>
       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">{message}</p>
       {!data.allPlayers.length ? (
         <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
-          <ButtonLink href="/squad/players/new">Add player manually</ButtonLink>
-          <ButtonLink href="/squad/import" variant="secondary">Import players</ButtonLink>
+          <ButtonLink href="/squad/players/new">{messages.squad.actions.addPlayerManually}</ButtonLink>
+          <ButtonLink href="/squad/import" variant="secondary">{messages.squad.actions.importPlayers}</ButtonLink>
         </div>
       ) : hasSearchOrFilters ? (
         <div className="mt-5 flex justify-center">
-          <ButtonLink href={workspaceViewSwitchHref(data.state, data.state.view)} variant="secondary">Clear filters</ButtonLink>
+          <ButtonLink href={workspaceViewSwitchHref(data.state, data.state.view)} variant="secondary">{messages.squad.actions.clearFilters}</ButtonLink>
         </div>
       ) : null}
     </div>
@@ -1483,13 +1496,13 @@ function fieldClass() {
   return "h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100";
 }
 
-function StatusDot({ player, compact = false }: { player: WorkspacePlayerSummary; compact?: boolean }) {
+function StatusDot({ player, compact = false, messages }: { player: WorkspacePlayerSummary; compact?: boolean; messages: Messages }) {
   const medical = player.currentMedical;
   const tone = !medical ? "green" : medical.type === "injured" ? "red" : "amber";
   return (
     <span className={cn("inline-flex items-center gap-2 font-bold", compact ? "text-xs" : "text-sm", toneText(tone))}>
       <span className={cn("h-2.5 w-2.5 rounded-full", tone === "green" && "bg-green-600", tone === "amber" && "bg-amber-500", tone === "red" && "bg-red-500")} />
-      {availabilityLabel(player)}
+      {localizedAvailability(player, messages)}
     </span>
   );
 }
@@ -1578,7 +1591,7 @@ function visibleDesktopColumns(data: WorkspaceData, columnOrder = data.configura
   return ordered.length ? ordered : workspaceColumns.filter((column) => column.required || visible.has(column.id));
 }
 
-function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: WorkspaceData, player: WorkspacePlayerSummary) {
+function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: WorkspaceData, player: WorkspacePlayerSummary, messages: Messages) {
   const summary = player.analytics;
   const record = summary.latestTraining;
   const medical = player.currentMedical;
@@ -1587,7 +1600,7 @@ function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: Works
       <div className="min-w-[190px]">
         <Link href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))} className="font-bold text-board-navy hover:text-board-green">{playerName(summary.player)}</Link>
         <div className="mt-1 flex flex-wrap gap-1.5">
-          <Badge tone={summary.player.playerType === "trial" ? "amber" : "neutral"}>{summary.player.playerType === "trial" ? "Trial" : "Roster"}</Badge>
+          <Badge tone={summary.player.playerType === "trial" ? "amber" : "neutral"}>{playerTypeLabel(summary.player.playerType, messages)}</Badge>
           {(data.configuration.showAttentionIndicators || data.state.view === "needs-attention") && visibleAttention(player.attention).map((indicator) => <AttentionBadge key={indicator.id} indicator={indicator} />)}
         </div>
       </div>
@@ -1600,13 +1613,13 @@ function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: Works
   if (columnId === "strongFoot") return summary.player.strongFoot ?? "-";
   if (columnId === "jerseyNumber") return summary.player.jerseyNumber ?? "-";
   if (columnId === "club") return summary.player.club ?? "-";
-  if (columnId === "playerType") return summary.player.playerType === "trial" ? "Trial" : "Roster";
+  if (columnId === "playerType") return playerTypeLabel(summary.player.playerType, messages);
   if (columnId === "captainStatus") return summary.player.captainStatus && summary.player.captainStatus !== "none" ? summary.player.captainStatus.replace("_", " ") : "-";
   if (columnId === "joinedDate") return summary.player.joinedDate ? formatEventDate(summary.player.joinedDate) : "-";
-  if (columnId === "archivedStatus") return summary.player.archivedAt ? `Archived ${formatEventDate(summary.player.archivedAt.slice(0, 10))}` : "Active";
-  if (columnId === "availability") return <StatusDot player={player} compact />;
+  if (columnId === "archivedStatus") return summary.player.archivedAt ? formatMessage(messages.squad.labels.archived, { date: formatEventDate(summary.player.archivedAt.slice(0, 10)) }) : messages.squad.labels.active;
+  if (columnId === "availability") return <StatusDot player={player} compact messages={messages} />;
   if (columnId === "expectedReturn") return medical?.expectedReturnDate ? formatEventDate(medical.expectedReturnDate) : "-";
-  if (columnId === "medicalReview") return medical && availabilityLabel(player) === "Needs review" ? "Needs review" : "-";
+  if (columnId === "medicalReview") return medical && availabilityLabel(player) === "Needs review" ? messages.squad.labels.needsReview : "-";
   if (columnId === "attendance") return formatWorkspacePercent(summary.attendanceRate);
   if (columnId === "attendedTrainings") return String(summary.attended);
   if (columnId === "relevantTrainings") return String(summary.trainings);
@@ -1621,8 +1634,8 @@ function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: Works
   if (columnId === "evidence") return summary.evidenceBase.label;
   if (columnId === "recentRatings") return recentRatings(summary);
   if (columnId === "activeGoals") return String(player.activeGoals.length);
-  if (columnId === "goalPriority") return goalPriorityLabel(player);
-  if (columnId === "review") return <span className={cn("font-bold", toneText(player.review.tone))}>{player.review.label}</span>;
+  if (columnId === "goalPriority") return goalPriorityLabel(player, messages);
+  if (columnId === "review") return <span className={cn("font-bold", toneText(player.review.tone))}>{localizedReview(player.review.label, messages)}</span>;
   if (columnId === "coachAssessment") return coachAssessmentLabels[summary.assessment?.assessment ?? "decision_open"];
   if (columnId === "lastObservation") return player.latestObservation ? formatEventDate(player.latestObservation.observationDate) : "-";
   if (columnId === "observationAge") return player.latestObservation ? `${Math.max(0, daysBetween(player.latestObservation.observationDate, todayIso()))}d` : "-";
@@ -1640,22 +1653,22 @@ function playerHubHref(playerId: string, returnTo: string, tab?: string) {
   return `/squad/players/${playerId}?${params.toString()}`;
 }
 
-function mobileMetric(metricId: string, player: WorkspacePlayerSummary) {
+function mobileMetric(metricId: string, player: WorkspacePlayerSummary, messages: Messages) {
   const summary = player.analytics;
-  if (metricId === "average") return { label: "Average", value: formatWorkspaceRating(summary.averageRating), detail: `${summary.rated} ratings` };
-  if (metricId === "trend") return { label: "Trend", value: summary.trend.value === null ? "-" : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`, detail: summary.trend.label };
-  if (metricId === "attendance") return { label: "Attendance", value: formatWorkspacePercent(summary.attendanceRate), detail: `${summary.attended}/${summary.trainings}` };
-  if (metricId === "reliability") return { label: "Reliability", value: summary.reliabilityPenalty.toFixed(1), detail: `${summary.late} late` };
-  if (metricId === "latestRating") return { label: "Latest", value: summary.latestRating ? String(summary.latestRating) : "-", detail: summary.evidenceBase.label };
-  if (metricId === "ratedTrainings") return { label: "Rated", value: String(summary.rated), detail: "Trainings" };
-  if (metricId === "evidence") return { label: "Evidence", value: summary.evidenceBase.label, detail: "" };
-  if (metricId === "activeGoals") return { label: "Goals", value: String(player.activeGoals.length), detail: player.activeGoals.some((goal) => goal.priority === "high") ? "High priority" : "Active" };
-  if (metricId === "goalPriority") return { label: "Goal priority", value: goalPriorityLabel(player), detail: "" };
-  if (metricId === "review") return { label: "Review", value: player.review.label, detail: player.review.dueDate ? formatEventDate(player.review.dueDate) : "" };
-  if (metricId === "coachAssessment") return { label: "Assessment", value: coachAssessmentLabels[summary.assessment?.assessment ?? "decision_open"], detail: "" };
-  if (metricId === "lastObservation") return { label: "Observation", value: player.latestObservation ? formatEventDate(player.latestObservation.observationDate) : "-", detail: "" };
-  if (metricId === "expectedReturn") return { label: "Expected return", value: player.currentMedical?.expectedReturnDate ? formatEventDate(player.currentMedical.expectedReturnDate) : "-", detail: availabilityDetail(player) };
-  if (metricId === "trialDuration") return { label: "Trial duration", value: summary.player.playerType === "trial" ? `${Math.max(0, daysBetween((summary.player.joinedDate ?? summary.player.createdAt).slice(0, 10), todayIso()))}d` : "-", detail: "" };
+  if (metricId === "average") return { label: messages.squad.labels.average, value: formatWorkspaceRating(summary.averageRating), detail: `${summary.rated} ${messages.squad.labels.ratings}` };
+  if (metricId === "trend") return { label: messages.squad.labels.trend, value: summary.trend.value === null ? "-" : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`, detail: localizedTrend(summary.trend.label, messages) };
+  if (metricId === "attendance") return { label: messages.squad.labels.attendance, value: formatWorkspacePercent(summary.attendanceRate), detail: `${summary.attended}/${summary.trainings}` };
+  if (metricId === "reliability") return { label: messages.squad.labels.reliability, value: summary.reliabilityPenalty.toFixed(1), detail: `${summary.late} ${messages.squad.labels.late}` };
+  if (metricId === "latestRating") return { label: messages.squad.labels.latest, value: summary.latestRating ? String(summary.latestRating) : "-", detail: summary.evidenceBase.label };
+  if (metricId === "ratedTrainings") return { label: messages.squad.labels.rated, value: String(summary.rated), detail: messages.common.entities.trainings };
+  if (metricId === "evidence") return { label: messages.squad.labels.evidence, value: summary.evidenceBase.label, detail: "" };
+  if (metricId === "activeGoals") return { label: messages.squad.labels.goals, value: String(player.activeGoals.length), detail: player.activeGoals.some((goal) => goal.priority === "high") ? messages.squad.labels.highPriority : messages.squad.labels.active };
+  if (metricId === "goalPriority") return { label: messages.squad.labels.goalPriority, value: goalPriorityLabel(player, messages), detail: "" };
+  if (metricId === "review") return { label: messages.squad.labels.review, value: localizedReview(player.review.label, messages), detail: player.review.dueDate ? formatEventDate(player.review.dueDate) : "" };
+  if (metricId === "coachAssessment") return { label: messages.squad.labels.assessment, value: coachAssessmentLabels[summary.assessment?.assessment ?? "decision_open"], detail: "" };
+  if (metricId === "lastObservation") return { label: messages.squad.labels.observation, value: player.latestObservation ? formatEventDate(player.latestObservation.observationDate) : "-", detail: "" };
+  if (metricId === "expectedReturn") return { label: messages.squad.labels.expectedReturn, value: player.currentMedical?.expectedReturnDate ? formatEventDate(player.currentMedical.expectedReturnDate) : "-", detail: availabilityDetail(player) };
+  if (metricId === "trialDuration") return { label: messages.squad.labels.trialDuration, value: summary.player.playerType === "trial" ? `${Math.max(0, daysBetween((summary.player.joinedDate ?? summary.player.createdAt).slice(0, 10), todayIso()))}d` : "-", detail: "" };
   return null;
 }
 
@@ -1687,16 +1700,16 @@ function groupByPosition(players: WorkspacePlayerSummary[]) {
   });
 }
 
-function groupWorkspacePlayers(data: WorkspaceData) {
+function groupWorkspacePlayers(data: WorkspaceData, messages: Messages) {
   if (data.configuration.groupMode === "none") return null;
   if (data.configuration.groupMode === "playerType") {
     return [
-      { label: "Roster players", players: data.players.filter((player) => player.analytics.player.playerType === "roster") },
-      { label: "Trial players", players: data.players.filter((player) => player.analytics.player.playerType === "trial") }
+      { label: messages.squad.filters.rosterPlayers, players: data.players.filter((player) => player.analytics.player.playerType === "roster") },
+      { label: messages.squad.filters.trialPlayers, players: data.players.filter((player) => player.analytics.player.playerType === "trial") }
     ].filter((group) => group.players.length);
   }
   const grouped = groupByPosition(data.players);
-  return positionGroups.map((label) => ({ label, players: grouped[label] })).filter((group) => group.players.length);
+  return positionGroups.map((label) => ({ label: messages.squad.positionGroups[label], players: grouped[label] })).filter((group) => group.players.length);
 }
 
 function recentRatings(summary: WorkspacePlayerSummary["analytics"]) {
@@ -1707,11 +1720,106 @@ function recentRatings(summary: WorkspacePlayerSummary["analytics"]) {
   return values.length ? values.join(" · ") : "-";
 }
 
-function goalPriorityLabel(player: WorkspacePlayerSummary) {
-  if (player.activeGoals.some((goal) => goal.priority === "high")) return "High";
-  if (player.activeGoals.some((goal) => goal.priority === "medium")) return "Medium";
-  if (player.activeGoals.some((goal) => goal.priority === "low")) return "Low";
+function goalPriorityLabel(player: WorkspacePlayerSummary, messages: Messages) {
+  if (player.activeGoals.some((goal) => goal.priority === "high")) return messages.squad.labels.high;
+  if (player.activeGoals.some((goal) => goal.priority === "medium")) return messages.squad.labels.medium;
+  if (player.activeGoals.some((goal) => goal.priority === "low")) return messages.squad.labels.low;
   return "-";
+}
+
+function localizedQuickView(messages: Messages, viewId: WorkspaceView) {
+  const views = messages.squad.views;
+  const byId: Record<WorkspaceView, { label: string; description: string }> = {
+    all: views.all,
+    "by-position": views.byPosition,
+    "needs-attention": views.needsAttention,
+    development: views.development,
+    performance: views.performance,
+    attendance: views.attendance,
+    unavailable: views.unavailable,
+    "trial-players": views.trialPlayers,
+    "reviews-due": views.reviewsDue
+  };
+  return byId[viewId] ?? views.all;
+}
+
+function columnLabel(messages: Messages, columnId: WorkspaceColumnDefinition["id"]) {
+  const labels: Record<WorkspaceColumnDefinition["id"], string> = {
+    player: messages.squad.columns.player,
+    position: messages.squad.columns.position,
+    secondaryPositions: messages.squad.columns.secondaryPositions,
+    age: messages.squad.columns.age,
+    dateOfBirth: messages.squad.columns.dateOfBirth,
+    strongFoot: messages.squad.columns.strongFoot,
+    jerseyNumber: messages.squad.columns.jerseyNumber,
+    club: messages.squad.columns.club,
+    playerType: messages.squad.columns.playerType,
+    captainStatus: messages.squad.columns.captainStatus,
+    joinedDate: messages.squad.columns.joinedDate,
+    archivedStatus: messages.squad.columns.archivedStatus,
+    availability: messages.squad.columns.availability,
+    expectedReturn: messages.squad.columns.expectedReturn,
+    medicalReview: messages.squad.columns.medicalReview,
+    attendance: messages.squad.labels.attendance,
+    attendedTrainings: messages.squad.columns.attendedTrainings,
+    relevantTrainings: messages.squad.columns.relevantTrainings,
+    lastTraining: messages.squad.columns.lastTraining,
+    reliability: messages.squad.labels.reliability,
+    penalisedLateness: messages.squad.columns.penalisedLateness,
+    lateCancellations: messages.squad.columns.lateCancellations,
+    average: messages.squad.labels.average,
+    latestRating: messages.squad.columns.latestRating,
+    trend: messages.squad.labels.trend,
+    ratedTrainings: messages.squad.columns.ratedTrainings,
+    evidence: messages.squad.labels.evidence,
+    recentRatings: messages.squad.columns.recentRatings,
+    activeGoals: messages.squad.columns.activeGoals,
+    goalPriority: messages.squad.labels.goalPriority,
+    review: messages.squad.labels.review,
+    coachAssessment: messages.squad.filters.coachAssessment,
+    lastObservation: messages.squad.columns.lastObservation,
+    observationAge: messages.squad.columns.observationAge,
+    trialDuration: messages.squad.labels.trialDuration,
+    trialTrainings: messages.squad.columns.trialTrainings,
+    trialRatedTrainings: messages.squad.columns.trialRatedTrainings,
+    trialDecision: messages.squad.columns.trialDecision
+  };
+  return labels[columnId];
+}
+
+function localizeColumn(column: WorkspaceColumnDefinition, messages: Messages): WorkspaceColumnDefinition {
+  return {
+    ...column,
+    label: columnLabel(messages, column.id)
+  };
+}
+
+function playerTypeLabel(playerType: string | null | undefined, messages: Messages) {
+  return playerType === "trial" ? messages.squad.labels.trial : messages.squad.labels.roster;
+}
+
+function localizedAvailability(player: WorkspacePlayerSummary, messages: Messages) {
+  const label = availabilityLabel(player);
+  if (label === "Available") return messages.squad.labels.available;
+  if (label === "Needs review") return messages.squad.labels.needsReview;
+  return label;
+}
+
+function localizedReview(label: string, messages: Messages) {
+  if (label === "No review date") return messages.squad.labels.noReviewDate;
+  return label;
+}
+
+function localizedTrend(label: string, messages: Messages) {
+  if (label === "No trend") return messages.squad.labels.noTrend;
+  return label;
+}
+
+function localizedPriority(priority: string | null | undefined, messages: Messages) {
+  if (priority === "high") return messages.squad.labels.high;
+  if (priority === "medium") return messages.squad.labels.medium;
+  if (priority === "low") return messages.squad.labels.low;
+  return priority ?? "-";
 }
 
 function todayIso() {

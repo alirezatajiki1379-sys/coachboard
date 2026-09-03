@@ -4,6 +4,8 @@ import { PageContainer, PageHeader } from "@/components/layout/page";
 import { CoachWorkspace } from "@/components/squad/coach-workspace";
 import { SquadNav } from "@/components/squad/squad-nav";
 import { ButtonLink } from "@/components/ui/button";
+import { formatMessage, getMessages } from "@/lib/i18n";
+import { getUserLocale } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCoachWorkspaceData, parseWorkspaceState } from "@/lib/squad/workspace";
 
@@ -21,30 +23,38 @@ export default async function SquadPage({ searchParams }: SquadPageProps) {
 
   if (!user) redirect("/login");
 
-  const data = await getCoachWorkspaceData(supabase, user.id, state);
+  const [data, locale] = await Promise.all([
+    getCoachWorkspaceData(supabase, user.id, state),
+    getUserLocale(supabase, user.id)
+  ]);
+  const messages = getMessages(locale);
 
   return (
     <PageContainer width="wide">
       <PageHeader
-        eyebrow="Squad"
-        title="Coach Workspace"
-        description="Review your squad, identify players who need attention and open the right Player Hub when deeper context is needed."
-        metadata={`${data.counts.active} active players · ${data.counts.roster} roster · ${data.counts.trial} trial`}
+        eyebrow={messages.squad.page.eyebrow}
+        title={messages.squad.page.title}
+        description={messages.squad.page.description}
+        metadata={formatMessage(messages.squad.page.metadata, {
+          active: data.counts.active,
+          roster: data.counts.roster,
+          trial: data.counts.trial
+        })}
         actions={(
           <>
             <ButtonLink href="/squad/players/new" className="justify-center">
               <Plus className="h-4 w-4" />
-              Add player
+              {messages.squad.page.addPlayer}
             </ButtonLink>
             <ButtonLink href="/squad/import" variant="secondary" className="justify-center">
               <FileSpreadsheet className="h-4 w-4" />
-              Import players
+              {messages.squad.page.importPlayers}
             </ButtonLink>
           </>
         )}
       />
-      <SquadNav />
-      <CoachWorkspace data={data} />
+      <SquadNav locale={locale} />
+      <CoachWorkspace data={data} locale={locale} />
     </PageContainer>
   );
 }
