@@ -129,6 +129,9 @@ create table if not exists public.drills (
     check (max_players >= min_players),
 
   materials jsonb not null default '[]'::jsonb,
+  setup_area jsonb,
+  setup_parameters jsonb not null default '[]'::jsonb,
+  setup_notes text,
 
   pitch_area text,
 
@@ -170,6 +173,15 @@ add column if not exists minimum_age integer;
 
 alter table public.drills
 add column if not exists maximum_age integer;
+
+alter table public.drills
+add column if not exists setup_area jsonb;
+
+alter table public.drills
+add column if not exists setup_parameters jsonb not null default '[]'::jsonb;
+
+alter table public.drills
+add column if not exists setup_notes text;
 
 alter table public.drills
 drop constraint if exists drills_status_check;

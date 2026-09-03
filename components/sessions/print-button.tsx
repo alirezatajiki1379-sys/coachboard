@@ -2,12 +2,14 @@
 
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getMessages, type Locale } from "@/lib/i18n";
 
-export function PrintButton({ className }: { className?: string }) {
+export function PrintButton({ className, locale = "en" }: { className?: string; locale?: Locale }) {
+  const messages = getMessages(locale);
   return (
-    <Button type="button" className={className} onClick={() => window.print()} title="Open the browser print dialog. Choose Save as PDF to export.">
+    <Button type="button" className={className} onClick={() => window.print()} title={messages.export.actions.printTitle}>
       <Printer className="h-4 w-4" />
-      Print / save PDF
+      {messages.export.actions.printSavePdf}
     </Button>
   );
 }

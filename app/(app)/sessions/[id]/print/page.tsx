@@ -7,6 +7,9 @@ import { SessionDrillPreview } from "@/components/sessions/session-drill-preview
 import { MaterialSummaryList } from "@/components/sessions/material-summary-list";
 import { ButtonLink } from "@/components/ui/button";
 import { materialSummary } from "@/lib/drills/materials";
+import { formatArea, formatMeters } from "@/lib/drills/setup";
+import { formatDate, formatMessage, getMessages, localeToIntl } from "@/lib/i18n";
+import { getUserLocale } from "@/lib/i18n/server";
 import { calculateSessionDuration, calculateSessionMaterials, durationDeltaLabel, effectiveStationDuration, formatTimelineRange, groupByTrainingBlock, normalizeSimultaneousGroup, resolveGroupName, stationSetLabel, stationSetOptions } from "@/lib/sessions/utils";
 import { createClient } from "@/lib/supabase/server";
 import { getUserSession, type SessionDrillDetail } from "@/lib/sessions/queries";
@@ -27,6 +30,8 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
 
   const session = await getUserSession(supabase, user.id, id);
   if (!session) notFound();
+  const locale = await getUserLocale(supabase, user.id);
+  const messages = getMessages(locale);
 
   const total = calculateSessionDuration(session.drills);
   const blocks = groupByTrainingBlock(session.drills);
@@ -45,46 +50,47 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
       <div className="no-print mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-board-line bg-white p-4">
         <Link href={`/sessions/${session.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
           <ArrowLeft className="h-4 w-4" />
-          Back to training plan
+          {messages.export.actions.backToTrainingPlan}
         </Link>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-          <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary" className="flex-1 justify-center sm:flex-none">Edit session</ButtonLink>
-          <PrintButton className="flex-1 justify-center sm:flex-none" />
+          <ButtonLink href={`/sessions/${session.id}/field`} variant="secondary" className="flex-1 justify-center sm:flex-none">{messages.export.actions.fieldView}</ButtonLink>
+          <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary" className="flex-1 justify-center sm:flex-none">{messages.export.actions.editSession}</ButtonLink>
+          <PrintButton className="flex-1 justify-center sm:flex-none" locale={locale} />
         </div>
       </div>
 
       <article className="space-y-7 rounded-xl border border-board-line bg-white p-4 print:space-y-5 print:border-0 print:p-0 sm:p-8">
         <header className="print-avoid overflow-hidden rounded-xl border border-board-line">
           <div className="bg-board-navy px-6 py-5 text-white print:bg-board-navy">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-200">Football training plan</p>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-200">{messages.export.document.footballTrainingPlan}</p>
             <h1 className="mt-2 text-3xl font-bold tracking-normal print:text-3xl sm:text-4xl">{session.title}</h1>
             <p className="mt-2 text-sm text-white/80">
-              {session.mainFocus || "Training plan"}
+              {session.mainFocus || messages.export.document.trainingPlan}
               {session.secondaryFocus ? ` · ${session.secondaryFocus}` : ""}
             </p>
           </div>
           <div className="grid gap-px bg-board-line md:grid-cols-4 print:grid-cols-4">
-            <PrintMeta label="Date" value={session.date || "Not set"} />
-            <PrintMeta label="Start time" value={session.startTime || "Not set"} />
-            <PrintMeta label="Team / age group" value={session.teamAgeGroup || "Not set"} />
-            <PrintMeta label="Location" value={session.location || "Not set"} />
-            <PrintMeta label="Expected players" value={session.expectedPlayers ? String(session.expectedPlayers) : "Not set"} />
-            <PrintMeta label="Total duration" value={`${total} min`} emphasis />
-            <PrintMeta label="Target duration" value={session.durationTargetMinutes ? `${session.durationTargetMinutes} min` : "Not set"} />
-            <PrintMeta label="Target status" value={session.durationTargetMinutes ? targetLabel ?? "On target" : "No target set"} />
+            <PrintMeta label={messages.export.document.date} value={formatDate(session.date, locale, { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" }) || messages.export.document.notSet} />
+            <PrintMeta label={messages.export.document.startTime} value={session.startTime || messages.export.document.notSet} />
+            <PrintMeta label={messages.export.document.teamAgeGroup} value={session.teamAgeGroup || messages.export.document.notSet} />
+            <PrintMeta label={messages.export.document.location} value={session.location || messages.export.document.notSet} />
+            <PrintMeta label={messages.export.document.expectedPlayers} value={session.expectedPlayers ? String(session.expectedPlayers) : messages.export.document.notSet} />
+            <PrintMeta label={messages.export.document.totalDuration} value={`${total} min`} emphasis />
+            <PrintMeta label={messages.export.document.targetDuration} value={session.durationTargetMinutes ? `${session.durationTargetMinutes} min` : messages.export.document.notSet} />
+            <PrintMeta label={messages.export.document.targetStatus} value={session.durationTargetMinutes ? targetLabel ?? messages.export.document.onTarget : messages.export.document.noTargetSet} />
           </div>
         </header>
 
         <section className="grid gap-4 lg:grid-cols-[1.35fr_1fr] print:grid-cols-[1.35fr_1fr]">
-          <PrintPanel title="Material summary">
-            <p className="mb-3 text-xs text-slate-500">Required material, calculated from sequential and simultaneous drill usage.</p>
+          <PrintPanel title={messages.export.document.equipmentSummary}>
+            <p className="mb-3 text-xs text-slate-500">{messages.export.document.equipmentNote}</p>
             <div className="text-sm text-slate-700">
-              <MaterialSummaryList materials={materials} emptyText="No materials listed." />
+              <MaterialSummaryList materials={materials} emptyText={messages.export.document.noMaterialsListed} />
             </div>
           </PrintPanel>
 
           {session.playerGroups.length ? (
-            <PrintPanel title="Player groups">
+            <PrintPanel title={messages.export.document.playerGroups}>
               <ul className="space-y-2 text-sm">
                 {session.playerGroups.map((group) => (
                   <li key={group.id}>
@@ -98,7 +104,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
         </section>
 
         {session.notes ? (
-          <PrintPanel title="Training plan notes">
+          <PrintPanel title={messages.export.document.trainingPlanNotes}>
             <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{session.notes}</p>
           </PrintPanel>
         ) : null}
@@ -107,7 +113,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
           <div className="border-b border-board-line pb-3">
             <h2 className="text-2xl font-bold text-board-navy">Training timeline</h2>
             <p className="mt-1 text-sm text-slate-500">
-              {session.startTime ? "Times are shown as real clock ranges from the training plan start time." : "Times are shown as relative training plan ranges because no start time is set."}
+              {session.startTime ? messages.export.document.timesReal : messages.export.document.timesRelative}
             </p>
           </div>
 
@@ -127,7 +133,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide text-board-green">{formatTimelineRange(blockStart, block.duration, session.startTime)}</p>
                     <h3 className="mt-1 text-xl font-bold text-board-navy">{block.block}</h3>
-                    <p className="mt-1 text-sm text-slate-600">{block.duration} min · {block.items.length} drills</p>
+                    <p className="mt-1 text-sm text-slate-600">{block.duration} min · {formatMessage(messages.export.document.drillsCount, { count: block.items.length })}</p>
                   </div>
                   {block.stationSets.length ? (
                     <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
@@ -139,7 +145,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
                 <div className="space-y-4 p-4">
                   {blockMaterials.length ? (
                     <section className="print-avoid rounded-lg border border-board-line bg-white p-4">
-                      <h4 className="text-sm font-bold uppercase tracking-wide text-board-green">Materials for {block.block}</h4>
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-board-green">{formatMessage(messages.export.document.materialsForBlock, { block: block.block })}</h4>
                       <div className="mt-2 text-sm text-slate-700">
                         <MaterialSummaryList materials={blockMaterials} />
                       </div>
@@ -155,12 +161,12 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
                             <h4 className="text-sm font-bold uppercase tracking-wide text-board-green">{set.label}</h4>
-                            <p className="mt-1 text-xs text-slate-600">Drills in this station set run at the same time.</p>
+                            <p className="mt-1 text-xs text-slate-600">{messages.export.document.stationSetHelper}</p>
                           </div>
                           <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-board-navy ring-1 ring-emerald-100">{setDuration} min</span>
                         </div>
                         <div className="mt-3 space-y-3">
-                          {setItems.map((item) => <PrintableDrill key={item.id} item={item} playerGroups={session.playerGroups} />)}
+                          {setItems.map((item) => <PrintableDrill key={item.id} item={item} playerGroups={session.playerGroups} locale={locale} />)}
                         </div>
                       </section>
                     );
@@ -168,11 +174,11 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
 
                   {block.items.some((item) => item.timingMode !== "simultaneous") ? (
                     <section className="print-avoid rounded-lg border border-board-line bg-board-paper p-4">
-                      <h4 className="text-sm font-bold uppercase tracking-wide text-board-green">Sequential drills</h4>
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-board-green">{messages.export.document.sequentialDrills}</h4>
                       <div className="mt-3 space-y-3">
                         {block.items
                           .filter((item) => item.timingMode !== "simultaneous")
-                          .map((item) => <PrintableDrill key={item.id} item={item} playerGroups={session.playerGroups} />)}
+                          .map((item) => <PrintableDrill key={item.id} item={item} playerGroups={session.playerGroups} locale={locale} />)}
                       </div>
                     </section>
                   ) : null}
@@ -186,15 +192,18 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
   );
 }
 
-function PrintableDrill({ item, playerGroups }: { item: SessionDrillDetail; playerGroups: SessionPlayerGroup[] }) {
+function PrintableDrill({ item, playerGroups, locale }: { item: SessionDrillDetail; playerGroups: SessionPlayerGroup[]; locale: "en" | "de" }) {
   const drill = item.drill;
+  const messages = getMessages(locale);
+  const intlLocale = localeToIntl(locale);
   const details = [
-    { label: "Organization", value: drill.organization || drill.shortDescription },
-    { label: "Coaching points", value: drill.coachingPoints },
-    { label: "Variations", value: drill.variations },
-    { label: "Easier", value: drill.easierVersion },
-    { label: "Harder", value: drill.harderVersion }
+    { label: messages.export.document.organization, value: drill.organization || drill.shortDescription },
+    { label: messages.export.document.coachingPoints, value: drill.coachingPoints },
+    { label: messages.export.document.variations, value: drill.variations },
+    { label: messages.export.document.easier, value: drill.easierVersion },
+    { label: messages.export.document.harder, value: drill.harderVersion }
   ].filter((detail) => detail.value);
+  const areaLabel = formatArea(drill.setupArea, intlLocale);
 
   return (
     <article className="print-avoid rounded-lg border border-board-line bg-white p-4">
@@ -207,25 +216,40 @@ function PrintableDrill({ item, playerGroups }: { item: SessionDrillDetail; play
             <div>
               <h5 className="text-base font-bold text-board-navy">{drill.title}</h5>
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                {item.timingMode === "simultaneous" ? `Station set: ${stationSetLabel(item.simultaneousGroup)}` : "Sequential"} · {item.plannedDurationMinutes} min
+                {item.timingMode === "simultaneous" ? `${messages.export.document.stationSet}: ${stationSetLabel(item.simultaneousGroup)}` : messages.export.document.sequentialDrills} · {item.plannedDurationMinutes} min
               </p>
             </div>
             {item.timingMode === "simultaneous" ? (
               <span className="rounded-full bg-board-paper px-3 py-1 text-xs font-semibold text-slate-600">
-                {item.plannedDurationMinutes} × {Math.max(1, item.participatingGroups?.length ?? 0)} groups = {effectiveStationDuration(item)} min
+                {formatMessage(messages.export.document.groupsFormula, { duration: item.plannedDurationMinutes, groups: Math.max(1, item.participatingGroups?.length ?? 0), total: effectiveStationDuration(item) })}
               </span>
             ) : null}
           </div>
 
           {item.timingMode === "simultaneous" ? (
             <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-              <span className="rounded bg-slate-50 px-2 py-1">Groups: {item.participatingGroups?.length ? item.participatingGroups.map((groupId) => resolveGroupName(playerGroups, groupId)).join(", ") : "Not set"}</span>
-              <span className="rounded bg-slate-50 px-2 py-1">Starts: {resolveGroupName(playerGroups, item.startingGroup) || "Not set"}</span>
+              <span className="rounded bg-slate-50 px-2 py-1">{messages.export.document.groups}: {item.participatingGroups?.length ? item.participatingGroups.map((groupId) => resolveGroupName(playerGroups, groupId)).join(", ") : messages.export.document.notSet}</span>
+              <span className="rounded bg-slate-50 px-2 py-1">{messages.export.document.starts}: {resolveGroupName(playerGroups, item.startingGroup) || messages.export.document.notSet}</span>
             </div>
           ) : null}
 
-          {item.coachNotes ? <PrintDetailBlock label="Coach notes">{item.coachNotes}</PrintDetailBlock> : null}
-          {drill.materials.length ? <p className="mt-2 text-xs font-semibold text-slate-500">Materials: {materialSummary(drill.materials)}</p> : null}
+          {(areaLabel || drill.setupParameters.length || drill.setupNotes) ? (
+            <div className="mt-3 rounded-md border border-board-line bg-slate-50 p-3 text-xs text-slate-700">
+              <p className="font-bold uppercase text-board-green">{messages.export.document.setup}</p>
+              {areaLabel ? <p className="mt-1"><span className="font-semibold">{messages.export.document.area}:</span> {areaLabel}</p> : null}
+              {drill.setupParameters.length ? (
+                <ul className="mt-1 space-y-0.5">
+                  {drill.setupParameters.map((parameter) => (
+                    <li key={parameter.id}><span className="font-semibold">{parameter.label}:</span> {formatMeters(parameter.value, intlLocale)}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {drill.setupNotes ? <p className="mt-1 whitespace-pre-wrap">{drill.setupNotes}</p> : null}
+            </div>
+          ) : null}
+
+          {item.coachNotes ? <PrintDetailBlock label={messages.export.document.coachNotes}>{item.coachNotes}</PrintDetailBlock> : null}
+          {drill.materials.length ? <p className="mt-2 text-xs font-semibold text-slate-500">{messages.export.document.materials}: {materialSummary(drill.materials)}</p> : null}
 
           {details.length ? (
             <div className="mt-3 space-y-2">

@@ -6,6 +6,8 @@ import { ButtonLink } from "@/components/ui/button";
 import { SessionActions } from "@/components/sessions/session-actions";
 import { SessionDrillPreview } from "@/components/sessions/session-drill-preview";
 import { MaterialSummaryList } from "@/components/sessions/material-summary-list";
+import { getMessages } from "@/lib/i18n";
+import { getUserLocale } from "@/lib/i18n/server";
 import { materialSummary } from "@/lib/drills/materials";
 import { createClient } from "@/lib/supabase/server";
 import { getUserSession, type SessionDrillDetail } from "@/lib/sessions/queries";
@@ -27,6 +29,8 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
 
   const session = await getUserSession(supabase, user.id, id);
   if (!session) notFound();
+  const locale = await getUserLocale(supabase, user.id);
+  const messages = getMessages(locale);
 
   const total = calculateSessionDuration(session.drills);
   const materials = calculateSessionMaterials(
@@ -63,7 +67,11 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
           <div className="flex flex-wrap gap-2">
             <ButtonLink href={`/sessions/${session.id}/print`} variant="primary">
               <FileText className="h-4 w-4" />
-              Export PDF
+              {messages.export.actions.fullTraining}
+            </ButtonLink>
+            <ButtonLink href={`/sessions/${session.id}/field`} variant="secondary">
+              <FileText className="h-4 w-4" />
+              {messages.export.actions.fieldView}
             </ButtonLink>
             {view !== "trash" ? <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary">
               <Edit className="h-4 w-4" />

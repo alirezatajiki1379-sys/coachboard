@@ -109,6 +109,19 @@ export type MaterialItem = {
   quantity: number;
 };
 
+export type DrillSetupArea = {
+  length?: number;
+  width?: number;
+  unit: "m";
+};
+
+export type DrillSetupParameter = {
+  id: string;
+  label: string;
+  value: number;
+  unit: "m";
+};
+
 export type Drill = {
   id: string;
   userId: string;
@@ -131,6 +144,9 @@ export type Drill = {
   minPlayers: number;
   maxPlayers: number;
   materials: MaterialItem[];
+  setupArea?: DrillSetupArea;
+  setupParameters: DrillSetupParameter[];
+  setupNotes?: string;
   pitchArea?: string;
   difficultyLevel: 1 | 2 | 3 | 4 | 5;
   intensityLevel: 1 | 2 | 3 | 4 | 5;

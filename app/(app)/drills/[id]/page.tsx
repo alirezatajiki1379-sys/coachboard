@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, Clock, Edit, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, Clock, Edit, FileText, Users } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
@@ -64,6 +64,10 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
               <Edit className="h-4 w-4" />
               {drill.status === "draft" ? "Continue editing" : "Edit"}
             </ButtonLink> : null}
+            <ButtonLink href={`/drills/${drill.id}/print`} variant="secondary">
+              <FileText className="h-4 w-4" />
+              Print Drill
+            </ButtonLink>
             <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} view={view} isDraft={drill.status === "draft"} />
           </div>
         </div>

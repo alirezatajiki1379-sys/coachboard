@@ -1,8 +1,9 @@
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { parseEditorJsonString } from "@/lib/drills/editor";
 import { detectMaterialsFromGraphic, materialsToJson, parseMaterials, parseMaterialsJson } from "@/lib/drills/materials";
+import { parseSetupNumberInput, setupAreaToJson, setupParametersToJson } from "@/lib/drills/setup";
 import type { DrillInsert, DrillUpdate } from "@/lib/drills/mappers";
-import type { AgeGroup, DrillType, MainFocus, TrainingBlock } from "@/types/domain";
+import type { AgeGroup, DrillSetupParameter, DrillType, MainFocus, TrainingBlock } from "@/types/domain";
 import type { DrillEditorState } from "@/types/editor";
 
 export type DrillFormField =
@@ -25,6 +26,10 @@ export type DrillFormField =
   | "minPlayers"
   | "maxPlayers"
   | "materials"
+  | "setupAreaLength"
+  | "setupAreaWidth"
+  | "setupParameters"
+  | "setupNotes"
   | "difficultyLevel"
   | "intensityLevel"
   | "tags"
@@ -51,6 +56,10 @@ export type DrillFormValues = {
   maxPlayers: string;
   materials: string;
   materialsJson: string;
+  setupAreaLength: string;
+  setupAreaWidth: string;
+  setupParametersJson: string;
+  setupNotes: string;
   difficultyLevel: string;
   intensityLevel: string;
   tags: string;
@@ -110,6 +119,10 @@ export function snapshotDrillFormValues(formData: FormData): DrillFormValues {
     maxPlayers: text(formData, "maxPlayers"),
     materials: text(formData, "materials"),
     materialsJson: text(formData, "materialsJson"),
+    setupAreaLength: text(formData, "setupAreaLength"),
+    setupAreaWidth: text(formData, "setupAreaWidth"),
+    setupParametersJson: text(formData, "setupParametersJson"),
+    setupNotes: text(formData, "setupNotes"),
     difficultyLevel: text(formData, "difficultyLevel"),
     intensityLevel: text(formData, "intensityLevel"),
     tags: text(formData, "tags"),
@@ -149,6 +162,12 @@ export function parseDrillForm(formData: FormData): DrillFormResult {
   const graphic = parseEditorJsonString(values.graphicJson);
   const materialRows = parseMaterialsJson(text(formData, "materialsJson")) ?? parseMaterials(text(formData, "materials"));
   const finalMaterials = materialRows.length ? materialRows : detectMaterialsFromGraphic(graphic);
+  const setupArea = {
+    length: parseSetupNumberInput(values.setupAreaLength),
+    width: parseSetupNumberInput(values.setupAreaWidth),
+    unit: "m" as const
+  };
+  const setupParameters = parseSetupParametersInput(values.setupParametersJson);
 
   return {
     ok: true,
@@ -172,6 +191,9 @@ export function parseDrillForm(formData: FormData): DrillFormResult {
       min_players: minPlayers,
       max_players: maxPlayers,
       materials: materialsToJson(finalMaterials),
+      setup_area: setupAreaToJson(setupArea),
+      setup_parameters: setupParametersToJson(setupParameters),
+      setup_notes: optionalText(text(formData, "setupNotes")),
       pitch_area: null,
       difficulty_level: Math.min(Math.max(difficulty, 1), 5),
       intensity_level: Math.min(Math.max(intensity, 1), 5),
@@ -225,6 +247,12 @@ export function parseDrillDraftForm(formData: FormData): { data: Omit<DrillInser
   const graphic = parseEditorJsonString(values.graphicJson);
   const materialRows = parseMaterialsJson(text(formData, "materialsJson")) ?? parseMaterials(text(formData, "materials"));
   const finalMaterials = materialRows.length ? materialRows : detectMaterialsFromGraphic(graphic);
+  const setupArea = {
+    length: parseSetupNumberInput(values.setupAreaLength),
+    width: parseSetupNumberInput(values.setupAreaWidth),
+    unit: "m" as const
+  };
+  const setupParameters = parseSetupParametersInput(values.setupParametersJson);
 
   return {
     values,
@@ -249,6 +277,9 @@ export function parseDrillDraftForm(formData: FormData): { data: Omit<DrillInser
       min_players: minPlayers,
       max_players: maxPlayers,
       materials: materialsToJson(finalMaterials),
+      setup_area: setupAreaToJson(setupArea),
+      setup_parameters: setupParametersToJson(setupParameters),
+      setup_notes: optionalText(text(formData, "setupNotes")),
       pitch_area: null,
       difficulty_level: Math.min(Math.max(difficulty, 1), 5),
       intensity_level: Math.min(Math.max(intensity, 1), 5),
@@ -311,4 +342,27 @@ function parseOptionalAge(value: string, field: "minimumAge" | "maximumAge", fie
     return null;
   }
   return age;
+}
+
+function parseSetupParametersInput(value: string): DrillSetupParameter[] {
+  if (!value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const label = typeof item.label === "string" ? item.label.trim() : "";
+      const rawValue = typeof item.value === "string" ? item.value : typeof item.value === "number" ? String(item.value) : "";
+      const measurement = parseSetupNumberInput(rawValue);
+      if (!label || measurement == null) return [];
+      return [{
+        id: typeof item.id === "string" && item.id ? item.id : `setup-${Date.now()}`,
+        label,
+        value: measurement,
+        unit: "m" as const
+      }];
+    });
+  } catch {
+    return [];
+  }
 }

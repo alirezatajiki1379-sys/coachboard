@@ -69,6 +69,9 @@ export type Database = {
           min_players: number;
           max_players: number;
           materials: Json;
+          setup_area: Json | null;
+          setup_parameters: Json;
+          setup_notes: string | null;
           pitch_area: string | null;
           difficulty_level: number;
           intensity_level: number;
@@ -102,6 +105,9 @@ export type Database = {
           min_players?: number;
           max_players?: number;
           materials?: Json;
+          setup_area?: Json | null;
+          setup_parameters?: Json;
+          setup_notes?: string | null;
           pitch_area?: string | null;
           difficulty_level?: number;
           intensity_level?: number;
@@ -135,6 +141,9 @@ export type Database = {
           min_players?: number;
           max_players?: number;
           materials?: Json;
+          setup_area?: Json | null;
+          setup_parameters?: Json;
+          setup_notes?: string | null;
           pitch_area?: string | null;
           difficulty_level?: number;
           intensity_level?: number;

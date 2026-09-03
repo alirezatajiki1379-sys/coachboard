@@ -10,6 +10,7 @@ import { useUnsavedChangesProtection } from "@/components/shared/use-unsaved-cha
 import { useLocalDraft } from "@/components/shared/local-draft";
 import { parseEditorJsonString } from "@/lib/drills/editor";
 import { detectMaterialsFromGraphic, materialCategoryLabel, materialDisplayGroups, materialLineLabel, materialsToJson, parseMaterials, serializeMaterials } from "@/lib/drills/materials";
+import { parseSetupNumberInput } from "@/lib/drills/setup";
 import type { DrillActionState } from "@/lib/drills/actions";
 import { snapshotDrillFormValues, validateDrillFormFields, type DrillFormField, type DrillFormValues, type DrillValidationErrors } from "@/lib/drills/form";
 import { formatCustomAgeRange } from "@/lib/drills/age-suitability";
@@ -55,6 +56,10 @@ const validationFieldOrder: DrillFormField[] = [
   "easierVersion",
   "harderVersion",
   "materials",
+  "setupAreaLength",
+  "setupAreaWidth",
+  "setupParameters",
+  "setupNotes",
   "difficultyLevel",
   "intensityLevel",
   "tags",
@@ -73,6 +78,12 @@ const fieldLabels: Partial<Record<DrillFormField, string>> = {
   maximumAge: "Maximum age",
   trainingBlocks: "Training section",
   tags: "Tags"
+};
+
+type SetupParameterRow = {
+  id: string;
+  label: string;
+  value: string;
 };
 
 export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = "", cancelHref, hiddenFields, contextBanner }: DrillFormProps) {
@@ -340,6 +351,31 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
       <DrillEditor initialValue={values.graphicJson} onDirty={markDirty} />
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+        <h2 className="text-lg font-bold text-board-navy">Setup</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Optional pitch-side details for print, PDF and Field View. Measurements are only shown when you enter them.
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <NumberInput
+            name="setupAreaLength"
+            label="Area length in meters"
+            defaultValue={values.setupAreaLength}
+            min={0}
+            step="0.1"
+          />
+          <NumberInput
+            name="setupAreaWidth"
+            label="Area width in meters"
+            defaultValue={values.setupAreaWidth}
+            min={0}
+            step="0.1"
+          />
+        </div>
+        <SetupParametersEditor initialValue={values.setupParametersJson} onDirty={markDirty} />
+        <TextArea name="setupNotes" label="Setup notes" rows={3} defaultValue={values.setupNotes} help="Practical setup instructions that should appear on printable coaching sheets." />
+      </section>
+
+      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-bold text-board-navy">Coaching content</h2>
         <div className="mt-4 grid gap-4">
           <TextArea name="organization" label="Detailed organization" rows={5} defaultValue={values.organization} />
@@ -434,6 +470,10 @@ function normalizeDrillDraftValues(values: DrillFormValues, fallback: DrillFormV
     minPlayers: normalizedNumber(values.minPlayers, normalizedNumber(fallback.minPlayers, 1)),
     maxPlayers: normalizedNumber(values.maxPlayers, normalizedNumber(fallback.maxPlayers, 12)),
     materials: normalizedMaterials(values),
+    setupAreaLength: normalizedSetupNumber(values.setupAreaLength),
+    setupAreaWidth: normalizedSetupNumber(values.setupAreaWidth),
+    setupParameters: normalizedSetupParameters(values.setupParametersJson),
+    setupNotes: normalizedText(values.setupNotes),
     difficultyLevel: normalizedNumber(values.difficultyLevel, normalizedNumber(fallback.difficultyLevel, 3)),
     intensityLevel: normalizedNumber(values.intensityLevel, normalizedNumber(fallback.intensityLevel, 3)),
     tags: parseTagInput(values.tags).map((tag) => tag.toLowerCase()).sort(),
@@ -467,6 +507,28 @@ function normalizedNumber(value: string | undefined, fallback: number) {
 function normalizedOptionalAge(value: string | undefined) {
   const parsed = Number.parseInt(value?.trim() ?? "", 10);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizedSetupNumber(value: string | undefined) {
+  return parseSetupNumberInput(value ?? "") ?? null;
+}
+
+function normalizedSetupParameters(value: string | undefined) {
+  if (!value?.trim()) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+      .map((item) => ({
+        label: typeof item.label === "string" ? item.label.trim() : "",
+        value: typeof item.value === "string" ? normalizedSetupNumber(item.value) : typeof item.value === "number" ? normalizedSetupNumber(String(item.value)) : null
+      }))
+      .filter((item) => item.label && item.value != null)
+      .sort((a, b) => a.label.localeCompare(b.label));
+  } catch {
+    return [];
+  }
 }
 
 function normalizedMaterials(values: DrillFormValues) {
@@ -676,6 +738,95 @@ function MaterialListEditor({
   );
 }
 
+function SetupParametersEditor({ initialValue, onDirty }: { initialValue: string; onDirty: () => void }) {
+  const [rows, setRows] = useState<SetupParameterRow[]>(() => parseSetupParameterRows(initialValue));
+  const normalizedRows = rows
+    .map((row) => ({
+      id: row.id,
+      label: row.label.trim(),
+      value: parseSetupNumberInput(row.value),
+      unit: "m" as const
+    }))
+    .filter((row) => row.label && row.value != null);
+
+  function updateRow(id: string, patch: Partial<SetupParameterRow>) {
+    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+    onDirty();
+  }
+
+  function addRow() {
+    setRows((current) => [...current, { id: crypto.randomUUID(), label: "", value: "" }]);
+    onDirty();
+  }
+
+  function removeRow(id: string) {
+    setRows((current) => current.filter((row) => row.id !== id));
+    onDirty();
+  }
+
+  return (
+    <div className="mt-4">
+      <input type="hidden" name="setupParametersJson" value={JSON.stringify(normalizedRows)} readOnly />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700">Setup parameters</h3>
+          <p className="mt-1 text-xs text-slate-500">Add distances like cone distance, gate width or line spacing. No distances are guessed from the drawing.</p>
+        </div>
+        <Button type="button" variant="secondary" className="h-9 px-3" onClick={addRow}>
+          <Plus className="h-4 w-4" />
+          Add parameter
+        </Button>
+      </div>
+      <div className="mt-3 space-y-2">
+        {rows.length ? rows.map((row) => (
+          <div key={row.id} className="grid gap-2 rounded-md border border-board-line bg-board-paper p-3 sm:grid-cols-[minmax(0,1fr)_140px_auto] sm:items-end">
+            <label>
+              <span className="text-xs font-semibold text-slate-500">Label</span>
+              <input
+                value={row.label}
+                onChange={(event) => updateRow(row.id, { label: event.target.value })}
+                placeholder="Cone distance"
+                className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
+              />
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-slate-500">Meters</span>
+              <input
+                value={row.value}
+                onChange={(event) => updateRow(row.id, { value: event.target.value })}
+                inputMode="decimal"
+                placeholder="5"
+                className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
+              />
+            </label>
+            <Button type="button" variant="danger" className="h-10 px-3" onClick={() => removeRow(row.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        )) : (
+          <p className="rounded-md border border-dashed border-board-line bg-board-paper p-3 text-sm text-slate-500">No setup parameters yet.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function parseSetupParameterRows(value: string): SetupParameterRow[] {
+  if (!value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const label = typeof item.label === "string" ? item.label : "";
+      const rawValue = typeof item.value === "number" ? String(item.value) : typeof item.value === "string" ? item.value : "";
+      return [{ id: typeof item.id === "string" && item.id ? item.id : crypto.randomUUID(), label, value: rawValue }];
+    });
+  } catch {
+    return [];
+  }
+}
+
 function MaterialRowEditor({
   row,
   onUpdate,
@@ -877,6 +1028,10 @@ function getInitialValues(drill?: Drill, graphicJson = ""): DrillFormValues {
     maxPlayers: String(drill?.maxPlayers ?? 12),
     materials: drill ? serializeMaterials(drill.materials) : "",
     materialsJson: drill ? JSON.stringify(materialsToJson(drill.materials)) : "",
+    setupAreaLength: drill?.setupArea?.length ? String(drill.setupArea.length) : "",
+    setupAreaWidth: drill?.setupArea?.width ? String(drill.setupArea.width) : "",
+    setupParametersJson: drill ? JSON.stringify(drill.setupParameters) : "",
+    setupNotes: drill?.setupNotes ?? "",
     difficultyLevel: String(drill?.difficultyLevel ?? 3),
     intensityLevel: String(drill?.intensityLevel ?? 3),
     tags: drill?.tags.join(", ") ?? "",
@@ -1162,6 +1317,7 @@ function NumberInput({
   defaultValue,
   min,
   max,
+  step,
   required = false,
   error
 }: {
@@ -1170,6 +1326,7 @@ function NumberInput({
   defaultValue: string;
   min?: number;
   max?: number;
+  step?: number | string;
   required?: boolean;
   error?: string;
 }) {
@@ -1186,6 +1343,7 @@ function NumberInput({
         type="number"
         min={min}
         max={max}
+        step={step}
         aria-required={required}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}

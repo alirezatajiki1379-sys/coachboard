@@ -1,6 +1,7 @@
 import type { Database } from "@/types/database";
 import type { Drill } from "@/types/domain";
 import { jsonToMaterials, materialsToJson } from "@/lib/drills/materials";
+import { parseSetupArea, parseSetupParameters, setupAreaToJson, setupParametersToJson } from "@/lib/drills/setup";
 
 export type DrillRow = Database["public"]["Tables"]["drills"]["Row"];
 export type DrillInsert = Database["public"]["Tables"]["drills"]["Insert"];
@@ -44,6 +45,9 @@ export function mapDrillRow(row: DrillRow): Drill {
     minPlayers: row.min_players,
     maxPlayers: row.max_players,
     materials: jsonToMaterials(row.materials),
+    setupArea: parseSetupArea(row.setup_area),
+    setupParameters: parseSetupParameters(row.setup_parameters),
+    setupNotes: row.setup_notes ?? undefined,
     pitchArea: row.pitch_area ?? undefined,
     difficultyLevel: toLevel(row.difficulty_level),
     intensityLevel: toLevel(row.intensity_level),
@@ -79,6 +83,9 @@ export function mapDrillToDuplicateInsert(drill: Drill, userId: string): DrillIn
     min_players: drill.minPlayers,
     max_players: drill.maxPlayers,
     materials: materialsToJson(drill.materials),
+    setup_area: setupAreaToJson(drill.setupArea),
+    setup_parameters: setupParametersToJson(drill.setupParameters),
+    setup_notes: drill.setupNotes ?? null,
     pitch_area: drill.pitchArea ?? null,
     difficulty_level: drill.difficultyLevel,
     intensity_level: drill.intensityLevel,
