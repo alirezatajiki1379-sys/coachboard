@@ -9,10 +9,31 @@ type DrillFiltersProps = {
 };
 
 export function DrillFilters({ filters }: DrillFiltersProps) {
+  const usageViews = [
+    { value: "all", label: "All Drills" },
+    { value: "favorites", label: "Favorites" },
+    { value: "recent", label: "Recently used" },
+    { value: "never", label: "Never used" }
+  ] as const;
+
   return (
     <form className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <input type="hidden" name="view" value={filters.view} />
-      <div className="grid gap-3 lg:grid-cols-[1.5fr_repeat(4,1fr)_auto]">
+      <div className="mb-4 flex flex-wrap gap-2" aria-label="Usage views">
+        {usageViews.map((view) => (
+          <label
+            key={view.value}
+            className={`cursor-pointer rounded-md px-3 py-2 text-sm font-semibold transition ${
+              filters.usage === view.value ? "bg-board-green text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-board-navy"
+            }`}
+          >
+            <input type="radio" name="usage" value={view.value} defaultChecked={filters.usage === view.value} className="sr-only" />
+            {view.label}
+          </label>
+        ))}
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[1.5fr_repeat(5,1fr)_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
           <input
@@ -27,6 +48,14 @@ export function DrillFilters({ filters }: DrillFiltersProps) {
         <Select name="mainFocus" label="Main focus" value={filters.mainFocus} options={mainFocuses} />
         <Select name="trainingBlock" label="Block" value={filters.trainingBlock} options={trainingBlocks} />
         <Select name="drillType" label="Drill type" value={filters.drillType} options={drillTypes} />
+        <Select name="sort" label="Sort" value={filters.sort} options={[
+          { value: "updated", label: "Recently updated" },
+          { value: "recently_used", label: "Recently used" },
+          { value: "most_used", label: "Most used" },
+          { value: "name", label: "Name" },
+          { value: "created", label: "Recently created" },
+          { value: "effectiveness", label: "Effectiveness" }
+        ]} />
 
         <Button type="submit" className="h-10 justify-center">
           <Filter className="h-4 w-4" />
@@ -43,19 +72,9 @@ export function DrillFilters({ filters }: DrillFiltersProps) {
         <Input name="material" label="Material" value={filters.material} />
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
-          <input
-            type="checkbox"
-            name="favorites"
-            value="true"
-            defaultChecked={filters.favorites}
-            className="h-4 w-4 rounded border-board-line text-board-green"
-          />
-          Favorites only
-        </label>
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
         <ButtonLink href="/drills" variant="ghost" className="h-9 justify-center px-3">
-          Reset filters
+          Clear filters
         </ButtonLink>
       </div>
     </form>

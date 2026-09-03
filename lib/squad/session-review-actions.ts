@@ -133,6 +133,7 @@ export async function saveTrainingSessionReview(_: SessionReviewActionState, for
 
   revalidatePath(`/trainings/${eventId}`);
   revalidatePath(`/trainings/${eventId}/review`);
+  revalidatePath("/drills");
   revalidatePath("/actions");
   revalidatePath("/dashboard");
   return { success: "Session review saved.", submissionId: Date.now() };

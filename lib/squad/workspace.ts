@@ -395,6 +395,7 @@ export async function getCoachWorkspaceData(
   const effectiveState = applyConfigurationToState({ ...state, view: baseView, savedView: activeSavedView?.id }, configuration);
   const analyticsFilters = {
     period: effectiveState.period,
+    section: "overview" as const,
     playerType: "all" as const,
     ratedOnly: false,
     sort: "name" as const,

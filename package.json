@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "i18n:check": "node scripts/check-i18n.mjs",
     "db:check": "node scripts/check-supabase-schema.mjs",
     "test:recurrence": "node --experimental-strip-types scripts/recurrence-regression.mjs",
     "test:calendar": "node --experimental-strip-types scripts/calendar-regression.mjs",

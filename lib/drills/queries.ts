@@ -3,10 +3,12 @@ import type { createClient } from "@/lib/supabase/server";
 import { mapDrillRow, type DrillRow } from "@/lib/drills/mappers";
 import { drillMatchesAgeFilter } from "@/lib/drills/age-suitability";
 import { parseEditorState } from "@/lib/drills/editor";
+import { getDrillUsageStatsByDrillId, type DrillUsageStats } from "@/lib/drills/usage";
 import type { Json } from "@/types/database";
 import type { DrillEditorState } from "@/types/editor";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+export type DrillWithLibraryData = Drill & { graphic?: DrillEditorState; usage: DrillUsageStats };
 
 const drillLibraryColumns = [
   "id",
@@ -39,6 +41,8 @@ const drillLibraryColumns = [
 
 export type DrillFilters = {
   view: "active" | "drafts" | "published" | "archived" | "trash";
+  usage: "all" | "favorites" | "recent" | "never";
+  sort: "updated" | "recently_used" | "most_used" | "name" | "created" | "effectiveness";
   search?: string;
   ageGroup?: string;
   mainFocus?: string;
@@ -65,6 +69,8 @@ export function parseDrillFilters(searchParams: Record<string, string | string[]
 
   return {
     view: get("view") === "drafts" || get("view") === "published" || get("view") === "archived" || get("view") === "trash" ? get("view") as DrillFilters["view"] : "active",
+    usage: parseUsageFilter(get("usage"), get("favorites")),
+    sort: parseSortFilter(get("sort")),
     search: get("search")?.trim() || undefined,
     ageGroup: get("ageGroup") || undefined,
     mainFocus: get("mainFocus") || undefined,
@@ -84,7 +90,7 @@ export async function listUserDrills(
   supabase: SupabaseServerClient,
   userId: string,
   filters: DrillFilters
-): Promise<Array<Drill & { graphic?: DrillEditorState }>> {
+): Promise<DrillWithLibraryData[]> {
   let query = supabase.from("drills").select(drillLibraryColumns).eq("user_id", userId).order("updated_at", {
     ascending: false
   });
@@ -108,24 +114,44 @@ export async function listUserDrills(
   if (filters.maxPlayers) query = query.lte("min_players", filters.maxPlayers);
   if (filters.minDuration) query = query.gte("duration_minutes", filters.minDuration);
   if (filters.maxDuration) query = query.lte("duration_minutes", filters.maxDuration);
-  if (filters.favorites) query = query.eq("is_favorite", true);
+  if (filters.favorites || filters.usage === "favorites") query = query.eq("is_favorite", true);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []) as Partial<DrillRow>[];
   const drills = rows.map(mapDrillListRow).filter((drill) => drillMatchesAgeFilter(drill, filters.ageGroup));
-  const graphics = await getGraphicsByDrillId(supabase, userId, drills.map((drill) => drill.id));
-  const drillsWithGraphics = drills.map((drill) => ({ ...drill, graphic: graphics.get(drill.id) }));
+  const drillIds = drills.map((drill) => drill.id);
+  const [graphics, usageStats] = await Promise.all([
+    getGraphicsByDrillId(supabase, userId, drillIds),
+    getDrillUsageStatsByDrillId(supabase, userId, drillIds)
+  ]);
+  let drillsWithData: DrillWithLibraryData[] = drills.map((drill) => ({
+    ...drill,
+    graphic: graphics.get(drill.id),
+    usage: usageStats.get(drill.id) ?? {
+      drillId: drill.id,
+      historicalUseCount: 0,
+      reviewedUseCount: 0,
+      feedbackCounts: { worked_well: 0, needs_adjustment: 0, not_effective: 0 },
+      history: [],
+      teamBreakdown: []
+    }
+  }));
 
-  if (!filters.material) return drillsWithGraphics;
+  if (filters.usage === "recent") drillsWithData = drillsWithData.filter((drill) => drill.usage.historicalUseCount > 0);
+  if (filters.usage === "never") drillsWithData = drillsWithData.filter((drill) => drill.usage.historicalUseCount === 0);
 
-  const material = filters.material.toLowerCase();
-  return drillsWithGraphics.filter((drill) =>
-    drill.materials.some((item) =>
-      [item.type, item.color, item.label].filter(Boolean).join(" ").toLowerCase().includes(material)
-    )
-  );
+  if (filters.material) {
+    const material = filters.material.toLowerCase();
+    drillsWithData = drillsWithData.filter((drill) =>
+      drill.materials.some((item) =>
+        [item.type, item.color, item.label].filter(Boolean).join(" ").toLowerCase().includes(material)
+      )
+    );
+  }
+
+  return sortDrills(drillsWithData, filters);
 }
 
 function mapDrillListRow(row: Partial<DrillRow>): Drill {
@@ -193,4 +219,38 @@ export async function getUserDrill(
 
   if (error) throw new Error(error.message);
   return data ? mapDrillRow(data as DrillRow) : null;
+}
+
+function parseUsageFilter(value?: string, legacyFavorites?: string): DrillFilters["usage"] {
+  if (legacyFavorites === "true") return "favorites";
+  if (value === "favorites" || value === "recent" || value === "never") return value;
+  return "all";
+}
+
+function parseSortFilter(value?: string): DrillFilters["sort"] {
+  if (value === "recently_used" || value === "most_used" || value === "name" || value === "created" || value === "effectiveness") return value;
+  return "updated";
+}
+
+function sortDrills(drills: DrillWithLibraryData[], filters: DrillFilters) {
+  const sort = filters.usage === "recent" && filters.sort === "updated" ? "recently_used" : filters.sort;
+  return [...drills].sort((a, b) => {
+    if (sort === "recently_used") return compareDateDesc(a.usage.lastUsedAt, b.usage.lastUsedAt) || a.title.localeCompare(b.title);
+    if (sort === "most_used") return b.usage.historicalUseCount - a.usage.historicalUseCount || compareDateDesc(a.usage.lastUsedAt, b.usage.lastUsedAt) || a.title.localeCompare(b.title);
+    if (sort === "name") return a.title.localeCompare(b.title);
+    if (sort === "created") return compareDateDesc(a.createdAt, b.createdAt) || a.title.localeCompare(b.title);
+    if (sort === "effectiveness") return compareNumberDesc(a.usage.averageEffectiveness, b.usage.averageEffectiveness) || b.usage.reviewedUseCount - a.usage.reviewedUseCount || a.title.localeCompare(b.title);
+    return compareDateDesc(a.updatedAt, b.updatedAt) || a.title.localeCompare(b.title);
+  });
+}
+
+function compareDateDesc(a?: string, b?: string) {
+  return (b ?? "").localeCompare(a ?? "");
+}
+
+function compareNumberDesc(a?: number, b?: number) {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return b - a;
 }

@@ -3,6 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, Plus, Settings, UsersRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { formatMessage, getMessages, type Locale } from "@/lib/i18n";
 import { createTeam, switchTeam } from "@/lib/squad/team-actions";
 import { germanFederalStates } from "@/lib/squad/regional-calendar";
 import type { Squad } from "@/types/domain";
@@ -11,9 +12,11 @@ type TeamSwitcherProps = {
   teams: Squad[];
   returnTo?: string;
   compact?: boolean;
+  locale?: Locale;
 };
 
-export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }: TeamSwitcherProps) {
+export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false, locale = "en" }: TeamSwitcherProps) {
+  const messages = getMessages(locale);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTeam = teams.find((team) => team.isActive) ?? teams[0];
@@ -24,10 +27,10 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }
   if (!activeTeam) {
     return (
       <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-        <p className="text-xs font-semibold uppercase text-slate-300">Team</p>
+        <p className="text-xs font-semibold uppercase text-slate-300">{messages.teams.team}</p>
         <ButtonLink href="/teams" className="mt-2 h-9 w-full justify-center px-3 text-xs">
           <Plus className="h-4 w-4" />
-          Create first team
+          {messages.teams.createFirstTeam}
         </ButtonLink>
       </div>
     );
@@ -39,16 +42,16 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }
         <details className="group">
           <summary
             className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-md border border-white/10 bg-white/5 text-xs font-black text-white outline-none transition hover:border-white/20 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-board-green/40"
-            title={`Active Team: ${activeTeam.name}`}
-            aria-label={`Active Team: ${activeTeam.name}`}
+            title={formatMessage(messages.teams.activeTeamName, { name: activeTeam.name })}
+            aria-label={formatMessage(messages.teams.activeTeamName, { name: activeTeam.name })}
           >
             {compactTeamName(activeTeam.name)}
           </summary>
           <div className="absolute left-full top-0 z-[90] ml-3 w-72 max-w-[calc(100vw-5rem)] rounded-lg border border-board-line bg-board-navy p-3 text-white shadow-2xl">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Active Team</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">{messages.teams.activeTeam}</p>
             <p className="mt-1 truncate text-sm font-bold text-white" title={activeTeam.name}>{activeTeam.name}</p>
             <div className="mt-3 space-y-2">
-              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Switch team</p>
+              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-300">{messages.teams.switchTeam}</p>
               {teams.map((team) => (
                 <form key={team.id} action={switchTeam}>
                   <input type="hidden" name="teamId" value={team.id} />
@@ -66,11 +69,11 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }
               ))}
               <ButtonLink href="/teams" variant="ghost" className="h-9 w-full justify-start px-3 text-xs text-slate-200 hover:bg-white/10 hover:text-white">
                 <UsersRound className="h-4 w-4" />
-                All teams
+                {messages.teams.allTeams}
               </ButtonLink>
               <ButtonLink href={`/teams/${activeTeam.id}/settings`} variant="ghost" className="h-9 w-full justify-start px-3 text-xs text-slate-200 hover:bg-white/10 hover:text-white">
                 <Settings className="h-4 w-4" />
-                Team settings
+                {messages.teams.teamSettings}
               </ButtonLink>
             </div>
           </div>
@@ -81,7 +84,7 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-white">
-      <span className="block text-xs font-semibold uppercase text-slate-300">Active team</span>
+      <span className="block text-xs font-semibold uppercase text-slate-300">{messages.teams.activeTeam}</span>
       <div className="mt-1 flex items-center gap-2">
         <details className="group min-w-0 flex-1">
           <summary className={`${activeTeamControlClass} flex cursor-pointer list-none items-center justify-between gap-2 px-3`}>
@@ -89,7 +92,7 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-300 transition group-open:rotate-180" />
           </summary>
           <div className="mt-3 space-y-2">
-            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Switch team</p>
+            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-300">{messages.teams.switchTeam}</p>
             {teams.map((team) => (
               <form key={team.id} action={switchTeam}>
                 <input type="hidden" name="teamId" value={team.id} />
@@ -109,50 +112,50 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }
               <details>
                 <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-md px-3 text-xs font-bold text-slate-200 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-board-green/40">
                   <Plus className="h-4 w-4" />
-                  Create new team
+                  {messages.teams.createNewTeam}
                 </summary>
                 <form action={createTeam} className="mt-2 space-y-2 rounded-md bg-black/15 p-2">
                   <input type="hidden" name="returnTo" value="/squad" />
                   <input type="hidden" name="countryCode" value="DE" />
                   <label className="block">
-                    <span className="sr-only">Team name</span>
+                    <span className="sr-only">{messages.teams.teamName}</span>
                     <input
                       name="name"
                       required
-                      placeholder="Team name"
+                      placeholder={messages.teams.teamName}
                       className="h-9 w-full rounded-md border border-white/10 bg-white px-3 text-xs font-semibold text-board-navy outline-none focus:border-board-green focus:ring-2 focus:ring-board-green/30"
                     />
                   </label>
                   <label className="block">
-                    <span className="sr-only">Bundesland</span>
+                    <span className="sr-only">{messages.teams.federalState}</span>
                     <select
                       name="federalStateCode"
                       required
                       defaultValue=""
                       className="h-9 w-full rounded-md border border-white/10 bg-white px-3 text-xs font-semibold text-board-navy outline-none focus:border-board-green focus:ring-2 focus:ring-board-green/30"
                     >
-                      <option value="" disabled>Bundesland</option>
+                      <option value="" disabled>{messages.teams.federalState}</option>
                       {germanFederalStates.map((state) => (
                         <option key={state.code} value={state.code}>{state.name}</option>
                       ))}
                     </select>
                   </label>
                   <label className="block">
-                    <span className="sr-only">City</span>
+                    <span className="sr-only">{messages.teams.cityOptional}</span>
                     <input
                       name="city"
-                      placeholder="City (optional)"
+                      placeholder={messages.teams.cityOptional}
                       className="h-9 w-full rounded-md border border-white/10 bg-white px-3 text-xs font-semibold text-board-navy outline-none focus:border-board-green focus:ring-2 focus:ring-board-green/30"
                     />
                   </label>
                   <Button type="submit" className="h-9 w-full justify-center px-3 text-xs">
-                    Create and switch
+                    {messages.teams.createAndSwitch}
                   </Button>
                 </form>
               </details>
               <ButtonLink href="/teams" variant="ghost" className="h-9 w-full justify-start px-3 text-xs text-slate-200 hover:bg-white/10 hover:text-white">
                 <UsersRound className="h-4 w-4" />
-                All teams
+                {messages.teams.allTeams}
               </ButtonLink>
             </div>
           </div>
@@ -161,8 +164,8 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false }
           href={`/teams/${activeTeam.id}/settings`}
           variant="ghost"
           className={`${activeTeamControlClass} w-10 shrink-0 items-center justify-center px-0`}
-          aria-label={`Open settings for ${activeTeam.name}`}
-          title="Team settings"
+          aria-label={formatMessage(messages.teams.openSettingsFor, { name: activeTeam.name })}
+          title={messages.teams.teamSettings}
         >
           <Settings className="h-5 w-5 -translate-y-px" />
         </ButtonLink>

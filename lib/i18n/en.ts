@@ -1,17 +1,20 @@
+import enMessages from "@/messages/en.json";
+
 export const en = {
-  appName: "CoachBoard",
+  ...enMessages,
+  appName: enMessages.app.name,
   nav: {
-    dashboard: "Dashboard",
-    trainings: "Trainings",
-    trainingPlans: "Training Plans",
-    drills: "Drill Library",
-    squad: "Squad",
-    sessions: "Training Plans",
-    settings: "Settings"
+    dashboard: enMessages.navigation.dashboard,
+    trainings: enMessages.navigation.trainings,
+    trainingPlans: enMessages.navigation.trainingPlans,
+    drills: enMessages.navigation.drills,
+    squad: enMessages.navigation.squad,
+    sessions: enMessages.navigation.trainingPlans,
+    settings: enMessages.navigation.settings
   },
   actions: {
-    createDrill: "Create new drill",
+    createDrill: enMessages.dashboard.actions.createDrill,
     createSession: "Create new training plan",
-    openLibrary: "Open drill library"
+    openLibrary: enMessages.dashboard.actions.openLibrary
   }
 } as const;

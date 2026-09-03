@@ -1673,6 +1673,13 @@ on public.drills (
   updated_at desc
 );
 
+create index if not exists drills_user_id_favorite_idx
+on public.drills (
+  user_id,
+  is_favorite
+)
+where deleted_at is null and archived_at is null;
+
 create index if not exists drills_search_idx
 on public.drills
 using gin (
@@ -1931,6 +1938,14 @@ on public.training_session_drill_instances (
   status,
   order_index
 );
+
+create index if not exists training_session_drill_instances_source_drill_idx
+on public.training_session_drill_instances (
+  user_id,
+  source_drill_id,
+  event_id
+)
+where source_drill_id is not null and status <> 'removed';
 
 create index if not exists squad_attendance_records_event_id_idx
 on public.squad_attendance_records (
@@ -3866,6 +3881,13 @@ on public.training_session_drill_reviews (session_review_id);
 
 create index if not exists training_session_drill_reviews_instance_idx
 on public.training_session_drill_reviews (session_drill_instance_id);
+
+create index if not exists training_session_drill_reviews_instance_rating_idx
+on public.training_session_drill_reviews (
+  user_id,
+  session_drill_instance_id,
+  effectiveness_rating
+);
 
 drop trigger if exists set_training_session_reviews_updated_at
 on public.training_session_reviews;

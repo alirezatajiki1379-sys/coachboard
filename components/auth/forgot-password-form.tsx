@@ -4,14 +4,16 @@ import { useActionState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requestPasswordReset } from "@/lib/auth/actions";
+import { getMessages, type Locale } from "@/lib/i18n";
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ locale = "en" }: { locale?: Locale }) {
   const [state, formAction, isPending] = useActionState(requestPasswordReset, {});
+  const messages = getMessages(locale);
 
   return (
     <form action={formAction} className="space-y-4">
       <label className="block">
-        <span className="text-sm font-medium text-slate-700">Email</span>
+        <span className="text-sm font-medium text-slate-700">{messages.auth.fields.email}</span>
         <input
           required
           name="email"
@@ -19,7 +21,7 @@ export function ForgotPasswordForm() {
           autoComplete="email"
           defaultValue={state?.email ?? ""}
           className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none transition focus:border-board-green focus:ring-4 focus:ring-green-100"
-          placeholder="coach@example.com"
+          placeholder={messages.auth.fields.emailPlaceholder}
           aria-invalid={Boolean(state?.fieldErrors?.email)}
         />
         {state?.fieldErrors?.email ? (
@@ -41,7 +43,7 @@ export function ForgotPasswordForm() {
 
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-        Send reset link
+        {messages.auth.forgotPassword.submit}
       </Button>
     </form>
   );

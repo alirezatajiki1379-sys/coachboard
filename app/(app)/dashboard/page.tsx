@@ -5,7 +5,8 @@ import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { createClient } from "@/lib/supabase/server";
-import { en } from "@/lib/i18n/en";
+import { formatDate, formatMessage, getMessages } from "@/lib/i18n";
+import { getUserLocale } from "@/lib/i18n/server";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import { attentionPriorityLabels, attentionTone } from "@/lib/squad/attention";
 import { getDashboardAttentionData } from "@/lib/squad/attention-queries";
@@ -41,6 +42,8 @@ export default async function DashboardPage() {
   }
 
   const activeTeam = await ensureActiveSquad(supabase, user.id);
+  const locale = await getUserLocale(supabase, user.id);
+  const messages = getMessages(locale);
   const [planCount, playerCounts, recentDrills, recentSessions] = await Promise.all([
     supabase
       .from("training_sessions")
@@ -84,17 +87,17 @@ export default async function DashboardPage() {
     ? nextTraining.linkedTrainingSessionId ? `/sessions/${nextTraining.linkedTrainingSessionId}` : `/trainings/${nextTraining.id}/plan`
     : "/trainings/new";
   const planNextLabel = nextTraining
-    ? nextTraining.linkedTrainingSessionId ? "Review Training Plan" : "Plan Next Training"
-    : "Create Training";
+    ? nextTraining.linkedTrainingSessionId ? messages.dashboard.actions.reviewTrainingPlan : messages.dashboard.actions.planNextTraining
+    : messages.dashboard.actions.createTraining;
 
   const drills = (recentDrills.data ?? []) as RecentDrill[];
   const sessions = (recentSessions.data ?? []) as RecentSession[];
   return (
     <PageContainer width="wide" className="space-y-8">
       <PageHeader
-        eyebrow="Dashboard"
-        title="Welcome back, Coach"
-        description="Plan concrete trainings, prepare attendance, rate players, and build reusable training plans."
+        eyebrow={messages.dashboard.eyebrow}
+        title={messages.dashboard.title}
+        description={messages.dashboard.description}
         actions={(
           <>
           <ButtonLink href={planNextHref}>
@@ -103,19 +106,19 @@ export default async function DashboardPage() {
           </ButtonLink>
           <ButtonLink href="/trainings/new" variant="secondary">
             <CalendarPlus className="h-4 w-4" />
-            Create training
+            {messages.dashboard.actions.createTraining}
           </ButtonLink>
           <ButtonLink href="/squad/import" variant="secondary">
             <UsersRound className="h-4 w-4" />
-            Add or import players
+            {messages.dashboard.actions.addOrImportPlayers}
           </ButtonLink>
           <ButtonLink href="/drills/new" variant="secondary">
             <Dumbbell className="h-4 w-4" />
-            {en.actions.createDrill}
+            {messages.dashboard.actions.createDrill}
           </ButtonLink>
           <ButtonLink href="/drills" variant="secondary">
             <LibraryBig className="h-4 w-4" />
-            Drill library
+            {messages.dashboard.actions.drillLibrary}
           </ButtonLink>
           </>
         )}
@@ -126,24 +129,24 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <p className="text-sm font-semibold uppercase text-board-green">Next training</p>
+                <p className="text-sm font-semibold uppercase text-board-green">{messages.dashboard.nextTraining}</p>
                 <Link href="/trainings" className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-board-green hover:underline">
-                  View all trainings
+                  {messages.dashboard.actions.viewAllTrainings}
                 </Link>
               </div>
               <h2 className="mt-1 text-2xl font-bold text-board-navy">{trainingDisplayTitle(nextTraining)}</h2>
-              <p className="mt-2 text-sm text-slate-600">{nextTraining.date} · {trainingTimeRange(nextTraining)}{nextTraining.location ? ` · ${nextTraining.location}` : ""}</p>
+              <p className="mt-2 text-sm text-slate-600">{formatDate(nextTraining.date, locale)} · {trainingTimeRange(nextTraining)}{nextTraining.location ? ` · ${nextTraining.location}` : ""}</p>
               <p className="mt-2 text-sm font-semibold text-slate-700">
-                {trainingSummaryCounts(nextTraining).attendance.confirmedTotal} expected · {trainingSummaryCounts(nextTraining).attendance.goalkeepers} Goalkeepers · {trainingSummaryCounts(nextTraining).attendance.fieldPlayers} Field Players
+                {trainingSummaryCounts(nextTraining).attendance.confirmedTotal} {messages.dashboard.expected} · {trainingSummaryCounts(nextTraining).attendance.goalkeepers} {messages.dashboard.goalkeepers} · {trainingSummaryCounts(nextTraining).attendance.fieldPlayers} {messages.dashboard.fieldPlayers}
               </p>
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                {trainingSummaryCounts(nextTraining).attendance.defensive} Defensive · {trainingSummaryCounts(nextTraining).attendance.midfield} Midfield · {trainingSummaryCounts(nextTraining).attendance.attacking} Attacking · {trainingSummaryCounts(nextTraining).attendance.unassigned} Position missing · {nextTraining.linkedTrainingSessionId ? "Plan available" : "No plan"}
+                {trainingSummaryCounts(nextTraining).attendance.defensive} {messages.dashboard.defensive} · {trainingSummaryCounts(nextTraining).attendance.midfield} {messages.dashboard.midfield} · {trainingSummaryCounts(nextTraining).attendance.attacking} {messages.dashboard.attacking} · {trainingSummaryCounts(nextTraining).attendance.unassigned} {messages.dashboard.positionMissing} · {nextTraining.linkedTrainingSessionId ? messages.dashboard.planAvailable : messages.dashboard.noPlan}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <ButtonLink href={`/trainings/${nextTraining.id}`} variant="secondary" className="justify-center">Open</ButtonLink>
-              <ButtonLink href={`/trainings/${nextTraining.id}/check-in`} className="justify-center">Check-in</ButtonLink>
-              <ButtonLink href={planNextHref} variant="secondary" className="justify-center">{nextTraining.linkedTrainingSessionId ? "Review Plan" : "Plan Training"}</ButtonLink>
+              <ButtonLink href={`/trainings/${nextTraining.id}`} variant="secondary" className="justify-center">{messages.common.actions.open}</ButtonLink>
+              <ButtonLink href={`/trainings/${nextTraining.id}/check-in`} className="justify-center">{messages.dashboard.actions.checkIn}</ButtonLink>
+              <ButtonLink href={planNextHref} variant="secondary" className="justify-center">{nextTraining.linkedTrainingSessionId ? messages.dashboard.actions.reviewPlan : messages.dashboard.actions.planTraining}</ButtonLink>
             </div>
           </div>
         </section>
@@ -151,30 +154,30 @@ export default async function DashboardPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Next training"
-          value={nextTraining ? trainingTimeRange(nextTraining) : "None"}
-          detail={nextTraining ? `${nextTraining.date} · ${nextTraining.squadName ?? "Current team"}` : "Create the next scheduled training"}
+          label={messages.dashboard.nextTraining}
+          value={nextTraining ? trainingTimeRange(nextTraining) : messages.common.empty.none}
+          detail={nextTraining ? `${formatDate(nextTraining.date, locale)} · ${nextTraining.squadName ?? messages.dashboard.currentTeam}` : messages.dashboard.actions.createTraining}
           icon={<CalendarDays className="h-5 w-5" />}
           href={nextTraining ? `/trainings/${nextTraining.id}` : "/trainings/new"}
         />
         <StatCard
-          label="Training Sessions"
+          label={messages.dashboard.trainingSessions}
           value={trainingEvents.length}
-          detail={`${completedTrainings} completed · ${upcomingTrainings} upcoming`}
+          detail={`${completedTrainings} ${messages.dashboard.completed} · ${upcomingTrainings} ${messages.dashboard.upcoming}`}
           icon={<CalendarDays className="h-5 w-5" />}
           href="/trainings"
         />
         <StatCard
-          label="Training Plans"
+          label={messages.dashboard.trainingPlans}
           value={createdPlans}
-          detail={`${assignedPlans} assigned · ${draftPlans} drafts/unassigned`}
+          detail={`${assignedPlans} ${messages.dashboard.assigned} · ${draftPlans} ${messages.dashboard.draftsUnassigned}`}
           icon={<ClipboardList className="h-5 w-5" />}
           href="/sessions"
         />
         <StatCard
-          label="Squad"
+          label={messages.dashboard.squad}
           value={playerCounts.active}
-          detail={`${playerCounts.trial} Trial Players · ${activeTeam.name}`}
+          detail={`${playerCounts.trial} ${messages.dashboard.trialPlayers} · ${activeTeam.name}`}
           icon={<UsersRound className="h-5 w-5" />}
           href="/squad"
         />
@@ -183,10 +186,10 @@ export default async function DashboardPage() {
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Bell className="h-5 w-5" />Coach Actions</h2>
-            <p className="mt-1 text-sm text-slate-600">{attentionData.summary.critical + attentionData.summary.high} high priority · {attentionData.summary.open} open</p>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Bell className="h-5 w-5" />{messages.dashboard.coachActions}</h2>
+            <p className="mt-1 text-sm text-slate-600">{formatMessage(messages.dashboard.highPriorityOpen, { count: attentionData.summary.critical + attentionData.summary.high, open: attentionData.summary.open })}</p>
           </div>
-          <ButtonLink href="/actions" variant="ghost" className="h-9 px-3">View all {attentionData.summary.open} open actions</ButtonLink>
+          <ButtonLink href="/actions" variant="ghost" className="h-9 px-3">{formatMessage(messages.dashboard.viewAllOpenActions, { count: attentionData.summary.open })}</ButtonLink>
         </div>
         {attentionData.items.length ? (
           <div className="grid gap-3 lg:grid-cols-3">
@@ -194,48 +197,48 @@ export default async function DashboardPage() {
               <Link key={item.key} href={item.suggestedActions[0]?.href ?? "/actions"} className="rounded-md border border-board-line bg-slate-50 p-4 transition hover:border-board-green/40 hover:bg-green-50">
                 <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${attentionTone(item.priority) === "red" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{attentionPriorityLabels[item.priority].toUpperCase()}</span>
                 <h3 className="mt-3 font-bold text-board-navy">{item.title}</h3>
-                <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? "Current"}</p>
+                <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? messages.dashboard.currentTeam}</p>
                 <p className="mt-2 line-clamp-2 text-sm text-slate-500">{item.explanation}</p>
               </Link>
             ))}
           </div>
         ) : (
-          <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">No high-priority Coach Actions. Open items are still available in the Action Center when needed.</p>
+          <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">{messages.dashboard.noHighPriorityActions}</p>
         )}
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Target className="h-5 w-5" />Development</h2>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Target className="h-5 w-5" />{messages.dashboard.development}</h2>
             <ButtonLink href="/squad?view=reviews-due" variant="ghost" className="h-9 px-3">
-              Open reviews
+              {messages.dashboard.actions.openReviews}
             </ButtonLink>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Link href="/squad?view=reviews-due" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-              <p className="text-xs font-bold uppercase text-slate-500">Review</p>
+              <p className="text-xs font-bold uppercase text-slate-500">{messages.dashboard.review}</p>
               <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.goalsDueForReview}</p>
-              <p className="mt-1 text-xs text-slate-500">goals need review</p>
+              <p className="mt-1 text-xs text-slate-500">{messages.dashboard.goalsNeedReview}</p>
             </Link>
             <Link href="/squad?view=development&developmentStatus=high-priority" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-              <p className="text-xs font-bold uppercase text-slate-500">High priority</p>
+              <p className="text-xs font-bold uppercase text-slate-500">{messages.dashboard.highPriority}</p>
               <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.activeHighPriorityGoals}</p>
-              <p className="mt-1 text-xs text-slate-500">active goals</p>
+              <p className="mt-1 text-xs text-slate-500">{messages.dashboard.activeGoals}</p>
             </Link>
             <Link href="/squad?view=development&sort=lastObservation&direction=asc" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-              <p className="text-xs font-bold uppercase text-slate-500">This week</p>
+              <p className="text-xs font-bold uppercase text-slate-500">{messages.dashboard.thisWeek}</p>
               <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.observationsThisWeek}</p>
-              <p className="mt-1 text-xs text-slate-500">observations</p>
+              <p className="mt-1 text-xs text-slate-500">{messages.dashboard.observations}</p>
             </Link>
           </div>
         </div>
 
         <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-board-navy">Recent drills</h2>
+            <h2 className="text-lg font-bold text-board-navy">{messages.dashboard.recentDrills}</h2>
             <ButtonLink href="/drills" variant="ghost" className="h-9 px-3">
-              Open library
+              {messages.dashboard.actions.openLibrary}
             </ButtonLink>
           </div>
           <div className="space-y-3">
@@ -258,11 +261,11 @@ export default async function DashboardPage() {
             ) : (
               <div className="rounded-md border border-dashed border-board-line p-5">
                 <p className="text-sm text-slate-500">
-                  No drills yet. Create your first drill, draw the setup, and the library will become your reusable coaching base.
+                  {messages.dashboard.emptyDrills}
                 </p>
                 <ButtonLink href="/drills/new" className="mt-4 h-9 justify-center px-3">
                   <Dumbbell className="h-4 w-4" />
-                  Create drill
+                  {messages.dashboard.createDrillShort}
                 </ButtonLink>
               </div>
             )}
@@ -271,9 +274,9 @@ export default async function DashboardPage() {
 
         <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-board-navy">Recent training plans</h2>
+            <h2 className="text-lg font-bold text-board-navy">{messages.dashboard.recentTrainingPlans}</h2>
             <ButtonLink href="/sessions" variant="ghost" className="h-9 px-3">
-              View plans
+              {messages.dashboard.actions.viewPlans}
             </ButtonLink>
           </div>
           <div className="space-y-3">
@@ -286,7 +289,7 @@ export default async function DashboardPage() {
                         {session.title}
                       </Link>
                       <p className="mt-1 text-sm text-slate-500">
-                        {session.main_focus ?? "No focus set"} · {session.session_date ?? "No date"}
+                        {session.main_focus ?? messages.common.empty.noFocus} · {formatDate(session.session_date, locale) || messages.common.empty.noDate}
                       </p>
                     </div>
                     <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
@@ -298,11 +301,11 @@ export default async function DashboardPage() {
             ) : (
               <div className="rounded-md border border-dashed border-board-line p-5">
                 <p className="text-sm text-slate-500">
-                  No training plans yet. Add a few drills, then create a plan to build the timeline and material list.
+                  {messages.dashboard.emptyPlans}
                 </p>
                 <ButtonLink href="/sessions/new" variant="secondary" className="mt-4 h-9 justify-center px-3">
                   <CalendarPlus className="h-4 w-4" />
-                  Create plan
+                  {messages.dashboard.createPlan}
                 </ButtonLink>
               </div>
             )}
@@ -311,9 +314,9 @@ export default async function DashboardPage() {
 
         <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-board-navy">Open rating work</h2>
+            <h2 className="text-lg font-bold text-board-navy">{messages.dashboard.openRatingWork}</h2>
             <ButtonLink href="/trainings?view=rating_open" variant="ghost" className="h-9 px-3">
-              View
+              {messages.dashboard.actions.view}
             </ButtonLink>
           </div>
           <div className="space-y-3">
@@ -325,12 +328,12 @@ export default async function DashboardPage() {
                     <Link href={`/trainings/${event.id}`} className="font-semibold text-board-navy hover:text-board-green">
                       {trainingDisplayTitle(event)}
                     </Link>
-                    <p className="mt-1 text-sm text-slate-500">{event.date} · {summary.ratings.rated} of {summary.ratings.rateable} rated</p>
+                    <p className="mt-1 text-sm text-slate-500">{formatDate(event.date, locale)} · {formatMessage(messages.dashboard.ratedCount, { rated: summary.ratings.rated, rateable: summary.ratings.rateable })}</p>
                   </div>
                 );
               })
             ) : (
-              <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">No open rating work right now.</p>
+              <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">{messages.dashboard.noOpenRatingWork}</p>
             )}
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, Edit, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, Clock, Edit, Users } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { editorStateToString } from "@/lib/drills/editor";
 import { getDrillGraphic } from "@/lib/drills/graphics";
 import { createClient } from "@/lib/supabase/server";
 import { getUserDrill } from "@/lib/drills/queries";
+import { drillFeedbackStatusLabels } from "@/lib/squad/session-review";
+import { getDrillUsageStatsByDrillId, type DrillUsageStats } from "@/lib/drills/usage";
 import { materialSummary } from "@/lib/drills/materials";
 import { formatDrillAgeSuitability } from "@/lib/drills/age-suitability";
 
@@ -26,11 +28,16 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
     redirect("/login");
   }
 
-  const [drill, graphic] = await Promise.all([getUserDrill(supabase, user.id, id), getDrillGraphic(supabase, user.id, id)]);
+  const [drill, graphic, usageMap] = await Promise.all([
+    getUserDrill(supabase, user.id, id),
+    getDrillGraphic(supabase, user.id, id),
+    getDrillUsageStatsByDrillId(supabase, user.id, [id])
+  ]);
   if (!drill) {
     notFound();
   }
   const view = drill.deletedAt ? "trash" : drill.archivedAt ? "archived" : "active";
+  const usage = usageMap.get(drill.id);
 
   return (
     <div className="space-y-6">
@@ -71,6 +78,7 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
 
       <section className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="space-y-6">
+          <UsageSection usage={usage} />
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
             <h2 className="text-lg font-bold text-board-navy">Drill graphic</h2>
             {graphic.objects.length ? (
@@ -102,10 +110,90 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
         <aside className="space-y-4">
           <InfoCard title="Age suitability" items={[formatDrillAgeSuitability(drill)]} />
           <InfoCard title="Categories" items={[drill.drillType, drill.subFocus, ...drill.trainingBlocks]} />
+          <InfoCard title="Favorite" items={[drill.isFavorite ? "Favorite drill" : "Not favorite"]} />
           <InfoCard title="Materials" items={[materialSummary(drill.materials)]} />
           <InfoCard title="Tags" items={drill.tags.length ? drill.tags : ["No tags"]} />
         </aside>
       </section>
+    </div>
+  );
+}
+
+function UsageSection({ usage }: { usage?: DrillUsageStats }) {
+  if (usage?.usageUnavailable) {
+    return (
+      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><BarChart3 className="h-5 w-5 text-board-green" />Usage</h2>
+        <p className="mt-3 text-sm text-slate-600">Usage data is currently unavailable. The drill itself is still safe to view and edit.</p>
+      </section>
+    );
+  }
+
+  const history = usage?.history ?? [];
+  return (
+    <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><BarChart3 className="h-5 w-5 text-board-green" />Usage</h2>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <Metric label="Times used" value={usage?.historicalUseCount ? String(usage.historicalUseCount) : "Never used"} />
+        <Metric label="Last used" value={usage?.lastUsedAt ? formatShortDate(usage.lastUsedAt) : "Never"} />
+        <Metric label="Average effectiveness" value={usage?.averageEffectiveness == null ? "No ratings yet" : `${usage.averageEffectiveness.toFixed(1)} / 5`} />
+        <Metric label="Reviewed" value={`${usage?.reviewedUseCount ?? 0} review${usage?.reviewedUseCount === 1 ? "" : "s"}`} />
+      </div>
+
+      {usage?.historicalUseCount ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <FeedbackMetric label="Worked well" value={usage.feedbackCounts.worked_well} />
+          <FeedbackMetric label="Needs adjustment" value={usage.feedbackCounts.needs_adjustment} />
+          <FeedbackMetric label="Not effective" value={usage.feedbackCounts.not_effective} />
+        </div>
+      ) : null}
+
+      {usage?.teamBreakdown && usage.teamBreakdown.length > 1 ? (
+        <div className="mt-5">
+          <h3 className="text-sm font-bold uppercase text-slate-500">Team usage</h3>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {usage.teamBreakdown.map((team) => (
+              <span key={team.teamId} className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                {team.teamName}: {team.count}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-5">
+        <h3 className="text-sm font-bold uppercase text-slate-500">Usage history</h3>
+        {history.length ? (
+          <div className="mt-3 divide-y divide-board-line rounded-md border border-board-line">
+            {history.slice(0, 12).map((item) => (
+              <Link key={item.instanceId} href={`/trainings/${item.eventId}`} className="block p-3 transition hover:bg-board-paper">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-bold text-board-navy">{formatShortDate(item.date)} · {item.trainingTitle}</p>
+                  {item.effectivenessRating ? <span className="rounded-full bg-board-cream px-2 py-1 text-xs font-bold text-board-navy">{item.effectivenessRating} / 5</span> : null}
+                </div>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  {[item.teamName, item.trainingFocus, item.block, item.durationMinutes ? `${item.durationMinutes} min` : undefined].filter(Boolean).join(" · ")}
+                </p>
+                {item.feedbackStatus ? <p className="mt-2 text-sm font-semibold text-board-green">{drillFeedbackStatusLabels[item.feedbackStatus]}</p> : null}
+                {item.reviewNote ? <p className="mt-1 line-clamp-2 text-sm text-slate-600">{item.reviewNote}</p> : null}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-md border border-dashed border-board-line bg-board-paper p-4 text-sm text-slate-600">
+            This reusable drill has not appeared in a historical training yet.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function FeedbackMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-board-line bg-slate-50 px-3 py-2">
+      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-bold text-board-navy">{value}</p>
     </div>
   );
 }
@@ -152,4 +240,10 @@ function InfoCard({ title, items }: { title: string; items: Array<string | undef
       </div>
     </section>
   );
+}
+
+function formatShortDate(date: string) {
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(parsed);
 }

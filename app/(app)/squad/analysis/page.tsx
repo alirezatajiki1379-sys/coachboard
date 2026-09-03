@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { ArrowUpDown, CalendarCheck, Filter, Info, Minus, Printer, Star, TrendingDown, TrendingUp, UserCheck, Users } from "lucide-react";
+import { ArrowUpDown, BarChart3, CalendarCheck, Dumbbell, Filter, Info, Minus, Printer, Star, Target, TrendingDown, TrendingUp, UserCheck, Users } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { STICKY_TABLE_HEADER_CLASS } from "@/components/squad/player-table-layers";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
 import {
   analyticsPeriodLabels,
+  analyticsSectionLabels,
   coachAssessmentLabels,
   defaultSortDirection,
   evidenceBadgeTone,
@@ -16,10 +17,12 @@ import {
   playerName,
   type AnalyticsPeriod,
   type AnalyticsPlayerTypeFilter,
+  type AnalyticsSection,
   type AnalyticsSortDirection,
   type AnalyticsSortKey,
   type PlayerAnalyticsRecord,
-  type PlayerAnalyticsSummary
+  type PlayerAnalyticsSummary,
+  type TeamAnalyticsOverview
 } from "@/lib/squad/analytics";
 import { getSquadAnalyticsOverview, parseAnalyticsFilters } from "@/lib/squad/analytics-queries";
 import { createClient } from "@/lib/supabase/server";
@@ -59,13 +62,10 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { summaries, positions, seasonSettings } = await getSquadAnalyticsOverview(supabase, user.id, filters);
+  const { summaries, positions, seasonSettings, teamAnalytics } = await getSquadAnalyticsOverview(supabase, user.id, filters);
   const allFilteredRecords = summaries.flatMap((summary) => summary.records);
   const periodDefinition = getPeriodDefinition(filters, allFilteredRecords, seasonSettings);
-  const totalTrainings = summaries.reduce((sum, summary) => sum + summary.trainings, 0);
   const totalRated = summaries.reduce((sum, summary) => sum + summary.rated, 0);
-  const playersWithAttendance = summaries.filter((summary) => summary.attendanceRate !== null);
-  const averageAttendance = playersWithAttendance.length ? playersWithAttendance.reduce((sum, summary) => sum + (summary.attendanceRate ?? 0), 0) / playersWithAttendance.length : null;
   const openAssessments = summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length;
   const activeFilters = countActiveFilters(filters);
 
@@ -84,6 +84,14 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
       />
 
       <SquadNav />
+
+      <section className="flex flex-wrap gap-2 rounded-lg border border-board-line bg-white p-3 shadow-soft">
+        {(Object.keys(analyticsSectionLabels) as AnalyticsSection[]).map((section) => (
+          <FilterLink key={section} href={hrefFor({ ...filters, section })} active={filters.section === section}>
+            {analyticsSectionLabels[section]}
+          </FilterLink>
+        ))}
+      </section>
 
       <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500 md:hidden">
@@ -120,6 +128,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
             </div>
             <form action="/squad/analysis" className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
               <input type="hidden" name="period" value="custom" />
+              {filters.section !== "overview" ? <input type="hidden" name="section" value={filters.section} /> : null}
               {filters.playerType !== "all" ? <input type="hidden" name="playerType" value={filters.playerType} /> : null}
               {filters.position ? <input type="hidden" name="position" value={filters.position} /> : null}
               {filters.ratedOnly ? <input type="hidden" name="ratedOnly" value="true" /> : null}
@@ -171,14 +180,16 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <SummaryMetric icon={<Users className="h-4 w-4" />} label="Players" value={String(summaries.length)} hint="Current filter" />
-        <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label="Training records" value={String(totalTrainings)} hint={periodDefinition.shortLabel} />
-        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label="Average attendance" value={formatPercent(averageAttendance)} hint={playersWithAttendance.length ? `Across ${playersWithAttendance.length} players` : "No attendance data"} />
+        <SummaryMetric icon={<Users className="h-4 w-4" />} label="Players" value={String(summaries.length)} hint={`Active team: ${teamAnalytics.activeSquad.name}`} />
+        <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label="Trainings" value={String(teamAnalytics.trainingSessions)} hint={periodDefinition.shortLabel} />
+        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label="Team attendance" value={formatPercent(teamAnalytics.teamAttendanceRate)} hint={`${teamAnalytics.present + teamAnalytics.late} attended`} />
         <SummaryMetric icon={<Star className="h-4 w-4" />} label="Rated performances" value={String(totalRated)} hint="Final overall ratings only" />
         <SummaryMetric icon={<Info className="h-4 w-4" />} label="Open assessments" value={String(openAssessments)} hint="Manual coach status" />
       </section>
 
-      {summaries.length ? (
+      <AnalyticsSectionPanel section={filters.section} teamAnalytics={teamAnalytics} summaries={summaries} />
+
+      {(filters.section === "players" || filters.section === "attendance") && summaries.length ? (
         <>
           <section className="hidden overflow-x-auto rounded-lg border border-board-line bg-white shadow-soft lg:block">
             <table className="w-full border-collapse text-left text-sm">
@@ -211,13 +222,13 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
             ))}
           </section>
         </>
-      ) : (
+      ) : filters.section === "players" || filters.section === "attendance" ? (
         <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
           <h2 className="text-lg font-bold text-board-navy">No analytics data for this view.</h2>
           <p className="mt-2 text-sm text-slate-600">Adjust the filters or complete trainings with attendance and ratings.</p>
           <ButtonLink href="/trainings/new" className="mt-5">Create training</ButtonLink>
         </div>
-      )}
+      ) : null}
 
       <section id="analytics-help" className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <details>
@@ -228,14 +239,163 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
           <div className="mt-4 grid gap-4 text-sm leading-6 text-slate-600 md:grid-cols-2">
             <p><strong className="text-board-navy">Average rating:</strong> only final overall ratings intentionally entered by the coach. Unrated trainings are not counted as 3.</p>
             <p><strong className="text-board-navy">Trend:</strong> latest five rated trainings compared with the five rated trainings before them, inside the selected period.</p>
-            <p><strong className="text-board-navy">Attendance rate:</strong> Present and Late count as attended. Absence reasons do not count as attended.</p>
+            <p><strong className="text-board-navy">Attendance rate:</strong> Present and Late count as attended. Not expected and not recorded are excluded from the denominator.</p>
             <p><strong className="text-board-navy">Reliability:</strong> existing malus rules; late only counts when the penalty is active.</p>
             <p><strong className="text-board-navy">Evidence:</strong> shows how many rated trainings support the performance view.</p>
             <p><strong className="text-board-navy">Coach assessment:</strong> manual coach marker, separate from automatic summaries.</p>
+            <p><strong className="text-board-navy">Drill usage:</strong> scoped to the active team and selected historical training period.</p>
           </div>
         </details>
       </section>
     </PageContainer>
+  );
+}
+
+function AnalyticsSectionPanel({
+  section,
+  teamAnalytics,
+  summaries
+}: {
+  section: AnalyticsSection;
+  teamAnalytics: TeamAnalyticsOverview;
+  summaries: PlayerAnalyticsSummary[];
+}) {
+  if (section === "training" || section === "overview") {
+    return (
+      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <Panel title="Training Sessions" icon={<CalendarCheck className="h-5 w-5" />}>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MiniStat label="Sessions" value={teamAnalytics.trainingSessions} />
+            <MiniStat label="Reviewed" value={`${teamAnalytics.reviewedSessions}/${teamAnalytics.trainingSessions}`} />
+            <MiniStat label="Review coverage" value={formatPercent(teamAnalytics.reviewCoverage)} />
+            <MiniStat label="Quality" value={formatRating(teamAnalytics.averageSessionQuality)} />
+            <MiniStat label="Intensity" value={formatRating(teamAnalytics.averageSessionIntensity)} />
+            <MiniStat label="Planned sessions" value={formatPercent(teamAnalytics.planCoverage.rate)} />
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <OutcomeBadge label="Achieved" value={teamAnalytics.objectiveOutcomes.achieved} />
+            <OutcomeBadge label="Partly" value={teamAnalytics.objectiveOutcomes.partly_achieved} />
+            <OutcomeBadge label="Not achieved" value={teamAnalytics.objectiveOutcomes.not_achieved} />
+          </div>
+        </Panel>
+        <Panel title="Training Focus" icon={<Target className="h-5 w-5" />}>
+          {teamAnalytics.focusDistribution.length ? (
+            <div className="space-y-3">
+              {teamAnalytics.focusDistribution.slice(0, 6).map((item) => (
+                <ProgressRow key={item.label} label={item.label} value={`${item.count}x`} percent={item.percentage} />
+              ))}
+            </div>
+          ) : (
+            <EmptyPanelText>No structured focus has been saved for trainings in this period.</EmptyPanelText>
+          )}
+        </Panel>
+      </section>
+    );
+  }
+
+  if (section === "attendance") {
+    return (
+      <Panel title="Team Attendance" icon={<UserCheck className="h-5 w-5" />}>
+        <div className="grid gap-3 sm:grid-cols-5">
+          <MiniStat label="Present" value={teamAnalytics.present} />
+          <MiniStat label="Late" value={teamAnalytics.late} />
+          <MiniStat label="Absent" value={teamAnalytics.absent} />
+          <MiniStat label="Not expected" value={teamAnalytics.notExpected} />
+          <MiniStat label="Not recorded" value={teamAnalytics.notRecorded} />
+        </div>
+      </Panel>
+    );
+  }
+
+  if (section === "development") {
+    return (
+      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <Panel title="Development Goals" icon={<Target className="h-5 w-5" />}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniStat label="Active goals" value={teamAnalytics.activeDevelopmentGoals} />
+            <MiniStat label="Players with goals" value={teamAnalytics.playersWithActiveGoals} />
+            <MiniStat label="Due for review" value={teamAnalytics.goalsDueForReview} />
+            <MiniStat label="Achieved in period" value={teamAnalytics.goalsAchievedInPeriod} />
+          </div>
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Active goals by category</p>
+            <ChipList items={teamAnalytics.activeGoalCategoryDistribution.map((item) => `${developmentCategoryLabel(item.category)}: ${item.count}`)} empty="No active goals yet." />
+          </div>
+        </Panel>
+        <Panel title="Progress Updates" icon={<TrendingUp className="h-5 w-5" />}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniStat label="Updates in period" value={teamAnalytics.progressUpdatesInPeriod} />
+            <MiniStat label="Players updated" value={teamAnalytics.progressPlayersInPeriod} />
+          </div>
+          <div className="mt-4 space-y-3">
+            {teamAnalytics.latestProgressDistribution.length ? (
+              teamAnalytics.latestProgressDistribution.map((item) => (
+                <ProgressRow
+                  key={item.progress}
+                  label={progressLabel(item.progress)}
+                  value={String(item.count)}
+                  percent={teamAnalytics.activeDevelopmentGoals ? item.count / teamAnalytics.activeDevelopmentGoals : 0}
+                />
+              ))
+            ) : (
+              <EmptyPanelText>No active goal progress to summarize yet.</EmptyPanelText>
+            )}
+          </div>
+        </Panel>
+      </section>
+    );
+  }
+
+  if (section === "drills") {
+    return (
+      <Panel title="Drill Usage" icon={<Dumbbell className="h-5 w-5" />}>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <MiniStat label="Instances used" value={teamAnalytics.drillInstancesUsed} />
+          <MiniStat label="Unique linked drills" value={teamAnalytics.uniqueDrillsUsed} />
+          <MiniStat label="Reviewed" value={teamAnalytics.reviewedDrillInstances} />
+          <MiniStat label="Effectiveness" value={formatRating(teamAnalytics.averageDrillEffectiveness)} />
+        </div>
+        {teamAnalytics.drillUsage.length ? (
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[620px] text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="py-2 pr-3">Drill</th>
+                  <th className="py-2 pr-3 text-right">Uses</th>
+                  <th className="py-2 pr-3 text-right">Reviewed</th>
+                  <th className="py-2 pr-3 text-right">Effectiveness</th>
+                  <th className="py-2 text-right">Last used</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {teamAnalytics.drillUsage.slice(0, 12).map((drill) => (
+                  <tr key={`${drill.drillId ?? drill.title}-${drill.lastUsedAt ?? "never"}`}>
+                    <td className="py-3 pr-3 font-bold text-board-navy">{drill.title}</td>
+                    <td className="py-3 pr-3 text-right tabular-nums">{drill.uses}</td>
+                    <td className="py-3 pr-3 text-right tabular-nums">{drill.reviewed}</td>
+                    <td className="py-3 pr-3 text-right tabular-nums">{formatRating(drill.averageEffectiveness)}</td>
+                    <td className="py-3 text-right tabular-nums">{drill.lastUsedAt ? formatShortDate(drill.lastUsedAt) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyPanelText>No drill usage in this team and period yet.</EmptyPanelText>
+        )}
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title="Player Analytics" icon={<BarChart3 className="h-5 w-5" />}>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <MiniStat label="Players shown" value={summaries.length} />
+        <MiniStat label="Rated players" value={summaries.filter((summary) => summary.rated > 0).length} />
+        <MiniStat label="Attendance data" value={summaries.filter((summary) => summary.attendanceRate !== null).length} />
+        <MiniStat label="Open assessments" value={summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length} />
+      </div>
+    </Panel>
   );
 }
 
@@ -364,6 +524,67 @@ function SummaryMetric({ icon, label, value, hint }: { icon: ReactNode; label: s
   );
 }
 
+function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <div className="mb-4 flex items-center gap-2 text-lg font-bold text-board-navy">
+        <span className="text-board-green">{icon}</span>
+        {title}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md bg-slate-50 p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-board-navy">{value}</p>
+    </div>
+  );
+}
+
+function OutcomeBadge({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-slate-100 px-3 py-2">
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="ml-2 text-sm font-bold text-board-navy">{value}</span>
+    </div>
+  );
+}
+
+function ProgressRow({ label, value, percent }: { label: string; value: string; percent: number }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-semibold text-board-navy">{label}</span>
+        <span className="font-bold tabular-nums text-slate-600">{value}</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-board-green" style={{ width: `${Math.max(3, Math.min(100, Math.round(percent * 100)))}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ChipList({ items, empty }: { items: string[]; empty: string }) {
+  if (!items.length) return <EmptyPanelText>{empty}</EmptyPanelText>;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => (
+        <span key={item} className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function EmptyPanelText({ children }: { children: ReactNode }) {
+  return <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">{children}</p>;
+}
+
 function SortableHeader({
   label,
   sortKey,
@@ -374,6 +595,7 @@ function SortableHeader({
   sortKey: AnalyticsSortKey;
   filters: {
     period: AnalyticsPeriod;
+    section: AnalyticsSection;
     playerType: AnalyticsPlayerTypeFilter;
     position?: string;
     ratedOnly: boolean;
@@ -496,6 +718,28 @@ function formatShortDate(date: string) {
   return parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
+function developmentCategoryLabel(category: string) {
+  const labels: Record<string, string> = {
+    technical: "Technical",
+    tactical: "Tactical",
+    physical: "Physical",
+    mental: "Mental",
+    other: "Other"
+  };
+  return labels[category] ?? category;
+}
+
+function progressLabel(progress: string) {
+  const labels: Record<string, string> = {
+    needs_attention: "Needs attention",
+    developing: "Developing",
+    consistent: "Consistent",
+    achieved: "Achieved",
+    none: "No progress update"
+  };
+  return labels[progress] ?? progress;
+}
+
 function formatGermanDate(date?: string) {
   if (!date) return "";
   const [year, month, day] = date.split("-");
@@ -504,6 +748,7 @@ function formatGermanDate(date?: string) {
 
 function countActiveFilters(filters: {
   period: AnalyticsPeriod;
+  section: AnalyticsSection;
   playerType: AnalyticsPlayerTypeFilter;
   position?: string;
   ratedOnly: boolean;
@@ -513,7 +758,8 @@ function countActiveFilters(filters: {
   customTo?: string;
 }) {
   return (
-    Number(filters.period !== "season") +
+    Number(filters.period !== "last10") +
+    Number(filters.section !== "overview") +
     Number(filters.playerType !== "all") +
     Number(Boolean(filters.position)) +
     Number(filters.ratedOnly) +
@@ -524,6 +770,7 @@ function countActiveFilters(filters: {
 
 function hrefFor(filters: {
   period: AnalyticsPeriod;
+  section: AnalyticsSection;
   playerType: AnalyticsPlayerTypeFilter;
   position?: string;
   ratedOnly: boolean;
@@ -533,7 +780,8 @@ function hrefFor(filters: {
   customTo?: string;
 }) {
   const params = new URLSearchParams();
-  if (filters.period !== "season") params.set("period", filters.period);
+  if (filters.period !== "last10") params.set("period", filters.period);
+  if (filters.section !== "overview") params.set("section", filters.section);
   if (filters.period === "custom") {
     if (filters.customFrom) params.set("from", formatGermanDate(filters.customFrom));
     if (filters.customTo) params.set("to", formatGermanDate(filters.customTo));

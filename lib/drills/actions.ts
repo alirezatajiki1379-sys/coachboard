@@ -314,15 +314,18 @@ export async function duplicateDrill(formData: FormData) {
 export async function toggleFavorite(formData: FormData) {
   const drillId = formString(formData, "drillId");
   const nextFavorite = formString(formData, "nextFavorite") === "true";
+  if (!drillId) return { error: "Missing drill id." };
   const { supabase, user } = await requireUser();
 
   const db = supabase as unknown as SupabaseClient;
-  await db
+  const { error } = await db
     .from("drills")
     .update({ is_favorite: nextFavorite })
     .eq("id", drillId)
     .eq("user_id", user.id);
+  if (error) return { error: error.message };
 
   revalidatePath("/drills");
   revalidatePath(`/drills/${drillId}`);
+  return { ok: true };
 }

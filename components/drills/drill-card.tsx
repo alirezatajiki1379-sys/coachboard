@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Clock, Edit, Eye, Users } from "lucide-react";
+import { BarChart3, Clock, Edit, Eye, Users } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { DrillActions } from "@/components/drills/drill-actions";
 import { SessionDrillPreview } from "@/components/sessions/session-drill-preview";
@@ -9,9 +9,10 @@ import { materialLineLabel } from "@/lib/drills/materials";
 import { formatDrillAgeSuitability } from "@/lib/drills/age-suitability";
 import type { Drill } from "@/types/domain";
 import type { DrillEditorState } from "@/types/editor";
+import type { DrillUsageStats } from "@/lib/drills/usage";
 
 type DrillCardProps = {
-  drill: Drill & { graphic?: DrillEditorState };
+  drill: Drill & { graphic?: DrillEditorState; usage?: DrillUsageStats };
   view?: "active" | "published" | "drafts" | "archived" | "trash";
 };
 
@@ -84,6 +85,17 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
             </span>
           </div>
 
+          <div className="mt-4 rounded-md border border-board-line bg-slate-50 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-slate-600">
+              <span className="inline-flex items-center gap-1.5 text-board-navy">
+                <BarChart3 className="h-3.5 w-3.5 text-board-green" />
+                {usageSummary(drill.usage)}
+              </span>
+              <span>{lastUsedSummary(drill.usage)}</span>
+              <span>{effectivenessSummary(drill.usage)}</span>
+            </div>
+          </div>
+
           <div className="mt-4">
             <p className="text-[11px] font-bold uppercase tracking-wide text-board-green">Materials</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -145,6 +157,32 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
       </div>
     </article>
   );
+}
+
+function usageSummary(usage?: DrillUsageStats) {
+  if (usage?.usageUnavailable) return "Usage unavailable";
+  const count = usage?.historicalUseCount ?? 0;
+  if (!count) return "Never used";
+  return `Used ${count} time${count === 1 ? "" : "s"}`;
+}
+
+function lastUsedSummary(usage?: DrillUsageStats) {
+  if (usage?.usageUnavailable) return "";
+  if (!usage?.lastUsedAt) return "No historical use";
+  return `Last used ${formatShortDate(usage.lastUsedAt)}`;
+}
+
+function effectivenessSummary(usage?: DrillUsageStats) {
+  if (usage?.usageUnavailable) return "";
+  if (!usage?.historicalUseCount) return "No review data";
+  if (!usage.reviewedUseCount || usage.averageEffectiveness == null) return "No ratings yet";
+  return `${usage.averageEffectiveness.toFixed(1)} / 5 · ${usage.reviewedUseCount} review${usage.reviewedUseCount === 1 ? "" : "s"}`;
+}
+
+function formatShortDate(date: string) {
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(parsed);
 }
 
 function StatusBadge({ label, danger = false, neutral = false }: { label: string; danger?: boolean; neutral?: boolean }) {

@@ -1,6 +1,8 @@
 import { attendanceReasonLabels, calculateReliabilityPenalty } from "@/lib/squad/attendance-utils";
 import { seasonLabelForDate } from "@/lib/trainings/utils";
 import type {
+  PlayerDevelopmentGoalCategory,
+  PlayerDevelopmentProgress,
   PlayerCoachAssessment,
   PlayerCoachAssessmentValue,
   SquadAttendanceEntry,
@@ -9,6 +11,7 @@ import type {
 } from "@/types/domain";
 
 export type AnalyticsPeriod = "last5" | "last10" | "30d" | "90d" | "season" | "all" | "custom";
+export type AnalyticsSection = "overview" | "training" | "attendance" | "development" | "drills" | "players";
 export type AnalyticsPlayerTypeFilter = "all" | "roster" | "trial";
 export type AnalyticsSortDirection = "asc" | "desc";
 export type AnalyticsSortKey =
@@ -55,6 +58,73 @@ export type PlayerAnalyticsSummary = {
   latestTraining?: PlayerAnalyticsRecord;
   latestRating?: number;
   assessment?: PlayerCoachAssessment;
+};
+
+export type TeamAnalyticsEvent = {
+  event: SquadTrainingEvent;
+  records: PlayerAnalyticsRecord[];
+  attendance: {
+    present: number;
+    late: number;
+    absent: number;
+    notExpected: number;
+    notRecorded: number;
+    attended: number;
+    recorded: number;
+    rate: number | null;
+  };
+  review?: {
+    overallQuality: number;
+    intensity: number;
+    objectiveOutcome: "achieved" | "partly_achieved" | "not_achieved";
+  };
+  planDrillCount: number;
+};
+
+export type TeamAnalyticsOverview = {
+  activeSquad: { id: string; name: string };
+  periodEventIds: string[];
+  periodRangeLabel: string;
+  trainingSessions: number;
+  sessionsWithAttendance: number;
+  attendanceRecordCount: number;
+  teamAttendanceRate: number | null;
+  present: number;
+  late: number;
+  absent: number;
+  notExpected: number;
+  notRecorded: number;
+  reviewedSessions: number;
+  reviewCoverage: number | null;
+  averageSessionQuality: number | null;
+  averageSessionIntensity: number | null;
+  objectiveOutcomes: Record<"achieved" | "partly_achieved" | "not_achieved", number>;
+  focusDistribution: Array<{ label: string; count: number; percentage: number }>;
+  totalTrainingMinutes: number | null;
+  averageTrainingMinutes: number | null;
+  planCoverage: { planned: number; total: number; rate: number | null };
+  activeDevelopmentGoals: number;
+  playersWithActiveGoals: number;
+  goalsDueForReview: number;
+  goalsAchievedInPeriod: number;
+  progressUpdatesInPeriod: number;
+  progressPlayersInPeriod: number;
+  activeGoalCategoryDistribution: Array<{ category: PlayerDevelopmentGoalCategory; count: number }>;
+  latestProgressDistribution: Array<{ progress: PlayerDevelopmentProgress | "none"; count: number }>;
+  uniqueDrillsUsed: number;
+  drillInstancesUsed: number;
+  reviewedDrillInstances: number;
+  averageDrillEffectiveness: number | null;
+  drillFeedbackCounts: Record<"worked_well" | "needs_adjustment" | "not_effective", number>;
+  drillUsage: Array<{
+    drillId?: string;
+    title: string;
+    uses: number;
+    lastUsedAt?: string;
+    reviewed: number;
+    averageEffectiveness: number | null;
+  }>;
+  events: TeamAnalyticsEvent[];
 };
 
 export type RatingDistribution = Record<1 | 2 | 3 | 4 | 5, number>;
@@ -107,6 +177,15 @@ export const analyticsPeriodLabels: Record<AnalyticsPeriod, string> = {
   season: "This season",
   all: "All time",
   custom: "Custom range"
+};
+
+export const analyticsSectionLabels: Record<AnalyticsSection, string> = {
+  overview: "Overview",
+  training: "Training",
+  attendance: "Attendance",
+  development: "Development",
+  drills: "Drill Usage",
+  players: "Players"
 };
 
 export const coachAssessmentLabels: Record<PlayerCoachAssessmentValue, string> = {
@@ -251,6 +330,42 @@ export function filterRecordsByPeriod(
   });
 }
 
+export function filterEventsByPeriod<T extends { id: string; date: string; startTime?: string }>(
+  events: T[],
+  period: AnalyticsPeriod,
+  today = new Date(),
+  seasonStartMonth = 7,
+  seasonStartDay = 1,
+  customFrom?: string,
+  customTo?: string
+) {
+  const historical = [...events]
+    .filter((event) => isPastEventDateTime(event.date, event.startTime, today))
+    .sort((a, b) => `${b.date} ${b.startTime ?? ""}`.localeCompare(`${a.date} ${a.startTime ?? ""}`));
+  if (period === "all") return historical;
+  if (period === "custom") {
+    const fromTime = customFrom ? parseDateToUtc(customFrom) : Number.NaN;
+    const toTime = customTo ? parseDateToUtc(customTo) : Number.NaN;
+    if (!Number.isFinite(fromTime) || !Number.isFinite(toTime) || fromTime > toTime) return [];
+    return historical.filter((event) => {
+      const parsed = Date.parse(`${event.date}T00:00:00Z`);
+      return Number.isFinite(parsed) && parsed >= fromTime && parsed <= toTime;
+    });
+  }
+  if (period === "last5" || period === "last10") return historical.slice(0, period === "last5" ? 5 : 10);
+  if (period === "season") {
+    const currentSeason = seasonLabelForDate(dateToDateString(today), seasonStartMonth, seasonStartDay);
+    return historical.filter((event) => seasonLabelForDate(event.date, seasonStartMonth, seasonStartDay) === currentSeason);
+  }
+
+  const days = period === "30d" ? 30 : 90;
+  const minTime = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() - days + 1);
+  return historical.filter((event) => {
+    const parsed = Date.parse(`${event.date}T00:00:00Z`);
+    return Number.isFinite(parsed) && parsed >= minTime;
+  });
+}
+
 export function createPlayerAnalyticsSummary(
   player: SquadPlayer,
   allRecords: PlayerAnalyticsRecord[],
@@ -323,7 +438,11 @@ export function hasRecordedAttendance(record: PlayerAnalyticsRecord) {
 
 export function isPastAttendanceEvent(event?: SquadTrainingEvent, now = new Date()) {
   if (!event || event.deletedAt || event.archivedAt) return false;
-  const startKey = `${event.date} ${event.startTime || "00:00"}`;
+  return isPastEventDateTime(event.date, event.startTime, now);
+}
+
+export function isPastEventDateTime(date: string, startTime = "00:00", now = new Date()) {
+  const startKey = `${date} ${startTime || "00:00"}`;
   return startKey < berlinDateTimeKey(now);
 }
 

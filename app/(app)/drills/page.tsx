@@ -27,6 +27,21 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
   const drills = await listUserDrills(supabase, user.id, filters);
   const draftCount = filters.view === "drafts" ? drills.length : await countDraftDrills(supabase, user.id);
   const viewLabels = { active: "All Drills", published: "Published", drafts: `Drafts · ${draftCount}`, archived: "Archived", trash: "Trash" } as const;
+  const hasFilters = Boolean(
+    filters.usage !== "all" ||
+    filters.search ||
+    filters.ageGroup ||
+    filters.mainFocus ||
+    filters.subFocus ||
+    filters.trainingBlock ||
+    filters.drillType ||
+    filters.minPlayers ||
+    filters.maxPlayers ||
+    filters.minDuration ||
+    filters.maxDuration ||
+    filters.material ||
+    filters.sort !== "updated"
+  );
 
   return (
     <div className="space-y-6">
@@ -66,20 +81,36 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
           drills.map((drill) => <DrillCard key={drill.id} drill={drill} view={filters.view} />)
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">No {viewLabels[filters.view].toLowerCase()} found</h2>
+            <h2 className="text-lg font-bold text-board-navy">{emptyTitle(filters)}</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-              Create your first drill, or clear the filters if you were searching. Drill cards show previews, materials,
-              and quick actions once your library has content.
+              {emptyDescription(filters)}
             </p>
-            <ButtonLink href="/drills/new" className="mt-5">
-              <Plus className="h-4 w-4" />
-              Create drill
-            </ButtonLink>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              {hasFilters ? <ButtonLink href="/drills" variant="secondary">Clear filters</ButtonLink> : null}
+              <ButtonLink href="/drills/new">
+                <Plus className="h-4 w-4" />
+                Create drill
+              </ButtonLink>
+            </div>
           </div>
         )}
       </section>
     </div>
   );
+}
+
+function emptyTitle(filters: ReturnType<typeof parseDrillFilters>) {
+  if (filters.usage === "favorites") return "No favorite Drills yet";
+  if (filters.usage === "recent") return "No recently used Drills";
+  if (filters.usage === "never") return "No unused Drills found";
+  return `No ${filters.view === "active" ? "drills" : filters.view} found`;
+}
+
+function emptyDescription(filters: ReturnType<typeof parseDrillFilters>) {
+  if (filters.usage === "favorites") return "Favorite the drills you rely on most so you can find them quickly.";
+  if (filters.usage === "recent") return "Recently used only includes drills from historical training sessions, not future plans.";
+  if (filters.usage === "never") return "Every matching drill has historical usage, or your current filters are hiding unused drills.";
+  return "Create your first drill, or clear the filters if you were searching. Drill cards show previews, materials, usage, and quick actions once your library has content.";
 }
 
 async function countDraftDrills(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {

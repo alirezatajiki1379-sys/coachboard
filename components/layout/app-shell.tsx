@@ -6,33 +6,24 @@ import { usePathname } from "next/navigation";
 import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, UserCircle, UsersRound, X } from "lucide-react";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { TeamSwitcher } from "@/components/layout/team-switcher";
-import { en } from "@/lib/i18n/en";
+import { formatMessage, getMessages, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Squad } from "@/types/domain";
-
-const navItems = [
-  { href: "/dashboard", label: en.nav.dashboard, icon: LayoutDashboard },
-  { href: "/trainings", label: en.nav.trainings, icon: CalendarDays },
-  { href: "/sessions", label: en.nav.trainingPlans, icon: ClipboardList },
-  { href: "/drills", label: en.nav.drills, icon: Dumbbell },
-  { href: "/squad", label: en.nav.squad, icon: UsersRound },
-  { href: "/actions", label: "Action Center", icon: Bell },
-  { href: "/squad/analysis", label: "Analytics", icon: BarChart3 },
-  { href: "/settings", label: en.nav.settings, icon: Settings }
-];
 
 type AppShellProps = {
   children: React.ReactNode;
   coachName?: string | null;
   teams?: Squad[];
+  locale: Locale;
 };
 
 type SidebarMode = "expanded" | "collapsed";
 
 const sidebarPreferenceKey = "coachboard:ui:sidebar-mode";
 
-export function AppShell({ children, coachName, teams = [] }: AppShellProps) {
+export function AppShell({ children, coachName, teams = [], locale }: AppShellProps) {
   const pathname = usePathname();
+  const messages = getMessages(locale);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>("expanded");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -104,6 +95,7 @@ export function AppShell({ children, coachName, teams = [] }: AppShellProps) {
           teams={teams}
           pathname={pathname}
           onToggle={toggleDesktopSidebar}
+          locale={locale}
         />
       </aside>
 
@@ -115,7 +107,7 @@ export function AppShell({ children, coachName, teams = [] }: AppShellProps) {
               type="button"
               onClick={() => setDrawerOpen(true)}
               className="flex h-10 w-10 items-center justify-center rounded-md text-board-navy outline-none transition hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-board-green"
-              aria-label="Open navigation menu"
+              aria-label={messages.accessibility.openNavigationMenu}
               aria-expanded={drawerOpen}
             >
               <Menu className="h-5 w-5" />
@@ -124,20 +116,20 @@ export function AppShell({ children, coachName, teams = [] }: AppShellProps) {
               <span className="flex h-9 w-9 items-center justify-center rounded-md bg-board-green text-white">
                 <BarChart3 className="h-5 w-5" />
               </span>
-              {en.appName}
+              {messages.app.name}
             </Link>
-            <LogoutButton />
+            <LogoutButton locale={locale} />
           </div>
         </header>
         <main className="app-main mx-auto w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6 lg:py-6">{children}</main>
       </div>
 
       {drawerOpen ? (
-        <div className="fixed inset-0 z-[100] lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
+        <div className="fixed inset-0 z-[100] lg:hidden" role="dialog" aria-modal="true" aria-label={messages.accessibility.navigationMenu}>
           <button
             type="button"
             className="absolute inset-0 bg-slate-950/50"
-            aria-label="Close navigation menu"
+            aria-label={messages.accessibility.closeNavigationMenu}
             onClick={() => setDrawerOpen(false)}
           />
           <div
@@ -150,22 +142,22 @@ export function AppShell({ children, coachName, teams = [] }: AppShellProps) {
                 <span className="flex h-10 w-10 items-center justify-center rounded-md bg-board-green">
                   <BarChart3 className="h-5 w-5" />
                 </span>
-                {en.appName}
+                {messages.app.name}
               </Link>
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
                 className="flex h-10 w-10 items-center justify-center rounded-md text-slate-200 outline-none transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-board-green"
-                aria-label="Close navigation menu"
+                aria-label={messages.accessibility.closeNavigationMenu}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="px-3 pb-4">
-              <TeamSwitcher teams={teams} />
+              <TeamSwitcher teams={teams} locale={locale} />
             </div>
-            <SidebarNav collapsed={false} pathname={pathname} onNavigate={() => setDrawerOpen(false)} />
-            <SidebarAccount collapsed={false} coachName={coachName} />
+            <SidebarNav collapsed={false} pathname={pathname} onNavigate={() => setDrawerOpen(false)} locale={locale} />
+            <SidebarAccount collapsed={false} coachName={coachName} locale={locale} />
           </div>
         </div>
       ) : null}
@@ -178,25 +170,28 @@ function SidebarContent({
   coachName,
   teams,
   pathname,
-  onToggle
+  onToggle,
+  locale
 }: {
   collapsed: boolean;
   coachName?: string | null;
   teams: Squad[];
   pathname: string;
   onToggle: () => void;
+  locale: Locale;
 }) {
+  const messages = getMessages(locale);
   return (
     <>
       <div className={cn("flex h-20 items-center gap-3 px-4", collapsed ? "justify-center" : "justify-between")}>
-        <Link href="/dashboard" className={cn("flex min-w-0 items-center gap-3 text-white", collapsed && "justify-center")} title={collapsed ? en.appName : undefined}>
+        <Link href="/dashboard" className={cn("flex min-w-0 items-center gap-3 text-white", collapsed && "justify-center")} title={collapsed ? messages.app.name : undefined}>
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-board-green">
             <BarChart3 className="h-6 w-6" />
           </span>
           {!collapsed ? (
             <span className="min-w-0">
-              <span className="block text-lg font-bold">{en.appName}</span>
-              <span className="block text-xs text-slate-300">Training planner</span>
+              <span className="block text-lg font-bold">{messages.app.name}</span>
+              <span className="block text-xs text-slate-300">{messages.app.subtitle}</span>
             </span>
           ) : null}
         </Link>
@@ -207,25 +202,36 @@ function SidebarContent({
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-200 outline-none transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-board-green",
             collapsed && "absolute left-full top-5 ml-2 bg-board-navy shadow-lg"
           )}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? messages.accessibility.expandSidebar : messages.accessibility.collapseSidebar}
           aria-expanded={!collapsed}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? messages.accessibility.expandSidebar : messages.accessibility.collapseSidebar}
         >
           {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
         </button>
       </div>
       <div className={cn("pb-4", collapsed ? "flex justify-center px-0" : "px-3")}>
-        <TeamSwitcher teams={teams} compact={collapsed} />
+        <TeamSwitcher teams={teams} compact={collapsed} locale={locale} />
       </div>
-      <SidebarNav collapsed={collapsed} pathname={pathname} />
-      <SidebarAccount collapsed={collapsed} coachName={coachName} />
+      <SidebarNav collapsed={collapsed} pathname={pathname} locale={locale} />
+      <SidebarAccount collapsed={collapsed} coachName={coachName} locale={locale} />
     </>
   );
 }
 
-function SidebarNav({ collapsed, pathname, onNavigate }: { collapsed: boolean; pathname: string; onNavigate?: () => void }) {
+function SidebarNav({ collapsed, pathname, locale, onNavigate }: { collapsed: boolean; pathname: string; locale: Locale; onNavigate?: () => void }) {
+  const messages = getMessages(locale);
+  const navItems = [
+    { href: "/dashboard", label: messages.navigation.dashboard, icon: LayoutDashboard },
+    { href: "/trainings", label: messages.navigation.trainings, icon: CalendarDays },
+    { href: "/sessions", label: messages.navigation.trainingPlans, icon: ClipboardList },
+    { href: "/drills", label: messages.navigation.drills, icon: Dumbbell },
+    { href: "/squad", label: messages.navigation.squad, icon: UsersRound },
+    { href: "/actions", label: messages.navigation.actionCenter, icon: Bell },
+    { href: "/squad/analysis", label: messages.navigation.analytics, icon: BarChart3 },
+    { href: "/settings", label: messages.navigation.settings, icon: Settings }
+  ];
   return (
-    <nav className={cn("flex-1 space-y-1", collapsed ? "px-2" : "px-3")} aria-label="Main navigation">
+    <nav className={cn("flex-1 space-y-1", collapsed ? "px-2" : "px-3")} aria-label={messages.accessibility.mainNavigation}>
       {navItems.map((item) => {
         const Icon = item.icon;
         const active = isActivePath(pathname, item.href);
@@ -252,25 +258,27 @@ function SidebarNav({ collapsed, pathname, onNavigate }: { collapsed: boolean; p
   );
 }
 
-function SidebarAccount({ collapsed, coachName }: { collapsed: boolean; coachName?: string | null }) {
+function SidebarAccount({ collapsed, coachName, locale }: { collapsed: boolean; coachName?: string | null; locale: Locale }) {
+  const messages = getMessages(locale);
+  const fallbackName = coachName ?? messages.account.coachFallback;
   return (
     <div className={cn("border-t border-white/10", collapsed ? "flex flex-col items-center gap-2 p-3" : "p-4")}>
       {collapsed ? (
         <>
           <span
             className="flex h-10 w-10 items-center justify-center rounded-md bg-white/5 text-slate-200"
-            title={`Signed in as ${coachName ?? "Coach"}`}
-            aria-label={`Signed in as ${coachName ?? "Coach"}`}
+            title={formatMessage(messages.accessibility.signedInAs, { name: fallbackName })}
+            aria-label={formatMessage(messages.accessibility.signedInAs, { name: fallbackName })}
           >
             <UserCircle className="h-5 w-5" />
           </span>
-          <LogoutButton compact />
+          <LogoutButton compact locale={locale} />
         </>
       ) : (
         <>
-          <p className="px-3 text-xs uppercase text-slate-400">Signed in as</p>
-          <p className="mb-3 truncate px-3 text-sm font-semibold text-white">{coachName ?? "Coach"}</p>
-          <LogoutButton />
+          <p className="px-3 text-xs uppercase text-slate-400">{messages.account.signedInAs}</p>
+          <p className="mb-3 truncate px-3 text-sm font-semibold text-white">{fallbackName}</p>
+          <LogoutButton locale={locale} />
         </>
       )}
     </div>
