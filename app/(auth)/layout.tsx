@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
+import { GermanLocalizationBoundary } from "@/components/i18n/german-localization-boundary";
+import { I18nProvider } from "@/components/i18n/i18n-provider";
 import { getMessages } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/i18n/server";
 
@@ -32,7 +34,11 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
             </span>
             <span className="text-xl font-bold">{messages.app.name}</span>
           </Link>
-          {children}
+          <I18nProvider locale={locale}>
+            <GermanLocalizationBoundary locale={locale}>
+              {children}
+            </GermanLocalizationBoundary>
+          </I18nProvider>
         </div>
       </section>
     </main>

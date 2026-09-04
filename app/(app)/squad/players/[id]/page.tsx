@@ -588,6 +588,7 @@ function DetailsTab({ hub, medicalError, contactError, deleteError }: { hub: Pla
             <DetailRow label="Current club" value={player.club} />
             <DetailRow label="Original imported club" value={player.originalClub} />
             <DetailRow label="Primary position" value={positionLabel(player.position)} />
+            <DetailRow label="Position groups" value={player.positionFamilies.join(", ")} />
             <DetailRow label="Secondary positions" value={positionListLabel(player.secondaryPositions)} />
             <DetailRow label="Player-preferred positions" value={positionListLabel(player.preferredPositions)} />
             <DetailRow label="Original preferred positions" value={player.originalPreferredPositions} />
@@ -598,14 +599,29 @@ function DetailsTab({ hub, medicalError, contactError, deleteError }: { hub: Pla
             <DetailRow label="Jersey number" value={player.jerseyNumber} />
             <DetailRow label="Height" value={player.heightCm ? `${player.heightCm} cm` : undefined} />
             <DetailRow label="Weight" value={player.weightKg ? `${player.weightKg} kg` : undefined} />
+            <DetailRow label="Distance" value={player.distanceKm ? `${player.distanceKm} km` : undefined} />
             <DetailRow label="Captain status" value={player.captainStatus ? captainLabel(player.captainStatus) : undefined} />
             <DetailRow label="Joined date" value={player.joinedDate ? formatEventDate(player.joinedDate) : undefined} />
+            <DetailRow label="Exit date" value={player.exitDate ? formatEventDate(player.exitDate) : undefined} />
+            <DetailRow label="Exit reason" value={player.exitReason} />
+            <DetailRow label="Scouting source" value={player.scoutingSource} />
+            <DetailRow label="Development centre" value={player.developmentCentre} />
+            <DetailRow label="Last performance review" value={player.lastPerformanceReviewDate ? formatEventDate(player.lastPerformanceReviewDate) : undefined} />
           </DetailGrid>
         </Card>
+        {player.addressStreet || player.addressPostalCode || player.addressCity ? (
+          <Card title="Address" icon={<ClipboardList className="h-5 w-5" />}>
+            <div className="rounded-lg bg-slate-50 p-4 text-sm font-semibold leading-6 text-board-navy">
+              {player.addressStreet ? <p>{player.addressStreet}</p> : null}
+              {player.addressPostalCode || player.addressCity ? <p>{[player.addressPostalCode, player.addressCity].filter(Boolean).join(" ")}</p> : null}
+            </div>
+          </Card>
+        ) : null}
         <Card title="Contact information" icon={<Phone className="h-5 w-5" />}>
           <DetailGrid>
             <DetailRow label="Player phone" value={player.playerPhone} href={player.playerPhone ? `tel:${player.playerPhone}` : undefined} />
             <DetailRow label="Player email" value={player.playerEmail} href={player.playerEmail ? `mailto:${player.playerEmail}` : undefined} />
+            <DetailRow label="Secondary email" value={player.secondaryEmail} href={player.secondaryEmail ? `mailto:${player.secondaryEmail}` : undefined} />
             <DetailRow label="Parent / guardian" value={player.parentGuardianName} />
             <DetailRow label="Parent / guardian phone" value={player.parentPhone} href={player.parentPhone ? `tel:${player.parentPhone}` : undefined} />
             <DetailRow label="Parent / guardian email" value={player.parentEmail} href={player.parentEmail ? `mailto:${player.parentEmail}` : undefined} />

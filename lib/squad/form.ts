@@ -5,7 +5,11 @@ export type SquadPlayerFormField =
   | "firstName"
   | "lastName"
   | "dateOfBirth"
+  | "addressStreet"
+  | "addressPostalCode"
+  | "addressCity"
   | "position"
+  | "positionFamilies"
   | "secondaryPositions"
   | "strongFoot"
   | "club"
@@ -18,6 +22,7 @@ export type SquadPlayerFormField =
   | "trialTrainingLimit"
   | "trialEndDate"
   | "playerEmail"
+  | "secondaryEmail"
   | "parentGuardianName"
   | "parentPhone"
   | "playerPhone"
@@ -34,9 +39,15 @@ export type SquadPlayerFormField =
   | "originalStrongFoot"
   | "heightCm"
   | "weightKg"
+  | "distanceKm"
   | "jerseyNumber"
   | "captainStatus"
   | "joinedDate"
+  | "exitDate"
+  | "exitReason"
+  | "scoutingSource"
+  | "developmentCentre"
+  | "lastPerformanceReviewDate"
   | "allergies"
   | "medication"
   | "medicalNotes"
@@ -77,7 +88,7 @@ function optionalText(value: string) {
 
 function optionalNumber(value: string) {
   if (!value) return null;
-  const parsed = Number.parseInt(value, 10);
+  const parsed = Number.parseFloat(value.replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -105,7 +116,11 @@ export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFo
     firstName: text(formData, "firstName"),
     lastName: text(formData, "lastName"),
     dateOfBirth: text(formData, "dateOfBirth"),
+    addressStreet: text(formData, "addressStreet"),
+    addressPostalCode: text(formData, "addressPostalCode"),
+    addressCity: text(formData, "addressCity"),
     position: text(formData, "position"),
+    positionFamilies: text(formData, "positionFamilies"),
     secondaryPositions: text(formData, "secondaryPositions"),
     strongFoot: text(formData, "strongFoot"),
     club: text(formData, "club"),
@@ -118,6 +133,7 @@ export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFo
     trialTrainingLimit: text(formData, "trialTrainingLimit"),
     trialEndDate: text(formData, "trialEndDate"),
     playerEmail: text(formData, "playerEmail"),
+    secondaryEmail: text(formData, "secondaryEmail"),
     parentGuardianName: text(formData, "parentGuardianName"),
     parentPhone: text(formData, "parentPhone"),
     playerPhone: text(formData, "playerPhone"),
@@ -134,9 +150,15 @@ export function snapshotSquadPlayerFormValues(formData: FormData): SquadPlayerFo
     originalStrongFoot: text(formData, "originalStrongFoot"),
     heightCm: text(formData, "heightCm"),
     weightKg: text(formData, "weightKg"),
+    distanceKm: text(formData, "distanceKm"),
     jerseyNumber: text(formData, "jerseyNumber"),
     captainStatus: text(formData, "captainStatus"),
     joinedDate: text(formData, "joinedDate"),
+    exitDate: text(formData, "exitDate"),
+    exitReason: text(formData, "exitReason"),
+    scoutingSource: text(formData, "scoutingSource"),
+    developmentCentre: text(formData, "developmentCentre"),
+    lastPerformanceReviewDate: text(formData, "lastPerformanceReviewDate"),
     allergies: text(formData, "allergies"),
     medication: text(formData, "medication"),
     medicalNotes: text(formData, "medicalNotes"),
@@ -164,8 +186,13 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
   if (!values.firstName) fieldErrors.firstName = "Enter the player's first name.";
   if (!isEmail(values.parentEmail)) fieldErrors.parentEmail = "Enter a valid email address.";
   if (!isEmail(values.playerEmail)) fieldErrors.playerEmail = "Enter a valid email address.";
-  if (values.heightCm && (Number.parseInt(values.heightCm, 10) < 80 || Number.parseInt(values.heightCm, 10) > 230)) fieldErrors.heightCm = "Use a realistic height in cm.";
-  if (values.weightKg && (Number.parseInt(values.weightKg, 10) < 20 || Number.parseInt(values.weightKg, 10) > 180)) fieldErrors.weightKg = "Use a realistic weight in kg.";
+  if (!isEmail(values.secondaryEmail)) fieldErrors.secondaryEmail = "Enter a valid email address.";
+  const height = optionalNumber(values.heightCm);
+  const weight = optionalNumber(values.weightKg);
+  const distance = optionalNumber(values.distanceKm);
+  if (values.heightCm && (height === null || height < 80 || height > 230)) fieldErrors.heightCm = "Use a realistic height in cm.";
+  if (values.weightKg && (weight === null || weight < 20 || weight > 180)) fieldErrors.weightKg = "Use a realistic weight in kg.";
+  if (values.distanceKm && (distance === null || distance < 0 || distance > 500)) fieldErrors.distanceKm = "Use a realistic distance in km.";
   if (values.trialTrainingLimit && Number.parseInt(values.trialTrainingLimit, 10) < 1) fieldErrors.trialTrainingLimit = "Use at least 1 training.";
 
   const primaryPosition = normalizePositionInput(values.position);
@@ -188,7 +215,11 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       first_name: values.firstName,
       last_name: optionalText(values.lastName),
       date_of_birth: optionalText(values.dateOfBirth),
+      address_street: optionalText(values.addressStreet),
+      address_postal_code: optionalText(values.addressPostalCode),
+      address_city: optionalText(values.addressCity),
       position: optionalText(primaryPosition),
+      position_families: parseList(values.positionFamilies),
       secondary_positions: secondaryPositions,
       strong_foot: optionalText(values.strongFoot),
       club: optionalText(values.club),
@@ -204,6 +235,7 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       trial_training_limit: values.playerType === "trial" && values.trialDurationMode === "training_count" ? optionalNumber(values.trialTrainingLimit) : null,
       trial_end_date: values.playerType === "trial" && values.trialDurationMode === "end_date" ? optionalText(values.trialEndDate) : null,
       player_email: optionalText(values.playerEmail),
+      secondary_email: optionalText(values.secondaryEmail),
       parent_guardian_name: optionalText(values.parentGuardianName),
       parent_phone: optionalText(values.parentPhone),
       player_phone: optionalText(values.playerPhone),
@@ -218,11 +250,17 @@ export function parseSquadPlayerForm(formData: FormData): SquadPlayerFormResult 
       preferred_positions: preferredPositions,
       original_preferred_positions: optionalText(values.originalPreferredPositions),
       original_strong_foot: optionalText(values.originalStrongFoot),
-      height_cm: optionalNumber(values.heightCm),
-      weight_kg: optionalNumber(values.weightKg),
+      height_cm: height,
+      weight_kg: weight,
+      distance_km: distance,
       jersey_number: optionalText(values.jerseyNumber),
       captain_status: values.captainStatus === "captain" || values.captainStatus === "vice_captain" ? values.captainStatus : "none",
       joined_date: optionalText(values.joinedDate),
+      exit_date: optionalText(values.exitDate),
+      exit_reason: optionalText(values.exitReason),
+      scouting_source: optionalText(values.scoutingSource),
+      development_centre: optionalText(values.developmentCentre),
+      last_performance_review_date: optionalText(values.lastPerformanceReviewDate),
       allergies: optionalText(values.allergies),
       medication: optionalText(values.medication),
       medical_notes: optionalText(values.medicalNotes),

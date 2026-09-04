@@ -7,6 +7,7 @@ import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard
 import { LogoutButton } from "@/components/layout/logout-button";
 import { TeamSwitcher } from "@/components/layout/team-switcher";
 import { I18nProvider } from "@/components/i18n/i18n-provider";
+import { GermanLocalizationBoundary } from "@/components/i18n/german-localization-boundary";
 import { formatMessage, getMessages, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Squad } from "@/types/domain";
@@ -123,7 +124,9 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
           </div>
         </header>
         <I18nProvider locale={locale}>
-          <main className="app-main mx-auto w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6 lg:py-6">{children}</main>
+          <GermanLocalizationBoundary locale={locale}>
+            <main className="app-main mx-auto w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6 lg:py-6">{children}</main>
+          </GermanLocalizationBoundary>
         </I18nProvider>
       </div>
 

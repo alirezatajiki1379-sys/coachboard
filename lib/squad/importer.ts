@@ -1,5 +1,5 @@
 import type { SquadPlayer } from "@/types/domain";
-import { cleanInvisible, normalizeDominantFoot, normalizeGermanPhone, normalizePositions } from "@/lib/squad/intake";
+import { cleanInvisible, normalizeDominantFoot, normalizePositions } from "@/lib/squad/intake";
 
 export type ImportSourceType = "xlsx" | "csv" | "paste" | "template";
 export type ImportMode = "add_new" | "add_update" | "update_only";
@@ -29,20 +29,33 @@ export type ImportFieldKey =
   | "lastName"
   | "fullName"
   | "dateOfBirth"
+  | "addressStreet"
+  | "addressPostalCode"
+  | "addressCity"
   | "jerseyNumber"
   | "externalPlayerId"
   | "playerType"
   | "trialStartDate"
   | "joinedDate"
+  | "exitDate"
+  | "exitReason"
   | "captainStatus"
   | "position"
+  | "positionFamilies"
+  | "positionFamilyDefensive"
+  | "positionFamilyMidfield"
+  | "positionFamilyAttacking"
+  | "positionFamilyGoalkeeper"
   | "secondaryPositions"
   | "preferredPositions"
   | "strongFoot"
+  | "dominantFootLeftMarker"
+  | "dominantFootRightMarker"
   | "club"
   | "clubTrainingSchedule"
   | "playerPhone"
   | "playerEmail"
+  | "secondaryEmail"
   | "parentGuardianName"
   | "parentPhone"
   | "parentEmail"
@@ -53,6 +66,12 @@ export type ImportFieldKey =
   | "jacketSize"
   | "trouserSize"
   | "shoeSize"
+  | "heightCm"
+  | "weightKg"
+  | "distanceKm"
+  | "scoutingSource"
+  | "developmentCentre"
+  | "lastPerformanceReviewDate"
   | "hobbies"
   | "developmentGoal"
   | "workOn"
@@ -123,27 +142,40 @@ export type DuplicatePlayerContext = {
 
 export const importFields: ImportFieldDefinition[] = [
   { key: "ignore", label: "Do not import this column", group: "Mapping", profileField: false },
-  { key: "firstName", label: "First name", group: "Identity", profileField: true },
-  { key: "lastName", label: "Last name", group: "Identity", profileField: true },
-  { key: "fullName", label: "Full name", group: "Identity", profileField: false },
-  { key: "dateOfBirth", label: "Date of birth", group: "Identity", profileField: true },
-  { key: "jerseyNumber", label: "Jersey number", group: "Identity", profileField: true },
-  { key: "externalPlayerId", label: "External player ID", group: "Identity", profileField: true },
+  { key: "firstName", label: "First name", group: "Player", profileField: true },
+  { key: "lastName", label: "Last name", group: "Player", profileField: true },
+  { key: "fullName", label: "Full name", group: "Player", profileField: false },
+  { key: "dateOfBirth", label: "Date of birth", group: "Player", profileField: true },
+  { key: "jerseyNumber", label: "Jersey number", group: "Player", profileField: true },
+  { key: "externalPlayerId", label: "External player ID", group: "Player", profileField: true },
+  { key: "addressStreet", label: "Address · Street", group: "Address", profileField: true },
+  { key: "addressPostalCode", label: "Address · Postal code", group: "Address", profileField: true },
+  { key: "addressCity", label: "Address · City", group: "Address", profileField: true },
   { key: "playerType", label: "Player type", group: "Player status", profileField: true },
   { key: "trialStartDate", label: "Trial start date", group: "Player status", profileField: true },
-  { key: "joinedDate", label: "Joined date", group: "Player status", profileField: true },
+  { key: "joinedDate", label: "Joined date", group: "Team membership", profileField: true },
+  { key: "exitDate", label: "Exit date", group: "Team membership", profileField: true },
+  { key: "exitReason", label: "Exit reason", group: "Team membership", profileField: true },
   { key: "captainStatus", label: "Captain status", group: "Player status", profileField: true },
   { key: "position", label: "Coach-assigned primary position", group: "Football", profileField: true },
+  { key: "positionFamilies", label: "Position groups", group: "Football", profileField: true },
+  { key: "positionFamilyDefensive", label: "Position group marker · Defensive", group: "Football", profileField: false },
+  { key: "positionFamilyMidfield", label: "Position group marker · Midfield", group: "Football", profileField: false },
+  { key: "positionFamilyAttacking", label: "Position group marker · Attacking", group: "Football", profileField: false },
+  { key: "positionFamilyGoalkeeper", label: "Position group marker · Goalkeeper", group: "Football", profileField: false },
   { key: "secondaryPositions", label: "Coach-assigned secondary positions", group: "Football", profileField: true },
   { key: "preferredPositions", label: "Player-preferred positions", group: "Football", profileField: true },
   { key: "strongFoot", label: "Dominant foot", group: "Football", profileField: true },
+  { key: "dominantFootLeftMarker", label: "Dominant foot marker · Left", group: "Football", profileField: false },
+  { key: "dominantFootRightMarker", label: "Dominant foot marker · Right", group: "Football", profileField: false },
   { key: "club", label: "Current club", group: "Football", profileField: true },
   { key: "clubTrainingSchedule", label: "Club training schedule", group: "Football", profileField: true },
-  { key: "playerPhone", label: "Player phone number", group: "Player contact", profileField: true },
-  { key: "playerEmail", label: "Player email address", group: "Player contact", profileField: true },
-  { key: "parentGuardianName", label: "Parent or guardian name", group: "Guardian contact", profileField: true },
-  { key: "parentPhone", label: "Parent or guardian phone number", group: "Guardian contact", profileField: true },
-  { key: "parentEmail", label: "Parent or guardian email address", group: "Guardian contact", profileField: true },
+  { key: "playerPhone", label: "Phone", group: "Contact", profileField: true },
+  { key: "playerEmail", label: "Primary email", group: "Contact", profileField: true },
+  { key: "secondaryEmail", label: "Secondary email", group: "Contact", profileField: true },
+  { key: "parentGuardianName", label: "Parent or guardian name", group: "Contact", profileField: true },
+  { key: "parentPhone", label: "Parent or guardian phone number", group: "Contact", profileField: true },
+  { key: "parentEmail", label: "Parent or guardian email address", group: "Contact", profileField: true },
   { key: "emergencyContactName", label: "Emergency contact name", group: "Emergency contact", profileField: true },
   { key: "emergencyContactPhone", label: "Emergency contact phone", group: "Emergency contact", profileField: true },
   { key: "emergencyContactRelationship", label: "Emergency contact relationship", group: "Emergency contact", profileField: true },
@@ -151,6 +183,12 @@ export const importFields: ImportFieldDefinition[] = [
   { key: "jacketSize", label: "Jacket size", group: "Equipment", profileField: true },
   { key: "trouserSize", label: "Trouser size", group: "Equipment", profileField: true },
   { key: "shoeSize", label: "Shoe size", group: "Equipment", profileField: true },
+  { key: "heightCm", label: "Height (cm)", group: "Physical", profileField: true },
+  { key: "weightKg", label: "Weight (kg)", group: "Physical", profileField: true },
+  { key: "distanceKm", label: "Distance (km)", group: "Additional", profileField: true },
+  { key: "scoutingSource", label: "Scouting source", group: "Scouting", profileField: true },
+  { key: "developmentCentre", label: "Development centre / Stützpunkt", group: "Scouting", profileField: true },
+  { key: "lastPerformanceReviewDate", label: "Last performance review date", group: "Scouting", profileField: true },
   { key: "hobbies", label: "Hobbies and interests outside football", group: "Player Voice", profileField: true },
   { key: "developmentGoal", label: "Biggest football goal", group: "Player Voice", profileField: true },
   { key: "workOn", label: "Self-identified development focus", group: "Player Voice", profileField: true },
@@ -172,20 +210,40 @@ const mappingAliases: Array<{ field: ImportFieldKey; aliases: string[]; confiden
   { field: "firstName", aliases: ["vorname", "first name", "firstname", "given name"] },
   { field: "lastName", aliases: ["nachname", "last name", "surname", "family name"] },
   { field: "fullName", aliases: ["full name", "name", "voller name"] },
-  { field: "dateOfBirth", aliases: ["geburtsdatum", "geburtstag", "dob", "date of birth", "birthday"] },
-  { field: "playerPhone", aliases: ["telefonnummer spieler", "player phone", "player phone number", "handy spieler"] },
+  { field: "dateOfBirth", aliases: ["geb.", "geb", "geboren", "geburtsdatum", "geburtstag", "birthdate", "dob", "date of birth", "birthday"] },
+  { field: "addressStreet", aliases: ["straße", "strasse", "straßenname", "strassenname", "str.", "street", "street address", "address street"] },
+  { field: "addressPostalCode", aliases: ["plz", "postleitzahl", "postcode", "postal code", "zip", "zip code"] },
+  { field: "addressCity", aliases: ["ort", "stadt", "wohnort", "city", "town"] },
+  { field: "playerPhone", aliases: ["telefon privat", "telefonnummer spieler", "player phone", "player phone number", "handy spieler", "phone", "telefon"] },
+  { field: "playerEmail", aliases: ["e-mail", "email", "mail", "primary email", "player email", "spieler email"] },
+  { field: "secondaryEmail", aliases: ["2. e-mail", "2 e-mail", "zweite e-mail", "secondary email", "second email", "alternate email"] },
   { field: "parentPhone", aliases: ["telefonnummer erziehungsberechtigten (eltern)", "telefonnummer erziehungsberechtigten", "eltern telefon", "guardian phone", "parent phone"] },
   { field: "parentEmail", aliases: ["e-mail-adresse erziehungsberechtigten", "guardian email", "parent email", "eltern email"] },
   { field: "topSize", aliases: ["klamotten groesse.oberteil", "klamotten größe.oberteil", "top size", "shirt size"] },
   { field: "jacketSize", aliases: ["klamotten groesse.jacke", "klamotten größe.jacke", "jacket size"] },
   { field: "trouserSize", aliases: ["klamotten groesse.hose", "klamotten größe.hose", "trouser size", "pants size"] },
   { field: "shoeSize", aliases: ["schuhgroesse", "schuhgröße", "shoe size"] },
-  { field: "club", aliases: ["verein", "aktueller verein", "club", "current club", "team"] },
+  { field: "club", aliases: ["verein", "aktueller verein", "heimatverein", "club", "current club"] },
+  { field: "joinedDate", aliases: ["eintritt ins tfp", "eintritt", "joined date", "joined at", "team joined date"] },
+  { field: "exitDate", aliases: ["austritt", "exit date", "left date", "leaving date"] },
+  { field: "exitReason", aliases: ["austrittsgrund", "exit reason", "leaving reason"] },
+  { field: "scoutingSource", aliases: ["gesichtet bei", "sichtungsquelle", "scouting source", "source"] },
+  { field: "developmentCentre", aliases: ["stützpunkt", "stuetzpunkt", "support point", "development centre", "development center"] },
+  { field: "lastPerformanceReviewDate", aliases: ["datum letzte leistungsbewertung", "letzte leistungsbewertung", "last performance review date"] },
   { field: "clubTrainingSchedule", aliases: ["trainingszeiten (verein)", "trainingszeiten", "club training schedule"] },
   { field: "preferredPositions", aliases: ["bevorzugte position", "bevorzugte positionen", "positionen", "playing position", "preferred position", "preferred positions", "wunschposition"] },
   { field: "position", aliases: ["hauptposition", "position", "primary position", "coach-assigned primary position"] },
   { field: "secondaryPositions", aliases: ["nebenpositionen", "secondary positions", "coach-assigned secondary positions"] },
   { field: "strongFoot", aliases: ["rechtsfuss oder linksfuss?", "rechtsfuß oder linksfuß?", "starker fuss", "starker fuß", "dominant foot", "preferred foot", "fuss", "fuß"] },
+  { field: "dominantFootLeftMarker", aliases: ["links", "left foot marker"] },
+  { field: "dominantFootRightMarker", aliases: ["rechts", "right foot marker"] },
+  { field: "positionFamilyDefensive", aliases: ["abwehr", "defensive position group", "defence", "defense"] },
+  { field: "positionFamilyMidfield", aliases: ["mittelfeld", "midfield position group", "midfield"] },
+  { field: "positionFamilyAttacking", aliases: ["angriff", "attacking position group", "attack", "offense"] },
+  { field: "positionFamilyGoalkeeper", aliases: ["torwart", "goalkeeper marker", "goalkeeper", "gk"] },
+  { field: "heightCm", aliases: ["größe", "groesse", "height", "height cm", "height (cm)"] },
+  { field: "weightKg", aliases: ["gewicht", "weight", "weight kg", "weight (kg)"] },
+  { field: "distanceKm", aliases: ["entfernung", "distance", "distance km", "distance (km)"], confidence: "confirm", requiresConfirmation: true },
   { field: "hobbies", aliases: ["was sind deine anderen hobbys oder interessen (ausser fussball)?", "was sind deine anderen hobbys oder interessen (außer fußball)?", "hobbies", "hobbies and interests"] },
   { field: "developmentGoal", aliases: ["was ist dein groesstes ziel als fussball spieler?", "was ist dein größtes ziel als fußball spieler?", "biggest football goal"] },
   { field: "workOn", aliases: ["an welchem teil deines spiels moechtest du am meisten arbeiten?", "an welchem teil deines spiels möchtest du am meisten arbeiten?", "self-identified development focus", "work on"] },
@@ -241,13 +299,15 @@ export function buildReviewedRows(
     });
 
     applyFullName(values);
+    applyDominantFootMarkers(values);
+    applyPositionFamilyMarkers(values);
     applyPositionFallback(values);
     const firstName = valueOf(values.firstName);
     const lastName = valueOf(values.lastName);
     const dateOfBirth = valueOf(values.dateOfBirth);
     if (!firstName && !lastName) errors.push("No player name.");
     if (!dateOfBirth) warnings.push("Date of birth missing.");
-    if (!valueOf(values.position)) warnings.push("Primary position missing.");
+    if (!valueOf(values.position) && !valueOf(values.positionFamilies)) warnings.push("Primary position missing.");
 
     const duplicateMatches = duplicateMatchesFor(values, duplicateContext);
     const sourceDuplicateKey = [firstName.toLowerCase(), lastName.toLowerCase(), dateOfBirth].join("|");
@@ -327,17 +387,39 @@ export function refreshReviewedRowDuplicates(
 export function normalizeFieldValue(field: ImportFieldKey, rawValue: string): { value: string; warnings: string[] } {
   const raw = cleanText(rawValue);
   if (!raw) return { value: "", warnings: [] };
-  if (field === "dateOfBirth" || field === "joinedDate" || field === "trialStartDate" || field === "formStartDate" || field === "formSubmissionDate") {
+  if (
+    field === "dateOfBirth" ||
+    field === "joinedDate" ||
+    field === "exitDate" ||
+    field === "trialStartDate" ||
+    field === "lastPerformanceReviewDate" ||
+    field === "formStartDate" ||
+    field === "formSubmissionDate"
+  ) {
     const parsed = normalizeDate(raw);
     return parsed.value ? parsed : { value: "", warnings: [`Invalid date: ${raw}`] };
   }
   if (field === "playerPhone" || field === "parentPhone" || field === "emergencyContactPhone") {
-    const phone = normalizeGermanPhone(raw);
-    return { value: phone.value ?? raw, warnings: phone.warning ? [phone.warning] : [] };
+    return { value: raw, warnings: [] };
   }
-  if (field === "playerEmail" || field === "parentEmail") {
+  if (field === "playerEmail" || field === "secondaryEmail" || field === "parentEmail") {
     const email = raw.toLowerCase();
     return { value: email, warnings: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? [] : [`Email format appears invalid: ${raw}`] };
+  }
+  if (field === "heightCm" || field === "weightKg" || field === "distanceKm") {
+    const parsed = normalizeDecimal(raw);
+    return parsed ? { value: parsed, warnings: [] } : { value: "", warnings: [`Invalid number: ${raw}`] };
+  }
+  if (
+    field === "addressPostalCode" ||
+    field === "dominantFootLeftMarker" ||
+    field === "dominantFootRightMarker" ||
+    field === "positionFamilyDefensive" ||
+    field === "positionFamilyMidfield" ||
+    field === "positionFamilyAttacking" ||
+    field === "positionFamilyGoalkeeper"
+  ) {
+    return { value: raw, warnings: [] };
   }
   if (field === "preferredPositions" || field === "secondaryPositions") {
     const positions = normalizePositions(raw);
@@ -415,6 +497,43 @@ function applyFullName(values: Partial<Record<ImportFieldKey, ImportRowValue>>) 
   values.firstName = { original: values.fullName.original, normalized: parts[0], warnings: [] };
   if (parts.length > 1) {
     values.lastName = { original: values.fullName.original, normalized: parts.slice(1).join(" "), warnings: ["Full name was split automatically. Please review."] };
+  }
+}
+
+function applyDominantFootMarkers(values: Partial<Record<ImportFieldKey, ImportRowValue>>) {
+  if (values.strongFoot) return;
+  const left = isMarked(valueOf(values.dominantFootLeftMarker));
+  const right = isMarked(valueOf(values.dominantFootRightMarker));
+  if (!left && !right) return;
+  values.strongFoot = {
+    original: [values.dominantFootLeftMarker?.original, values.dominantFootRightMarker?.original].filter(Boolean).join(" / "),
+    normalized: left && right ? "both" : left ? "left" : "right",
+    warnings: []
+  };
+}
+
+function applyPositionFamilyMarkers(values: Partial<Record<ImportFieldKey, ImportRowValue>>) {
+  const families = [
+    ["Defensive", values.positionFamilyDefensive],
+    ["Midfield", values.positionFamilyMidfield],
+    ["Attacking", values.positionFamilyAttacking],
+    ["Goalkeeper", values.positionFamilyGoalkeeper]
+  ] as const;
+  const marked = families.filter(([, value]) => isMarked(valueOf(value))).map(([family]) => family);
+  if (!marked.length) return;
+  values.positionFamilies = {
+    original: marked.join(", "),
+    normalized: marked.join(", "),
+    warnings: marked.some((family) => family !== "Goalkeeper")
+      ? ["Broad position groups were imported. Exact outfield positions were not guessed."]
+      : []
+  };
+  if (marked.includes("Goalkeeper") && !values.position) {
+    values.position = {
+      original: values.positionFamilyGoalkeeper?.original ?? "Torwart",
+      normalized: "GK",
+      warnings: []
+    };
   }
 }
 
@@ -541,7 +660,7 @@ function normalizeDate(value: string) {
 }
 
 function cleanText(value: string) {
-  return cleanInvisible(value).replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+  return cleanInvisible(value).replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim().replace(/^'(?=.)/, "");
 }
 
 function safeCell(value: unknown) {
@@ -555,4 +674,16 @@ function normalizeHeader(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/ß/g, "ss");
+}
+
+function normalizeDecimal(value: string) {
+  const trimmed = value.trim();
+  const normalized = trimmed.includes(",") ? trimmed.replace(/\./g, "").replace(",", ".") : trimmed;
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) return "";
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? String(parsed) : "";
+}
+
+function isMarked(value: string) {
+  return ["x", "1", "yes", "ja", "true", "✓", "✔"].includes(value.trim().toLowerCase());
 }

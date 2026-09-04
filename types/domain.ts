@@ -208,7 +208,11 @@ export type SquadPlayer = {
   firstName: string;
   lastName?: string;
   dateOfBirth?: string;
+  addressStreet?: string;
+  addressPostalCode?: string;
+  addressCity?: string;
   position?: string;
+  positionFamilies: string[];
   secondaryPositions: string[];
   strongFoot?: string;
   club?: string;
@@ -220,6 +224,7 @@ export type SquadPlayer = {
   trialTrainingLimit?: number;
   trialEndDate?: string;
   playerEmail?: string;
+  secondaryEmail?: string;
   parentGuardianName?: string;
   parentPhone?: string;
   playerPhone?: string;
@@ -236,9 +241,15 @@ export type SquadPlayer = {
   originalStrongFoot?: string;
   heightCm?: number;
   weightKg?: number;
+  distanceKm?: number;
   jerseyNumber?: string;
   captainStatus?: "none" | "captain" | "vice_captain";
   joinedDate?: string;
+  exitDate?: string;
+  exitReason?: string;
+  scoutingSource?: string;
+  developmentCentre?: string;
+  lastPerformanceReviewDate?: string;
   allergies?: string;
   medication?: string;
   medicalNotes?: string;

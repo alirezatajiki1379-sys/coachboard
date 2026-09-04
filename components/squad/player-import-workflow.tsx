@@ -149,7 +149,7 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
               <UploadBox onError={setError} onLoaded={loadSheet} />
               <PasteBox value={pasteValue} onChange={setPasteValue} onLoad={() => {
                 try {
-                  loadSheet([{ name: "Pasted table", rows: parseDelimited(pasteValue, "\t") }], "paste", "Pasted table");
+                  loadSheet([{ name: "Pasted table", rows: parseDelimited(pasteValue) }], "paste", "Pasted table");
                 } catch (caught) {
                   setError(caught instanceof Error ? caught.message : "Could not read pasted table.");
                 }
@@ -192,6 +192,7 @@ export function PlayerImportWorkflow({ existingPlayers, history }: PlayerImportW
           <div className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">
             Generic columns such as Spalte7 and Spalte8 are suggested but require confirmation.
           </div>
+          <CompositeMappingOverview headers={detected.headers} rows={detected.rows} mappings={mappings} />
           <div className="overflow-x-auto rounded-lg border border-board-line">
             <table className="min-w-full divide-y divide-board-line text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -347,6 +348,120 @@ function Panel({ title, action, children }: { title: string; action?: React.Reac
   );
 }
 
+function CompositeMappingOverview({ headers, rows, mappings }: { headers: string[]; rows: string[][]; mappings: ColumnMapping[] }) {
+  const firstRow = rows[0] ?? [];
+  const cards = [
+    {
+      title: "Player name",
+      fields: [
+        ["First name", "firstName"],
+        ["Last name", "lastName"],
+        ["Birth date", "dateOfBirth"]
+      ],
+      preview: [normalizedPreview("firstName", headers, firstRow, mappings), normalizedPreview("lastName", headers, firstRow, mappings)].filter(Boolean).join(" ")
+    },
+    {
+      title: "Address",
+      fields: [
+        ["Street", "addressStreet"],
+        ["Postal code", "addressPostalCode"],
+        ["City", "addressCity"]
+      ],
+      preview: addressPreview(headers, firstRow, mappings)
+    },
+    {
+      title: "Contact",
+      fields: [
+        ["Phone", "playerPhone"],
+        ["Primary email", "playerEmail"],
+        ["Secondary email", "secondaryEmail"]
+      ],
+      preview: [normalizedPreview("playerPhone", headers, firstRow, mappings), normalizedPreview("playerEmail", headers, firstRow, mappings), normalizedPreview("secondaryEmail", headers, firstRow, mappings)].filter(Boolean).join(" · ")
+    },
+    {
+      title: "Football",
+      fields: [
+        ["Current club", "club"],
+        ["Dominant foot", "strongFoot"],
+        ["Left marker", "dominantFootLeftMarker"],
+        ["Right marker", "dominantFootRightMarker"],
+        ["Position groups", "positionFamilies"],
+        ["Defensive marker", "positionFamilyDefensive"],
+        ["Midfield marker", "positionFamilyMidfield"],
+        ["Attacking marker", "positionFamilyAttacking"],
+        ["Goalkeeper marker", "positionFamilyGoalkeeper"]
+      ],
+      preview: footballPreview(headers, firstRow, mappings)
+    },
+    {
+      title: "Physical",
+      fields: [
+        ["Height", "heightCm"],
+        ["Weight", "weightKg"]
+      ],
+      preview: [normalizedPreview("heightCm", headers, firstRow, mappings, " cm"), normalizedPreview("weightKg", headers, firstRow, mappings, " kg")].filter(Boolean).join(" · ")
+    }
+  ] satisfies Array<{ title: string; fields: Array<[string, ColumnMapping["field"]]>; preview: string }>;
+
+  return (
+    <div className="mb-5 grid gap-3 lg:grid-cols-2">
+      {cards.map((card) => (
+        <div key={card.title} className="rounded-lg border border-board-line bg-slate-50 p-4">
+          <h3 className="text-sm font-black uppercase tracking-wide text-board-navy">{card.title}</h3>
+          <div className="mt-3 grid gap-2">
+            {card.fields.map(([label, field]) => {
+              const source = sourceForField(field, mappings);
+              if (!source && field.includes("Marker")) return null;
+              return (
+                <div key={field} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-sm ring-1 ring-board-line">
+                  <span className="font-semibold text-slate-600">{label}</span>
+                  <span className={cn("font-bold", source ? "text-board-navy" : "text-slate-400")}>{source || "Unmapped"}</span>
+                </div>
+              );
+            })}
+          </div>
+          {card.preview ? <p className="mt-3 whitespace-pre-line rounded-md bg-white px-3 py-2 text-sm font-semibold leading-6 text-board-navy ring-1 ring-board-line">{card.preview}</p> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function sourceForField(field: ColumnMapping["field"], mappings: ColumnMapping[]) {
+  return mappings.find((mapping) => mapping.field === field)?.source ?? "";
+}
+
+function normalizedPreview(field: ColumnMapping["field"], headers: string[], row: string[], mappings: ColumnMapping[], suffix = "") {
+  const index = mappings.findIndex((mapping) => mapping.field === field);
+  if (index < 0) return "";
+  const raw = row[index] ?? "";
+  if (!raw.trim()) return "";
+  const normalized = buildReviewedRows(headers, [row], mappings, []).at(0)?.values[field]?.normalized ?? "";
+  return normalized ? `${normalized}${suffix}` : "";
+}
+
+function addressPreview(headers: string[], row: string[], mappings: ColumnMapping[]) {
+  const street = normalizedPreview("addressStreet", headers, row, mappings);
+  const postalCode = normalizedPreview("addressPostalCode", headers, row, mappings);
+  const city = normalizedPreview("addressCity", headers, row, mappings);
+  return [street, [postalCode, city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
+}
+
+function footballPreview(headers: string[], row: string[], mappings: ColumnMapping[]) {
+  const reviewed = buildReviewedRows(headers, [row], mappings, []).at(0);
+  if (!reviewed) return "";
+  return [
+    valuePreview("club", reviewed),
+    valuePreview("strongFoot", reviewed),
+    valuePreview("position", reviewed),
+    valuePreview("positionFamilies", reviewed)
+  ].filter(Boolean).join(" · ");
+}
+
+function valuePreview(field: ColumnMapping["field"], row: ReviewedImportRow) {
+  return row.values[field]?.normalized ?? "";
+}
+
 function UploadBox({ onError, onLoaded }: { onError: (message: string) => void; onLoaded: (sheets: ParsedSheet[], sourceType: ImportSourceType, name: string) => void }) {
   const [filename, setFilename] = useState("");
   return (
@@ -430,6 +545,7 @@ function ReviewRows({ rows, onRowsChange, duplicatesOnly = false }: { rows: Revi
             </div>
           </div>
           <DuplicateMatchList row={row} />
+          <TransformedPlayerPreview row={row} />
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {Object.entries(row.values).filter(([key]) => key !== "ignore" && key !== "fullName").map(([key, value]) => (
               <label key={key} className="block">
@@ -449,6 +565,48 @@ function ReviewRows({ rows, onRowsChange, duplicatesOnly = false }: { rows: Revi
             </ul>
           ) : null}
         </article>
+      ))}
+    </div>
+  );
+}
+
+function TransformedPlayerPreview({ row }: { row: ReviewedImportRow }) {
+  const address = [
+    valuePreview("addressStreet", row),
+    [valuePreview("addressPostalCode", row), valuePreview("addressCity", row)].filter(Boolean).join(" ")
+  ].filter(Boolean).join("\n");
+  const contact = [
+    valuePreview("playerPhone", row),
+    valuePreview("playerEmail", row),
+    valuePreview("secondaryEmail", row)
+  ].filter(Boolean).join(" · ");
+  const football = [
+    valuePreview("club", row),
+    valuePreview("strongFoot", row),
+    valuePreview("position", row),
+    valuePreview("positionFamilies", row)
+  ].filter(Boolean).join(" · ");
+  const physical = [
+    valuePreview("heightCm", row) ? `${valuePreview("heightCm", row)} cm` : "",
+    valuePreview("weightKg", row) ? `${valuePreview("weightKg", row)} kg` : "",
+    valuePreview("distanceKm", row) ? `${valuePreview("distanceKm", row)} km` : ""
+  ].filter(Boolean).join(" · ");
+  const items = [
+    ["Name", `${valuePreview("firstName", row)} ${valuePreview("lastName", row)}`.trim()],
+    ["Birth date", valuePreview("dateOfBirth", row)],
+    ["Address", address],
+    ["Contact", contact],
+    ["Football", football],
+    ["Physical", physical]
+  ].filter(([, value]) => value);
+  if (!items.length) return null;
+  return (
+    <div className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-3 md:grid-cols-2 xl:grid-cols-3">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-md bg-white px-3 py-2 ring-1 ring-board-line">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-board-navy">{value}</p>
+        </div>
       ))}
     </div>
   );
@@ -882,13 +1040,15 @@ function splitPositionList(value: string) {
 }
 
 function positionSourceValue(row: ReviewedImportRow) {
-  return row.values.position?.original || row.values.preferredPositions?.original || row.values.secondaryPositions?.original || "";
+  return row.values.position?.original || row.values.preferredPositions?.original || row.values.secondaryPositions?.original || row.values.positionFamilies?.original || "";
 }
 
 function positionReviewStatus(row: ReviewedImportRow): PositionStatus {
   const source = positionSourceValue(row).trim();
   const primary = row.values.position?.normalized?.trim();
+  const families = row.values.positionFamilies?.normalized?.trim();
   if (row.values.position?.warnings?.includes("Intentionally left without position.")) return "intentionally-missing";
+  if (families && !primary) return "recognized";
   if (!source && !primary) return "missing";
   if (!primary && source) return "needs-review";
   if (row.warnings.some(isPositionWarning) || row.values.position?.warnings?.some(isPositionWarning) || row.values.secondaryPositions?.warnings?.some(isPositionWarning) || row.values.preferredPositions?.warnings?.some(isPositionWarning)) return "partial";
@@ -1071,8 +1231,8 @@ async function parseFile(file: File): Promise<{ sheets: ParsedSheet[]; sourceTyp
   if (file.size > maxFileSize) throw new Error("File is too large. Maximum size is 10 MB.");
   const lower = file.name.toLowerCase();
   if (lower.endsWith(".csv")) {
-    const text = await file.text();
-    return { sheets: [{ name: "CSV", rows: parseDelimited(text, detectDelimiter(text)) }], sourceType: "csv" };
+    const text = await decodeTextFile(file);
+    return { sheets: [{ name: "CSV", rows: parseDelimited(text) }], sourceType: "csv" };
   }
   if (!lower.endsWith(".xlsx")) throw new Error("Unsupported file type. Upload a standard .xlsx or .csv file.");
   const XLSX = await import("xlsx");
@@ -1087,7 +1247,14 @@ async function parseFile(file: File): Promise<{ sheets: ParsedSheet[]; sourceTyp
   return { sheets, sourceType: "xlsx" };
 }
 
-function parseDelimited(text: string, delimiter: string) {
+async function decodeTextFile(file: File) {
+  const buffer = await file.arrayBuffer();
+  const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+  if (!utf8.includes("\uFFFD")) return utf8;
+  return new TextDecoder("windows-1252", { fatal: false }).decode(buffer);
+}
+
+function parseDelimited(text: string, delimiter = detectDelimiter(text)) {
   const rows = text.replace(/^\uFEFF/, "").split(/\r?\n/).map((line) => parseLine(line, delimiter)).filter((row) => row.some((cell) => cell.trim()));
   validateSheets([{ name: "Table", rows }]);
   return rows;

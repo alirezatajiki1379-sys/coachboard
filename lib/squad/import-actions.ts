@@ -305,13 +305,19 @@ function buildPlayerInsert(userId: string, squadId: string | undefined, batchId:
     first_name: valueOf(row.values.firstName),
     last_name: nullable(valueOf(row.values.lastName)),
     date_of_birth: nullable(valueOf(row.values.dateOfBirth)),
+    address_street: nullable(valueOf(row.values.addressStreet)),
+    address_postal_code: nullable(valueOf(row.values.addressPostalCode)),
+    address_city: nullable(valueOf(row.values.addressCity)),
     player_type: valueOf(row.values.playerType) === "trial" ? "trial" : "roster",
     trial_start_date: nullable(valueOf(row.values.trialStartDate)),
     joined_date: nullable(valueOf(row.values.joinedDate)),
+    exit_date: nullable(valueOf(row.values.exitDate)),
+    exit_reason: nullable(valueOf(row.values.exitReason)),
     captain_status: captain(valueOf(row.values.captainStatus)),
     jersey_number: nullable(valueOf(row.values.jerseyNumber)),
     external_player_id: nullable(valueOf(row.values.externalPlayerId) || valueOf(row.values.externalResponseId)),
     position: nullable(valueOf(row.values.position)),
+    position_families: list(valueOf(row.values.positionFamilies)),
     secondary_positions: list(valueOf(row.values.secondaryPositions)),
     preferred_positions: list(valueOf(row.values.preferredPositions)),
     original_preferred_positions: nullable(row.values.preferredPositions?.original ?? ""),
@@ -322,6 +328,7 @@ function buildPlayerInsert(userId: string, squadId: string | undefined, batchId:
     club_training_schedule: nullable(valueOf(row.values.clubTrainingSchedule)),
     player_phone: nullable(valueOf(row.values.playerPhone)),
     player_email: nullable(valueOf(row.values.playerEmail)),
+    secondary_email: nullable(valueOf(row.values.secondaryEmail)),
     parent_guardian_name: nullable(valueOf(row.values.parentGuardianName)),
     parent_phone: nullable(valueOf(row.values.parentPhone)),
     parent_email: nullable(valueOf(row.values.parentEmail)),
@@ -332,6 +339,12 @@ function buildPlayerInsert(userId: string, squadId: string | undefined, batchId:
     jacket_size: nullable(valueOf(row.values.jacketSize)),
     trouser_size: nullable(valueOf(row.values.trouserSize)),
     shoe_size: nullable(valueOf(row.values.shoeSize)),
+    height_cm: decimal(valueOf(row.values.heightCm)),
+    weight_kg: decimal(valueOf(row.values.weightKg)),
+    distance_km: decimal(valueOf(row.values.distanceKm)),
+    scouting_source: nullable(valueOf(row.values.scoutingSource)),
+    development_centre: nullable(valueOf(row.values.developmentCentre)),
+    last_performance_review_date: nullable(valueOf(row.values.lastPerformanceReviewDate)),
     hobbies: nullable(valueOf(row.values.hobbies)),
     development_goal: nullable(valueOf(row.values.developmentGoal)),
     work_on: nullable(valueOf(row.values.workOn)),
@@ -353,8 +366,13 @@ function buildPlayerUpdate(batchId: string, row: ReviewedImportRow, player: Squa
   const mapping: Array<[string, keyof SquadPlayer]> = [
     ["last_name", "lastName"],
     ["date_of_birth", "dateOfBirth"],
+    ["address_street", "addressStreet"],
+    ["address_postal_code", "addressPostalCode"],
+    ["address_city", "addressCity"],
     ["trial_start_date", "trialStartDate"],
     ["joined_date", "joinedDate"],
+    ["exit_date", "exitDate"],
+    ["exit_reason", "exitReason"],
     ["captain_status", "captainStatus"],
     ["jersey_number", "jerseyNumber"],
     ["external_player_id", "externalPlayerId"],
@@ -366,6 +384,7 @@ function buildPlayerUpdate(batchId: string, row: ReviewedImportRow, player: Squa
     ["club_training_schedule", "clubTrainingSchedule"],
     ["player_phone", "playerPhone"],
     ["player_email", "playerEmail"],
+    ["secondary_email", "secondaryEmail"],
     ["parent_guardian_name", "parentGuardianName"],
     ["parent_phone", "parentPhone"],
     ["parent_email", "parentEmail"],
@@ -376,6 +395,12 @@ function buildPlayerUpdate(batchId: string, row: ReviewedImportRow, player: Squa
     ["jacket_size", "jacketSize"],
     ["trouser_size", "trouserSize"],
     ["shoe_size", "shoeSize"],
+    ["height_cm", "heightCm"],
+    ["weight_kg", "weightKg"],
+    ["distance_km", "distanceKm"],
+    ["scouting_source", "scoutingSource"],
+    ["development_centre", "developmentCentre"],
+    ["last_performance_review_date", "lastPerformanceReviewDate"],
     ["hobbies", "hobbies"],
     ["development_goal", "developmentGoal"],
     ["work_on", "workOn"],
@@ -400,6 +425,10 @@ function buildPlayerUpdate(batchId: string, row: ReviewedImportRow, player: Squa
   if (Array.isArray(insert.preferred_positions) && insert.preferred_positions.length && (operation === "update" || !player.preferredPositions.length)) {
     next.preferred_positions = insert.preferred_positions;
     previous.preferred_positions = player.preferredPositions;
+  }
+  if (Array.isArray(insert.position_families) && insert.position_families.length && (operation === "update" || !player.positionFamilies.length)) {
+    next.position_families = insert.position_families;
+    previous.position_families = player.positionFamilies;
   }
   next.onboarding_original_answers = row.originalRow as Json;
   next.onboarding_normalized_values = normalizedRecord(row) as Json;
@@ -577,6 +606,12 @@ function nullable(value: string) {
 
 function list(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function decimal(value: string) {
+  if (!value.trim()) return null;
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function captain(value: string) {

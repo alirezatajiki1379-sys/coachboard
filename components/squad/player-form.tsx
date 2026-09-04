@@ -49,11 +49,12 @@ export function PlayerForm({ action, mode, player, trainingDates = [] }: PlayerF
           <TextInput name="dateOfBirth" label="Date of birth" type="date" defaultValue={values.dateOfBirth} error={fieldErrors.dateOfBirth} />
           <TextInput name="position" label="Position" defaultValue={values.position} error={fieldErrors.position} />
           <TextInput name="secondaryPositions" label="Secondary positions" defaultValue={values.secondaryPositions} error={fieldErrors.secondaryPositions} />
+          <TextInput name="positionFamilies" label="Position groups" defaultValue={values.positionFamilies} error={fieldErrors.positionFamilies} />
           <SelectInput
             name="strongFoot"
             label="Strong foot"
             defaultValue={values.strongFoot}
-            options={["", "Right", "Left", "Both"]}
+            options={["", "right", "left", "both"]}
             error={fieldErrors.strongFoot}
           />
           <TextInput name="club" label="Club" defaultValue={values.club} error={fieldErrors.club} />
@@ -75,8 +76,9 @@ export function PlayerForm({ action, mode, player, trainingDates = [] }: PlayerF
           <TextInput name="originalPreferredPositions" label="Original preferred positions" defaultValue={values.originalPreferredPositions} error={fieldErrors.originalPreferredPositions} />
           <TextInput name="originalStrongFoot" label="Original dominant foot" defaultValue={values.originalStrongFoot} error={fieldErrors.originalStrongFoot} />
           <TextInput name="jerseyNumber" label="Jersey number" defaultValue={values.jerseyNumber} error={fieldErrors.jerseyNumber} />
-          <TextInput name="heightCm" label="Height (cm)" type="number" defaultValue={values.heightCm} error={fieldErrors.heightCm} />
-          <TextInput name="weightKg" label="Weight (kg)" type="number" defaultValue={values.weightKg} error={fieldErrors.weightKg} />
+          <TextInput name="heightCm" label="Height (cm)" type="number" step="0.1" defaultValue={values.heightCm} error={fieldErrors.heightCm} />
+          <TextInput name="weightKg" label="Weight (kg)" type="number" step="0.1" defaultValue={values.weightKg} error={fieldErrors.weightKg} />
+          <TextInput name="distanceKm" label="Distance (km)" type="number" step="0.1" defaultValue={values.distanceKm} error={fieldErrors.distanceKm} />
           <SelectInput
             name="captainStatus"
             label="Captain status"
@@ -85,6 +87,8 @@ export function PlayerForm({ action, mode, player, trainingDates = [] }: PlayerF
             error={fieldErrors.captainStatus}
           />
           <TextInput name="joinedDate" label="Joined date" type="date" defaultValue={values.joinedDate} error={fieldErrors.joinedDate} />
+          <TextInput name="exitDate" label="Exit date" type="date" defaultValue={values.exitDate} error={fieldErrors.exitDate} />
+          <TextInput name="exitReason" label="Exit reason" defaultValue={values.exitReason} error={fieldErrors.exitReason} />
         </div>
         <p className="mt-3 text-xs text-slate-500">Separate secondary positions with commas, for example CDM, CAM. Optional fields are hidden in the Player Hub header unless enabled.</p>
       </section>
@@ -148,10 +152,21 @@ export function PlayerForm({ action, mode, player, trainingDates = [] }: PlayerF
       )}
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+        <h2 className="text-lg font-bold text-board-navy">Address</h2>
+        <p className="mt-1 text-sm text-slate-500">Stored as street, postal code and city so imports and exports stay editable.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <TextInput name="addressStreet" label="Street" defaultValue={values.addressStreet} error={fieldErrors.addressStreet} />
+          <TextInput name="addressPostalCode" label="Postal code" defaultValue={values.addressPostalCode} error={fieldErrors.addressPostalCode} />
+          <TextInput name="addressCity" label="City" defaultValue={values.addressCity} error={fieldErrors.addressCity} />
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-bold text-board-navy">Contact</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <TextInput name="playerPhone" label="Player phone" defaultValue={values.playerPhone} error={fieldErrors.playerPhone} />
           <TextInput name="playerEmail" label="Player email" type="email" defaultValue={values.playerEmail} error={fieldErrors.playerEmail} />
+          <TextInput name="secondaryEmail" label="Secondary email" type="email" defaultValue={values.secondaryEmail} error={fieldErrors.secondaryEmail} />
           <TextInput name="parentGuardianName" label="Parent / guardian name" defaultValue={values.parentGuardianName} error={fieldErrors.parentGuardianName} />
           <TextInput name="parentPhone" label="Parent phone" defaultValue={values.parentPhone} error={fieldErrors.parentPhone} />
           <TextInput name="parentEmail" label="Parent email" type="email" defaultValue={values.parentEmail} error={fieldErrors.parentEmail} />
@@ -176,6 +191,11 @@ export function PlayerForm({ action, mode, player, trainingDates = [] }: PlayerF
         <h2 className="text-lg font-bold text-board-navy">Football profile</h2>
         <div className="mt-4 grid gap-4">
           <TextArea name="clubTrainingSchedule" label="Club training schedule" defaultValue={values.clubTrainingSchedule} error={fieldErrors.clubTrainingSchedule} />
+          <div className="grid gap-4 md:grid-cols-3">
+            <TextInput name="scoutingSource" label="Scouting source" defaultValue={values.scoutingSource} error={fieldErrors.scoutingSource} />
+            <TextInput name="developmentCentre" label="Development centre" defaultValue={values.developmentCentre} error={fieldErrors.developmentCentre} />
+            <TextInput name="lastPerformanceReviewDate" label="Last performance review" type="date" defaultValue={values.lastPerformanceReviewDate} error={fieldErrors.lastPerformanceReviewDate} />
+          </div>
           <TextArea name="developmentGoal" label="Development goal" defaultValue={values.developmentGoal} error={fieldErrors.developmentGoal} />
           <TextArea name="workOn" label="Work on" defaultValue={values.workOn} error={fieldErrors.workOn} />
         </div>
@@ -235,7 +255,11 @@ function getInitialValues(player?: SquadPlayer): SquadPlayerFormValues {
     firstName: player?.firstName ?? "",
     lastName: player?.lastName ?? "",
     dateOfBirth: player?.dateOfBirth ?? "",
+    addressStreet: player?.addressStreet ?? "",
+    addressPostalCode: player?.addressPostalCode ?? "",
+    addressCity: player?.addressCity ?? "",
     position: player?.position ?? "",
+    positionFamilies: player?.positionFamilies.join(", ") ?? "",
     secondaryPositions: player?.secondaryPositions.join(", ") ?? "",
     strongFoot: player?.strongFoot ?? "",
     club: player?.club ?? "",
@@ -248,6 +272,7 @@ function getInitialValues(player?: SquadPlayer): SquadPlayerFormValues {
     trialTrainingLimit: player?.trialTrainingLimit ? String(player.trialTrainingLimit) : "",
     trialEndDate: player?.trialEndDate ?? "",
     playerEmail: player?.playerEmail ?? "",
+    secondaryEmail: player?.secondaryEmail ?? "",
     parentGuardianName: player?.parentGuardianName ?? "",
     parentPhone: player?.parentPhone ?? "",
     playerPhone: player?.playerPhone ?? "",
@@ -264,9 +289,15 @@ function getInitialValues(player?: SquadPlayer): SquadPlayerFormValues {
     originalStrongFoot: player?.originalStrongFoot ?? "",
     heightCm: player?.heightCm ? String(player.heightCm) : "",
     weightKg: player?.weightKg ? String(player.weightKg) : "",
+    distanceKm: player?.distanceKm ? String(player.distanceKm) : "",
     jerseyNumber: player?.jerseyNumber ?? "",
     captainStatus: player?.captainStatus ?? "none",
     joinedDate: player?.joinedDate ?? "",
+    exitDate: player?.exitDate ?? "",
+    exitReason: player?.exitReason ?? "",
+    scoutingSource: player?.scoutingSource ?? "",
+    developmentCentre: player?.developmentCentre ?? "",
+    lastPerformanceReviewDate: player?.lastPerformanceReviewDate ?? "",
     allergies: player?.allergies ?? "",
     medication: player?.medication ?? "",
     medicalNotes: player?.medicalNotes ?? "",
@@ -340,6 +371,7 @@ function TextInput({
   error,
   required = false,
   type = "text",
+  step,
   onChange
 }: {
   name: SquadPlayerFormField;
@@ -348,6 +380,7 @@ function TextInput({
   error?: string;
   required?: boolean;
   type?: string;
+  step?: string;
   onChange?: (value: string) => void;
 }) {
   return (
@@ -359,6 +392,7 @@ function TextInput({
       <input
         name={name}
         type={type}
+        step={step}
         defaultValue={defaultValue}
         onChange={onChange ? (event) => onChange(event.target.value) : undefined}
         aria-invalid={Boolean(error)}
