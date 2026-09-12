@@ -107,7 +107,7 @@ PASS for grouped preview labels: Name, Birth date, Address, Contact, Football an
 
 ## 13. Training Result
 
-WARNING: Common labels are covered, but full source-level semantic migration remains.
+PASS for the Training calendar screenshot regression set. The page title, description, metric cards, filters, management area and empty state now render German source text when `locale = de`.
 
 ## 14. Training Participant Tables Result
 
@@ -115,11 +115,11 @@ WARNING: Common participant table terms are covered.
 
 ## 15. Session Plan Result
 
-WARNING: Existing export/session message keys plus runtime boundary improve German coverage.
+PASS for the Training Plan Library screenshot regression set. The page title, description, view tabs, empty state and create action now render German source text when `locale = de`.
 
 ## 16. Drill Library Result
 
-WARNING: Common drill/action/material terms are covered. Drill/editor source-level hardcoded strings remain.
+PASS for the Drill Library screenshot regression set. The library header, description, view tabs, filters and empty states now render German source text when `locale = de`.
 
 ## 17. Drill Editor Result
 
@@ -135,7 +135,7 @@ WARNING: Development table and goal terms are partially covered.
 
 ## 20. Analytics Result
 
-WARNING: Common analytics table terms are covered, but chart-specific text still needs direct migration.
+PASS for the main Analytics screenshot regression set. The page header, filter controls, period labels, summary sentence, metric cards, table headers, empty state and calculation help now render German source text when `locale = de`. Lower nested panel labels remain covered by the runtime boundary until a complete source-level migration.
 
 ## 21. Planning Insights Result
 
@@ -179,7 +179,7 @@ PASS: `npm run i18n:check`
 
 ## 31. Hardcoded English Audit Result
 
-WARNING: `npm run i18n:audit` still reports hardcoded source literals. The runtime boundary reduces visible German-locale English for covered phrases but does not eliminate all source literals.
+WARNING: `npm run i18n:audit` still reports hardcoded source literals. The runtime boundary reduces visible German-locale English for covered phrases and the screenshot-blocker pages were source-localized, but the audit does not yet pass at a strict zero-hardcoded-string level.
 
 ## 32. Tests Executed
 
@@ -193,7 +193,7 @@ Passed:
 
 Important result:
 
-- `npm run i18n:audit` exits successfully but still reports 3316 likely hardcoded source strings. This is a source-level warning, not a failed build. The runtime boundary translates many of those visible strings when German is active, but the strict source-level standard is not complete.
+- `npm run i18n:audit` exits successfully but still reports 3264 likely hardcoded source strings. This is a source-level warning, not a failed build. The runtime boundary translates many visible strings when German is active, and the screenshot blocker pages now use locale-aware source copy, but the strict source-level standard is not complete.
 
 ## 33. Remaining Intentional Exceptions
 
@@ -235,6 +235,18 @@ Mobile layout uses responsive cards plus an existing horizontally scrollable det
 | Development | WARNING |
 | Analytics | WARNING |
 | Import Mapping | PASS |
+
+## SCREENSHOT REGRESSION
+
+| Area | Result |
+| --- | --- |
+| Training Plan Library | PASS |
+| Training Calendar | PASS |
+| Drill Library | PASS |
+| Actions | PASS |
+| Analytics | PASS |
+
+These five areas now have German-mode source text for the exact screenshot blocker labels. English-mode copy remains available through locale-specific copy objects.
 
 ## Runtime Walkthrough Limitation
 

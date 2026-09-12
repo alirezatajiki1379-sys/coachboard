@@ -7,8 +7,6 @@ import { STICKY_TABLE_HEADER_CLASS } from "@/components/squad/player-table-layer
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
 import {
-  analyticsPeriodLabels,
-  analyticsSectionLabels,
   coachAssessmentLabels,
   defaultSortDirection,
   evidenceBadgeTone,
@@ -26,32 +24,207 @@ import {
 } from "@/lib/squad/analytics";
 import { getSquadAnalyticsOverview, parseAnalyticsFilters } from "@/lib/squad/analytics-queries";
 import { createClient } from "@/lib/supabase/server";
+import { getUserLocale } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
 type AnalysisPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const playerTypeOptions: Array<{ id: AnalyticsPlayerTypeFilter; label: string; compact: string }> = [
-  { id: "all", label: "All players", compact: "All" },
-  { id: "roster", label: "Roster players", compact: "Roster" },
-  { id: "trial", label: "Trial players", compact: "Trial" }
-];
+const analyticsPlayerTypeOptions: Record<"en" | "de", Array<{ id: AnalyticsPlayerTypeFilter; label: string; compact: string }>> = {
+  en: [
+    { id: "all", label: "All players", compact: "All" },
+    { id: "roster", label: "Roster players", compact: "Roster" },
+    { id: "trial", label: "Trial players", compact: "Trial" }
+  ],
+  de: [
+    { id: "all", label: "Alle Spieler", compact: "Alle Spieler" },
+    { id: "roster", label: "Kaderspieler", compact: "Kader" },
+    { id: "trial", label: "Probespieler", compact: "Probe" }
+  ]
+};
 
-const sortOptions: Array<{ id: AnalyticsSortKey; label: string }> = [
-  { id: "name", label: "Name" },
-  { id: "position", label: "Position" },
-  { id: "status", label: "Status" },
-  { id: "trainings", label: "Trainings" },
-  { id: "attendance", label: "Attendance" },
-  { id: "average", label: "Average rating" },
-  { id: "latestFive", label: "Latest 5" },
-  { id: "trend", label: "Trend" },
-  { id: "reliability", label: "Reliability" },
-  { id: "lastTraining", label: "Last training" },
-  { id: "evidence", label: "Evidence" },
-  { id: "coachAssessment", label: "Coach assessment" }
-];
+const analyticsSortOptions: Record<"en" | "de", Array<{ id: AnalyticsSortKey; label: string }>> = {
+  en: [
+    { id: "name", label: "Name" },
+    { id: "position", label: "Position" },
+    { id: "status", label: "Status" },
+    { id: "trainings", label: "Trainings" },
+    { id: "attendance", label: "Attendance" },
+    { id: "average", label: "Average rating" },
+    { id: "latestFive", label: "Latest 5" },
+    { id: "trend", label: "Trend" },
+    { id: "reliability", label: "Reliability" },
+    { id: "lastTraining", label: "Last training" },
+    { id: "evidence", label: "Evidence" },
+    { id: "coachAssessment", label: "Coach assessment" }
+  ],
+  de: [
+    { id: "name", label: "Name" },
+    { id: "position", label: "Position" },
+    { id: "status", label: "Status" },
+    { id: "trainings", label: "Trainingseinheiten" },
+    { id: "attendance", label: "Anwesenheit" },
+    { id: "average", label: "Durchschnittsbewertung" },
+    { id: "latestFive", label: "Letzte 5" },
+    { id: "trend", label: "Trend" },
+    { id: "reliability", label: "Zuverlässigkeit" },
+    { id: "lastTraining", label: "Letztes Training" },
+    { id: "evidence", label: "Belege" },
+    { id: "coachAssessment", label: "Trainereinschätzung" }
+  ]
+};
+
+const analyticsCopy = {
+  en: {
+    eyebrow: "Squad",
+    title: "Analytics",
+    description: "Compare player availability, performance ratings, reliability and manual coach assessments without mixing observations with automatic decisions.",
+    helpTitle: "How analytics are calculated",
+    filters: "Filters",
+    players: "Players",
+    position: "Position",
+    allPositions: "All positions",
+    period: "Period",
+    customFrom: "Custom period from date",
+    customTo: "Custom period to date",
+    datePlaceholder: "dd.mm.yyyy",
+    apply: "Apply",
+    showing: "Showing",
+    all: "All",
+    sortedBy: (label: string, direction: AnalyticsSortDirection) => `Sorted by ${label} ${direction === "asc" ? "ascending" : "descending"}`,
+    resetFilters: "Reset filters",
+    activeTeam: "Active team",
+    attended: (count: number) => `${count} attended`,
+    finalRatingsOnly: "Final overall ratings only",
+    manualCoachStatus: "Manual coach status",
+    noDataTitle: "No analytics data for this view.",
+    noDataDescription: "Adjust the filters or complete trainings with attendance and ratings.",
+    createTraining: "Create training",
+    noTrainingData: "No training data in this period",
+    availableTrainings: (count: number) => `${count} training${count === 1 ? "" : "s"} available`,
+    periods: {
+      last5: "Last 5 trainings",
+      last10: "Last 10 trainings",
+      "30d": "Last 30 days",
+      "90d": "Last 90 days",
+      season: "This season",
+      all: "All time",
+      custom: "Custom range"
+    },
+    sections: {
+      overview: "Overview",
+      training: "Training",
+      attendance: "Attendance",
+      development: "Development",
+      drills: "Drill Usage",
+      players: "Players"
+    },
+    metrics: {
+      players: "Players",
+      trainings: "Trainings",
+      teamAttendance: "Team attendance",
+      ratedPerformances: "Rated performances",
+      openAssessments: "Open assessments"
+    },
+    headers: {
+      player: "Player",
+      position: "Position",
+      status: "Status",
+      trainings: "Trainings",
+      attendance: "Attendance",
+      average: "Average",
+      latestFive: "Latest 5",
+      trend: "Trend",
+      reliability: "Reliability",
+      evidence: "Evidence",
+      coachAssessment: "Coach assessment"
+    },
+    helpItems: [
+      { title: "Average rating", text: "only final overall ratings intentionally entered by the coach. Unrated trainings are not counted as 3." },
+      { title: "Trend", text: "latest five rated trainings compared with the five rated trainings before them, inside the selected period." },
+      { title: "Attendance rate", text: "Present and Late count as attended. Not expected and not recorded are excluded from the denominator." },
+      { title: "Reliability", text: "existing malus rules; late only counts when the penalty is active." },
+      { title: "Evidence", text: "shows how many rated trainings support the performance view." },
+      { title: "Coach assessment", text: "manual coach marker, separate from automatic summaries." },
+      { title: "Drill usage", text: "scoped to the active team and selected historical training period." }
+    ]
+  },
+  de: {
+    eyebrow: "Kader",
+    title: "Analysen",
+    description: "Vergleiche Verfügbarkeit, Leistungsbewertungen, Zuverlässigkeit und manuelle Trainereinschätzungen, ohne Beobachtungen mit automatischen Hinweisen zu vermischen.",
+    helpTitle: "So werden die Analysen berechnet",
+    filters: "Filter",
+    players: "Spieler",
+    position: "Position",
+    allPositions: "Alle Positionen",
+    period: "Zeitraum",
+    customFrom: "Zeitraum von Datum",
+    customTo: "Zeitraum bis Datum",
+    datePlaceholder: "TT.MM.JJJJ",
+    apply: "Anwenden",
+    showing: "Anzeige",
+    all: "Alle Spieler",
+    sortedBy: (label: string, direction: AnalyticsSortDirection) => `Nach ${label} ${direction === "asc" ? "aufsteigend" : "absteigend"} sortiert`,
+    resetFilters: "Filter zurücksetzen",
+    activeTeam: "Aktive Mannschaft",
+    attended: (count: number) => `${count} anwesend`,
+    finalRatingsOnly: "Nur abschließende Gesamtbewertungen",
+    manualCoachStatus: "Manuelle Trainerbewertung",
+    noDataTitle: "Keine Analysedaten für diese Ansicht.",
+    noDataDescription: "Passe die Filter an oder schließe Trainingseinheiten mit Anwesenheit und Bewertungen ab.",
+    createTraining: "Training erstellen",
+    noTrainingData: "Keine Trainingsdaten in diesem Zeitraum",
+    availableTrainings: (count: number) => `${count} Trainingseinheit${count === 1 ? "" : "en"} verfügbar`,
+    periods: {
+      last5: "Letzte 5 Trainingseinheiten",
+      last10: "Letzte 10 Trainingseinheiten",
+      "30d": "Letzte 30 Tage",
+      "90d": "Letzte 90 Tage",
+      season: "Diese Saison",
+      all: "Gesamter Zeitraum",
+      custom: "Benutzerdefinierter Zeitraum"
+    },
+    sections: {
+      overview: "Übersicht",
+      training: "Training",
+      attendance: "Anwesenheit",
+      development: "Entwicklung",
+      drills: "Übungsnutzung",
+      players: "Spieler"
+    },
+    metrics: {
+      players: "Spieler",
+      trainings: "Trainingseinheiten",
+      teamAttendance: "Mannschaftsanwesenheit",
+      ratedPerformances: "Bewertete Leistungen",
+      openAssessments: "Offene Bewertungen"
+    },
+    headers: {
+      player: "Spieler",
+      position: "Position",
+      status: "Status",
+      trainings: "Trainingseinheiten",
+      attendance: "Anwesenheit",
+      average: "Durchschnitt",
+      latestFive: "Letzte 5",
+      trend: "Trend",
+      reliability: "Zuverlässigkeit",
+      evidence: "Belege",
+      coachAssessment: "Trainereinschätzung"
+    },
+    helpItems: [
+      { title: "Durchschnittsbewertung", text: "nur abschließende Gesamtbewertungen, die der Trainer bewusst eingetragen hat. Nicht bewertete Trainings zählen nicht als 3." },
+      { title: "Trend", text: "die letzten fünf bewerteten Trainings im Vergleich zu den fünf bewerteten Trainings davor, innerhalb des gewählten Zeitraums." },
+      { title: "Anwesenheitsquote", text: "Anwesend und Verspätet zählen als anwesend. Nicht eingeplant und nicht erfasst werden aus der Grundlage ausgeschlossen." },
+      { title: "Zuverlässigkeit", text: "bestehende Malus-Regeln; Verspätung zählt nur, wenn der Abzug aktiv ist." },
+      { title: "Belege", text: "zeigt, wie viele bewertete Trainings die Leistungsansicht stützen." },
+      { title: "Trainereinschätzung", text: "manuelle Einschätzung des Trainers, getrennt von automatischen Zusammenfassungen." },
+      { title: "Übungsnutzung", text: "bezogen auf die aktive Mannschaft und den gewählten historischen Trainingszeitraum." }
+    ]
+  }
+} as const;
 
 export default async function AnalysisPage({ searchParams }: AnalysisPageProps) {
   const params = await searchParams;
@@ -62,9 +235,13 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const locale = await getUserLocale(supabase, user.id);
+  const copy = analyticsCopy[locale];
+  const playerTypeOptions = analyticsPlayerTypeOptions[locale];
+  const sortOptions = analyticsSortOptions[locale];
   const { summaries, positions, seasonSettings, teamAnalytics } = await getSquadAnalyticsOverview(supabase, user.id, filters);
   const allFilteredRecords = summaries.flatMap((summary) => summary.records);
-  const periodDefinition = getPeriodDefinition(filters, allFilteredRecords, seasonSettings);
+  const periodDefinition = getPeriodDefinition(filters, allFilteredRecords, seasonSettings, locale);
   const totalRated = summaries.reduce((sum, summary) => sum + summary.rated, 0);
   const openAssessments = summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length;
   const activeFilters = countActiveFilters(filters);
@@ -72,13 +249,13 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
   return (
     <PageContainer width="wide">
       <PageHeader
-        eyebrow="Squad"
-        title="Analytics"
-        description="Compare player availability, performance ratings, reliability and manual coach assessments without mixing observations with automatic decisions."
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        description={copy.description}
         actions={(
         <ButtonLink href="#analytics-help" variant="secondary" className="justify-center">
           <Info className="h-4 w-4" />
-          How analytics are calculated
+          {copy.helpTitle}
         </ButtonLink>
         )}
       />
@@ -86,9 +263,9 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
       <SquadNav />
 
       <section className="flex flex-wrap gap-2 rounded-lg border border-board-line bg-white p-3 shadow-soft">
-        {(Object.keys(analyticsSectionLabels) as AnalyticsSection[]).map((section) => (
+        {(Object.keys(copy.sections) as AnalyticsSection[]).map((section) => (
           <FilterLink key={section} href={hrefFor({ ...filters, section })} active={filters.section === section}>
-            {analyticsSectionLabels[section]}
+            {copy.sections[section]}
           </FilterLink>
         ))}
       </section>
@@ -96,10 +273,10 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
       <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500 md:hidden">
           <Filter className="h-4 w-4" />
-          Filters{activeFilters ? ` (${activeFilters})` : ""}
+          {copy.filters}{activeFilters ? ` (${activeFilters})` : ""}
         </div>
         <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_1fr_1.35fr] md:mt-0">
-          <ControlField label="Players">
+          <ControlField label={copy.players}>
             <div className="flex flex-wrap gap-2">
               {playerTypeOptions.map((option) => (
                 <FilterLink key={option.id} href={hrefFor({ ...filters, playerType: option.id })} active={filters.playerType === option.id}>
@@ -108,9 +285,9 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
               ))}
             </div>
           </ControlField>
-          <ControlField label="Position">
+          <ControlField label={copy.position}>
             <div className="flex flex-wrap gap-2">
-              <FilterLink href={hrefFor({ ...filters, position: undefined })} active={!filters.position}>All positions</FilterLink>
+              <FilterLink href={hrefFor({ ...filters, position: undefined })} active={!filters.position}>{copy.allPositions}</FilterLink>
               {positions.map((position) => (
                 <FilterLink key={position} href={hrefFor({ ...filters, position })} active={filters.position === position}>
                   {position}
@@ -118,11 +295,11 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
               ))}
             </div>
           </ControlField>
-          <ControlField label="Period">
+          <ControlField label={copy.period}>
             <div className="flex flex-wrap gap-2">
-              {(Object.keys(analyticsPeriodLabels) as AnalyticsPeriod[]).map((period) => (
+              {(Object.keys(copy.periods) as AnalyticsPeriod[]).map((period) => (
                 <FilterLink key={period} href={hrefFor({ ...filters, period })} active={filters.period === period}>
-                  {analyticsPeriodLabels[period]}
+                  {copy.periods[period]}
                 </FilterLink>
               ))}
             </div>
@@ -135,25 +312,25 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
               {filters.sort !== "name" ? <input type="hidden" name="sort" value={filters.sort} /> : null}
               {filters.direction !== defaultSortDirection(filters.sort) ? <input type="hidden" name="direction" value={filters.direction} /> : null}
               <label>
-                <span className="sr-only">Custom period from date</span>
+                <span className="sr-only">{copy.customFrom}</span>
                 <input
                   name="from"
-                  placeholder="dd.mm.yyyy"
+                  placeholder={copy.datePlaceholder}
                   defaultValue={formatGermanDate(filters.customFrom)}
                   className="h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-board-navy outline-none placeholder:text-slate-400 focus:border-board-green focus:ring-4 focus:ring-green-100"
                 />
               </label>
               <label>
-                <span className="sr-only">Custom period to date</span>
+                <span className="sr-only">{copy.customTo}</span>
                 <input
                   name="to"
-                  placeholder="dd.mm.yyyy"
+                  placeholder={copy.datePlaceholder}
                   defaultValue={formatGermanDate(filters.customTo)}
                   className="h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-board-navy outline-none placeholder:text-slate-400 focus:border-board-green focus:ring-4 focus:ring-green-100"
                 />
               </label>
               <button type="submit" className="inline-flex h-10 items-center justify-center rounded-md bg-board-navy px-3 text-sm font-bold text-white hover:bg-slate-800">
-                Apply
+                {copy.apply}
               </button>
             </form>
             <p className="mt-2 text-sm font-semibold text-board-navy">{periodDefinition.rangeLabel}</p>
@@ -162,29 +339,29 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
         </div>
         <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
           <p>
-            <span className="font-bold text-board-navy">Showing:</span> {playerTypeOptions.find((option) => option.id === filters.playerType)?.compact ?? "All"}
+            <span className="font-bold text-board-navy">{copy.showing}:</span> {playerTypeOptions.find((option) => option.id === filters.playerType)?.compact ?? copy.all}
             {" · "}
-            {filters.position || "All positions"}
+            {filters.position || copy.allPositions}
             {" · "}
-            {analyticsPeriodLabels[filters.period]}
+            {copy.periods[filters.period]}
             {filters.period === "custom" && filters.customFrom && filters.customTo ? ` (${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)})` : ""}
             {" · "}
-            Sorted by {sortOptions.find((option) => option.id === filters.sort)?.label ?? "Name"} {filters.direction === "asc" ? "ascending" : "descending"}
+            {copy.sortedBy(sortOptions.find((option) => option.id === filters.sort)?.label ?? "Name", filters.direction)}
           </p>
           {activeFilters ? (
             <Link href="/squad/analysis" className="text-sm font-bold text-board-green underline-offset-4 hover:underline">
-              Reset filters
+              {copy.resetFilters}
             </Link>
           ) : null}
         </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <SummaryMetric icon={<Users className="h-4 w-4" />} label="Players" value={String(summaries.length)} hint={`Active team: ${teamAnalytics.activeSquad.name}`} />
-        <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label="Trainings" value={String(teamAnalytics.trainingSessions)} hint={periodDefinition.shortLabel} />
-        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label="Team attendance" value={formatPercent(teamAnalytics.teamAttendanceRate)} hint={`${teamAnalytics.present + teamAnalytics.late} attended`} />
-        <SummaryMetric icon={<Star className="h-4 w-4" />} label="Rated performances" value={String(totalRated)} hint="Final overall ratings only" />
-        <SummaryMetric icon={<Info className="h-4 w-4" />} label="Open assessments" value={String(openAssessments)} hint="Manual coach status" />
+        <SummaryMetric icon={<Users className="h-4 w-4" />} label={copy.metrics.players} value={String(summaries.length)} hint={`${copy.activeTeam}: ${teamAnalytics.activeSquad.name}`} />
+        <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label={copy.metrics.trainings} value={String(teamAnalytics.trainingSessions)} hint={periodDefinition.shortLabel} />
+        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label={copy.metrics.teamAttendance} value={formatPercent(teamAnalytics.teamAttendanceRate)} hint={copy.attended(teamAnalytics.present + teamAnalytics.late)} />
+        <SummaryMetric icon={<Star className="h-4 w-4" />} label={copy.metrics.ratedPerformances} value={String(totalRated)} hint={copy.finalRatingsOnly} />
+        <SummaryMetric icon={<Info className="h-4 w-4" />} label={copy.metrics.openAssessments} value={String(openAssessments)} hint={copy.manualCoachStatus} />
       </section>
 
       <AnalyticsSectionPanel section={filters.section} teamAnalytics={teamAnalytics} summaries={summaries} />
@@ -195,17 +372,17 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
             <table className="w-full border-collapse text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <SortableHeader label="Player" sortKey="name" filters={filters} />
-                  <SortableHeader label="Position" sortKey="position" filters={filters} />
-                  <SortableHeader label="Status" sortKey="status" filters={filters} />
-                  <SortableHeader label="Trainings" sortKey="trainings" filters={filters} align="right" />
-                  <SortableHeader label="Attendance" sortKey="attendance" filters={filters} align="right" />
-                  <SortableHeader label="Average" sortKey="average" filters={filters} align="right" />
-                  <SortableHeader label="Latest 5" sortKey="latestFive" filters={filters} align="right" />
-                  <SortableHeader label="Trend" sortKey="trend" filters={filters} align="right" />
-                  <SortableHeader label="Reliability" sortKey="reliability" filters={filters} align="right" />
-                  <SortableHeader label="Evidence" sortKey="evidence" filters={filters} />
-                  <SortableHeader label="Coach assessment" sortKey="coachAssessment" filters={filters} />
+                  <SortableHeader label={copy.headers.player} sortKey="name" filters={filters} />
+                  <SortableHeader label={copy.headers.position} sortKey="position" filters={filters} />
+                  <SortableHeader label={copy.headers.status} sortKey="status" filters={filters} />
+                  <SortableHeader label={copy.headers.trainings} sortKey="trainings" filters={filters} align="right" />
+                  <SortableHeader label={copy.headers.attendance} sortKey="attendance" filters={filters} align="right" />
+                  <SortableHeader label={copy.headers.average} sortKey="average" filters={filters} align="right" />
+                  <SortableHeader label={copy.headers.latestFive} sortKey="latestFive" filters={filters} align="right" />
+                  <SortableHeader label={copy.headers.trend} sortKey="trend" filters={filters} align="right" />
+                  <SortableHeader label={copy.headers.reliability} sortKey="reliability" filters={filters} align="right" />
+                  <SortableHeader label={copy.headers.evidence} sortKey="evidence" filters={filters} />
+                  <SortableHeader label={copy.headers.coachAssessment} sortKey="coachAssessment" filters={filters} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -224,9 +401,9 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
         </>
       ) : filters.section === "players" || filters.section === "attendance" ? (
         <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-          <h2 className="text-lg font-bold text-board-navy">No analytics data for this view.</h2>
-          <p className="mt-2 text-sm text-slate-600">Adjust the filters or complete trainings with attendance and ratings.</p>
-          <ButtonLink href="/trainings/new" className="mt-5">Create training</ButtonLink>
+          <h2 className="text-lg font-bold text-board-navy">{copy.noDataTitle}</h2>
+          <p className="mt-2 text-sm text-slate-600">{copy.noDataDescription}</p>
+          <ButtonLink href="/trainings/new" className="mt-5">{copy.createTraining}</ButtonLink>
         </div>
       ) : null}
 
@@ -234,16 +411,12 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
         <details>
           <summary className="flex cursor-pointer items-center gap-2 text-lg font-bold text-board-navy">
             <Info className="h-5 w-5" />
-            How analytics are calculated
+            {copy.helpTitle}
           </summary>
           <div className="mt-4 grid gap-4 text-sm leading-6 text-slate-600 md:grid-cols-2">
-            <p><strong className="text-board-navy">Average rating:</strong> only final overall ratings intentionally entered by the coach. Unrated trainings are not counted as 3.</p>
-            <p><strong className="text-board-navy">Trend:</strong> latest five rated trainings compared with the five rated trainings before them, inside the selected period.</p>
-            <p><strong className="text-board-navy">Attendance rate:</strong> Present and Late count as attended. Not expected and not recorded are excluded from the denominator.</p>
-            <p><strong className="text-board-navy">Reliability:</strong> existing malus rules; late only counts when the penalty is active.</p>
-            <p><strong className="text-board-navy">Evidence:</strong> shows how many rated trainings support the performance view.</p>
-            <p><strong className="text-board-navy">Coach assessment:</strong> manual coach marker, separate from automatic summaries.</p>
-            <p><strong className="text-board-navy">Drill usage:</strong> scoped to the active team and selected historical training period.</p>
+            {copy.helpItems.map((item) => (
+              <p key={item.title}><strong className="text-board-navy">{item.title}:</strong> {item.text}</p>
+            ))}
           </div>
         </details>
       </section>
@@ -668,32 +841,34 @@ function getPeriodDefinition(
     customTo?: string;
   },
   records: PlayerAnalyticsRecord[],
-  seasonSettings: { seasonStartMonth: number; seasonStartDay: number }
+  seasonSettings: { seasonStartMonth: number; seasonStartDay: number },
+  locale: "en" | "de"
 ) {
+  const copy = analyticsCopy[locale];
   const today = new Date();
   if (filters.period === "custom") {
-    if (!filters.customFrom || !filters.customTo) return { shortLabel: "Custom range", rangeLabel: "Choose from and to dates", note: "Use dd.mm.yyyy, for example 01.07.2026." };
-    if (filters.customFrom > filters.customTo) return { shortLabel: "Custom range", rangeLabel: "Invalid custom range", note: "The from date must be before the to date." };
-    return { shortLabel: "Custom range", rangeLabel: `${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)}` };
+    if (!filters.customFrom || !filters.customTo) return { shortLabel: copy.periods.custom, rangeLabel: locale === "de" ? "Von- und Bis-Datum wählen" : "Choose from and to dates", note: locale === "de" ? "Nutze TT.MM.JJJJ, zum Beispiel 01.07.2026." : "Use dd.mm.yyyy, for example 01.07.2026." };
+    if (filters.customFrom > filters.customTo) return { shortLabel: copy.periods.custom, rangeLabel: locale === "de" ? "Ungültiger Zeitraum" : "Invalid custom range", note: locale === "de" ? "Das Von-Datum muss vor dem Bis-Datum liegen." : "The from date must be before the to date." };
+    return { shortLabel: copy.periods.custom, rangeLabel: `${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)}` };
   }
   if (filters.period === "season") {
     const range = seasonDateRange(today, seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay);
-    return { shortLabel: "This season", rangeLabel: `${formatGermanDate(range.from)} – ${formatGermanDate(range.to)}` };
+    return { shortLabel: copy.periods.season, rangeLabel: `${formatGermanDate(range.from)} – ${formatGermanDate(range.to)}` };
   }
   if (filters.period === "30d" || filters.period === "90d") {
     const days = filters.period === "30d" ? 30 : 90;
     const to = dateOnly(today);
     const fromDate = new Date(today);
     fromDate.setDate(fromDate.getDate() - days + 1);
-    return { shortLabel: analyticsPeriodLabels[filters.period], rangeLabel: `${formatGermanDate(dateOnly(fromDate))} – ${formatGermanDate(to)}` };
+    return { shortLabel: copy.periods[filters.period], rangeLabel: `${formatGermanDate(dateOnly(fromDate))} – ${formatGermanDate(to)}` };
   }
 
   const dates = Array.from(new Set(records.map((record) => record.event?.date).filter((date): date is string => Boolean(date)))).sort();
-  if (!dates.length) return { shortLabel: analyticsPeriodLabels[filters.period], rangeLabel: "No training data in this period" };
+  if (!dates.length) return { shortLabel: copy.periods[filters.period], rangeLabel: copy.noTrainingData };
   return {
-    shortLabel: analyticsPeriodLabels[filters.period],
+    shortLabel: copy.periods[filters.period],
     rangeLabel: `${formatGermanDate(dates[0])} – ${formatGermanDate(dates[dates.length - 1])}`,
-    note: filters.period === "last5" || filters.period === "last10" ? `${dates.length} training${dates.length === 1 ? "" : "s"} available` : undefined
+    note: filters.period === "last5" || filters.period === "last10" ? copy.availableTrainings(dates.length) : undefined
   };
 }
 

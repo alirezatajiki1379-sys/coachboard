@@ -8,20 +8,11 @@ import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import { listTrainingSessionReviewSummaries } from "@/lib/squad/session-review";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { filterTrainings, parseTrainingFilter, sortTrainings, type TrainingFilter } from "@/lib/trainings/utils";
+import { getUserLocale } from "@/lib/i18n/server";
 
 type TrainingsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
-
-const filters: Array<{ id: TrainingFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "upcoming", label: "Upcoming" },
-  { id: "past", label: "Past" },
-  { id: "rating_open", label: "Rating open" },
-  { id: "completed", label: "Completed" },
-  { id: "draft", label: "Draft" },
-  { id: "trash", label: "Trash" }
-];
 
 export default async function TrainingsPage({ searchParams }: TrainingsPageProps) {
   const params = await searchParams;
@@ -33,6 +24,9 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
 
   if (!user) redirect("/login");
 
+  const locale = await getUserLocale(supabase, user.id);
+  const copy = trainingsCopy[locale];
+  const filters = trainingFilterLabels[locale];
   const activeTeam = await ensureActiveSquad(supabase, user.id);
   const allEvents = await listTrainingEventDetails(supabase, user.id, {
     squadId: activeTeam.id,
@@ -48,27 +42,27 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
   return (
     <PageContainer width="wide">
       <PageHeader
-        eyebrow="Trainings"
-        title="Training calendar"
-        description={`Team: ${activeTeam.name}. Concrete training appointments with availability, check-in, ratings, trial players, and an optional training plan.`}
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        description={`${copy.teamLabel}: ${activeTeam.name}. ${copy.description}`}
         actions={(
           <ButtonLink href="/trainings/new" className="justify-center">
           <CalendarPlus className="h-4 w-4" />
-          Create training
+          {copy.create}
           </ButtonLink>
         )}
       />
 
       {filter !== "trash" ? (
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Upcoming" value={upcomingCount} />
-          <Metric label="Past" value={pastCount} />
-          <Metric label="Completed" value={completedCount} />
-          <Metric label="Needs ratings" value={needsRatingsCount} />
+          <Metric label={copy.metrics.upcoming} value={upcomingCount} />
+          <Metric label={copy.metrics.past} value={pastCount} />
+          <Metric label={copy.metrics.completed} value={completedCount} />
+          <Metric label={copy.metrics.needsRatings} value={needsRatingsCount} />
         </section>
       ) : null}
 
-      <PageTabs label="Training filters">
+      <PageTabs label={copy.filtersLabel}>
         {filters.map((item) => (
           <ButtonLink
             key={item.id}
@@ -86,14 +80,69 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
           initialEvents={events}
           activeTeamId={activeTeam.id}
           activeTeamName={activeTeam.name}
-          filterLabel={filters.find((item) => item.id === filter)?.label ?? "Current filter"}
+          filterLabel={filters.find((item) => item.id === filter)?.label ?? copy.currentFilter}
           isTrash={filter === "trash"}
           reviewedEventIds={Array.from(reviewSummaries.keys())}
+          locale={locale}
         />
       </section>
     </PageContainer>
   );
 }
+
+const trainingsCopy = {
+  en: {
+    eyebrow: "Trainings",
+    title: "Training calendar",
+    teamLabel: "Team",
+    description: "Concrete training appointments with availability, check-in, ratings, trial players, and an optional training plan.",
+    create: "Create training",
+    filtersLabel: "Training filters",
+    currentFilter: "Current filter",
+    metrics: {
+      upcoming: "Upcoming",
+      past: "Past",
+      completed: "Completed",
+      needsRatings: "Needs ratings"
+    }
+  },
+  de: {
+    eyebrow: "Trainingseinheiten",
+    title: "Trainingskalender",
+    teamLabel: "Mannschaft",
+    description: "Konkrete Trainingstermine mit Verfügbarkeit, Check-in, Bewertungen, Probespielern und optionalem Trainingsplan.",
+    create: "Training erstellen",
+    filtersLabel: "Trainingsfilter",
+    currentFilter: "Aktueller Filter",
+    metrics: {
+      upcoming: "Anstehend",
+      past: "Vergangen",
+      completed: "Abgeschlossen",
+      needsRatings: "Bewertungen offen"
+    }
+  }
+} as const;
+
+const trainingFilterLabels = {
+  en: [
+    { id: "all", label: "All" },
+    { id: "upcoming", label: "Upcoming" },
+    { id: "past", label: "Past" },
+    { id: "rating_open", label: "Rating open" },
+    { id: "completed", label: "Completed" },
+    { id: "draft", label: "Draft" },
+    { id: "trash", label: "Trash" }
+  ],
+  de: [
+    { id: "all", label: "Alle" },
+    { id: "upcoming", label: "Anstehend" },
+    { id: "past", label: "Vergangen" },
+    { id: "rating_open", label: "Bewertung offen" },
+    { id: "completed", label: "Abgeschlossen" },
+    { id: "draft", label: "Entwurf" },
+    { id: "trash", label: "Papierkorb" }
+  ]
+} satisfies Record<string, Array<{ id: TrainingFilter; label: string }>>;
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (

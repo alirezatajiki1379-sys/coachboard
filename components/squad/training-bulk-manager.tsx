@@ -12,6 +12,7 @@ import {
 } from "@/lib/squad/attendance-actions";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
 import { formatDateLabel, trainingDisplayTitle, trainingTimeRange, weekdayLabel } from "@/lib/trainings/utils";
+import type { Locale } from "@/lib/i18n";
 import type { SquadAttendanceEntry, SquadTrainingEventDetail } from "@/types/domain";
 
 type TrainingBulkManagerProps = {
@@ -21,11 +22,13 @@ type TrainingBulkManagerProps = {
   filterLabel: string;
   isTrash: boolean;
   reviewedEventIds?: string[];
+  locale?: Locale;
 };
 
 type BulkAction = "trash" | "restore" | "permanent";
 
-export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamName, filterLabel, isTrash, reviewedEventIds = [] }: TrainingBulkManagerProps) {
+export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamName, filterLabel, isTrash, reviewedEventIds = [], locale = "en" }: TrainingBulkManagerProps) {
+  const copy = trainingBulkCopy[locale];
   const [events, setEvents] = useState(initialEvents);
   const reviewedIds = useMemo(() => new Set(reviewedEventIds), [reviewedEventIds]);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -106,30 +109,30 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
       <div className="rounded-lg border border-board-line bg-white p-3 shadow-soft">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-bold text-board-navy">Training management</p>
+            <p className="text-sm font-bold text-board-navy">{copy.title}</p>
             <p className="text-xs font-semibold text-slate-500">
-              {events.length} Training{events.length === 1 ? "" : "s"} in this view · Team: {activeTeamName}
+              {copy.count(events.length)} · {copy.team}: {activeTeamName}
             </p>
           </div>
           {selectionMode ? (
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="secondary" onClick={selectAllVisible} disabled={!events.length} className="h-9 px-3">
-                Select all visible
+                {copy.selectAllVisible}
               </Button>
               <Button type="button" variant="secondary" onClick={selectAllVisible} disabled={!events.length} className="h-9 px-3">
-                Select all filtered
+                {copy.selectAllFiltered}
               </Button>
               <Button type="button" variant="ghost" onClick={deselectAll} disabled={!selectedIds.size} className="h-9 px-3">
-                Deselect all
+                {copy.deselectAll}
               </Button>
               <Button type="button" variant="ghost" onClick={cancelSelectionMode} className="h-9 px-3">
-                Cancel
+                {copy.cancel}
               </Button>
             </div>
           ) : (
             <Button type="button" variant="secondary" onClick={enterSelectionMode} disabled={!events.length} className="h-9 px-3">
               <CheckSquare className="h-4 w-4" />
-              Select
+              {copy.select}
             </Button>
           )}
         </div>
@@ -145,12 +148,12 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
                   else deselectAll();
                 }}
                 className="h-5 w-5 rounded border-slate-300 text-board-green focus:ring-board-green"
-                aria-label="Select all visible Trainings"
+                aria-label={copy.selectAllVisible}
               />
-              {selectionLabel(selectedIds.size)}
+              {selectionLabel(selectedIds.size, locale)}
             </label>
             <p className="text-xs font-semibold text-slate-500">
-              Select all visible and all filtered both mean these {events.length} Trainings because the current filtered result is fully loaded.
+              {copy.loadedFilterHelp(events.length)}
             </p>
           </div>
         ) : null}
@@ -177,11 +180,11 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
         </section>
       ) : (
         <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-          <h2 className="text-lg font-bold text-board-navy">No trainings found</h2>
-          <p className="mt-2 text-sm text-slate-600">{isTrash ? "Training Trash is empty for this Team." : "No trainings scheduled for this Team. Create the first Training or switch to another Team."}</p>
+          <h2 className="text-lg font-bold text-board-navy">{copy.emptyTitle}</h2>
+          <p className="mt-2 text-sm text-slate-600">{isTrash ? copy.emptyTrash : copy.emptyActive}</p>
           {!isTrash ? (
             <ButtonLink href="/trainings/new" className="mt-5">
-              Create training
+              {copy.create}
             </ButtonLink>
           ) : null}
         </div>
@@ -190,24 +193,24 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
       {selectionMode ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-board-line bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-bold text-board-navy" aria-live="polite">{selectionLabel(selectedIds.size)}</p>
+            <p className="text-sm font-bold text-board-navy" aria-live="polite">{selectionLabel(selectedIds.size, locale)}</p>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={selectAllVisible} disabled={!events.length || allSelected} className="h-9 px-3">Select all filtered</Button>
+              <Button type="button" variant="secondary" onClick={selectAllVisible} disabled={!events.length || allSelected} className="h-9 px-3">{copy.selectAllFiltered}</Button>
               {isTrash ? (
                 <>
                   <Button type="button" variant="secondary" onClick={() => setPendingAction("restore")} disabled={!selectedIds.size} className="h-9 px-3">
                     <RotateCcw className="h-4 w-4" />
-                    Restore selected
+                    {copy.restoreSelected}
                   </Button>
                   <Button type="button" variant="danger" onClick={() => setPendingAction("permanent")} disabled={!selectedIds.size} className="h-9 px-3">
                     <Trash2 className="h-4 w-4" />
-                    Delete permanently
+                    {copy.deletePermanently}
                   </Button>
                 </>
               ) : (
                 <Button type="button" variant="danger" onClick={() => setPendingAction("trash")} disabled={!selectedIds.size} className="h-9 px-3">
                   <Trash2 className="h-4 w-4" />
-                  Delete selected
+                  {copy.deleteSelected}
                 </Button>
               )}
             </div>
@@ -235,6 +238,45 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
     </div>
   );
 }
+
+const trainingBulkCopy = {
+  en: {
+    title: "Training management",
+    team: "Team",
+    select: "Select",
+    selectAllVisible: "Select all visible",
+    selectAllFiltered: "Select all filtered",
+    deselectAll: "Deselect all",
+    cancel: "Cancel",
+    restoreSelected: "Restore selected",
+    deletePermanently: "Delete permanently",
+    deleteSelected: "Delete selected",
+    emptyTitle: "No trainings found",
+    emptyTrash: "Training Trash is empty for this Team.",
+    emptyActive: "No trainings scheduled for this Team. Create the first Training or switch to another Team.",
+    create: "Create training",
+    count: (count: number) => `${count} Training${count === 1 ? "" : "s"} in this view`,
+    loadedFilterHelp: (count: number) => `Select all visible and all filtered both mean these ${count} Trainings because the current filtered result is fully loaded.`
+  },
+  de: {
+    title: "Trainingsverwaltung",
+    team: "Mannschaft",
+    select: "Auswählen",
+    selectAllVisible: "Alle sichtbaren auswählen",
+    selectAllFiltered: "Alle gefilterten auswählen",
+    deselectAll: "Auswahl aufheben",
+    cancel: "Abbrechen",
+    restoreSelected: "Ausgewählte wiederherstellen",
+    deletePermanently: "Endgültig löschen",
+    deleteSelected: "Ausgewählte löschen",
+    emptyTitle: "Keine Trainingseinheiten gefunden",
+    emptyTrash: "Der Papierkorb für Trainingseinheiten ist für diese Mannschaft leer.",
+    emptyActive: "Für diese Mannschaft sind keine Trainingseinheiten geplant. Erstelle das erste Training oder wechsle die Mannschaft.",
+    create: "Training erstellen",
+    count: (count: number) => `${count} Trainingseinheit${count === 1 ? "" : "en"} in dieser Ansicht`,
+    loadedFilterHelp: (count: number) => `Alle sichtbaren und alle gefilterten auswählen meint diese ${count} Trainingseinheit${count === 1 ? "" : "en"}, weil das aktuelle Filterergebnis vollständig geladen ist.`
+  }
+} as const;
 
 function SelectableTrainingCard({ event, attendance, selected, onToggle }: { event: SquadTrainingEventDetail; attendance: SquadAttendanceEntry[]; selected: boolean; onToggle: () => void }) {
   const counts = attendanceCounts(attendance);
@@ -406,7 +448,8 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function selectionLabel(count: number) {
+function selectionLabel(count: number, locale: Locale = "en") {
+  if (locale === "de") return `${count} Trainingseinheit${count === 1 ? "" : "en"} ausgewählt`;
   if (count === 1) return "1 Training selected";
   return `${count} Trainings selected`;
 }

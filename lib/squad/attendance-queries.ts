@@ -12,6 +12,7 @@ import type { PlayerMedicalPeriod } from "@/types/domain";
 import { isMedicalPeriodActiveOnDate, latestApplicableMedicalPeriod, medicalLabel, medicalNeedsReview, medicalReasonForType } from "@/lib/squad/player-hub";
 import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 import { ensureActiveSquad } from "@/lib/squad/squads";
+import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -258,18 +259,7 @@ async function syncEventWithCurrentSquad(
   userId: string,
   event: Pick<SquadTrainingEventDetail, "id" | "date" | "squadId">
 ) {
-  let playerQuery = db
-    .from("squad_players")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("player_type", "roster")
-    .is("archived_at", null)
-    .is("deleted_at", null);
-  if (event.squadId) playerQuery = playerQuery.eq("squad_id", event.squadId);
-  const { data: players, error: playersError } = await playerQuery;
-  if (playersError) throw new Error(playersError.message);
-
-  const currentPlayerIds = Array.from(new Set(((players ?? []) as Array<{ id: string }>).map((player) => player.id)));
+  const currentPlayerIds = await currentEligibleSquadPlayerIds(db, userId, event.date, event.squadId);
   const currentPlayerIdSet = new Set(currentPlayerIds);
 
   const { data: existing, error: existingError } = await db

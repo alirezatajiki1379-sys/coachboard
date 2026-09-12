@@ -9,6 +9,7 @@ import { isMedicalPeriodActiveOnDate, medicalReasonForType } from "@/lib/squad/p
 import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, seasonLabelForDate, weekdayForDate } from "@/lib/trainings/utils";
 import { ensureActiveSquad } from "@/lib/squad/squads";
+import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -154,6 +155,14 @@ function eventPath(eventId: string, suffix = "") {
   return `/trainings/${eventId}${suffix}`;
 }
 
+function todayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function revalidateEvent(eventId: string) {
   revalidatePath("/squad");
   revalidatePath("/squad/attendance");
@@ -292,15 +301,13 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
     const createdEventRows = (createdEvents ?? []) as Array<{ id: string; date: string }>;
     const integrityError = verifyCreatedEventDates(keptDates, createdEventRows);
     if (integrityError) return { error: integrityError, values, submissionId: Date.now() };
-    const validParticipantIds = await validateSelectedParticipants(db, user.id, squadId, selectedIds);
     for (const event of createdEventRows) {
-      await syncTrainingParticipants(db, user.id, event.id, event.date, validParticipantIds, { removeUnselected: false, squadId, alreadyValidated: true });
+      const participantIds = await participantIdsForEvent(db, user.id, event.date, squadId, selectedIds, values.participantSourceMode);
+      await syncTrainingParticipants(db, user.id, event.id, event.date, participantIds, { removeUnselected: false, squadId, alreadyValidated: true });
       if (values.linkedTrainingSessionId && (values.planApplyMode === "all" || (values.planApplyMode === "first" && event.id === createdEvents?.[0]?.id))) {
         await createSessionPlanSnapshot(db, user.id, event.id, values.linkedTrainingSessionId);
       }
     }
-    const participantIntegrityError = await verifyParticipantSnapshots(db, user.id, createdEventRows.map((event) => event.id), validParticipantIds.length);
-    if (participantIntegrityError) return { error: participantIntegrityError, values, submissionId: Date.now() };
     revalidatePath("/trainings");
     revalidatePath("/squad/attendance");
     redirect("/trainings");
@@ -327,7 +334,10 @@ export async function createTrainingEvent(_: TrainingEventActionState, formData:
 
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
-  if (data?.id) await syncTrainingParticipants(db, user.id, data.id, values.date, selectedParticipantIds(formData), { squadId });
+  if (data?.id) {
+    const participantIds = await participantIdsForEvent(db, user.id, values.date, squadId, selectedParticipantIds(formData), values.participantSourceMode);
+    await syncTrainingParticipants(db, user.id, data.id, values.date, participantIds, { squadId, alreadyValidated: true });
+  }
   if (data?.id && values.linkedTrainingSessionId) await createSessionPlanSnapshot(db, user.id, data.id, values.linkedTrainingSessionId);
 
   revalidatePath("/trainings");
@@ -393,7 +403,8 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
     .eq("user_id", user.id);
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
-  await syncTrainingParticipants(db, user.id, eventId, values.date, selectedParticipantIds(formData), { squadId });
+  const participantIds = await participantIdsForEvent(db, user.id, values.date, squadId, selectedParticipantIds(formData), values.participantSourceMode);
+  await syncTrainingParticipants(db, user.id, eventId, values.date, participantIds, { squadId, alreadyValidated: true });
   if (originalEvent.recurrence_series_id && values.editScope === "future") {
     const { data: futureEvents, error: futureError } = await db
       .from("squad_training_events")
@@ -423,7 +434,8 @@ export async function updateTrainingEvent(_: TrainingEventActionState, formData:
       if (futureUpdateError) return { error: futureUpdateError.message, values, submissionId: Date.now() };
       for (const futureEvent of (futureEvents ?? []) as Array<{ id: string; date: string }>) {
         if (futureEvent.id === eventId) continue;
-        await syncTrainingParticipants(db, user.id, futureEvent.id, futureEvent.date, selectedParticipantIds(formData), { squadId });
+        const futureParticipantIds = await participantIdsForEvent(db, user.id, futureEvent.date, squadId, selectedParticipantIds(formData), values.participantSourceMode);
+        await syncTrainingParticipants(db, user.id, futureEvent.id, futureEvent.date, futureParticipantIds, { squadId, alreadyValidated: true });
       }
     }
     await db
@@ -460,7 +472,7 @@ export async function syncTrainingWithCurrentSquad(formData: FormData) {
 
   const events = await loadSyncTargetEvents(db, user.id, event, syncScope === "future");
   for (const target of events) {
-    const currentSquadIds = await currentRosterPlayerIds(db, user.id, target.squad_id ?? undefined);
+    const currentSquadIds = await currentEligibleSquadPlayerIds(db, user.id, target.date, target.squad_id ?? undefined);
     await syncTrainingParticipants(db, user.id, target.id, target.date, currentSquadIds, { squadId: target.squad_id ?? undefined, alreadyValidated: true });
     await db
       .from("squad_training_events")
@@ -492,20 +504,6 @@ async function loadSyncTargetEvents(
     .in("status", ["draft", "prepared"]);
   if (error) throw new Error(error.message);
   return (data ?? []) as Array<{ id: string; date: string; squad_id: string | null; recurrence_series_id: string | null; status: string; participants_locked_at: string | null }>;
-}
-
-async function currentRosterPlayerIds(db: SupabaseClient, userId: string, squadId?: string) {
-  let query = db
-    .from("squad_players")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("player_type", "roster")
-    .is("archived_at", null)
-    .is("deleted_at", null);
-  if (squadId) query = query.eq("squad_id", squadId);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return Array.from(new Set(((data ?? []) as Array<{ id: string }>).map((player) => player.id)));
 }
 
 export async function createRecurringTrainingEvents(_: TrainingEventActionState, formData: FormData): Promise<TrainingEventActionState> {
@@ -555,9 +553,9 @@ export async function createRecurringTrainingEvents(_: TrainingEventActionState,
   const { data: createdEvents, error } = await db.from("squad_training_events").insert(rows).select("id,date");
   if (error) return { error: error.message, values, submissionId: Date.now() };
 
-  const selectedIds = selectedParticipantIds(formData);
   for (const event of (createdEvents ?? []) as Array<{ id: string; date: string }>) {
-    await syncTrainingParticipants(db, user.id, event.id, event.date, selectedIds, { removeUnselected: false, squadId });
+    const participantIds = await currentEligibleSquadPlayerIds(db, user.id, event.date, squadId);
+    await syncTrainingParticipants(db, user.id, event.id, event.date, participantIds, { removeUnselected: false, squadId, alreadyValidated: true });
   }
 
   revalidatePath("/trainings");
@@ -732,18 +730,7 @@ export async function addSquadPlayersToEvent(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   const { data: event, error: eventError } = await db.from("squad_training_events").select("date,squad_id").eq("id", eventId).eq("user_id", user.id).maybeSingle();
   if (eventError) throw new Error(eventError.message);
-  let playersQuery = db
-    .from("squad_players")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("player_type", "roster")
-    .is("archived_at", null)
-    .is("deleted_at", null);
-  if (event?.squad_id) playersQuery = playersQuery.eq("squad_id", event.squad_id);
-  const { data: players, error: playersError } = await playersQuery;
-  if (playersError) throw new Error(playersError.message);
-
-  const playerIds = ((players ?? []) as { id: string }[]).map((player) => player.id);
+  const playerIds = await currentEligibleSquadPlayerIds(db, user.id, event?.date ?? "", event?.squad_id ?? undefined);
   const medicalByPlayer = await getMedicalByPlayer(db, user.id, event?.date ?? "", playerIds);
 
   const rows = playerIds.map((playerId) => {
@@ -1127,10 +1114,44 @@ export async function convertTrialPlayerToSquadPlayer(formData: FormData) {
     .eq("user_id", user.id)
     .eq("player_type", "trial");
   if (error) throw new Error(error.message);
+  await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
 
   revalidateEvent(eventId);
   revalidatePath("/squad");
   redirect(eventPath(eventId));
+}
+
+export async function syncFutureAutoSyncTrainingsForPlayer(db: SupabaseClient, userId: string, playerId: string) {
+  const { data: player, error: playerError } = await db
+    .from("squad_players")
+    .select("id,squad_id")
+    .eq("id", playerId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (playerError) throw new Error(playerError.message);
+  if (!player) return;
+
+  let eventQuery = db
+    .from("squad_training_events")
+    .select("id,date,squad_id")
+    .eq("user_id", userId)
+    .eq("participant_source_mode", "current_squad_sync")
+    .is("participants_locked_at", null)
+    .is("deleted_at", null)
+    .gte("date", todayDateString())
+    .in("status", ["draft", "prepared"]);
+  if (player.squad_id) eventQuery = eventQuery.eq("squad_id", player.squad_id);
+
+  const { data: events, error: eventError } = await eventQuery;
+  if (eventError) throw new Error(eventError.message);
+  for (const event of (events ?? []) as Array<{ id: string; date: string; squad_id: string | null }>) {
+    const participantIds = await currentEligibleSquadPlayerIds(db, userId, event.date, event.squad_id ?? undefined);
+    await syncTrainingParticipants(db, userId, event.id, event.date, participantIds, { squadId: event.squad_id ?? undefined, alreadyValidated: true });
+    revalidateEvent(event.id);
+  }
+  revalidatePath("/trainings");
+  revalidatePath("/squad/attendance");
+  revalidatePath("/dashboard");
 }
 
 async function upsertAttendanceRecord(db: SupabaseClient, userId: string, eventId: string, playerId: string) {
@@ -1147,6 +1168,20 @@ async function upsertAttendanceRecord(db: SupabaseClient, userId: string, eventI
       { onConflict: "event_id,player_id", ignoreDuplicates: true }
     );
   if (error) throw new Error(error.message);
+}
+
+async function participantIdsForEvent(
+  db: SupabaseClient,
+  userId: string,
+  eventDate: string,
+  squadId: string | undefined,
+  submittedPlayerIds: string[],
+  sourceMode: string
+) {
+  if (sourceMode === "current_squad_sync") {
+    return currentEligibleSquadPlayerIds(db, userId, eventDate, squadId);
+  }
+  return validateSelectedParticipants(db, userId, squadId, submittedPlayerIds);
 }
 
 async function syncTrainingParticipants(
@@ -1288,23 +1323,6 @@ function verifyCreatedEventDates(expectedDates: string[], events: Array<{ id: st
   if (events.length !== expected.length) return `Series creation stopped because ${expected.length} unique Trainings were expected, but ${events.length} records were created.`;
   if (actualDates.length !== events.length) return "Series creation stopped because duplicate Training dates were created.";
   if (actualDates.join("|") !== expected.join("|")) return "Series creation stopped because persisted Training dates did not match the reviewed recurrence dates.";
-  return "";
-}
-
-async function verifyParticipantSnapshots(db: SupabaseClient, userId: string, eventIds: string[], expectedPerEvent: number) {
-  if (!eventIds.length || expectedPerEvent === 0) return "";
-  const expectedTotal = eventIds.length * expectedPerEvent;
-  const { data, error } = await db
-    .from("squad_attendance_records")
-    .select("event_id")
-    .eq("user_id", userId)
-    .in("event_id", eventIds)
-    .range(0, Math.max(expectedTotal + eventIds.length, 999));
-  if (error) return error.message;
-  const counts = new Map<string, number>();
-  for (const row of (data ?? []) as Array<{ event_id: string }>) counts.set(row.event_id, (counts.get(row.event_id) ?? 0) + 1);
-  const missing = eventIds.filter((id) => (counts.get(id) ?? 0) !== expectedPerEvent);
-  if (missing.length) return `Participant snapshot verification failed for ${missing.length} Training${missing.length === 1 ? "" : "s"}. The series needs review before use.`;
   return "";
 }
 

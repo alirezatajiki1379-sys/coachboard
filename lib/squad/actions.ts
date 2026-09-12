@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { parseSquadPlayerForm, toSquadPlayerUpdate, type SquadPlayerFormField, type SquadPlayerFormValues } from "@/lib/squad/form";
 import { ensureActiveSquad } from "@/lib/squad/squads";
+import { syncFutureAutoSyncTrainingsForPlayer } from "@/lib/squad/attendance-actions";
 
 export type SquadPlayerActionState = {
   error?: string;
@@ -50,6 +51,7 @@ export async function createSquadPlayer(_: SquadPlayerActionState, formData: For
     .single();
 
   if (error) return { error: error.message, submissionId: Date.now() };
+  if (data?.id) await syncFutureAutoSyncTrainingsForPlayer(db, user.id, data.id);
 
   revalidatePath("/squad");
   redirect(data?.id ? `/squad/players/${data.id}` : "/squad");
@@ -78,6 +80,7 @@ export async function updateSquadPlayer(_: SquadPlayerActionState, formData: For
     .eq("user_id", user.id);
 
   if (error) return { error: error.message, submissionId: Date.now() };
+  await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
 
   revalidatePath("/squad");
   revalidatePath(`/squad/players/${playerId}`);
@@ -93,6 +96,7 @@ export async function archiveSquadPlayer(formData: FormData) {
     .update({ archived_at: new Date().toISOString() })
     .eq("id", playerId)
     .eq("user_id", user.id);
+  await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
   revalidatePath("/squad");
   revalidatePath(`/squad/players/${playerId}`);
   redirect("/squad?view=archived");
@@ -107,6 +111,7 @@ export async function restoreSquadPlayer(formData: FormData) {
     .update({ archived_at: null, deleted_at: null })
     .eq("id", playerId)
     .eq("user_id", user.id);
+  await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
   revalidatePath("/squad");
   revalidatePath(`/squad/players/${playerId}`);
   redirect("/squad");
@@ -136,6 +141,7 @@ async function updateSelectedPlayers(formData: FormData, values: Record<string, 
     .in("id", playerIds);
 
   if (error) return { ok: false, message: error.message };
+  for (const playerId of playerIds) await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
   revalidatePath("/squad");
   for (const playerId of playerIds) revalidatePath(`/squad/players/${playerId}`);
   return { ok: true, message: `${playerIds.length} player${playerIds.length === 1 ? "" : "s"} updated.` };

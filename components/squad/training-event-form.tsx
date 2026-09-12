@@ -467,7 +467,7 @@ function ParticipantSelector({
   const [participantMode, setParticipantMode] = useState<ParticipantSourceMode>(initialMode);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(selected));
-  const eligibleSquadPlayers = participants.filter((player) => player.playerType === "roster");
+  const eligibleSquadPlayers = participants.filter((player) => player.playerType === "roster" || (player.playerType === "trial" && !player.convertedAt));
   const visiblePlayers = participants.filter((player) => {
     const needle = search.trim().toLowerCase();
     if (!needle) return true;
@@ -518,8 +518,8 @@ function ParticipantSelector({
             className="mr-2"
           />
           <span className="font-bold text-board-navy">Entire squad</span>
-          <span className="mt-1 block text-sm text-slate-600">All active Roster Players are expected. Future Squad changes are synchronized automatically.</span>
-          <span className="mt-2 block text-xs font-bold text-board-green">{eligibleSquadPlayers.length} active Squad Players will be added.</span>
+          <span className="mt-1 block text-sm text-slate-600">All eligible Squad Players are expected. Future Squad and trial-player changes are synchronized automatically.</span>
+          <span className="mt-2 block text-xs font-bold text-board-green">{eligibleSquadPlayers.length} eligible Squad Players will be considered.</span>
         </label>
         <label className={`rounded-md border p-3 ${participantMode === "custom_selection" ? "border-board-green bg-green-50" : "border-board-line bg-white"}`}>
           <input

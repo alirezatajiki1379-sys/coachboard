@@ -19,6 +19,7 @@ import {
 } from "@/lib/squad/attention";
 import { getAttentionCenterData } from "@/lib/squad/attention-queries";
 import { createClient } from "@/lib/supabase/server";
+import { getUserLocale } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
 type ActionsPageProps = {
@@ -31,15 +32,6 @@ const priorities: Array<{ id: AttentionPriority; label: string }> = [
   { id: "medium", label: "Medium" },
   { id: "low", label: "Low" },
   { id: "info", label: "Information" }
-];
-
-const periods = [
-  ["last5", "Last 5 trainings"],
-  ["last10", "Last 10 trainings"],
-  ["30d", "Last 30 days"],
-  ["90d", "Last 90 days"],
-  ["season", "This season"],
-  ["all", "All time"]
 ];
 
 const optionalRules: Array<{ id: AttentionType; label: string }> = [
@@ -71,24 +63,26 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const locale = await getUserLocale(supabase, user.id);
+  const copy = actionsCopy[locale];
   const data = await getAttentionCenterData(supabase, user.id, state);
   const returnTo = attentionHref(data.state, {});
 
   return (
     <PageContainer width="wide">
       <PageHeader
-        eyebrow="Coach Intelligence"
-        title="Action Center"
-        description="Rules-based coaching reminders from your squad data. Every item shows the evidence and the threshold behind it."
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        description={copy.description}
         actions={(
           <>
           <ButtonLink href={attentionHref(data.state, {})} variant="secondary">
             <Clock className="h-4 w-4" />
-            Refresh
+            {copy.refresh}
           </ButtonLink>
           <ButtonLink href="#attention-settings" variant="secondary">
             <Settings2 className="h-4 w-4" />
-            Settings
+            {copy.settings}
           </ButtonLink>
           </>
         )}
@@ -101,7 +95,7 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
         <SummaryCard label="Dismissed" value={data.summary.dismissed} href={attentionHref(data.state, { status: "dismissed" })} />
       </section>
 
-      <ActionFilters data={data} />
+      <ActionFilters data={data} locale={locale} />
 
       <ActionDiagnostics data={data} />
 
@@ -151,73 +145,159 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
   );
 }
 
-function ActionFilters({ data }: { data: AttentionCenterData }) {
+function ActionFilters({ data, locale }: { data: AttentionCenterData; locale: "en" | "de" }) {
+  const copy = actionsCopy[locale];
   const state = data.state;
   return (
     <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <form action="/actions" className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <Field label="Priority">
+        <Field label={copy.priority}>
           <select name="priority" defaultValue={state.priority} className={fieldClass()}>
-            <option value="all">All priorities</option>
-            <option value="high-priority">High Priority only</option>
+            <option value="all">{copy.allPriorities}</option>
+            <option value="high-priority">{copy.highPriorityOnly}</option>
             {priorities.map((priority) => <option key={priority.id} value={priority.id}>{priority.label}</option>)}
           </select>
         </Field>
-        <Field label="Category">
+        <Field label={copy.category}>
           <select name="category" defaultValue={state.category} className={fieldClass()}>
-            <option value="all">All categories</option>
+            <option value="all">{copy.allCategories}</option>
             {attentionCategories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
           </select>
         </Field>
-        <Field label="Player type">
+        <Field label={copy.playerType}>
           <select name="playerType" defaultValue={state.playerType} className={fieldClass()}>
-            <option value="all">All players</option>
-            <option value="roster">Roster</option>
-            <option value="trial">Trial</option>
+            <option value="all">{copy.allPlayers}</option>
+            <option value="roster">{copy.roster}</option>
+            <option value="trial">{copy.trial}</option>
           </select>
         </Field>
-        <Field label="Status">
+        <Field label={copy.status}>
           <select name="status" defaultValue={state.status} className={fieldClass()}>
-            <option value="open">Open</option>
-            <option value="snoozed">Snoozed</option>
-            <option value="dismissed">Dismissed</option>
+            <option value="open">{copy.open}</option>
+            <option value="snoozed">{copy.snoozed}</option>
+            <option value="dismissed">{copy.dismissed}</option>
           </select>
         </Field>
-        <Field label="Period">
+        <Field label={copy.period}>
           <select name="period" defaultValue={state.period} className={fieldClass()}>
-            {periods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            {copy.periods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </Field>
-        <Field label="Position">
+        <Field label={copy.position}>
           <select name="position" defaultValue={state.position ?? ""} className={fieldClass()}>
-            <option value="">All positions</option>
+            <option value="">{copy.allPositions}</option>
             {data.positions.map((position) => <option key={position} value={position}>{position}</option>)}
           </select>
         </Field>
-        <Field label="Sort">
+        <Field label={copy.sort}>
           <select name="sort" defaultValue={state.sort} className={fieldClass()}>
-            <option value="priority">Priority</option>
-            <option value="dueDate">Due date</option>
-            <option value="player">Player name</option>
-            <option value="category">Category</option>
-            <option value="detected">Detected</option>
+            <option value="priority">{copy.priority}</option>
+            <option value="dueDate">{copy.dueDate}</option>
+            <option value="player">{copy.playerName}</option>
+            <option value="category">{copy.category}</option>
+            <option value="detected">{copy.detected}</option>
           </select>
         </Field>
-        <Field label="Search">
-          <input name="search" defaultValue={state.search} placeholder="Player, title, position..." className={fieldClass()} />
+        <Field label={copy.search}>
+          <input name="search" defaultValue={state.search} placeholder={copy.searchPlaceholder} className={fieldClass()} />
         </Field>
         <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-4 xl:items-end">
-          <Button type="submit">Apply filters</Button>
+          <Button type="submit">{copy.applyFilters}</Button>
           <ButtonLink href={attentionHref(state, { direction: state.direction === "asc" ? "desc" : "asc" })} variant="secondary">
             {state.direction === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-            {state.direction === "asc" ? "Ascending" : "Descending"}
+            {state.direction === "asc" ? copy.ascending : copy.descending}
           </ButtonLink>
-          <ButtonLink href="/actions" variant="ghost">Reset</ButtonLink>
+          <ButtonLink href="/actions" variant="ghost">{copy.reset}</ButtonLink>
         </div>
       </form>
     </section>
   );
 }
+
+const actionsCopy = {
+  en: {
+    eyebrow: "Coach Intelligence",
+    title: "Action Center",
+    description: "Rules-based coaching reminders from your squad data. Every item shows the evidence and the threshold behind it.",
+    refresh: "Refresh",
+    settings: "Settings",
+    priority: "Priority",
+    allPriorities: "All priorities",
+    highPriorityOnly: "High Priority only",
+    category: "Category",
+    allCategories: "All categories",
+    playerType: "Player type",
+    allPlayers: "All players",
+    roster: "Roster",
+    trial: "Trial",
+    status: "Status",
+    open: "Open",
+    snoozed: "Snoozed",
+    dismissed: "Dismissed",
+    period: "Period",
+    periods: [
+      ["last5", "Last 5 trainings"],
+      ["last10", "Last 10 trainings"],
+      ["30d", "Last 30 days"],
+      ["90d", "Last 90 days"],
+      ["season", "This season"],
+      ["all", "All time"]
+    ],
+    position: "Position",
+    allPositions: "All positions",
+    sort: "Sort",
+    dueDate: "Due date",
+    playerName: "Player name",
+    detected: "Detected",
+    search: "Search",
+    searchPlaceholder: "Player, title, position...",
+    applyFilters: "Apply filters",
+    ascending: "Ascending",
+    descending: "Descending",
+    reset: "Reset"
+  },
+  de: {
+    eyebrow: "Trainerhinweise",
+    title: "Aktionen",
+    description: "Regelbasierte Hinweise auf Grundlage deiner Mannschaftsdaten. Jeder Eintrag zeigt Belege und den Auslöser dahinter.",
+    refresh: "Aktualisieren",
+    settings: "Einstellungen",
+    priority: "Priorität",
+    allPriorities: "Alle Prioritäten",
+    highPriorityOnly: "Nur hohe Priorität",
+    category: "Kategorie",
+    allCategories: "Alle Kategorien",
+    playerType: "Spielertyp",
+    allPlayers: "Alle Spieler",
+    roster: "Kader",
+    trial: "Probe",
+    status: "Status",
+    open: "Offen",
+    snoozed: "Zurückgestellt",
+    dismissed: "Ausgeblendet",
+    period: "Zeitraum",
+    periods: [
+      ["last5", "Letzte 5 Trainingseinheiten"],
+      ["last10", "Letzte 10 Trainingseinheiten"],
+      ["30d", "Letzte 30 Tage"],
+      ["90d", "Letzte 90 Tage"],
+      ["season", "Diese Saison"],
+      ["all", "Gesamter Zeitraum"]
+    ],
+    position: "Position",
+    allPositions: "Alle Positionen",
+    sort: "Sortierung",
+    dueDate: "Fälligkeitsdatum",
+    playerName: "Spielername",
+    detected: "Erkannt",
+    search: "Suche",
+    searchPlaceholder: "Spieler, Titel, Position...",
+    applyFilters: "Filter anwenden",
+    ascending: "Aufsteigend",
+    descending: "Absteigend",
+    reset: "Zurücksetzen"
+  }
+} as const;
 
 function AttentionCard({ item, selected, stateHref, returnTo, selectable = false }: { item: AttentionItem; selected: boolean; stateHref: string; returnTo: string; selectable?: boolean }) {
   return (
