@@ -19,12 +19,12 @@ import { getAttentionPreferences, getPlayerAttentionItems, attentionTone } from 
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
 import { mapGoalRow, mapObservationRow } from "@/lib/squad/development";
 import { calculateAge } from "@/lib/squad/format";
-import { latestApplicableMedicalPeriod, medicalLabel, medicalNeedsReview } from "@/lib/squad/player-hub";
+import { availabilityReasonLabel, latestApplicableMedicalPeriod, medicalLabel, medicalNeedsReview } from "@/lib/squad/player-hub";
 import { getPositionFamily } from "@/lib/squad/positions";
-import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodRow, type SquadPlayerRow } from "@/lib/squad/mappers";
+import { mapPlayerAvailabilityPeriodRow, mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerAvailabilityPeriodRow, type PlayerMedicalPeriodRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import type { Database } from "@/types/database";
-import type { PlayerCoachAssessment, PlayerDevelopmentGoal, PlayerMedicalPeriod, PlayerObservation } from "@/types/domain";
+import type { PlayerAvailabilityPeriod, PlayerCoachAssessment, PlayerDevelopmentGoal, PlayerMedicalPeriod, PlayerObservation } from "@/types/domain";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type GoalRow = Database["public"]["Tables"]["player_development_goals"]["Row"];
@@ -210,6 +210,7 @@ export type WorkspacePlayerSummary = {
   activeGoals: PlayerDevelopmentGoal[];
   latestObservation?: PlayerObservation;
   currentMedical?: PlayerMedicalPeriod;
+  currentAvailability?: PlayerAvailabilityPeriod;
   attention: AttentionIndicator[];
   positionGroup: PositionGroup;
   review: ReviewState;
@@ -403,7 +404,7 @@ export async function getCoachWorkspaceData(
     customFrom: effectiveState.customFrom,
     customTo: effectiveState.customTo
   };
-  const [{ summaries, positions, seasonSettings }, inactivePlayers, records, assessments, goalsByPlayer, observationsByPlayer, medicalByPlayer, attentionPreferences] = await Promise.all([
+  const [{ summaries, positions, seasonSettings }, inactivePlayers, records, assessments, goalsByPlayer, observationsByPlayer, medicalByPlayer, availabilityByPlayer, attentionPreferences] = await Promise.all([
     getSquadAnalyticsOverview(supabase, userId, analyticsFilters),
     listInactivePlayers(db, userId),
     listWorkspaceRecords(db, userId),
@@ -411,6 +412,7 @@ export async function getCoachWorkspaceData(
     listActiveGoals(db, userId),
     listLatestObservations(db, userId),
     listActiveMedical(db, userId),
+    listActiveAvailability(db, userId),
     getAttentionPreferences(db, userId)
   ]);
 
@@ -432,12 +434,14 @@ export async function getCoachWorkspaceData(
     const playerGoals = goalsByPlayer.get(summary.player.id) ?? [];
     const latestObservation = observationsByPlayer.get(summary.player.id);
     const currentMedical = latestApplicableMedicalPeriod(medicalByPlayer.get(summary.player.id) ?? [], todayDate());
+    const currentAvailability = latestApplicableAvailability(availabilityByPlayer.get(summary.player.id) ?? [], todayDate());
     const review = getReviewState(playerGoals, summary.assessment);
     const workspaceSummary: WorkspacePlayerSummary = {
       analytics: summary,
       activeGoals: playerGoals,
       latestObservation,
       currentMedical,
+      currentAvailability,
       attention: [],
       positionGroup: positionGroup(summary.player.position),
       review
@@ -458,6 +462,7 @@ export async function getCoachWorkspaceData(
       activeGoals: playerGoals,
       latestObservation,
       currentMedical,
+      currentAvailability,
       attention,
       positionGroup: positionGroup(summary.player.position),
       review
@@ -484,7 +489,7 @@ export async function getCoachWorkspaceData(
       roster: active.filter((item) => item.analytics.player.playerType === "roster").length,
       trial: active.filter((item) => item.analytics.player.playerType === "trial").length,
       archived: allPlayers.filter((item) => item.analytics.player.archivedAt && !item.analytics.player.deletedAt).length,
-      unavailable: active.filter((item) => item.currentMedical).length,
+      unavailable: active.filter((item) => item.currentMedical || item.currentAvailability).length,
       needsAttention: active.filter((item) => item.attention.length).length,
       reviewsDue: active.filter((item) => item.review.rank <= 2).length
     }
@@ -633,11 +638,11 @@ function filterWorkspacePlayers(players: WorkspacePlayerSummary[], state: Worksp
     if (state.players === "roster" && player.playerType !== "roster") return false;
     if (state.players === "trial" && player.playerType !== "trial") return false;
     if (state.view === "trial-players" && player.playerType !== "trial") return false;
-    if (state.view === "unavailable" && !item.currentMedical && !item.attention.some((indicator) => indicator.id === "medical-review")) return false;
+    if (state.view === "unavailable" && !item.currentMedical && !item.currentAvailability && !item.attention.some((indicator) => indicator.id === "medical-review")) return false;
     if (state.view === "needs-attention" && !item.attention.length) return false;
     if (state.view === "reviews-due" && !(item.review.dueDate && item.review.dueDate <= weekEnd)) return false;
     if (state.position && player.position !== state.position) return false;
-    if (state.availability === "available" && item.currentMedical) return false;
+    if (state.availability === "available" && (item.currentMedical || item.currentAvailability)) return false;
     if (state.availability === "injured" && item.currentMedical?.type !== "injured") return false;
     if (state.availability === "sick" && item.currentMedical?.type !== "sick") return false;
     if (state.availability === "medical-review" && !item.attention.some((indicator) => indicator.id === "medical-review")) return false;
@@ -727,6 +732,7 @@ function availabilityRank(player: WorkspacePlayerSummary) {
   if (player.currentMedical && medicalNeedsReview(player.currentMedical)) return 1;
   if (player.currentMedical?.type === "injured") return 2;
   if (player.currentMedical?.type === "sick") return 3;
+  if (player.currentAvailability) return 4;
   return 4;
 }
 
@@ -932,6 +938,23 @@ async function listActiveMedical(db: SupabaseClient, userId: string) {
   return result;
 }
 
+async function listActiveAvailability(db: SupabaseClient, userId: string) {
+  const result = new Map<string, PlayerAvailabilityPeriod[]>();
+  const { data, error } = await db.from("player_availability_periods").select("*").eq("user_id", userId).eq("status", "active");
+  if (error) return result;
+  for (const row of (data ?? []) as PlayerAvailabilityPeriodRow[]) {
+    const period = mapPlayerAvailabilityPeriodRow(row);
+    result.set(period.playerId, [...(result.get(period.playerId) ?? []), period]);
+  }
+  return result;
+}
+
+function latestApplicableAvailability(periods: PlayerAvailabilityPeriod[], date: string) {
+  return periods
+    .filter((period) => period.startsOn <= date && (!period.endsOn || period.endsOn >= date))
+    .sort((a, b) => b.startsOn.localeCompare(a.startsOn) || b.updatedAt.localeCompare(a.updatedAt))[0];
+}
+
 function periodRangeLabel(summaries: PlayerAnalyticsSummary[], state: WorkspaceState) {
   if (state.period === "custom") {
     if (!state.customFrom || !state.customTo) return "Choose From and To dates";
@@ -1009,6 +1032,7 @@ function formatShortDate(date: string) {
 
 export function availabilityLabel(player: WorkspacePlayerSummary) {
   const medical = player.currentMedical;
+  if (!medical && player.currentAvailability) return availabilityReasonLabel(player.currentAvailability.reason);
   if (!medical) return "Available";
   if (medicalNeedsReview(medical)) return "Needs review";
   return medicalLabel(medical);
@@ -1016,6 +1040,7 @@ export function availabilityLabel(player: WorkspacePlayerSummary) {
 
 export function availabilityDetail(player: WorkspacePlayerSummary) {
   const medical = player.currentMedical;
+  if (!medical && player.currentAvailability) return player.currentAvailability.endsOn ? `Until ${formatShortDate(player.currentAvailability.endsOn)}` : "Until further notice";
   if (!medical) return "Current";
   if (medical.expectedReturnDate) return `Expected ${formatShortDate(medical.expectedReturnDate)}`;
   return "Return unknown";

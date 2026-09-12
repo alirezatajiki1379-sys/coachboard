@@ -17,7 +17,8 @@
     "test:positions": "node --experimental-strip-types scripts/position-normalization-regression.mjs",
     "test:import-duplicates": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/import-duplicate-regression.mjs",
     "test:import-composite": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/player-import-composite-regression.mjs",
-    "test:trial-sync": "node --experimental-strip-types scripts/trial-player-sync-regression.mjs"
+    "test:trial-sync": "node --experimental-strip-types scripts/trial-player-sync-regression.mjs",
+    "test:availability": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/player-availability-regression.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

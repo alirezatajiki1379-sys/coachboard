@@ -295,12 +295,14 @@ export type Squad = {
 export type SquadTrainingEventStatus = "draft" | "prepared" | "in_progress" | "rating_open" | "completed";
 export type ParticipantSourceMode = "current_squad_sync" | "custom_selection";
 export type SquadPlannedAttendanceStatus = "expected" | "unavailable" | "unclear";
-export type SquadAttendanceReason = "V" | "K" | "E" | "P" | "S" | "Z" | "U";
+export type SquadAttendanceReason = "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other";
 export type SquadFinalAttendanceStatus = "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
-export type SquadPlannedAttendanceSource = "default" | "manual" | "medical";
+export type SquadPlannedAttendanceSource = "default" | "manual" | "medical" | "availability";
 export type PlayerContactRelationship = "mother" | "father" | "parent" | "guardian" | "emergency" | "other";
 export type PlayerMedicalPeriodType = "injured" | "sick";
 export type PlayerMedicalPeriodStatus = "active" | "completed" | "cancelled";
+export type PlayerAvailabilityReason = "school" | "work" | "holiday" | "private" | "other";
+export type PlayerAvailabilityStatus = "active" | "cancelled";
 
 export type PlayerContact = {
   id: string;
@@ -329,6 +331,20 @@ export type PlayerMedicalPeriod = {
   description: string;
   notes?: string;
   status: PlayerMedicalPeriodStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlayerAvailabilityPeriod = {
+  id: string;
+  userId: string;
+  playerId: string;
+  squadId?: string;
+  reason: PlayerAvailabilityReason;
+  startsOn: string;
+  endsOn?: string;
+  note?: string;
+  status: PlayerAvailabilityStatus;
   createdAt: string;
   updatedAt: string;
 };

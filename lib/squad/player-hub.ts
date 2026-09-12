@@ -11,9 +11,11 @@ import { formatEventDate, finalStatusLabel, plannedReasonLabel } from "@/lib/squ
 import { getPlayerDevelopmentProfile, type PlayerDevelopmentProfile } from "@/lib/squad/development";
 import {
   mapPlayerContactRow,
+  mapPlayerAvailabilityPeriodRow,
   mapPlayerHeaderPreferencesRow,
   mapPlayerMedicalPeriodRow,
   mapSquadPlayerRow,
+  type PlayerAvailabilityPeriodRow,
   type PlayerContactRow,
   type PlayerHeaderPreferencesRow,
   type PlayerMedicalPeriodRow,
@@ -21,6 +23,7 @@ import {
 } from "@/lib/squad/mappers";
 import type {
   PlayerCoachAssessment,
+  PlayerAvailabilityPeriod,
   PlayerContact,
   PlayerHeaderPreferences,
   PlayerMedicalPeriod,
@@ -53,6 +56,7 @@ export type PlayerHubData = {
   periodRangeLabel: string;
   development: PlayerDevelopmentProfile;
   contacts: PlayerContact[];
+  availabilityPeriods: PlayerAvailabilityPeriod[];
   medicalPeriods: PlayerMedicalPeriod[];
   currentMedical?: PlayerMedicalPeriod;
   headerPreferences: PlayerHeaderPreferences;
@@ -107,12 +111,13 @@ export async function getPlayerHubData(
   if (!playerData) return null;
 
   const player = mapSquadPlayerRow(playerData as SquadPlayerRow);
-  const [records, assessments, development, contacts, medicalPeriods, preferences] = await Promise.all([
+  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, preferences] = await Promise.all([
     listPlayerRecords(db, userId, playerId),
     listAssessments(db, userId, playerId),
     getPlayerDevelopmentProfile(supabase, userId, playerId),
     listContacts(db, userId, playerId),
     listMedicalPeriods(db, userId, playerId),
+    listAvailabilityPeriods(db, userId, playerId),
     getHeaderPreferences(db, userId)
   ]);
 
@@ -125,10 +130,11 @@ export async function getPlayerHubData(
     periodRangeLabel: period === "custom" && customFrom && customTo ? `${formatEventDate(customFrom)} - ${formatEventDate(customTo)}` : analyticsPeriodLabels[period],
     development,
     contacts,
+    availabilityPeriods,
     medicalPeriods,
     currentMedical: currentMedicalPeriod(medicalPeriods),
     headerPreferences: preferences,
-    timeline: buildPlayerTimeline(records, assessments, development, medicalPeriods, player),
+    timeline: buildPlayerTimeline(records, assessments, development, medicalPeriods, availabilityPeriods, player),
     lifetime: {
       trainings: records.length,
       ratings: records.filter((record) => record.overallRating).length,
@@ -152,11 +158,22 @@ export function isMedicalPeriodActiveOnDate(period: PlayerMedicalPeriod, date: s
 }
 
 export function medicalReasonForType(type: PlayerMedicalPeriodType) {
-  return type === "injured" ? "V" : "K";
+  return type === "injured" ? "injured" : "sick";
 }
 
 export function medicalLabel(period: PlayerMedicalPeriod) {
   return period.type === "injured" ? "Injured" : "Sick";
+}
+
+export function availabilityReasonLabel(reason: PlayerAvailabilityPeriod["reason"]) {
+  const labels: Record<PlayerAvailabilityPeriod["reason"], string> = {
+    school: "School",
+    work: "Work",
+    holiday: "Holiday",
+    private: "Private",
+    other: "Other"
+  };
+  return labels[reason];
 }
 
 export function latestApplicableMedicalPeriod(periods: PlayerMedicalPeriod[], date: string) {
@@ -174,6 +191,7 @@ function buildPlayerTimeline(
   assessments: PlayerCoachAssessment[],
   development: PlayerDevelopmentProfile,
   medicalPeriods: PlayerMedicalPeriod[],
+  availabilityPeriods: PlayerAvailabilityPeriod[],
   player: SquadPlayer
 ): PlayerTimelineEvent[] {
   const items: PlayerTimelineEvent[] = [];
@@ -247,6 +265,24 @@ function buildPlayerTimeline(
       });
     }
   }
+  for (const period of availabilityPeriods) {
+    items.push({
+      id: `availability-${period.id}-start`,
+      date: period.startsOn,
+      type: "attendance",
+      title: `${availabilityReasonLabel(period.reason)} absence started`,
+      detail: period.note
+    });
+    if (period.endsOn && period.endsOn !== period.startsOn) {
+      items.push({
+        id: `availability-${period.id}-end`,
+        date: period.endsOn,
+        type: "attendance",
+        title: `${availabilityReasonLabel(period.reason)} absence ended`,
+        detail: period.note
+      });
+    }
+  }
   if (player.convertedAt) {
     items.push({
       id: `trial-converted-${player.id}`,
@@ -314,6 +350,17 @@ async function listMedicalPeriods(db: SupabaseClient, userId: string, playerId: 
     .order("start_date", { ascending: false });
   if (error) return [];
   return ((data ?? []) as PlayerMedicalPeriodRow[]).map(mapPlayerMedicalPeriodRow);
+}
+
+async function listAvailabilityPeriods(db: SupabaseClient, userId: string, playerId: string) {
+  const { data, error } = await db
+    .from("player_availability_periods")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("player_id", playerId)
+    .order("starts_on", { ascending: false });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as PlayerAvailabilityPeriodRow[]).map(mapPlayerAvailabilityPeriodRow);
 }
 
 async function getHeaderPreferences(db: SupabaseClient, userId: string) {

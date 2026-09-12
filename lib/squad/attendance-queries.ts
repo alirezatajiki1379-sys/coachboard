@@ -13,6 +13,7 @@ import { isMedicalPeriodActiveOnDate, latestApplicableMedicalPeriod, medicalLabe
 import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
+import { getAvailabilityByPlayerOnDate } from "@/lib/squad/availability";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -286,23 +287,43 @@ async function syncEventWithCurrentSquad(
   }>;
   const existingPlayerIds = new Set(existingRows.map((row) => row.player_id));
   const missingPlayerIds = currentPlayerIds.filter((playerId) => !existingPlayerIds.has(playerId));
+  const availabilityByPlayer = await getAvailabilityByPlayerOnDate(db, userId, event.date, currentPlayerIds);
   if (missingPlayerIds.length) {
-    const medicalByPlayer = await getMedicalByPlayer(db, userId, event.date, missingPlayerIds);
     const rows = missingPlayerIds.map((playerId) => {
-      const medical = medicalByPlayer.get(playerId);
+      const availability = availabilityByPlayer.get(playerId);
       return {
         user_id: userId,
         event_id: event.id,
         player_id: playerId,
-        planned_status: medical ? "unavailable" : "expected",
-        planned_reason: medical ? medicalReasonForType(medical.type) : null,
-        planned_reason_note: medical?.description ?? null,
-        planned_status_source: medical ? "medical" : "default"
+        planned_status: availability ? "unavailable" : "expected",
+        planned_reason: availability?.plannedReason ?? null,
+        planned_reason_note: availability?.note ?? null,
+        planned_status_source: availability?.source ?? "default"
       };
     });
     const { error } = await db.from("squad_attendance_records").upsert(rows, { onConflict: "event_id,player_id", ignoreDuplicates: true });
     if (error) throw new Error(error.message);
   }
+
+  const defaultRows = existingRows.filter((row) => currentPlayerIdSet.has(row.player_id) && row.planned_status_source !== "manual" && !row.final_status);
+  await Promise.all(defaultRows.map((row) => {
+    const availability = availabilityByPlayer.get(row.player_id);
+    return db
+      .from("squad_attendance_records")
+      .update(availability ? {
+        planned_status: "unavailable",
+        planned_reason: availability.plannedReason,
+        planned_reason_note: availability.note ?? null,
+        planned_status_source: availability.source
+      } : {
+        planned_status: "expected",
+        planned_reason: null,
+        planned_reason_note: null,
+        planned_status_source: "default"
+      })
+      .eq("id", row.id)
+      .eq("user_id", userId);
+  }));
 
   const protectedPlayerIds = await loadProtectedGroupPlayerIds(db, userId, event.id);
   const removableIds = existingRows

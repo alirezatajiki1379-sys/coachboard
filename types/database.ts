@@ -854,9 +854,9 @@ export type Database = {
           event_id: string;
           player_id: string;
           planned_status: "expected" | "unavailable" | "unclear" | null;
-          planned_reason: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | null;
+          planned_reason: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | null;
           planned_reason_note: string | null;
-          planned_status_source: "default" | "manual" | "medical" | null;
+          planned_status_source: "default" | "manual" | "medical" | "availability" | null;
           final_status: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
           late_minutes: number | null;
           late_penalty_applied: boolean;
@@ -877,9 +877,9 @@ export type Database = {
           event_id: string;
           player_id: string;
           planned_status?: "expected" | "unavailable" | "unclear" | null;
-          planned_reason?: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | null;
+          planned_reason?: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | null;
           planned_reason_note?: string | null;
-          planned_status_source?: "default" | "manual" | "medical" | null;
+          planned_status_source?: "default" | "manual" | "medical" | "availability" | null;
           final_status?: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
           late_minutes?: number | null;
           late_penalty_applied?: boolean;
@@ -1133,6 +1133,36 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["player_medical_periods"]["Insert"]>;
+        Relationships: [];
+      };
+      player_availability_periods: {
+        Row: {
+          id: string;
+          user_id: string;
+          player_id: string;
+          squad_id: string | null;
+          reason: "school" | "work" | "holiday" | "private" | "other";
+          starts_on: string;
+          ends_on: string | null;
+          note: string | null;
+          status: "active" | "cancelled";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          player_id: string;
+          squad_id?: string | null;
+          reason: "school" | "work" | "holiday" | "private" | "other";
+          starts_on: string;
+          ends_on?: string | null;
+          note?: string | null;
+          status?: "active" | "cancelled";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_availability_periods"]["Insert"]>;
         Relationships: [];
       };
       player_header_preferences: {

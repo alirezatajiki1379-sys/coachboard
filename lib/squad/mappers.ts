@@ -1,11 +1,12 @@
 import type { Database } from "@/types/database";
-import type { PlayerContact, PlayerHeaderPreferences, PlayerMedicalPeriod, SquadPlayer } from "@/types/domain";
+import type { PlayerAvailabilityPeriod, PlayerContact, PlayerHeaderPreferences, PlayerMedicalPeriod, SquadPlayer } from "@/types/domain";
 
 export type SquadPlayerRow = Database["public"]["Tables"]["squad_players"]["Row"];
 export type SquadPlayerInsert = Database["public"]["Tables"]["squad_players"]["Insert"];
 export type SquadPlayerUpdate = Database["public"]["Tables"]["squad_players"]["Update"];
 export type PlayerContactRow = Database["public"]["Tables"]["player_contacts"]["Row"];
 export type PlayerMedicalPeriodRow = Database["public"]["Tables"]["player_medical_periods"]["Row"];
+export type PlayerAvailabilityPeriodRow = Database["public"]["Tables"]["player_availability_periods"]["Row"];
 export type PlayerHeaderPreferencesRow = Database["public"]["Tables"]["player_header_preferences"]["Row"];
 
 function optional(value: string | null) {
@@ -125,6 +126,22 @@ export function mapPlayerMedicalPeriodRow(row: PlayerMedicalPeriodRow): PlayerMe
     actualReturnDate: optional(row.actual_return_date),
     description: row.description,
     notes: optional(row.notes),
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export function mapPlayerAvailabilityPeriodRow(row: PlayerAvailabilityPeriodRow): PlayerAvailabilityPeriod {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    playerId: row.player_id,
+    squadId: optional(row.squad_id),
+    reason: row.reason,
+    startsOn: row.starts_on,
+    endsOn: optional(row.ends_on),
+    note: optional(row.note),
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at

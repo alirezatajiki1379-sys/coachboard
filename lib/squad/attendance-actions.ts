@@ -5,11 +5,10 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
-import { isMedicalPeriodActiveOnDate, medicalReasonForType } from "@/lib/squad/player-hub";
-import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
 import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, seasonLabelForDate, weekdayForDate } from "@/lib/trainings/utils";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
+import { getAvailabilityByPlayerOnDate } from "@/lib/squad/availability";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -41,7 +40,7 @@ export type TrainingEventActionState = {
 };
 
 const plannedStatuses = ["expected", "unavailable", "unclear"] as const;
-const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U"] as const;
+const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U", "injured", "sick", "school", "work", "holiday", "private", "other"] as const;
 const finalStatuses = ["present", "absent", "Z", "V", "K", "E", "P", "S", "U"] as const;
 
 export type AttendanceMutationResult =
@@ -731,18 +730,18 @@ export async function addSquadPlayersToEvent(formData: FormData) {
   const { data: event, error: eventError } = await db.from("squad_training_events").select("date,squad_id").eq("id", eventId).eq("user_id", user.id).maybeSingle();
   if (eventError) throw new Error(eventError.message);
   const playerIds = await currentEligibleSquadPlayerIds(db, user.id, event?.date ?? "", event?.squad_id ?? undefined);
-  const medicalByPlayer = await getMedicalByPlayer(db, user.id, event?.date ?? "", playerIds);
+  const availabilityByPlayer = await getAvailabilityByPlayerOnDate(db, user.id, event?.date ?? "", playerIds);
 
   const rows = playerIds.map((playerId) => {
-    const medical = medicalByPlayer.get(playerId);
+    const availability = availabilityByPlayer.get(playerId);
     return {
       user_id: user.id,
       event_id: eventId,
       player_id: playerId,
-      planned_status: medical ? "unavailable" : "expected",
-      planned_reason: medical ? medicalReasonForType(medical.type) : null,
-      planned_reason_note: medical?.description ?? null,
-      planned_status_source: medical ? "medical" : "default"
+      planned_status: availability ? "unavailable" : "expected",
+      planned_reason: availability?.plannedReason ?? null,
+      planned_reason_note: availability?.note ?? null,
+      planned_status_source: availability?.source ?? "default"
     };
   });
 
@@ -1196,21 +1195,35 @@ async function syncTrainingParticipants(
   const safePlayerIds = Array.from(new Set(playerIds));
   if (safePlayerIds.length) {
     const validPlayerIds = options.alreadyValidated ? safePlayerIds : await validateSelectedParticipants(db, userId, options.squadId, safePlayerIds);
-    const medicalByPlayer = await getMedicalByPlayer(db, userId, eventDate, validPlayerIds);
-    const rows = validPlayerIds.map((playerId) => {
-      const medical = medicalByPlayer.get(playerId);
+    const [{ data: existingRows, error: existingRowsError }, availabilityByPlayer] = await Promise.all([
+      db
+        .from("squad_attendance_records")
+        .select("player_id,planned_status_source")
+        .eq("event_id", eventId)
+        .eq("user_id", userId)
+        .in("player_id", validPlayerIds),
+      getAvailabilityByPlayerOnDate(db, userId, eventDate, validPlayerIds)
+    ]);
+    if (existingRowsError) throw new Error(existingRowsError.message);
+    const manualPlayerIds = new Set(((existingRows ?? []) as Array<{ player_id: string; planned_status_source: string | null }>)
+      .filter((row) => row.planned_status_source === "manual")
+      .map((row) => row.player_id));
+    const rows = validPlayerIds.filter((playerId) => !manualPlayerIds.has(playerId)).map((playerId) => {
+      const availability = availabilityByPlayer.get(playerId);
       return {
         user_id: userId,
         event_id: eventId,
         player_id: playerId,
-        planned_status: medical ? "unavailable" : "expected",
-        planned_reason: medical ? medicalReasonForType(medical.type) : null,
-        planned_reason_note: medical?.description ?? null,
-        planned_status_source: medical ? "medical" : "default"
+        planned_status: availability ? "unavailable" : "expected",
+        planned_reason: availability?.plannedReason ?? null,
+        planned_reason_note: availability?.note ?? null,
+        planned_status_source: availability?.source ?? "default"
       };
     });
-    const { error } = await db.from("squad_attendance_records").upsert(rows, { onConflict: "event_id,player_id", ignoreDuplicates: true });
-    if (error) throw new Error(error.message);
+    if (rows.length) {
+      const { error } = await db.from("squad_attendance_records").upsert(rows, { onConflict: "event_id,player_id" });
+      if (error) throw new Error(error.message);
+    }
   }
 
   if (!removeUnselected) return;
@@ -1467,25 +1480,6 @@ async function createSessionPlanSnapshot(db: SupabaseClient, userId: string, eve
     const { error } = await db.from("training_session_drill_instances").insert(rows);
     if (error) throw new Error(error.message);
   }
-}
-
-async function getMedicalByPlayer(db: SupabaseClient, userId: string, eventDate: string, playerIds: string[]) {
-  const result = new Map<string, ReturnType<typeof mapPlayerMedicalPeriodRow>>();
-  if (!eventDate || !playerIds.length) return result;
-  const { data, error } = await db
-    .from("player_medical_periods")
-    .select("*")
-    .eq("user_id", userId)
-    .in("player_id", Array.from(new Set(playerIds)))
-    .eq("status", "active")
-    .lte("start_date", eventDate)
-    .or(`end_date.is.null,end_date.gte.${eventDate}`);
-  if (error) return result;
-  for (const row of (data ?? []) as PlayerMedicalPeriodRow[]) {
-    const medical = mapPlayerMedicalPeriodRow(row);
-    if (isMedicalPeriodActiveOnDate(medical, eventDate) && !result.has(medical.playerId)) result.set(medical.playerId, medical);
-  }
-  return result;
 }
 
 async function markEventPrepared(db: SupabaseClient, userId: string, eventId: string) {

@@ -8,7 +8,14 @@ export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
   P: "Private reason",
   S: "Late cancellation",
   Z: "Late",
-  U: "Unexcused"
+  U: "Unexcused",
+  injured: "Injured",
+  sick: "Sick",
+  school: "School",
+  work: "Work",
+  holiday: "Holiday",
+  private: "Private",
+  other: "Other"
 };
 
 export function isExpectedFromPlannedStatus(entry: Pick<SquadAttendanceEntry, "plannedStatus">) {

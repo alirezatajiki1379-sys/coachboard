@@ -220,7 +220,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
             aria-label="Not expected reason"
           >
             <option value="">Reason optional</option>
-            {(["V", "K", "E", "P", "S"] as const).map((reason) => (
+            {(["injured", "sick", "school", "work", "holiday", "private", "other", "V", "K", "E", "P", "S"] as const).map((reason) => (
               <option key={reason} value={reason}>{attendanceReasonLabels[reason]}</option>
             ))}
           </select>

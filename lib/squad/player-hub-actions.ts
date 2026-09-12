@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { latestApplicableMedicalPeriod, medicalReasonForType } from "@/lib/squad/player-hub";
-import { mapPlayerMedicalPeriodRow, type PlayerMedicalPeriodRow } from "@/lib/squad/mappers";
+import { playerAbsenceReasonLabels, syncPlayerAvailabilityToFutureTrainings, type PlayerAbsenceReason } from "@/lib/squad/availability";
 import { createClient } from "@/lib/supabase/server";
 
 async function requireUser() {
@@ -128,7 +127,7 @@ export async function createPlayerMedicalPeriod(formData: FormData) {
     status
   });
   if (error) redirect(playerPathWithError(playerId, "Medical period could not be saved. Please check the dates and try again."));
-  await syncAutomaticMedicalAttendance(db, user.id, playerId);
+  await syncPlayerAvailabilityToFutureTrainings(db, user.id, playerId);
   revalidatePlayer(playerId);
   revalidatePath("/squad/attendance");
   revalidatePath("/trainings");
@@ -155,7 +154,7 @@ export async function updatePlayerMedicalPeriodStatus(formData: FormData) {
     .eq("player_id", playerId)
     .eq("user_id", user.id);
   if (error) redirect(playerPathWithError(playerId, "Medical period could not be updated. Please try again."));
-  await syncAutomaticMedicalAttendance(db, user.id, playerId);
+  await syncPlayerAvailabilityToFutureTrainings(db, user.id, playerId);
   revalidatePlayer(playerId);
   revalidatePath("/squad/attendance");
   revalidatePath("/trainings");
@@ -195,7 +194,7 @@ export async function updatePlayerMedicalPeriodDetails(formData: FormData) {
     .eq("player_id", playerId)
     .eq("user_id", user.id);
   if (error) redirect(playerPathWithError(playerId, "Medical period could not be updated. Please try again."));
-  await syncAutomaticMedicalAttendance(db, user.id, playerId);
+  await syncPlayerAvailabilityToFutureTrainings(db, user.id, playerId);
   revalidatePlayer(playerId);
   revalidatePath("/squad/attendance");
   revalidatePath("/trainings");
@@ -214,47 +213,74 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-async function syncAutomaticMedicalAttendance(db: SupabaseClient, userId: string, playerId: string) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [medicalResult, attendanceResult] = await Promise.all([
-    db.from("player_medical_periods").select("*").eq("user_id", userId).eq("player_id", playerId).eq("status", "active"),
-    db
-      .from("squad_attendance_records")
-      .select("id, planned_status_source, final_status, squad_training_events!inner(date,status)")
-      .eq("user_id", userId)
-      .eq("player_id", playerId)
-      .is("final_status", null)
-  ]);
-  if (medicalResult.error || attendanceResult.error) return;
+export async function createPlayerAvailabilityPeriod(formData: FormData) {
+  const playerId = formString(formData, "playerId");
+  const startsOn = formString(formData, "startsOn");
+  const endsOn = formString(formData, "endsOn") || startsOn;
+  const note = formString(formData, "note");
+  const reason = absenceReasonValue(formString(formData, "reason"));
+  if (!playerId || !startsOn) redirect(playerPathWithError(playerId, "Start date is required."));
+  if (endsOn && endsOn < startsOn) redirect(playerPathWithError(playerId, "Until date cannot be before the start date."));
 
-  const medicalPeriods = ((medicalResult.data ?? []) as PlayerMedicalPeriodRow[]).map(mapPlayerMedicalPeriodRow);
-  const updates = ((attendanceResult.data ?? []) as unknown as Array<{
-    id: string;
-    planned_status_source: "default" | "manual" | "medical" | null;
-    final_status: string | null;
-    squad_training_events?: { date: string; status: string } | { date: string; status: string }[] | null;
-  }>).filter((record) => {
-    const event = Array.isArray(record.squad_training_events) ? record.squad_training_events[0] : record.squad_training_events;
-    return Boolean(event && event.date >= today && event.status !== "completed" && record.planned_status_source !== "manual");
-  }).map((record) => {
-    const event = Array.isArray(record.squad_training_events) ? record.squad_training_events[0] : record.squad_training_events;
-    const eventDate = event?.date ?? "";
-    const activeMedical = latestApplicableMedicalPeriod(medicalPeriods, eventDate);
-    return db
-      .from("squad_attendance_records")
-      .update(activeMedical ? {
-        planned_status: "unavailable",
-        planned_reason: medicalReasonForType(activeMedical.type),
-        planned_reason_note: activeMedical.description,
-        planned_status_source: "medical"
-      } : {
-        planned_status: "expected",
-        planned_reason: null,
-        planned_reason_note: null,
-        planned_status_source: "default"
-      })
-      .eq("id", record.id)
-      .eq("user_id", userId);
-  });
-  await Promise.all(updates);
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { data: player, error: playerError } = await db.from("squad_players").select("squad_id").eq("id", playerId).eq("user_id", user.id).maybeSingle();
+  if (playerError || !player) redirect(playerPathWithError(playerId, "Player was not found."));
+
+  if (reason === "injured" || reason === "sick") {
+    const { error } = await db.from("player_medical_periods").insert({
+      user_id: user.id,
+      player_id: playerId,
+      type: reason,
+      start_date: startsOn,
+      end_date: optional(endsOn),
+      description: note || playerAbsenceReasonLabels[reason],
+      notes: optional(note),
+      status: "active"
+    });
+    if (error) redirect(playerPathWithError(playerId, "Medical absence could not be saved."));
+  } else {
+    const { error } = await db.from("player_availability_periods").insert({
+      user_id: user.id,
+      player_id: playerId,
+      squad_id: player.squad_id ?? null,
+      reason,
+      starts_on: startsOn,
+      ends_on: optional(endsOn),
+      note: optional(note),
+      status: "active"
+    });
+    if (error) redirect(playerPathWithError(playerId, "Absence could not be saved."));
+  }
+
+  await syncPlayerAvailabilityToFutureTrainings(db, user.id, playerId);
+  revalidatePlayer(playerId);
+  revalidatePath("/squad/attendance");
+  revalidatePath("/trainings");
+  revalidatePath("/dashboard");
+  redirect(formString(formData, "returnTo") || playerPath(playerId, "medical"));
+}
+
+export async function deletePlayerAvailabilityPeriod(formData: FormData) {
+  const playerId = formString(formData, "playerId");
+  const periodId = formString(formData, "periodId");
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("player_availability_periods")
+    .update({ status: "cancelled" })
+    .eq("id", periodId)
+    .eq("player_id", playerId)
+    .eq("user_id", user.id);
+  if (error) redirect(playerPathWithError(playerId, "Absence could not be deleted."));
+  await syncPlayerAvailabilityToFutureTrainings(db, user.id, playerId);
+  revalidatePlayer(playerId);
+  revalidatePath("/squad/attendance");
+  revalidatePath("/trainings");
+  revalidatePath("/dashboard");
+  redirect(formString(formData, "returnTo") || playerPath(playerId, "medical"));
+}
+
+function absenceReasonValue(value: string): PlayerAbsenceReason {
+  return value === "sick" || value === "school" || value === "work" || value === "holiday" || value === "private" || value === "other" ? value : "injured";
 }
