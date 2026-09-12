@@ -306,7 +306,7 @@ async function syncEventWithCurrentSquad(
   }
 
   const defaultRows = existingRows.filter((row) => currentPlayerIdSet.has(row.player_id) && row.planned_status_source !== "manual" && !row.final_status);
-  await Promise.all(defaultRows.map((row) => {
+  const updateResults = await Promise.all(defaultRows.map((row) => {
     const availability = availabilityByPlayer.get(row.player_id);
     return db
       .from("squad_attendance_records")
@@ -324,6 +324,8 @@ async function syncEventWithCurrentSquad(
       .eq("id", row.id)
       .eq("user_id", userId);
   }));
+  const updateError = updateResults.find((result) => result.error)?.error;
+  if (updateError) throw new Error(updateError.message);
 
   const protectedPlayerIds = await loadProtectedGroupPlayerIds(db, userId, event.id);
   const removableIds = existingRows

@@ -930,7 +930,15 @@ async function listLatestObservations(db: SupabaseClient, userId: string) {
 async function listActiveMedical(db: SupabaseClient, userId: string) {
   const result = new Map<string, PlayerMedicalPeriod[]>();
   const { data, error } = await db.from("player_medical_periods").select("*").eq("user_id", userId).eq("status", "active");
-  if (error) return result;
+  if (error) {
+    console.error("squad_workspace_active_medical_query_failed", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint
+    });
+    throw new Error(`Squad medical periods could not be loaded: ${error.message}`);
+  }
   for (const row of (data ?? []) as PlayerMedicalPeriodRow[]) {
     const period = mapPlayerMedicalPeriodRow(row);
     result.set(period.playerId, [...(result.get(period.playerId) ?? []), period]);
@@ -941,7 +949,15 @@ async function listActiveMedical(db: SupabaseClient, userId: string) {
 async function listActiveAvailability(db: SupabaseClient, userId: string) {
   const result = new Map<string, PlayerAvailabilityPeriod[]>();
   const { data, error } = await db.from("player_availability_periods").select("*").eq("user_id", userId).eq("status", "active");
-  if (error) return result;
+  if (error) {
+    console.error("squad_workspace_active_availability_query_failed", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint
+    });
+    throw new Error(`Squad availability periods could not be loaded: ${error.message}`);
+  }
   for (const row of (data ?? []) as PlayerAvailabilityPeriodRow[]) {
     const period = mapPlayerAvailabilityPeriodRow(row);
     result.set(period.playerId, [...(result.get(period.playerId) ?? []), period]);
