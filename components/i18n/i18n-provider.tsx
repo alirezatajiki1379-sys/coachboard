@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo } from "react";
 import { getMessages, type Locale, type Messages } from "@/lib/i18n";
 
 type I18nContextValue = {
@@ -12,6 +12,11 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ locale, children }: { locale: Locale; children: React.ReactNode }) {
   const value = useMemo(() => ({ locale, messages: getMessages(locale) }), [locale]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

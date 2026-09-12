@@ -13,23 +13,30 @@ const attributeNames = ["placeholder", "title", "aria-label", "alt"];
 
 export function GermanLocalizationBoundary({ locale, children }: GermanLocalizationBoundaryProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const textOriginalsRef = useRef(new Map<Node, string>());
+  const attributeOriginalsRef = useRef(new Map<Element, Map<string, string>>());
 
   useEffect(() => {
     const root = rootRef.current;
-    if (!root || locale !== "de") return;
+    if (!root) return;
+    const textOriginals = textOriginalsRef.current;
+    const attributeOriginals = attributeOriginalsRef.current;
 
-    translateTree(root);
+    restoreOriginals(root, textOriginals, attributeOriginals);
+    if (locale !== "de") return;
+
+    translateTree(root, textOriginals, attributeOriginals);
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         if (mutation.type === "characterData") {
-          translateTextNode(mutation.target);
+          translateTextNode(mutation.target, textOriginals);
         }
         for (const node of mutation.addedNodes) {
-          if (node.nodeType === Node.TEXT_NODE) translateTextNode(node);
-          if (node.nodeType === Node.ELEMENT_NODE) translateTree(node as Element);
+          if (node.nodeType === Node.TEXT_NODE) translateTextNode(node, textOriginals);
+          if (node.nodeType === Node.ELEMENT_NODE) translateTree(node as Element, textOriginals, attributeOriginals);
         }
         if (mutation.type === "attributes" && mutation.target.nodeType === Node.ELEMENT_NODE) {
-          translateAttributes(mutation.target as Element);
+          translateAttributes(mutation.target as Element, attributeOriginals);
         }
       }
     });
@@ -40,40 +47,67 @@ export function GermanLocalizationBoundary({ locale, children }: GermanLocalizat
       childList: true,
       subtree: true
     });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      restoreOriginals(root, textOriginals, attributeOriginals);
+    };
   }, [locale]);
 
   return <div ref={rootRef}>{children}</div>;
 }
 
-function translateTree(root: Element) {
-  translateAttributes(root);
+function translateTree(root: Element, textOriginals: Map<Node, string>, attributeOriginals: Map<Element, Map<string, string>>) {
+  translateAttributes(root, attributeOriginals);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode();
   while (node) {
-    translateTextNode(node);
+    translateTextNode(node, textOriginals);
     node = walker.nextNode();
   }
   for (const element of root.querySelectorAll(attributeNames.map((name) => `[${name}]`).join(","))) {
-    translateAttributes(element);
+    translateAttributes(element, attributeOriginals);
   }
 }
 
-function translateAttributes(element: Element) {
+function translateAttributes(element: Element, attributeOriginals: Map<Element, Map<string, string>>) {
   for (const name of attributeNames) {
     const value = element.getAttribute(name);
     if (!value) continue;
     const translated = translatePhrase(value);
-    if (translated !== value) element.setAttribute(name, translated);
+    if (translated !== value) {
+      const originals = attributeOriginals.get(element) ?? new Map<string, string>();
+      if (!originals.has(name)) originals.set(name, value);
+      attributeOriginals.set(element, originals);
+      element.setAttribute(name, translated);
+    }
   }
 }
 
-function translateTextNode(node: Node) {
+function translateTextNode(node: Node, textOriginals: Map<Node, string>) {
   const current = node.textContent;
   if (!current || !current.trim()) return;
   if (isUserEditableText(node)) return;
   const translated = translatePhrase(current);
-  if (translated !== current) node.textContent = translated;
+  if (translated !== current) {
+    if (!textOriginals.has(node)) textOriginals.set(node, current);
+    node.textContent = translated;
+  }
+}
+
+function restoreOriginals(root: Element, textOriginals: Map<Node, string>, attributeOriginals: Map<Element, Map<string, string>>) {
+  for (const [element, originals] of attributeOriginals) {
+    if (!root.contains(element)) continue;
+    for (const [name, value] of originals) {
+      element.setAttribute(name, value);
+    }
+  }
+  attributeOriginals.clear();
+
+  for (const [node, value] of textOriginals) {
+    if (!root.contains(node)) continue;
+    node.textContent = value;
+  }
+  textOriginals.clear();
 }
 
 function translatePhrase(value: string) {

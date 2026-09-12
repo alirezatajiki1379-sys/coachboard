@@ -6,6 +6,7 @@ export type Locale = (typeof supportedLocales)[number];
 export type Messages = typeof enMessages;
 
 export const defaultLocale: Locale = "en";
+export const localeCookieName = "coachboard_locale";
 
 export function normalizeLocale(value: string | null | undefined): Locale | null {
   if (!value) return null;

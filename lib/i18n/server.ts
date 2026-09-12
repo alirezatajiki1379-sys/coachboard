@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
-import { resolveLocale, type Locale } from "@/lib/i18n";
+import { cookies } from "next/headers";
+import { localeCookieName, normalizeLocale, resolveLocale, type Locale } from "@/lib/i18n";
 import type { createClient } from "@/lib/supabase/server";
 
 type PreferredLanguageRow = {
@@ -7,8 +8,8 @@ type PreferredLanguageRow = {
 };
 
 export async function getRequestLocale(preferredLanguage?: string | null): Promise<Locale> {
-  const requestHeaders = await headers();
-  return resolveLocale(preferredLanguage, requestHeaders.get("accept-language"));
+  const [requestHeaders, cookieStore] = await Promise.all([headers(), cookies()]);
+  return normalizeLocale(preferredLanguage) ?? normalizeLocale(cookieStore.get(localeCookieName)?.value) ?? resolveLocale(null, requestHeaders.get("accept-language"));
 }
 
 export async function getUserLocale(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<Locale> {

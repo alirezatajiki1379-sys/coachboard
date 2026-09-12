@@ -1,9 +1,10 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeLocale } from "@/lib/i18n";
+import { localeCookieName, normalizeLocale } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 
 export async function updatePreferredLanguage(formData: FormData) {
@@ -25,6 +26,14 @@ export async function updatePreferredLanguage(formData: FormData) {
   await db
     .from("profiles")
     .upsert({ id: user.id, preferred_language: locale, updated_at: new Date().toISOString() }, { onConflict: "id" });
+
+  const cookieStore = await cookies();
+  cookieStore.set(localeCookieName, locale, {
+    httpOnly: false,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365
+  });
 
   revalidatePath("/", "layout");
   redirect(returnTo);
