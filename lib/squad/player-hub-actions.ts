@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { playerAbsenceReasonLabels, syncPlayerAvailabilityToFutureTrainings, type PlayerAbsenceReason } from "@/lib/squad/availability";
 import { createClient } from "@/lib/supabase/server";
+import type { PlayerAvailabilityReason } from "@/types/domain";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -281,6 +282,43 @@ export async function deletePlayerAvailabilityPeriod(formData: FormData) {
   redirect(formString(formData, "returnTo") || playerPath(playerId, "medical"));
 }
 
+export async function updatePlayerAvailabilityPeriodDetails(formData: FormData) {
+  const playerId = formString(formData, "playerId");
+  const periodId = formString(formData, "periodId");
+  const startsOn = formString(formData, "startsOn");
+  const endsOn = formString(formData, "endsOn") || startsOn;
+  const note = formString(formData, "note");
+  const reason = generalAbsenceReasonValue(formString(formData, "reason"));
+  if (!playerId || !periodId || !startsOn) redirect(playerPathWithError(playerId, "Start date is required."));
+  if (endsOn && endsOn < startsOn) redirect(playerPathWithError(playerId, "Until date cannot be before the start date."));
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("player_availability_periods")
+    .update({
+      reason,
+      starts_on: startsOn,
+      ends_on: optional(endsOn),
+      note: optional(note)
+    })
+    .eq("id", periodId)
+    .eq("player_id", playerId)
+    .eq("user_id", user.id);
+  if (error) redirect(playerPathWithError(playerId, "Absence could not be updated."));
+
+  await syncPlayerAvailabilityToFutureTrainings(db, user.id, playerId);
+  revalidatePlayer(playerId);
+  revalidatePath("/squad/attendance");
+  revalidatePath("/trainings");
+  revalidatePath("/dashboard");
+  redirect(formString(formData, "returnTo") || playerPath(playerId, "medical"));
+}
+
 function absenceReasonValue(value: string): PlayerAbsenceReason {
   return value === "sick" || value === "school" || value === "work" || value === "holiday" || value === "private" || value === "other" ? value : "injured";
+}
+
+function generalAbsenceReasonValue(value: string): PlayerAvailabilityReason {
+  return value === "work" || value === "holiday" || value === "private" || value === "other" ? value : "school";
 }

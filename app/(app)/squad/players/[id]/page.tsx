@@ -15,7 +15,7 @@ import {
   type AnalyticsPeriod,
   type PlayerAnalyticsRecord
 } from "@/lib/squad/analytics";
-import { createPlayerAvailabilityPeriod, createPlayerContact, createPlayerMedicalPeriod, deletePlayerAvailabilityPeriod, deletePlayerContact, savePlayerHeaderPreferences, updatePlayerMedicalPeriodDetails, updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
+import { createPlayerAvailabilityPeriod, createPlayerContact, createPlayerMedicalPeriod, deletePlayerAvailabilityPeriod, deletePlayerContact, savePlayerHeaderPreferences, updatePlayerAvailabilityPeriodDetails, updatePlayerMedicalPeriodDetails, updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { getPlayerAttentionSummary } from "@/lib/squad/attention-queries";
 import { attentionPriorityLabels, attentionTone, type AttentionItem } from "@/lib/squad/attention";
 import { formatEventDate, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
@@ -37,7 +37,7 @@ const tabs: Array<{ id: PlayerHubTab; label: string }> = [
   { id: "development", label: "Development" },
   { id: "history", label: "History" },
   { id: "attendance", label: "Attendance" },
-  { id: "medical", label: "Medical" },
+  { id: "medical", label: "Availability" },
   { id: "notes", label: "Notes" },
   { id: "details", label: "Details" }
 ];
@@ -66,6 +66,14 @@ const attendanceFilters: Array<{ id: AttendanceFilter; label: string }> = [
   { id: "private", label: "Private" },
   { id: "cancelled", label: "Late cancellation" },
   { id: "unexcused", label: "Unexcused" }
+];
+
+const generalAbsenceReasonOptions: Array<{ value: PlayerAvailabilityPeriod["reason"]; label: string }> = [
+  { value: "school", label: "School" },
+  { value: "work", label: "Work" },
+  { value: "holiday", label: "Holiday" },
+  { value: "private", label: "Private" },
+  { value: "other", label: "Other" }
 ];
 
 export default async function PlayerDetailPage({ params, searchParams }: PlayerDetailPageProps) {
@@ -903,13 +911,7 @@ function AvailabilitySection({ playerId, periods }: { playerId: string; periods:
           <input type="hidden" name="returnTo" value={`/squad/players/${playerId}?tab=medical`} />
           <FieldLabel label="Reason">
             <select name="reason" className={fieldClass()}>
-              <option value="school">School</option>
-              <option value="work">Work</option>
-              <option value="holiday">Holiday</option>
-              <option value="private">Private</option>
-              <option value="other">Other</option>
-              <option value="injured">Injured</option>
-              <option value="sick">Sick</option>
+              {generalAbsenceReasonOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </FieldLabel>
           <FieldLabel label="From"><input name="startsOn" required type="date" defaultValue={new Date().toISOString().slice(0, 10)} className={fieldClass()} /></FieldLabel>
@@ -934,7 +936,7 @@ function AvailabilityList({ title, periods, playerId, empty }: { title: string; 
       <div className="mt-2 space-y-2">
         {periods.length ? periods.map((period) => (
           <article key={period.id} className={cn("rounded-md border p-3 text-sm", period.status === "active" ? "border-board-line bg-white" : "border-slate-200 bg-slate-50 text-slate-500")}>
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-col gap-3">
               <div>
                 <p className="font-bold text-board-navy">{availabilityReasonLabel(period.reason)}</p>
                 <p className="mt-1 text-slate-600">{formatAvailabilityRange(period)}</p>
@@ -942,12 +944,31 @@ function AvailabilityList({ title, periods, playerId, empty }: { title: string; 
                 {period.status !== "active" ? <p className="mt-1 text-xs font-semibold uppercase text-slate-400">{period.status}</p> : null}
               </div>
               {period.status === "active" ? (
-                <form action={deletePlayerAvailabilityPeriod}>
-                  <input type="hidden" name="playerId" value={playerId} />
-                  <input type="hidden" name="periodId" value={period.id} />
-                  <input type="hidden" name="returnTo" value={`/squad/players/${playerId}?tab=medical`} />
-                  <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Delete</Button>
-                </form>
+                <div className="space-y-2 border-t border-slate-100 pt-2">
+                  <details className="rounded-md bg-slate-50 p-2">
+                    <summary className="cursor-pointer text-xs font-bold text-board-navy">Edit absence</summary>
+                    <form action={updatePlayerAvailabilityPeriodDetails} className="mt-3 grid gap-2">
+                      <input type="hidden" name="playerId" value={playerId} />
+                      <input type="hidden" name="periodId" value={period.id} />
+                      <input type="hidden" name="returnTo" value={`/squad/players/${playerId}?tab=medical`} />
+                      <FieldLabel label="Reason">
+                        <select name="reason" defaultValue={period.reason} className={fieldClass()}>
+                          {generalAbsenceReasonOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </FieldLabel>
+                      <FieldLabel label="From"><input name="startsOn" required type="date" defaultValue={period.startsOn} className={fieldClass()} /></FieldLabel>
+                      <FieldLabel label="Until"><input name="endsOn" type="date" defaultValue={period.endsOn ?? ""} className={fieldClass()} /></FieldLabel>
+                      <FieldLabel label="Note"><textarea name="note" rows={2} defaultValue={period.note ?? ""} className={textareaClass()} /></FieldLabel>
+                      <Button type="submit" variant="secondary" className="h-9 text-xs">Save changes</Button>
+                    </form>
+                  </details>
+                  <form action={deletePlayerAvailabilityPeriod}>
+                    <input type="hidden" name="playerId" value={playerId} />
+                    <input type="hidden" name="periodId" value={period.id} />
+                    <input type="hidden" name="returnTo" value={`/squad/players/${playerId}?tab=medical`} />
+                    <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Delete absence</Button>
+                  </form>
+                </div>
               ) : null}
             </div>
           </article>

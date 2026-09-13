@@ -1,5 +1,16 @@
 -- CoachBoard Player Availability periods and attendance availability sync support.
 -- Production repair migration for Squad / Attendance / Player Profile loading after availability rollout.
+-- Safe/manual version: self-contained updated_at function + legacy late normalization.
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
 
 create table if not exists public.player_availability_periods (
   id uuid primary key default gen_random_uuid(),
@@ -62,6 +73,14 @@ update public.squad_attendance_records
 set planned_reason = planned_status,
     planned_status = 'unavailable'
 where planned_status in ('V', 'K', 'E', 'P', 'S', 'Z', 'U');
+
+update public.squad_attendance_records
+set final_status = 'Z'
+where final_status = 'late';
+
+update public.squad_attendance_records
+set planned_reason = 'Z'
+where planned_reason = 'late';
 
 alter table public.squad_attendance_records
 drop constraint if exists squad_attendance_records_planned_status_check;
