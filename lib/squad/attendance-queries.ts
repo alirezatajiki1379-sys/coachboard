@@ -35,6 +35,7 @@ type TrainingEventListOptions = {
   squadId?: string;
   includeDeleted?: boolean;
   onlyDeleted?: boolean;
+  syncCurrentSquad?: boolean;
 };
 
 export async function listTrainingEvents(supabase: SupabaseServerClient, userId: string, options: TrainingEventListOptions = {}): Promise<SquadTrainingEvent[]> {
@@ -67,7 +68,9 @@ export async function listTrainingEventDetails(supabase: SupabaseServerClient, u
   const events = await listTrainingEvents(supabase, userId, options);
   if (!events.length) return [];
   const db = supabase as unknown as SupabaseClient;
-  await syncEligibleFutureEventsWithCurrentSquad(db, userId, events);
+  if (options.syncCurrentSquad) {
+    await syncEligibleFutureEventsWithCurrentSquad(db, userId, events);
+  }
   const { data, error } = await db
     .from("squad_attendance_records")
     .select("id,user_id,event_id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,late_minutes,late_penalty_applied,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,rating_auto_suggestion,coach_note,sensitive_note,created_at,updated_at,squad_players(id,user_id,first_name,last_name,position,secondary_positions,player_type,archived_at,deleted_at,created_at,updated_at)")

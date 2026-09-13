@@ -41,10 +41,12 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const activeTeam = await ensureActiveSquad(supabase, user.id);
-  const locale = await getUserLocale(supabase, user.id);
+  const [activeTeam, locale] = await Promise.all([
+    ensureActiveSquad(supabase, user.id),
+    getUserLocale(supabase, user.id)
+  ]);
   const messages = getMessages(locale);
-  const [planCount, playerCounts, recentDrills, recentSessions] = await Promise.all([
+  const [planCount, playerCounts, recentDrills, recentSessions, developmentSummary, attentionData, trainingEventsRaw] = await Promise.all([
     supabase
       .from("training_sessions")
       .select("id", { count: "exact", head: true })
@@ -67,13 +69,12 @@ export default async function DashboardPage() {
       .is("archived_at", null)
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
-      .limit(5)
-  ]);
-  const [developmentSummary, attentionData] = await Promise.all([
+      .limit(5),
     getDevelopmentDashboardSummary(supabase, user.id, activeTeam.id),
-    getDashboardAttentionData(supabase, user.id)
+    getDashboardAttentionData(supabase, user.id),
+    listTrainingEventDetails(supabase, user.id, { squadId: activeTeam.id })
   ]);
-  const trainingEvents = sortTrainings(await listTrainingEventDetails(supabase, user.id));
+  const trainingEvents = sortTrainings(trainingEventsRaw);
   const today = new Date().toISOString().slice(0, 10);
   const nextTraining = trainingEvents.find((event) => event.date >= today);
   const completedTrainings = trainingEvents.filter((event) => event.status === "completed").length;

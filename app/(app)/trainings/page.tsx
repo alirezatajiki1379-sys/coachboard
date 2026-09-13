@@ -24,10 +24,12 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
 
   if (!user) redirect("/login");
 
-  const locale = await getUserLocale(supabase, user.id);
+  const [locale, activeTeam] = await Promise.all([
+    getUserLocale(supabase, user.id),
+    ensureActiveSquad(supabase, user.id)
+  ]);
   const copy = trainingsCopy[locale];
   const filters = trainingFilterLabels[locale];
-  const activeTeam = await ensureActiveSquad(supabase, user.id);
   const allEvents = await listTrainingEventDetails(supabase, user.id, {
     squadId: activeTeam.id,
     onlyDeleted: filter === "trash"

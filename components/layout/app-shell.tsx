@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { usePathname } from "next/navigation";
-import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, UserCircle, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, LoaderCircle, Menu, PanelLeftClose, PanelLeftOpen, Settings, UserCircle, UsersRound, X } from "lucide-react";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { TeamSwitcher } from "@/components/layout/team-switcher";
 import { I18nProvider } from "@/components/i18n/i18n-provider";
@@ -28,6 +28,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
   const messages = getMessages(locale);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>("expanded");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   const collapsed = sidebarMode === "collapsed";
@@ -66,6 +67,17 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
     };
   }, [drawerOpen]);
 
+  useEffect(() => {
+    setPendingHref(null);
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!pendingHref) return;
+    const timeout = window.setTimeout(() => setPendingHref(null), 15000);
+    return () => window.clearTimeout(timeout);
+  }, [pendingHref]);
+
   const toggleDesktopSidebar = () => {
     setSidebarMode((current) => {
       const next = current === "collapsed" ? "expanded" : "collapsed";
@@ -97,6 +109,8 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
           teams={teams}
           pathname={pathname}
           onToggle={toggleDesktopSidebar}
+          pendingHref={pendingHref}
+          onPendingNavigation={setPendingHref}
           locale={locale}
         />
       </aside>
@@ -162,7 +176,14 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
             <div className="px-3 pb-4">
               <TeamSwitcher teams={teams} locale={locale} />
             </div>
-            <SidebarNav collapsed={false} pathname={pathname} onNavigate={() => setDrawerOpen(false)} locale={locale} />
+            <SidebarNav
+              collapsed={false}
+              pathname={pathname}
+              pendingHref={pendingHref}
+              onNavigate={() => setDrawerOpen(false)}
+              onPendingNavigation={setPendingHref}
+              locale={locale}
+            />
             <SidebarAccount collapsed={false} coachName={coachName} locale={locale} />
           </div>
         </div>
@@ -177,6 +198,8 @@ function SidebarContent({
   teams,
   pathname,
   onToggle,
+  pendingHref,
+  onPendingNavigation,
   locale
 }: {
   collapsed: boolean;
@@ -184,6 +207,8 @@ function SidebarContent({
   teams: Squad[];
   pathname: string;
   onToggle: () => void;
+  pendingHref: string | null;
+  onPendingNavigation: (href: string | null) => void;
   locale: Locale;
 }) {
   const messages = getMessages(locale);
@@ -218,13 +243,27 @@ function SidebarContent({
       <div className={cn("pb-4", collapsed ? "flex justify-center px-0" : "px-3")}>
         <TeamSwitcher teams={teams} compact={collapsed} locale={locale} />
       </div>
-      <SidebarNav collapsed={collapsed} pathname={pathname} locale={locale} />
+      <SidebarNav collapsed={collapsed} pathname={pathname} pendingHref={pendingHref} onPendingNavigation={onPendingNavigation} locale={locale} />
       <SidebarAccount collapsed={collapsed} coachName={coachName} locale={locale} />
     </>
   );
 }
 
-function SidebarNav({ collapsed, pathname, locale, onNavigate }: { collapsed: boolean; pathname: string; locale: Locale; onNavigate?: () => void }) {
+function SidebarNav({
+  collapsed,
+  pathname,
+  pendingHref,
+  locale,
+  onNavigate,
+  onPendingNavigation
+}: {
+  collapsed: boolean;
+  pathname: string;
+  pendingHref: string | null;
+  locale: Locale;
+  onNavigate?: () => void;
+  onPendingNavigation?: (href: string | null) => void;
+}) {
   const messages = getMessages(locale);
   const navItems = [
     { href: "/dashboard", label: messages.navigation.dashboard, icon: LayoutDashboard },
@@ -241,26 +280,48 @@ function SidebarNav({ collapsed, pathname, locale, onNavigate }: { collapsed: bo
       {navItems.map((item) => {
         const Icon = item.icon;
         const active = isActivePath(pathname, item.href);
+        const pending = pendingHref === item.href;
         return (
           <Link
             key={item.href}
             href={item.href}
-            onClick={onNavigate}
+            onClick={(event) => {
+              if (pending) {
+                event.preventDefault();
+                return;
+              }
+              if (!active) onPendingNavigation?.(item.href);
+              onNavigate?.();
+            }}
             title={collapsed ? item.label : undefined}
             aria-label={collapsed ? item.label : undefined}
             aria-current={active ? "page" : undefined}
+            aria-disabled={pending ? true : undefined}
             className={cn(
               "flex items-center gap-3 rounded-md text-sm font-medium transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-board-green",
+              pending && "cursor-wait",
               collapsed ? "h-10 justify-center px-0" : "px-3 py-2.5",
               active ? "bg-white/15 text-white shadow-[inset_3px_0_0_#37a96b]" : "text-slate-200"
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
             <span className={collapsed ? "sr-only" : ""}>{item.label}</span>
+            <SidebarLinkPendingIcon forcePending={pending} collapsed={collapsed} />
           </Link>
         );
       })}
     </nav>
+  );
+}
+
+function SidebarLinkPendingIcon({ forcePending, collapsed }: { forcePending: boolean; collapsed: boolean }) {
+  const { pending } = useLinkStatus();
+  if (!forcePending && !pending) return null;
+  return (
+    <LoaderCircle
+      className={cn("h-3.5 w-3.5 shrink-0 animate-spin text-board-green", collapsed ? "absolute bottom-1 right-1" : "ml-auto")}
+      aria-hidden="true"
+    />
   );
 }
 
