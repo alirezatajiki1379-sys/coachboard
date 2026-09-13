@@ -219,6 +219,8 @@ export async function createPlayerAvailabilityPeriod(formData: FormData) {
   const startsOn = formString(formData, "startsOn");
   const endsOn = formString(formData, "endsOn") || startsOn;
   const note = formString(formData, "note");
+  const description = formString(formData, "description");
+  const expectedReturnDate = formString(formData, "expectedReturnDate");
   const reason = absenceReasonValue(formString(formData, "reason"));
   if (!playerId || !startsOn) redirect(playerPathWithError(playerId, "Start date is required."));
   if (endsOn && endsOn < startsOn) redirect(playerPathWithError(playerId, "Until date cannot be before the start date."));
@@ -234,8 +236,9 @@ export async function createPlayerAvailabilityPeriod(formData: FormData) {
       player_id: playerId,
       type: reason,
       start_date: startsOn,
-      end_date: optional(endsOn),
-      description: note || playerAbsenceReasonLabels[reason],
+      end_date: null,
+      expected_return_date: optional(expectedReturnDate),
+      description: description || playerAbsenceReasonLabels[reason],
       notes: optional(note),
       status: "active"
     });

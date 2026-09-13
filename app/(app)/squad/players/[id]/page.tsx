@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, Minus, Phone, Printer, Shirt, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
+import { PlayerUnavailabilityForm } from "@/components/squad/player-unavailability-form";
 import { PlayerDevelopmentSection } from "@/components/squad/player-development";
 import { permanentlyDeleteSquadPlayer } from "@/lib/squad/actions";
 import { createPlayerCoachAssessment } from "@/lib/squad/analytics-actions";
@@ -23,6 +24,7 @@ import { calculateAge, formatLongDate, formatPlayerBirthDate, playerFullName } f
 import { availabilityReasonLabel, getPlayerHubData, medicalLabel, parsePlayerHubPeriod, parsePlayerHubTab, parsePlayerHubTimelineFilter, type PlayerHubData, type PlayerHubTab, type PlayerTimelineFilter } from "@/lib/squad/player-hub";
 import { formatPositionLabel } from "@/lib/squad/positions";
 import { createClient } from "@/lib/supabase/server";
+import { getUserLocale } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 import type { PlayerAvailabilityPeriod, PlayerContact, PlayerMedicalPeriod, SquadPlayer } from "@/types/domain";
 
@@ -76,6 +78,85 @@ const generalAbsenceReasonOptions: Array<{ value: PlayerAvailabilityPeriod["reas
   { value: "other", label: "Other" }
 ];
 
+const availabilityCopy = {
+  en: {
+    title: "Availability",
+    available: "Available",
+    unavailable: "Unavailable",
+    noActive: "No active unavailability is recorded.",
+    current: "Current",
+    upcoming: "Upcoming",
+    past: "Past",
+    addUnavailability: "Add unavailability",
+    viewHistory: "View availability history",
+    medicalHistory: "Medical history",
+    currentEmpty: "No current general absence.",
+    upcomingEmpty: "No upcoming general absence.",
+    pastEmpty: "No past general absence.",
+    editAbsence: "Edit absence",
+    deleteAbsence: "Delete absence",
+    saveChanges: "Save changes",
+    reason: "Reason",
+    from: "From",
+    until: "Until",
+    note: "Notes",
+    since: "Since",
+    expectedReturn: "Expected return",
+    actualReturn: "Actual return",
+    status: "Status",
+    returned: "Mark as returned",
+    update: "Update",
+    activeMedical: "Active medical records",
+    needsReview: "Needs review",
+    medicalInfo: "Medical information",
+    medicalPrivate: "Private medical background. This is not shown in squad overviews, training plans or standard reports.",
+    noMedicalHistory: "No completed or cancelled medical records yet.",
+    activeRecords: "Active medical records",
+    returnNeedsReview: "Return status needs review.",
+    overlapping: "Multiple active medical records overlap. The latest applicable start date determines attendance prefill.",
+    systemNote: "Future trainings keep the player visible but mark them as not expected unless a coach has manually overridden the training.",
+    absenceHelp: "Record injuries, sickness and non-medical absence in one place."
+  },
+  de: {
+    title: "Verfügbarkeit",
+    available: "Verfügbar",
+    unavailable: "Nicht verfügbar",
+    noActive: "Keine aktuelle Abwesenheit eingetragen.",
+    current: "Aktuell",
+    upcoming: "Anstehend",
+    past: "Vergangen",
+    addUnavailability: "Abwesenheit hinzufügen",
+    viewHistory: "Verlauf anzeigen",
+    medicalHistory: "Medizinischer Verlauf",
+    currentEmpty: "Keine aktuelle allgemeine Abwesenheit.",
+    upcomingEmpty: "Keine anstehende allgemeine Abwesenheit.",
+    pastEmpty: "Keine vergangene allgemeine Abwesenheit.",
+    editAbsence: "Abwesenheit bearbeiten",
+    deleteAbsence: "Abwesenheit löschen",
+    saveChanges: "Änderungen speichern",
+    reason: "Grund",
+    from: "Von",
+    until: "Bis",
+    note: "Notizen",
+    since: "Seit",
+    expectedReturn: "Erwartete Rückkehr",
+    actualReturn: "Tatsächliche Rückkehr",
+    status: "Status",
+    returned: "Rückkehr eintragen",
+    update: "Aktualisieren",
+    activeMedical: "Aktive medizinische Einträge",
+    needsReview: "Überprüfung nötig",
+    medicalInfo: "Medizinische Informationen",
+    medicalPrivate: "Private medizinische Informationen. In Kaderübersichten, Trainingsplänen und Standardberichten werden nur minimale Verfügbarkeitslabels angezeigt.",
+    noMedicalHistory: "Noch keine abgeschlossenen oder gelöschten medizinischen Einträge.",
+    activeRecords: "Aktive medizinische Einträge",
+    returnNeedsReview: "Rückkehrstatus muss überprüft werden.",
+    overlapping: "Mehrere aktive medizinische Einträge überschneiden sich. Für Trainings zählt der neueste passende Starttermin.",
+    systemNote: "Zukünftige Trainings behalten den Spieler sichtbar, markieren ihn aber als nicht eingeplant, sofern der Coach das Training nicht manuell überschrieben hat.",
+    absenceHelp: "Erfasse Verletzungen, Krankheit und allgemeine Abwesenheit an einer Stelle."
+  }
+} as const;
+
 export default async function PlayerDetailPage({ params, searchParams }: PlayerDetailPageProps) {
   const { id } = await params;
   const query = await searchParams;
@@ -94,7 +175,10 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
 
   if (!user) redirect("/login");
 
-  const hub = await getPlayerHubData(supabase, user.id, id, period, customFrom, customTo);
+  const [hub, locale] = await Promise.all([
+    getPlayerHubData(supabase, user.id, id, period, customFrom, customTo),
+    getUserLocale(supabase, user.id)
+  ]);
   if (!hub) notFound();
   const attentionItems = await getPlayerAttentionSummary(supabase, user.id, id, period);
 
@@ -109,12 +193,12 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
       <PlayerHubTabs playerId={hub.player.id} activeTab={tab} period={period} customFrom={customFrom} customTo={customTo} />
       {isPeriodAwareTab(tab) ? <PeriodControls playerId={hub.player.id} tab={tab} period={period} customFrom={customFrom} customTo={customTo} /> : null}
 
-      {tab === "overview" ? <OverviewTab hub={hub} period={period} attentionItems={attentionItems} /> : null}
+      {tab === "overview" ? <OverviewTab hub={hub} period={period} attentionItems={attentionItems} locale={locale} /> : null}
       {tab === "analytics" ? <AnalyticsTab hub={hub} period={period} /> : null}
       {tab === "development" ? <PlayerDevelopmentSection playerId={hub.player.id} development={hub.development} /> : null}
       {tab === "history" ? <HistoryTab hub={hub} filter={timelineFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "attendance" ? <AttendanceTab hub={hub} filter={attendanceFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
-      {tab === "medical" ? <MedicalTab hub={hub} medicalError={medicalError} /> : null}
+      {tab === "medical" ? <MedicalTab hub={hub} medicalError={medicalError} locale={locale} /> : null}
       {tab === "notes" ? <NotesTab hub={hub} /> : null}
       {tab === "details" ? <DetailsTab hub={hub} medicalError={medicalError} contactError={contactError} deleteError={deleteError} /> : null}
     </div>
@@ -227,7 +311,7 @@ function PlayerHubTabs({ playerId, activeTab, period, customFrom, customTo }: { 
   );
 }
 
-function OverviewTab({ hub, period, attentionItems }: { hub: PlayerHubData; period: AnalyticsPeriod; attentionItems: AttentionItem[] }) {
+function OverviewTab({ hub, period, attentionItems, locale }: { hub: PlayerHubData; period: AnalyticsPeriod; attentionItems: AttentionItem[]; locale: "en" | "de" }) {
   const { summary } = hub.analytics;
   const highestGoal = hub.development.goals.find((goal) => goal.status === "in_progress" && goal.priority === "high") ?? hub.development.goals.find((goal) => goal.status === "in_progress" || goal.status === "identified");
   const latestObservation = hub.development.observations[0];
@@ -235,7 +319,7 @@ function OverviewTab({ hub, period, attentionItems }: { hub: PlayerHubData; peri
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
       <section className="space-y-6">
         <AttentionSummaryCard playerId={hub.player.id} items={attentionItems} />
-        <MedicalOverviewCard hub={hub} />
+        <MedicalOverviewCard hub={hub} locale={locale} />
         <AnalyticsMetricGrid hub={hub} period={period} />
         <Card title="Development summary" icon={<Target className="h-5 w-5" />}>
           {highestGoal ? (
@@ -310,63 +394,110 @@ function playerHubAttentionTone(priority: AttentionItem["priority"]) {
   return tone === "neutral" ? "green" : tone;
 }
 
-function MedicalOverviewCard({ hub }: { hub: PlayerHubData }) {
+function MedicalOverviewCard({ hub, locale }: { hub: PlayerHubData; locale: "en" | "de" }) {
+  const text = availabilityCopy[locale];
   const current = hub.currentMedical;
+  const currentAvailability = currentAvailabilityPeriod(hub.availabilityPeriods);
+  const activeAvailability = hub.availabilityPeriods.filter((period) => period.status === "active");
+  const upcomingAvailability = activeAvailability.filter((period) => isAvailabilityUpcoming(period)).slice(0, 3);
   const needsReview = current ? medicalReviewNeeded(current) : false;
   return (
-    <Card title="Availability" icon={<Stethoscope className="h-5 w-5" />}>
+    <Card title={text.title} icon={<Stethoscope className="h-5 w-5" />}>
       {current ? (
         <div className="space-y-4">
           <div className={cn("rounded-md border-l-4 bg-slate-50 p-4", current.type === "injured" ? "border-red-400" : "border-amber-400")}>
             <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-500">
               <span className={cn("h-2.5 w-2.5 rounded-full", current.type === "injured" ? "bg-red-500" : "bg-amber-500")} />
-              {medicalLabel(current)}
+              {localizedMedicalLabel(current, locale)}
             </p>
             <p className="mt-2 text-lg font-bold text-board-navy">{current.description}</p>
             <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
-              <Mini label="Since" value={formatEventDate(current.startDate)} />
-              <Mini label="Expected return" value={current.expectedReturnDate ? formatEventDate(current.expectedReturnDate) : "Not set"} />
-              <Mini label="Actual return" value={current.actualReturnDate ? formatEventDate(current.actualReturnDate) : "Not entered"} />
+              <Mini label={text.since} value={formatEventDate(current.startDate)} />
+              <Mini label={text.expectedReturn} value={current.expectedReturnDate ? formatEventDate(current.expectedReturnDate) : "-"} />
+              <Mini label={text.actualReturn} value={current.actualReturnDate ? formatEventDate(current.actualReturnDate) : "-"} />
             </div>
             {needsReview ? (
               <p className="mt-3 inline-flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
                 <ShieldAlert className="h-4 w-4" />
-                Return status needs review
+                {text.returnNeedsReview}
               </p>
             ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <details className="rounded-md bg-board-paper px-3 py-2">
-              <summary className="cursor-pointer text-sm font-bold text-board-navy">Add injury or sickness</summary>
-              <MedicalQuickForm playerId={hub.player.id} compact />
-            </details>
-            <details className="rounded-md bg-board-paper px-3 py-2">
-              <summary className="cursor-pointer text-sm font-bold text-board-navy">Update</summary>
-              <MedicalUpdateForm playerId={hub.player.id} period={current} compact />
-            </details>
-            <details className="rounded-md bg-board-paper px-3 py-2">
-              <summary className="cursor-pointer text-sm font-bold text-board-navy">Mark as returned</summary>
-              <MarkReturnedForm playerId={hub.player.id} period={current} />
-            </details>
-            <ButtonLink href={tabHref(hub.player.id, "medical", "season")} variant="secondary" className="h-10 px-3">View medical history</ButtonLink>
-          </div>
+          <AvailabilityQuickSummary playerId={hub.player.id} periods={hub.availabilityPeriods} locale={locale} compact />
+          <AvailabilityOverviewActions playerId={hub.player.id} current={current} locale={locale} />
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="rounded-md border-l-4 border-green-500 bg-slate-50 p-4">
+          <div className={cn("rounded-md border-l-4 bg-slate-50 p-4", currentAvailability ? "border-red-400" : "border-green-500")}>
             <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-500">
-              <span className="h-2.5 w-2.5 rounded-full bg-green-600" />
-              Available
+              <span className={cn("h-2.5 w-2.5 rounded-full", currentAvailability ? "bg-red-500" : "bg-green-600")} />
+              {currentAvailability ? `${text.unavailable} · ${localizedAvailabilityReason(currentAvailability.reason, locale)}` : text.available}
             </p>
-            <p className="mt-2 text-sm text-slate-600">No active injury or sickness period is recorded.</p>
+            <p className="mt-2 text-sm text-slate-600">
+              {currentAvailability ? `${formatAvailabilityRange(currentAvailability)}${currentAvailability.note ? ` · ${currentAvailability.note}` : ""}` : text.noActive}
+            </p>
           </div>
-          <details className="rounded-md bg-board-paper px-3 py-2">
-            <summary className="cursor-pointer text-sm font-bold text-board-navy">Add injury or sickness</summary>
-            <MedicalQuickForm playerId={hub.player.id} compact />
-          </details>
+          {upcomingAvailability.length ? <AvailabilityQuickSummary playerId={hub.player.id} periods={hub.availabilityPeriods} locale={locale} compact /> : null}
+          <AvailabilityOverviewActions playerId={hub.player.id} current={undefined} locale={locale} />
         </div>
       )}
     </Card>
+  );
+}
+
+function AvailabilityOverviewActions({ playerId, current, locale }: { playerId: string; current?: PlayerMedicalPeriod; locale: "en" | "de" }) {
+  const text = availabilityCopy[locale];
+  return (
+    <div className="flex flex-wrap gap-2">
+      <details className="rounded-md bg-board-paper px-3 py-2">
+        <summary className="cursor-pointer text-sm font-bold text-board-navy">{text.addUnavailability}</summary>
+        <PlayerUnavailabilityForm playerId={playerId} returnTo={tabHref(playerId, "overview", "season")} compact locale={locale} action={createPlayerAvailabilityPeriod} />
+      </details>
+      {current ? (
+        <>
+          <details className="rounded-md bg-board-paper px-3 py-2">
+            <summary className="cursor-pointer text-sm font-bold text-board-navy">{text.update}</summary>
+            <MedicalUpdateForm playerId={playerId} period={current} compact />
+          </details>
+          <details className="rounded-md bg-board-paper px-3 py-2">
+            <summary className="cursor-pointer text-sm font-bold text-board-navy">{text.returned}</summary>
+            <MarkReturnedForm playerId={playerId} period={current} />
+          </details>
+        </>
+      ) : null}
+      <ButtonLink href={tabHref(playerId, "medical", "season")} variant="secondary" className="h-10 px-3">{text.viewHistory}</ButtonLink>
+    </div>
+  );
+}
+
+function AvailabilityQuickSummary({ periods, playerId, locale, compact = false }: { periods: PlayerAvailabilityPeriod[]; playerId: string; locale: "en" | "de"; compact?: boolean }) {
+  const text = availabilityCopy[locale];
+  const activePeriods = periods.filter((period) => period.status === "active");
+  const current = activePeriods.filter((period) => isAvailabilityCurrent(period)).slice(0, compact ? 2 : 4);
+  const upcoming = activePeriods.filter((period) => isAvailabilityUpcoming(period)).slice(0, compact ? 2 : 4);
+  if (!current.length && !upcoming.length) return null;
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <CompactAvailabilityGroup title={text.current} periods={current} playerId={playerId} locale={locale} empty={text.currentEmpty} />
+      <CompactAvailabilityGroup title={text.upcoming} periods={upcoming} playerId={playerId} locale={locale} empty={text.upcomingEmpty} />
+    </div>
+  );
+}
+
+function CompactAvailabilityGroup({ title, periods, playerId, locale, empty }: { title: string; periods: PlayerAvailabilityPeriod[]; playerId: string; locale: "en" | "de"; empty: string }) {
+  return (
+    <div className="rounded-md border border-board-line bg-white p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{title}</p>
+      <div className="mt-2 space-y-2">
+        {periods.length ? periods.map((period) => (
+          <Link key={period.id} href={`${tabHref(playerId, "medical", "season")}#availability-period-${period.id}`} className="block rounded bg-slate-50 p-2 text-sm transition hover:bg-green-50">
+            <p className="font-bold text-board-navy">{localizedAvailabilityReason(period.reason, locale)}</p>
+            <p className="text-slate-600">{formatAvailabilityRange(period)}</p>
+            {period.note ? <p className="line-clamp-1 text-slate-500">{period.note}</p> : null}
+          </Link>
+        )) : <p className="text-sm text-slate-500">{empty}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -770,7 +901,8 @@ function formatRecordValue(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
-function MedicalTab({ hub, medicalError }: { hub: PlayerHubData; medicalError?: string }) {
+function MedicalTab({ hub, medicalError, locale }: { hub: PlayerHubData; medicalError?: string; locale: "en" | "de" }) {
+  const text = availabilityCopy[locale];
   const active = hub.medicalPeriods.filter((period) => period.status === "active");
   const review = active.filter(medicalReviewNeeded);
   const history = hub.medicalPeriods.filter((period) => period.status !== "active");
@@ -779,22 +911,22 @@ function MedicalTab({ hub, medicalError }: { hub: PlayerHubData; medicalError?: 
   const overlapping = active.length > 1;
   return (
     <div className="space-y-6">
-      <Card title="Availability" icon={<CalendarDays className="h-5 w-5" />}>
+      <Card title={text.title} icon={<CalendarDays className="h-5 w-5" />}>
         {medicalError ? <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{medicalError}</p> : null}
         {current ? (
           <div className={cn("rounded-md border-l-4 bg-slate-50 p-4", current.type === "injured" ? "border-red-400" : "border-amber-400")}>
-            <p className="text-sm font-bold uppercase tracking-wide text-slate-500">{medicalLabel(current)}</p>
+            <p className="text-sm font-bold uppercase tracking-wide text-slate-500">{localizedMedicalLabel(current, locale)}</p>
             <p className="mt-2 text-xl font-bold text-board-navy">{current.description}</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Mini label="From" value={formatEventDate(current.startDate)} />
-              <Mini label="Expected return" value={current.expectedReturnDate ? formatEventDate(current.expectedReturnDate) : "Not set"} />
-              <Mini label="Actual return" value={current.actualReturnDate ? formatEventDate(current.actualReturnDate) : "Not entered"} />
-              <Mini label="Status" value={current.status} />
+              <Mini label={text.from} value={formatEventDate(current.startDate)} />
+              <Mini label={text.expectedReturn} value={current.expectedReturnDate ? formatEventDate(current.expectedReturnDate) : "-"} />
+              <Mini label={text.actualReturn} value={current.actualReturnDate ? formatEventDate(current.actualReturnDate) : "-"} />
+              <Mini label={text.status} value={current.status} />
             </div>
-            {medicalReviewNeeded(current) ? <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">Return status needs review.</p> : null}
-            {overlapping ? <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">Multiple active medical records overlap. The latest applicable start date determines attendance prefill.</p> : null}
+            {medicalReviewNeeded(current) ? <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">{text.returnNeedsReview}</p> : null}
+            {overlapping ? <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">{text.overlapping}</p> : null}
             <details className="mt-4 rounded-md bg-white p-3">
-              <summary className="cursor-pointer text-sm font-bold text-board-navy">Mark as returned</summary>
+              <summary className="cursor-pointer text-sm font-bold text-board-navy">{text.returned}</summary>
               <MarkReturnedForm playerId={hub.player.id} period={current} />
             </details>
           </div>
@@ -802,8 +934,8 @@ function MedicalTab({ hub, medicalError }: { hub: PlayerHubData; medicalError?: 
           <div className={cn("rounded-md border-l-4 bg-slate-50 p-4", currentAvailability ? "border-red-400" : "border-green-500")}>
             {currentAvailability ? (
               <>
-                <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Unavailable</p>
-                <p className="mt-2 text-xl font-bold text-board-navy">{availabilityReasonLabel(currentAvailability.reason)}</p>
+                <p className="text-sm font-bold uppercase tracking-wide text-slate-500">{text.unavailable}</p>
+                <p className="mt-2 text-xl font-bold text-board-navy">{localizedAvailabilityReason(currentAvailability.reason, locale)}</p>
                 <p className="mt-2 text-sm text-slate-600">
                   {formatAvailabilityRange(currentAvailability)}
                   {currentAvailability.note ? ` · ${currentAvailability.note}` : ""}
@@ -811,40 +943,41 @@ function MedicalTab({ hub, medicalError }: { hub: PlayerHubData; medicalError?: 
               </>
             ) : (
               <>
-            <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Available</p>
-                <p className="mt-2 text-sm text-slate-600">No active absence is recorded for today.</p>
+            <p className="text-sm font-bold uppercase tracking-wide text-slate-500">{text.available}</p>
+                <p className="mt-2 text-sm text-slate-600">{text.noActive}</p>
               </>
             )}
           </div>
         )}
       </Card>
 
-      <AvailabilitySection playerId={hub.player.id} periods={hub.availabilityPeriods} />
+      <AvailabilitySection playerId={hub.player.id} periods={hub.availabilityPeriods} locale={locale} />
 
-      <Card title="Add injury or sickness" icon={<ShieldAlert className="h-5 w-5" />}>
-        <MedicalQuickForm playerId={hub.player.id} />
+      <Card title={text.addUnavailability} icon={<ShieldAlert className="h-5 w-5" />}>
+        <p className="mb-3 rounded-md bg-board-paper p-3 text-sm text-slate-700">{text.absenceHelp}</p>
+        <PlayerUnavailabilityForm playerId={hub.player.id} returnTo={`/squad/players/${hub.player.id}?tab=medical`} locale={locale} action={createPlayerAvailabilityPeriod} />
       </Card>
 
       {review.length ? (
-        <Card title="Needs review" icon={<ShieldAlert className="h-5 w-5" />}>
+        <Card title={text.needsReview} icon={<ShieldAlert className="h-5 w-5" />}>
           <div className="space-y-3">{review.map((period) => <MedicalRecordCard key={period.id} playerId={hub.player.id} period={period} />)}</div>
         </Card>
       ) : null}
 
       {active.length ? (
-        <Card title="Active medical records" icon={<Stethoscope className="h-5 w-5" />}>
+        <Card title={text.activeRecords} icon={<Stethoscope className="h-5 w-5" />}>
           <div className="space-y-3">{active.map((period) => <MedicalRecordCard key={period.id} playerId={hub.player.id} period={period} />)}</div>
         </Card>
       ) : null}
 
-      <Card title="Medical history" icon={<ClipboardList className="h-5 w-5" />}>
+      <Card title={text.medicalHistory} icon={<ClipboardList className="h-5 w-5" />}>
         <div className="space-y-3">
-          {history.length ? history.map((period) => <MedicalRecordCard key={period.id} playerId={hub.player.id} period={period} />) : <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No completed or cancelled medical records yet.</p>}
+          {history.length ? history.map((period) => <MedicalRecordCard key={period.id} playerId={hub.player.id} period={period} />) : <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">{text.noMedicalHistory}</p>}
         </div>
       </Card>
 
-      <Card title="Medical information" icon={<FileText className="h-5 w-5" />}>
-        <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">Private medical background. This is not shown in squad overviews, training plans or standard reports.</p>
+      <Card title={text.medicalInfo} icon={<FileText className="h-5 w-5" />}>
+        <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">{text.medicalPrivate}</p>
         <DetailGrid>
           <DetailRow label="Allergies" value={hub.player.allergies} />
           <DetailRow label="Medication" value={hub.player.medication} />
@@ -896,49 +1029,35 @@ function CoachAssessmentPanel({ playerId, period, currentAssessment, assessmentH
   );
 }
 
-function AvailabilitySection({ playerId, periods }: { playerId: string; periods: PlayerAvailabilityPeriod[] }) {
+function AvailabilitySection({ playerId, periods, locale }: { playerId: string; periods: PlayerAvailabilityPeriod[]; locale: "en" | "de" }) {
+  const text = availabilityCopy[locale];
   const activePeriods = periods.filter((period) => period.status === "active");
   const current = activePeriods.filter((period) => isAvailabilityCurrent(period));
   const upcoming = activePeriods.filter((period) => isAvailabilityUpcoming(period));
   const past = periods.filter((period) => period.status !== "active" || isAvailabilityPast(period));
   return (
-    <Card title="General absences" icon={<CalendarDays className="h-5 w-5" />}>
-      <p className="mb-4 rounded-md bg-board-paper p-3 text-sm text-slate-700">Record non-medical unavailability such as school, work, holiday or private reasons. Future trainings keep the player visible but mark them as not expected.</p>
-      <details className="rounded-md bg-slate-50 p-3" open={!activePeriods.length}>
-        <summary className="cursor-pointer text-sm font-bold text-board-navy">Add absence</summary>
-        <form action={createPlayerAvailabilityPeriod} className="mt-3 grid gap-3 md:grid-cols-2">
-          <input type="hidden" name="playerId" value={playerId} />
-          <input type="hidden" name="returnTo" value={`/squad/players/${playerId}?tab=medical`} />
-          <FieldLabel label="Reason">
-            <select name="reason" className={fieldClass()}>
-              {generalAbsenceReasonOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </FieldLabel>
-          <FieldLabel label="From"><input name="startsOn" required type="date" defaultValue={new Date().toISOString().slice(0, 10)} className={fieldClass()} /></FieldLabel>
-          <FieldLabel label="Until"><input name="endsOn" type="date" className={fieldClass()} /></FieldLabel>
-          <FieldLabel label="Note" wide><textarea name="note" rows={2} placeholder="School trip, family holiday..." className={textareaClass()} /></FieldLabel>
-          <div className="md:col-span-2"><Button type="submit" variant="secondary">Save absence</Button></div>
-        </form>
-      </details>
+    <Card title={text.title} icon={<CalendarDays className="h-5 w-5" />}>
+      <p className="mb-4 rounded-md bg-board-paper p-3 text-sm text-slate-700">{text.systemNote}</p>
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
-        <AvailabilityList title="Current" periods={current} playerId={playerId} empty="No current general absence." />
-        <AvailabilityList title="Upcoming" periods={upcoming} playerId={playerId} empty="No upcoming general absence." />
-        <AvailabilityList title="Past" periods={past.slice(0, 6)} playerId={playerId} empty="No past general absence." />
+        <AvailabilityList title={text.current} periods={current} playerId={playerId} empty={text.currentEmpty} locale={locale} />
+        <AvailabilityList title={text.upcoming} periods={upcoming} playerId={playerId} empty={text.upcomingEmpty} locale={locale} />
+        <AvailabilityList title={text.past} periods={past.slice(0, 6)} playerId={playerId} empty={text.pastEmpty} locale={locale} />
       </div>
     </Card>
   );
 }
 
-function AvailabilityList({ title, periods, playerId, empty }: { title: string; periods: PlayerAvailabilityPeriod[]; playerId: string; empty: string }) {
+function AvailabilityList({ title, periods, playerId, empty, locale }: { title: string; periods: PlayerAvailabilityPeriod[]; playerId: string; empty: string; locale: "en" | "de" }) {
+  const text = availabilityCopy[locale];
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{title}</p>
       <div className="mt-2 space-y-2">
         {periods.length ? periods.map((period) => (
-          <article key={period.id} className={cn("rounded-md border p-3 text-sm", period.status === "active" ? "border-board-line bg-white" : "border-slate-200 bg-slate-50 text-slate-500")}>
+          <article id={`availability-period-${period.id}`} key={period.id} className={cn("rounded-md border p-3 text-sm", period.status === "active" ? "border-board-line bg-white" : "border-slate-200 bg-slate-50 text-slate-500")}>
             <div className="flex flex-col gap-3">
               <div>
-                <p className="font-bold text-board-navy">{availabilityReasonLabel(period.reason)}</p>
+                <p className="font-bold text-board-navy">{localizedAvailabilityReason(period.reason, locale)}</p>
                 <p className="mt-1 text-slate-600">{formatAvailabilityRange(period)}</p>
                 {period.note ? <p className="mt-1 whitespace-pre-wrap text-slate-700">{period.note}</p> : null}
                 {period.status !== "active" ? <p className="mt-1 text-xs font-semibold uppercase text-slate-400">{period.status}</p> : null}
@@ -946,27 +1065,27 @@ function AvailabilityList({ title, periods, playerId, empty }: { title: string; 
               {period.status === "active" ? (
                 <div className="space-y-2 border-t border-slate-100 pt-2">
                   <details className="rounded-md bg-slate-50 p-2">
-                    <summary className="cursor-pointer text-xs font-bold text-board-navy">Edit absence</summary>
+                    <summary className="cursor-pointer text-xs font-bold text-board-navy">{text.editAbsence}</summary>
                     <form action={updatePlayerAvailabilityPeriodDetails} className="mt-3 grid gap-2">
                       <input type="hidden" name="playerId" value={playerId} />
                       <input type="hidden" name="periodId" value={period.id} />
                       <input type="hidden" name="returnTo" value={`/squad/players/${playerId}?tab=medical`} />
-                      <FieldLabel label="Reason">
+                      <FieldLabel label={text.reason}>
                         <select name="reason" defaultValue={period.reason} className={fieldClass()}>
-                          {generalAbsenceReasonOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          {generalAbsenceReasonOptions.map((option) => <option key={option.value} value={option.value}>{localizedAvailabilityReason(option.value, locale)}</option>)}
                         </select>
                       </FieldLabel>
-                      <FieldLabel label="From"><input name="startsOn" required type="date" defaultValue={period.startsOn} className={fieldClass()} /></FieldLabel>
-                      <FieldLabel label="Until"><input name="endsOn" type="date" defaultValue={period.endsOn ?? ""} className={fieldClass()} /></FieldLabel>
-                      <FieldLabel label="Note"><textarea name="note" rows={2} defaultValue={period.note ?? ""} className={textareaClass()} /></FieldLabel>
-                      <Button type="submit" variant="secondary" className="h-9 text-xs">Save changes</Button>
+                      <FieldLabel label={text.from}><input name="startsOn" required type="date" defaultValue={period.startsOn} className={fieldClass()} /></FieldLabel>
+                      <FieldLabel label={text.until}><input name="endsOn" type="date" defaultValue={period.endsOn ?? ""} className={fieldClass()} /></FieldLabel>
+                      <FieldLabel label={text.note}><textarea name="note" rows={2} defaultValue={period.note ?? ""} className={textareaClass()} /></FieldLabel>
+                      <Button type="submit" variant="secondary" className="h-9 text-xs">{text.saveChanges}</Button>
                     </form>
                   </details>
                   <form action={deletePlayerAvailabilityPeriod}>
                     <input type="hidden" name="playerId" value={playerId} />
                     <input type="hidden" name="periodId" value={period.id} />
                     <input type="hidden" name="returnTo" value={`/squad/players/${playerId}?tab=medical`} />
-                    <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Delete absence</Button>
+                    <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{text.deleteAbsence}</Button>
                   </form>
                 </div>
               ) : null}
@@ -1087,36 +1206,6 @@ function MedicalSection({ playerId, player, periods, error }: { playerId: string
         </form>
       </details>
     </Card>
-  );
-}
-
-function MedicalQuickForm({ playerId, compact = false }: { playerId: string; compact?: boolean }) {
-  return (
-    <form action={createPlayerMedicalPeriod} className={cn("mt-3 grid gap-3", compact ? "sm:grid-cols-2" : "md:grid-cols-2")}>
-      <input type="hidden" name="playerId" value={playerId} />
-      <input type="hidden" name="status" value="active" />
-      <FieldLabel label="Type">
-        <select name="type" className={fieldClass()}>
-          <option value="injured">Injured</option>
-          <option value="sick">Sick</option>
-        </select>
-      </FieldLabel>
-      <FieldLabel label="From">
-        <input name="startDate" required type="date" defaultValue={new Date().toISOString().slice(0, 10)} className={fieldClass()} />
-      </FieldLabel>
-      <FieldLabel label="Expected return">
-        <input name="expectedReturnDate" type="date" className={fieldClass()} />
-      </FieldLabel>
-      <FieldLabel label="Description">
-        <input name="description" required placeholder="Ankle sprain, flu..." className={fieldClass()} />
-      </FieldLabel>
-      <FieldLabel label="Notes" wide>
-        <textarea name="notes" rows={compact ? 2 : 3} className={textareaClass()} />
-      </FieldLabel>
-      <div className={compact ? "sm:col-span-2" : "md:col-span-2"}>
-        <Button type="submit" variant="secondary">Save medical period</Button>
-      </div>
-    </form>
   );
 }
 
@@ -1384,6 +1473,31 @@ function relationshipLabel(value: string) {
     other: "Other"
   };
   return labels[value] ?? "Parent";
+}
+
+function localizedAvailabilityReason(reason: PlayerAvailabilityPeriod["reason"], locale: "en" | "de") {
+  const labels = {
+    en: {
+      school: "School",
+      work: "Work",
+      holiday: "Holiday",
+      private: "Private",
+      other: "Other"
+    },
+    de: {
+      school: "Schule",
+      work: "Arbeit",
+      holiday: "Urlaub",
+      private: "Privat",
+      other: "Sonstiges"
+    }
+  } as const;
+  return labels[locale][reason];
+}
+
+function localizedMedicalLabel(period: PlayerMedicalPeriod, locale: "en" | "de") {
+  if (locale === "de") return period.type === "injured" ? "Verletzt" : "Krank";
+  return medicalLabel(period);
 }
 
 function captainLabel(value: string) {
