@@ -15,6 +15,10 @@
   --table-corner-z: 30;
   --table-toolbar-z: 40;
   --table-popover-z: 60;
+  --app-sidebar-z: 80;
+  --app-popover-z: 90;
+  --app-modal-z: 120;
+  --app-drawer-z: 130;
 }
 
 * {

@@ -88,7 +88,7 @@ export function TrainingEventActions({ eventId, attendanceCount = 0, compact = f
 function EditScopeDialog({ eventId, onClose }: { eventId: string; onClose: () => void }) {
   const [scope, setScope] = useState("single");
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="edit-training-scope-title">
+    <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-slate-950/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="edit-training-scope-title">
       <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
         <h2 id="edit-training-scope-title" className="text-lg font-bold text-board-navy">Edit training</h2>
         <p className="mt-1 text-sm text-slate-600">Choose the scope for this recurring Training before opening the edit form.</p>
@@ -113,7 +113,7 @@ function EditScopeDialog({ eventId, onClose }: { eventId: string; onClose: () =>
 
 function TrashScopeDialog({ eventId, attendanceCount, isRecurring, onClose }: { eventId: string; attendanceCount: number; isRecurring: boolean; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="trash-training-scope-title">
+    <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-slate-950/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="trash-training-scope-title">
       <form action={deleteTrainingEvent} className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
         <input type="hidden" name="eventId" value={eventId} />
         <h2 id="trash-training-scope-title" className="text-lg font-bold text-board-navy">Move Training to Trash</h2>

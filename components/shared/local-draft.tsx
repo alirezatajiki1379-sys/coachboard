@@ -254,7 +254,7 @@ function DraftRecoveryDialog({
   onKeepCurrent: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
+    <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-center justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
       <div className="w-full max-w-lg rounded-lg border border-board-line bg-white p-4 shadow-2xl sm:p-5">
         <h2 className="text-lg font-bold text-board-navy">{title ?? "Recover unsaved draft?"}</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">

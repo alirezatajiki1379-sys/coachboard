@@ -87,7 +87,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
     >
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-[70] hidden border-r border-board-line bg-board-navy text-white transition-[width] duration-200 motion-reduce:transition-none lg:flex lg:flex-col",
+          "fixed inset-y-0 left-0 z-[var(--app-sidebar-z)] hidden border-r border-board-line bg-board-navy text-white transition-[width] duration-200 motion-reduce:transition-none lg:flex lg:flex-col",
           collapsed ? "lg:w-[4.5rem]" : "lg:w-72"
         )}
       >
@@ -131,7 +131,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
       </div>
 
       {drawerOpen ? (
-        <div className="fixed inset-0 z-[100] lg:hidden" role="dialog" aria-modal="true" aria-label={messages.accessibility.navigationMenu}>
+        <div className="fixed inset-0 z-[var(--app-drawer-z)] lg:hidden" role="dialog" aria-modal="true" aria-label={messages.accessibility.navigationMenu}>
           <button
             type="button"
             className="absolute inset-0 bg-slate-950/50"

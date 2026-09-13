@@ -97,7 +97,10 @@ export async function listTrainingSessionReviewSummaries(
     .eq("user_id", userId)
     .in("event_id", uniqueEventIds);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isMissingReviewTableError(error)) return result;
+    throw new Error(error.message);
+  }
 
   for (const row of (data ?? []) as Array<Pick<ReviewRow, "id" | "event_id" | "objective_outcome" | "overall_quality" | "intensity" | "updated_at">>) {
     result.set(row.event_id, {
@@ -139,6 +142,18 @@ function mapReviewRow(row: ReviewRow, drillRows: DrillReviewRow[]): TrainingSess
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function isMissingReviewTableError(error: { code?: string; message?: string }) {
+  const message = error.message?.toLowerCase() ?? "";
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    (
+      message.includes("training_session_reviews") &&
+      (message.includes("schema cache") || message.includes("does not exist") || message.includes("relation"))
+    )
+  );
 }
 
 function mapDrillReviewRow(row: DrillReviewRow): TrainingSessionDrillReview {

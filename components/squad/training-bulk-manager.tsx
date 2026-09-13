@@ -350,7 +350,7 @@ function BulkConfirmDialog({
         ? `Permanently delete ${count} Training${count === 1 ? "" : "s"}?`
         : `Delete ${count} Training${count === 1 ? "" : "s"}?`;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="bulk-training-dialog-title">
+    <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-slate-950/50 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="bulk-training-dialog-title">
       <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>

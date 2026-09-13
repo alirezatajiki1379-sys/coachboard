@@ -47,7 +47,7 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false, 
           >
             {compactTeamName(activeTeam.name)}
           </summary>
-          <div className="absolute left-full top-0 z-[90] ml-3 w-72 max-w-[calc(100vw-5rem)] rounded-lg border border-board-line bg-board-navy p-3 text-white shadow-2xl">
+          <div className="absolute left-full top-0 z-[var(--app-popover-z)] ml-3 w-72 max-w-[calc(100vw-5rem)] rounded-lg border border-board-line bg-board-navy p-3 text-white shadow-2xl">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">{messages.teams.activeTeam}</p>
             <p className="mt-1 truncate text-sm font-bold text-white" title={activeTeam.name}>{activeTeam.name}</p>
             <div className="mt-3 space-y-2">
