@@ -81,13 +81,13 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
   return (
     <div
       className={cn(
-        "min-h-screen bg-board-paper [--app-mobile-header-height:4rem] [--page-section-gap:1.5rem]",
+        "isolate min-h-screen bg-board-paper [--app-mobile-header-height:4rem] [--page-section-gap:1.5rem]",
         collapsed ? "[--app-sidebar-width:4.5rem]" : "[--app-sidebar-width:18rem]"
       )}
     >
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-[var(--app-sidebar-z)] hidden border-r border-board-line bg-board-navy text-white transition-[width] duration-200 motion-reduce:transition-none lg:flex lg:flex-col",
+          "fixed inset-y-0 left-0 z-[var(--app-sidebar-z)] isolate hidden border-r border-board-line bg-board-navy text-white transition-[width] duration-200 motion-reduce:transition-none lg:flex lg:flex-col",
           collapsed ? "lg:w-[4.5rem]" : "lg:w-72"
         )}
       >
@@ -101,7 +101,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
         />
       </aside>
 
-      <div className="min-w-0 transition-[padding] duration-200 motion-reduce:transition-none lg:pl-[var(--app-sidebar-width)]">
+      <div className="relative z-0 min-w-0 overflow-x-clip transition-[padding] duration-200 motion-reduce:transition-none lg:pl-[var(--app-sidebar-width)]">
         <header className="sticky top-0 z-50 min-h-[var(--app-mobile-header-height)] border-b border-board-line bg-white/90 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between px-4 py-3">
             <button
@@ -125,7 +125,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
         </header>
         <I18nProvider locale={locale}>
           <GermanLocalizationBoundary locale={locale}>
-            <main className="app-main mx-auto w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6 lg:py-6">{children}</main>
+            <main className="app-main relative z-0 mx-auto w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6 lg:py-6">{children}</main>
           </GermanLocalizationBoundary>
         </I18nProvider>
       </div>
