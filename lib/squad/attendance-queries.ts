@@ -14,6 +14,7 @@ import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodR
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
 import { getAvailabilityByPlayerOnDate } from "@/lib/squad/availability";
+import { trainingNowParts, type TrainingFilter } from "@/lib/trainings/utils";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -36,6 +37,7 @@ type TrainingEventListOptions = {
   includeDeleted?: boolean;
   onlyDeleted?: boolean;
   syncCurrentSquad?: boolean;
+  eventFilter?: TrainingFilter;
 };
 
 export async function listTrainingEvents(supabase: SupabaseServerClient, userId: string, options: TrainingEventListOptions = {}): Promise<SquadTrainingEvent[]> {
@@ -50,8 +52,16 @@ export async function listTrainingEvents(supabase: SupabaseServerClient, userId:
     .order("date", { ascending: false })
     .order("start_time", { ascending: false });
   if (squadId) query = query.eq("squad_id", squadId);
-  if (options.onlyDeleted) query = query.not("deleted_at", "is", null);
+  if (options.eventFilter === "trash" || options.onlyDeleted) query = query.not("deleted_at", "is", null);
   else if (!options.includeDeleted) query = query.is("deleted_at", null);
+  if (options.eventFilter === "completed") query = query.eq("status", "completed");
+  if (options.eventFilter === "draft") query = query.eq("status", "draft");
+  if (options.eventFilter === "upcoming" || options.eventFilter === "past") {
+    const now = trainingNowParts();
+    query = options.eventFilter === "upcoming"
+      ? query.or(`date.gt.${now.date},and(date.eq.${now.date},start_time.gte.${now.time})`)
+      : query.or(`date.lt.${now.date},and(date.eq.${now.date},start_time.lt.${now.time})`);
+  }
 
   const { data, error } = await query;
 

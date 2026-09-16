@@ -5,6 +5,7 @@ import { generateTrainingRecurrenceDates, parseDateOnly, weekdayForDate, type Tr
 export { generateTrainingRecurrenceDates, weekdayForDate };
 
 export type TrainingFilter = "all" | "upcoming" | "past" | "rating_open" | "completed" | "draft" | "trash";
+export const trainingDefaultTimeZone = "Europe/Berlin";
 
 export type RecurringTrainingInput = {
   startDate: string;
@@ -54,29 +55,60 @@ export function trainingRatingStats(event: SquadTrainingEventDetail) {
   };
 }
 
-export function sortTrainings(events: SquadTrainingEventDetail[], today = todayDateString()) {
+export function trainingDateTimeKey(event: Pick<SquadTrainingEventDetail, "date" | "startTime">) {
+  return `${event.date} ${normalizeTrainingTime(event.startTime)}`;
+}
+
+export function trainingNowParts(timeZone = trainingDefaultTimeZone, now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    hourCycle: "h23"
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+    time: `${value("hour")}:${value("minute")}:${value("second")}`
+  };
+}
+
+export function isTrainingPast(event: Pick<SquadTrainingEventDetail, "date" | "startTime">, now = trainingNowParts()) {
+  return trainingDateTimeKey(event) < `${now.date} ${now.time}`;
+}
+
+export function isTrainingUpcoming(event: Pick<SquadTrainingEventDetail, "date" | "startTime">, now = trainingNowParts()) {
+  return !isTrainingPast(event, now);
+}
+
+export function sortTrainings(events: SquadTrainingEventDetail[], now = trainingNowParts()) {
   const upcoming = events
-    .filter((event) => event.date >= today)
-    .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`));
+    .filter((event) => isTrainingUpcoming(event, now))
+    .sort((a, b) => trainingDateTimeKey(a).localeCompare(trainingDateTimeKey(b)));
   const past = events
-    .filter((event) => event.date < today)
-    .sort((a, b) => `${b.date} ${b.startTime}`.localeCompare(`${a.date} ${a.startTime}`));
+    .filter((event) => isTrainingPast(event, now))
+    .sort((a, b) => trainingDateTimeKey(b).localeCompare(trainingDateTimeKey(a)));
   return [...upcoming, ...past];
 }
 
-export function filterTrainings(events: SquadTrainingEventDetail[], filter: TrainingFilter, today = todayDateString()) {
-  if (filter === "upcoming") return events.filter((event) => event.date >= today);
-  if (filter === "past") return events.filter((event) => event.date < today);
+export function filterTrainings(events: SquadTrainingEventDetail[], filter: TrainingFilter, now = trainingNowParts()) {
+  if (filter === "upcoming") return events.filter((event) => isTrainingUpcoming(event, now) && !event.deletedAt);
+  if (filter === "past") return events.filter((event) => isTrainingPast(event, now) && !event.deletedAt);
   if (filter === "rating_open") {
     return events.filter((event) => {
       const ratings = trainingRatingStats(event);
-      return event.status === "rating_open" || (event.date < today && ratings.rateable > ratings.rated);
+      return !event.deletedAt && (event.status === "rating_open" || (isTrainingPast(event, now) && ratings.rateable > ratings.rated));
     });
   }
-  if (filter === "completed") return events.filter((event) => event.status === "completed");
-  if (filter === "draft") return events.filter((event) => event.status === "draft");
+  if (filter === "completed") return events.filter((event) => event.status === "completed" && !event.deletedAt);
+  if (filter === "draft") return events.filter((event) => event.status === "draft" && !event.deletedAt);
   if (filter === "trash") return events.filter((event) => event.deletedAt);
-  return events;
+  return events.filter((event) => !event.deletedAt);
 }
 
 export function parseTrainingFilter(value?: string | string[]): TrainingFilter {
@@ -125,4 +157,9 @@ export function todayDateString() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function normalizeTrainingTime(value: string) {
+  const [hours = "00", minutes = "00", seconds = "00"] = value.split(":");
+  return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}:${seconds.padStart(2, "0")}`;
 }

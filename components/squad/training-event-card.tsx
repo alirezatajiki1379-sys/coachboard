@@ -3,15 +3,15 @@ import { CalendarDays, ClipboardList, Clock, MapPin, Target, UsersRound } from "
 import { ButtonLink } from "@/components/ui/button";
 import { TrainingEventActions } from "@/components/squad/training-event-actions";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
-import { formatDateLabel, todayDateString, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingTimeRange, weekdayLabel } from "@/lib/trainings/utils";
+import { formatDateLabel, isTrainingPast, trainingDisplayTitle, trainingNowParts, trainingPlanStatus, trainingRatingStats, trainingTimeRange, weekdayLabel } from "@/lib/trainings/utils";
 import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
 
 export function TrainingEventCard({ event, attendance = [], hrefBase = "/squad/attendance", hasReview = false }: { event: SquadTrainingEvent; attendance?: SquadAttendanceEntry[]; hrefBase?: string; hasReview?: boolean }) {
   const counts = attendanceCounts(attendance);
   const ratings = trainingRatingStats({ ...event, attendance });
-  const today = todayDateString();
-  const isPast = event.date < today || event.status === "completed" || event.status === "rating_open";
-  const isLive = !isPast && (event.date === today || event.status === "in_progress");
+  const now = trainingNowParts();
+  const isPast = isTrainingPast(event, now);
+  const isLive = !isPast && (event.date === now.date || event.status === "in_progress");
   const detailHref = `${hrefBase}/${event.id}`;
   const dateTimeLabel = `${weekdayLabel(event.date)} · ${formatDateLabel(event.date)} · ${trainingTimeRange(event)}`;
 

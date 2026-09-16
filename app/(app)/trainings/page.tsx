@@ -32,10 +32,16 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
   const filters = trainingFilterLabels[locale];
   const allEvents = await listTrainingEventDetails(supabase, user.id, {
     squadId: activeTeam.id,
-    onlyDeleted: filter === "trash"
+    includeDeleted: false
   });
-  const reviewSummaries = await listTrainingSessionReviewSummaries(supabase, user.id, allEvents.map((event) => event.id));
-  const events = sortTrainings(filterTrainings(allEvents, filter));
+  const queryFilteredEvents = filter === "all" || filter === "rating_open"
+    ? allEvents
+    : await listTrainingEventDetails(supabase, user.id, {
+      squadId: activeTeam.id,
+      eventFilter: filter
+    });
+  const events = sortTrainings(filter === "rating_open" ? filterTrainings(queryFilteredEvents, filter) : queryFilteredEvents);
+  const reviewSummaries = await listTrainingSessionReviewSummaries(supabase, user.id, events.map((event) => event.id));
   const upcomingCount = filterTrainings(allEvents, "upcoming").length;
   const pastCount = filterTrainings(allEvents, "past").length;
   const completedCount = filterTrainings(allEvents, "completed").length;
