@@ -1468,6 +1468,22 @@ create table if not exists public.squad_attendance_records (
       )
     ),
 
+  actual_absence_reason text
+    check (
+      actual_absence_reason is null
+      or actual_absence_reason in (
+        'unexcused',
+        'excused',
+        'sick',
+        'injured',
+        'school',
+        'work',
+        'holiday',
+        'private',
+        'other'
+      )
+    ),
+
   late_minutes integer
     check (
       late_minutes is null
@@ -1526,6 +1542,7 @@ create table if not exists public.squad_attendance_records (
 
 alter table public.squad_attendance_records
 add column if not exists planned_reason text,
+add column if not exists actual_absence_reason text,
 add column if not exists planned_status_source text default 'default';
 
 update public.squad_attendance_records
@@ -1544,6 +1561,9 @@ drop constraint if exists squad_attendance_records_final_status_check;
 
 alter table public.squad_attendance_records
 drop constraint if exists squad_attendance_records_planned_status_source_check;
+
+alter table public.squad_attendance_records
+drop constraint if exists squad_attendance_records_actual_absence_reason_check;
 
 alter table public.squad_attendance_records
 add constraint squad_attendance_records_planned_status_check
@@ -1571,6 +1591,13 @@ add constraint squad_attendance_records_planned_status_source_check
 check (
   planned_status_source is null
   or planned_status_source in ('default', 'manual', 'medical', 'availability')
+);
+
+alter table public.squad_attendance_records
+add constraint squad_attendance_records_actual_absence_reason_check
+check (
+  actual_absence_reason is null
+  or actual_absence_reason in ('unexcused', 'excused', 'sick', 'injured', 'school', 'work', 'holiday', 'private', 'other')
 );
 
 

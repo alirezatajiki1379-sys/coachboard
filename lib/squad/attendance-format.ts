@@ -50,6 +50,31 @@ export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"]) {
   return status ? labels[status] : "Not recorded yet";
 }
 
+export function actualAbsenceReasonLabel(reason?: SquadAttendanceEntry["actualAbsenceReason"]) {
+  const labels: Record<NonNullable<SquadAttendanceEntry["actualAbsenceReason"]>, string> = {
+    unexcused: "Unexcused",
+    excused: "Excused",
+    sick: "Sick",
+    injured: "Injured",
+    school: "School",
+    work: "Work",
+    holiday: "Holiday",
+    private: "Private",
+    other: "Other"
+  };
+  return reason ? labels[reason] : "";
+}
+
+export function effectiveActualAbsenceReason(entry: SquadAttendanceEntry): SquadAttendanceEntry["actualAbsenceReason"] {
+  if (entry.actualAbsenceReason) return entry.actualAbsenceReason;
+  if (entry.finalStatus === "V") return "injured";
+  if (entry.finalStatus === "K") return "sick";
+  if (entry.finalStatus === "E") return "excused";
+  if (entry.finalStatus === "P") return "private";
+  if (entry.finalStatus === "U") return "unexcused";
+  return undefined;
+}
+
 export function reliabilityMalus(entry: SquadAttendanceEntry) {
   return calculateReliabilityPenalty(entry);
 }

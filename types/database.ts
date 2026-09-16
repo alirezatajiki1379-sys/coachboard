@@ -858,6 +858,7 @@ export type Database = {
           planned_reason_note: string | null;
           planned_status_source: "default" | "manual" | "medical" | "availability" | null;
           final_status: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
+          actual_absence_reason: "unexcused" | "excused" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other" | null;
           late_minutes: number | null;
           late_penalty_applied: boolean;
           overall_rating: number | null;
@@ -881,6 +882,7 @@ export type Database = {
           planned_reason_note?: string | null;
           planned_status_source?: "default" | "manual" | "medical" | "availability" | null;
           final_status?: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
+          actual_absence_reason?: "unexcused" | "excused" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other" | null;
           late_minutes?: number | null;
           late_penalty_applied?: boolean;
           overall_rating?: number | null;

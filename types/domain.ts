@@ -297,6 +297,7 @@ export type ParticipantSourceMode = "current_squad_sync" | "custom_selection";
 export type SquadPlannedAttendanceStatus = "expected" | "unavailable" | "unclear";
 export type SquadAttendanceReason = "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other";
 export type SquadFinalAttendanceStatus = "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
+export type SquadActualAbsenceReason = "unexcused" | "excused" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other";
 export type SquadPlannedAttendanceSource = "default" | "manual" | "medical" | "availability";
 export type PlayerContactRelationship = "mother" | "father" | "parent" | "guardian" | "emergency" | "other";
 export type PlayerMedicalPeriodType = "injured" | "sick";
@@ -379,6 +380,7 @@ export type SquadAttendanceEntry = {
   plannedReasonNote?: string;
   plannedStatusSource?: SquadPlannedAttendanceSource;
   finalStatus?: SquadFinalAttendanceStatus;
+  actualAbsenceReason?: SquadActualAbsenceReason;
   lateMinutes?: number;
   latePenaltyApplied: boolean;
   overallRating?: number;

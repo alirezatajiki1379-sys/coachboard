@@ -49,6 +49,7 @@ export function mapAttendanceRow(row: SquadAttendanceRow, player?: SquadPlayerRo
     plannedReasonNote: row.planned_reason_note ?? undefined,
     plannedStatusSource: row.planned_status_source ?? undefined,
     finalStatus: row.final_status ?? undefined,
+    actualAbsenceReason: row.actual_absence_reason ?? undefined,
     lateMinutes: row.late_minutes ?? undefined,
     latePenaltyApplied: row.late_penalty_applied,
     overallRating: row.overall_rating ?? undefined,

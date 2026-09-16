@@ -73,7 +73,7 @@ export async function listTrainingEventDetails(supabase: SupabaseServerClient, u
   }
   const { data, error } = await db
     .from("squad_attendance_records")
-    .select("id,user_id,event_id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,late_minutes,late_penalty_applied,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,rating_auto_suggestion,coach_note,sensitive_note,created_at,updated_at,squad_players(id,user_id,first_name,last_name,position,secondary_positions,player_type,archived_at,deleted_at,created_at,updated_at)")
+    .select("id,user_id,event_id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,actual_absence_reason,late_minutes,late_penalty_applied,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,rating_auto_suggestion,coach_note,sensitive_note,created_at,updated_at,squad_players(id,user_id,first_name,last_name,position,secondary_positions,player_type,archived_at,deleted_at,created_at,updated_at)")
     .eq("user_id", userId)
     .in("event_id", events.map((event) => event.id))
     .order("created_at", { ascending: true });
@@ -268,7 +268,7 @@ async function syncEventWithCurrentSquad(
 
   const { data: existing, error: existingError } = await db
     .from("squad_attendance_records")
-    .select("id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,coach_note")
+    .select("id,player_id,planned_status,planned_reason,planned_reason_note,planned_status_source,final_status,actual_absence_reason,overall_rating,rating_technique,rating_game_understanding,rating_intensity,rating_behavior,coach_note")
     .eq("user_id", userId)
     .eq("event_id", event.id);
   if (existingError) throw new Error(existingError.message);
@@ -281,6 +281,7 @@ async function syncEventWithCurrentSquad(
     planned_reason_note: string | null;
     planned_status_source: string | null;
     final_status: string | null;
+    actual_absence_reason: string | null;
     overall_rating: number | null;
     rating_technique: number | null;
     rating_game_understanding: number | null;
