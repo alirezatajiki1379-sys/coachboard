@@ -28,6 +28,19 @@ export function isConfirmedAttending(entry: SquadAttendanceEntry) {
   return isExpectedFromPlannedStatus(entry);
 }
 
+export function isRateableAttendance(entry: Pick<SquadAttendanceEntry, "finalStatus">) {
+  return entry.finalStatus === "present" || entry.finalStatus === "Z";
+}
+
+export function isDefaultRatingCandidate(entry: Pick<SquadAttendanceEntry, "plannedStatus" | "finalStatus">) {
+  return isExpectedFromPlannedStatus(entry) && isRateableAttendance(entry);
+}
+
+export function overallRatingInitialValue(entry: Pick<SquadAttendanceEntry, "plannedStatus" | "finalStatus" | "overallRating">) {
+  if (typeof entry.overallRating === "number") return entry.overallRating;
+  return isDefaultRatingCandidate(entry) ? 3 : undefined;
+}
+
 export function getPlannedAttendanceSummary(entries: SquadAttendanceEntry[]) {
   const expectedEntries = entries.filter(isExpectedFromPlannedStatus);
   const composition = participantComposition(expectedEntries);

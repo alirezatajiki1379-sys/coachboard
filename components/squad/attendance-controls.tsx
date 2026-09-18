@@ -22,7 +22,7 @@ import type { AttendanceMutationResult, PlannedAttendanceMutationResult, RatingM
 import { updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { actualAbsenceReasonLabel, attendanceDisplayName, effectiveActualAbsenceReason, finalStatusLabel, plannedReasonLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
-import { attendanceReasonLabels } from "@/lib/squad/attendance-utils";
+import { attendanceReasonLabels, overallRatingInitialValue } from "@/lib/squad/attendance-utils";
 import { cn } from "@/lib/utils";
 import type { PlayerDevelopmentGoal, SquadActualAbsenceReason, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus, SquadTrainingEventDetail } from "@/types/domain";
 
@@ -390,6 +390,7 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
 }
 
 export function RatingRow({ entry, eventId, goals = [] }: { entry: SquadAttendanceEntry; eventId: string; goals?: PlayerDevelopmentGoal[] }) {
+  const initialOverallRating = overallRatingInitialValue(entry);
   return (
     <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <form action={updateAttendanceRating}>
@@ -404,7 +405,7 @@ export function RatingRow({ entry, eventId, goals = [] }: { entry: SquadAttendan
             <p className="text-sm text-slate-500">Actual: {finalStatusLabel(entry.finalStatus)}{entry.ratingAutoSuggestion ? ` · Suggested ${entry.ratingAutoSuggestion}` : ""}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <RatingSelect name="overallRating" label="Overall" defaultValue={entry.overallRating} />
+            <RatingSelect name="overallRating" label="Overall" defaultValue={initialOverallRating} />
             <RatingSelect name="ratingTechnique" label="Technique" defaultValue={entry.ratingTechnique} />
             <RatingSelect name="ratingGameUnderstanding" label="Game IQ" defaultValue={entry.ratingGameUnderstanding} />
             <RatingSelect name="ratingIntensity" label="Intensity" defaultValue={entry.ratingIntensity} />

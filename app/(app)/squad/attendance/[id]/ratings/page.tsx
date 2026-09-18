@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { RatingRow } from "@/components/squad/attendance-controls";
 import { attendanceDisplayName, eventTimeRange, eventTitle, finalStatusLabel, formatEventDate } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
+import { isDefaultRatingCandidate, isRateableAttendance } from "@/lib/squad/attendance-utils";
 import { getActiveDevelopmentGoalsForPlayers } from "@/lib/squad/development";
 import { createClient } from "@/lib/supabase/server";
 
@@ -23,7 +24,9 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
   const goalsByPlayer = await getActiveDevelopmentGoalsForPlayers(supabase, user.id, event.attendance.map((entry) => entry.playerId));
-  const activeEntries = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
+  const rateableEntries = event.attendance.filter(isRateableAttendance);
+  const activeEntries = rateableEntries.filter(isDefaultRatingCandidate);
+  const additionalRateableEntries = rateableEntries.filter((entry) => !isDefaultRatingCandidate(entry));
   const unresolvedEntries = event.attendance.filter((entry) => !entry.finalStatus);
   const absentEntries = event.attendance.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus));
 
@@ -44,11 +47,20 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
           <>
             {activeEntries.length ? (
               activeEntries.map((entry) => <RatingRow key={entry.id} entry={entry} eventId={event.id} goals={goalsByPlayer.get(entry.playerId) ?? []} />)
-            ) : (
+            ) : additionalRateableEntries.length ? null : (
               <p className="rounded-lg border border-dashed border-board-line bg-white p-5 text-sm font-semibold text-slate-600 shadow-soft">
                 No present or late players are ready to rate yet. Complete check-in first, or leave ratings empty.
               </p>
             )}
+            {additionalRateableEntries.length ? (
+              <div className="space-y-3 rounded-lg border border-board-line bg-board-paper p-4">
+                <div>
+                  <h2 className="font-bold text-board-navy">Additional participants</h2>
+                  <p className="mt-1 text-sm text-slate-600">These players were not expected, but actually participated. They can be rated without an automatic default score.</p>
+                </div>
+                {additionalRateableEntries.map((entry) => <RatingRow key={entry.id} entry={entry} eventId={event.id} goals={goalsByPlayer.get(entry.playerId) ?? []} />)}
+              </div>
+            ) : null}
             {unresolvedEntries.length ? (
               <div className="rounded-lg border border-board-line bg-board-paper p-4">
                 <h2 className="font-bold text-board-navy">Unresolved check-in</h2>

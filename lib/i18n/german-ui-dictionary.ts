@@ -55,6 +55,8 @@ export const germanUiDictionary: Record<string, string> = {
   "Save attention settings": "Aktionseinstellungen speichern",
   "Generation diagnostics": "Generierungsdiagnose",
   "Nothing to process": "Nichts zu bearbeiten",
+  "Additional participants": "Zusätzliche Teilnehmende",
+  "These players were not expected, but actually participated. They can be rated without an automatic default score.": "Diese Spieler waren nicht erwartet, haben aber tatsächlich teilgenommen. Sie können ohne automatische Standardbewertung bewertet werden.",
 
   "Import players": "Spieler importieren",
   "Player Import": "Spielerimport",
