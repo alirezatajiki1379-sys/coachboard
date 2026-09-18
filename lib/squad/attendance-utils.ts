@@ -41,6 +41,10 @@ export function overallRatingInitialValue(entry: Pick<SquadAttendanceEntry, "pla
   return isDefaultRatingCandidate(entry) ? 3 : undefined;
 }
 
+export function toggleRatingValue(currentValue: number | null | undefined, clickedValue: number) {
+  return currentValue === clickedValue ? null : clickedValue;
+}
+
 export function getPlannedAttendanceSummary(entries: SquadAttendanceEntry[]) {
   const expectedEntries = entries.filter(isExpectedFromPlannedStatus);
   const composition = participantComposition(expectedEntries);

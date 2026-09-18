@@ -85,6 +85,7 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
 
       <section className={events.length ? "space-y-4" : ""}>
         <TrainingBulkManager
+          key={`${activeTeam.id}:${filter}`}
           initialEvents={events}
           activeTeamId={activeTeam.id}
           activeTeamName={activeTeam.name}

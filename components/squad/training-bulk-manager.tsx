@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { CheckSquare, RotateCcw, Trash2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { TrainingEventCard } from "@/components/squad/training-event-card";
@@ -30,6 +30,10 @@ type BulkAction = "trash" | "restore" | "permanent";
 export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamName, filterLabel, isTrash, reviewedEventIds = [], locale = "en" }: TrainingBulkManagerProps) {
   const copy = trainingBulkCopy[locale];
   const [events, setEvents] = useState(initialEvents);
+  const initialEventsKey = useMemo(
+    () => initialEvents.map((event) => `${event.id}:${event.updatedAt}:${event.deletedAt ?? ""}`).join("|"),
+    [initialEvents]
+  );
   const reviewedIds = useMemo(() => new Set(reviewedEventIds), [reviewedEventIds]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -44,6 +48,16 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
   const relatedSummary = useMemo(() => summarizeRelatedData(selectedEvents), [selectedEvents]);
   const masterRef = useRef<HTMLInputElement>(null);
   if (masterRef.current) masterRef.current.indeterminate = someSelected && !allSelected;
+
+  useEffect(() => {
+    setEvents(initialEvents);
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+    setPendingAction(null);
+    setPermanentConfirmation("");
+    setMessage(undefined);
+    setError(undefined);
+  }, [activeTeamId, filterLabel, initialEvents, initialEventsKey, isTrash]);
 
   function enterSelectionMode() {
     setSelectionMode(true);

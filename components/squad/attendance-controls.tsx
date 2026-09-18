@@ -22,7 +22,7 @@ import type { AttendanceMutationResult, PlannedAttendanceMutationResult, RatingM
 import { updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { actualAbsenceReasonLabel, attendanceDisplayName, effectiveActualAbsenceReason, finalStatusLabel, plannedReasonLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
-import { attendanceReasonLabels, overallRatingInitialValue } from "@/lib/squad/attendance-utils";
+import { attendanceReasonLabels, overallRatingInitialValue, toggleRatingValue } from "@/lib/squad/attendance-utils";
 import { cn } from "@/lib/utils";
 import type { PlayerDevelopmentGoal, SquadActualAbsenceReason, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus, SquadTrainingEventDetail } from "@/types/domain";
 
@@ -521,7 +521,8 @@ function InlineRatingControl({
                 type="button"
                 disabled={isPending}
                 aria-pressed={active}
-                onClick={() => updateRating(rating)}
+                aria-label={`Rating ${rating}${active ? ", selected. Press again to remove rating." : ""}`}
+                onClick={() => updateRating(toggleRatingValue(entry.overallRating, rating))}
                 className={cn(
                   "flex h-9 w-9 items-center justify-center rounded-md text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-70",
                   active ? "bg-board-green text-white" : "bg-white text-board-navy ring-1 ring-green-200 hover:bg-green-100"
@@ -531,16 +532,6 @@ function InlineRatingControl({
               </button>
             );
           })}
-          {entry.overallRating ? (
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => updateRating(null)}
-              className="h-9 rounded-md bg-white px-3 text-xs font-bold text-slate-600 ring-1 ring-green-200 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              Clear
-            </button>
-          ) : null}
         </div>
       </div>
       <p className="mt-1 text-xs text-green-800">Optional. Saved to the same rating used on the Ratings page.</p>
@@ -754,18 +745,37 @@ function CheckInMetric({ label, value, tone = "neutral" }: { label: string; valu
 }
 
 function RatingSelect({ name, label, defaultValue }: { name: string; label: string; defaultValue?: number }) {
+  const [value, setValue] = useState<number | null>(defaultValue ?? null);
+
+  useEffect(() => {
+    setValue(defaultValue ?? null);
+  }, [defaultValue]);
+
   return (
-    <label className="block">
-      <span className="text-xs font-bold uppercase text-slate-500">{label}</span>
-      <select name={name} defaultValue={defaultValue ?? ""} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-        <option value="">-</option>
-        {[1, 2, 3, 4, 5].map((value) => (
-          <option key={value} value={value}>
-            {value}
-          </option>
-        ))}
-      </select>
-    </label>
+    <fieldset className="block">
+      <legend className="text-xs font-bold uppercase text-slate-500">{label}</legend>
+      <input type="hidden" name={name} value={value ?? ""} />
+      <div className="mt-1 flex flex-wrap gap-1.5" role="group" aria-label={label}>
+        {[1, 2, 3, 4, 5].map((rating) => {
+          const active = value === rating;
+          return (
+            <button
+              key={rating}
+              type="button"
+              aria-pressed={active}
+              aria-label={`${label} ${rating}${active ? ", selected. Press again to remove rating." : ""}`}
+              onClick={() => setValue(toggleRatingValue(value, rating))}
+              className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-md text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-green-100",
+                active ? "bg-board-green text-white" : "bg-white text-board-navy ring-1 ring-board-line hover:bg-green-50 hover:ring-board-green"
+              )}
+            >
+              {rating}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 
