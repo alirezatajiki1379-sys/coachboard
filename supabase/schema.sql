@@ -4025,6 +4025,8 @@ create table if not exists public.training_session_reviews (
     check (overall_quality between 1 and 5),
   intensity integer not null
     check (intensity between 1 and 5),
+  player_response integer
+    check (player_response is null or player_response between 1 and 5),
   worked_well text,
   needs_improvement text,
   next_training_note text,

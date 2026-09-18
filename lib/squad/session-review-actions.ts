@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { TrainingSessionDrillFeedbackStatus, TrainingSessionObjectiveOutcome } from "@/types/domain";
 
-type ReviewField = "objectiveOutcome" | "overallQuality" | "intensity";
+type ReviewField = "objectiveOutcome" | "overallQuality" | "intensity" | "playerResponse";
 
 export type SessionReviewActionState = {
   error?: string;
@@ -32,12 +32,14 @@ export async function saveTrainingSessionReview(_: SessionReviewActionState, for
   const objectiveOutcome = formString(formData, "objectiveOutcome") as TrainingSessionObjectiveOutcome;
   const overallQuality = numberValue(formData, "overallQuality");
   const intensity = numberValue(formData, "intensity");
+  const playerResponse = numberValue(formData, "playerResponse");
   const fieldErrors: SessionReviewActionState["fieldErrors"] = {};
 
   if (!eventId) return { error: "Training not found.", submissionId: Date.now() };
   if (!objectiveOutcomes.includes(objectiveOutcome)) fieldErrors.objectiveOutcome = "Choose whether the training objective was achieved.";
   if (!overallQuality) fieldErrors.overallQuality = "Rate the overall training quality.";
   if (!intensity) fieldErrors.intensity = "Rate the training intensity.";
+  if (!playerResponse) fieldErrors.playerResponse = "Rate the player response.";
   if (Object.keys(fieldErrors).length) {
     return { error: "Please complete the required review fields.", fieldErrors, submissionId: Date.now() };
   }
@@ -61,6 +63,7 @@ export async function saveTrainingSessionReview(_: SessionReviewActionState, for
     objective_outcome: objectiveOutcome,
     overall_quality: overallQuality,
     intensity,
+    player_response: playerResponse,
     worked_well: nullableText(formString(formData, "workedWell")),
     needs_improvement: nullableText(formString(formData, "needsImprovement")),
     next_training_note: nullableText(formString(formData, "nextTrainingNote"))

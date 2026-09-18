@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
+import type { Locale } from "@/lib/i18n";
 import type {
   TrainingSessionDrillFeedbackStatus,
   TrainingSessionDrillReview,
@@ -21,6 +22,30 @@ export const drillFeedbackStatusLabels: Record<TrainingSessionDrillFeedbackStatu
   not_effective: "Not effective"
 };
 
+export type SessionReviewRatingKind = "quality" | "intensity" | "playerResponse";
+
+export const sessionReviewRatingAnchors: Record<Locale, Record<SessionReviewRatingKind, Record<number, string>>> = {
+  en: {
+    quality: { 1: "Poor", 2: "Below expectations", 3: "Solid", 4: "Good", 5: "Excellent" },
+    intensity: { 1: "Very low", 2: "Low", 3: "Moderate", 4: "High", 5: "Very high" },
+    playerResponse: { 1: "Very weak", 2: "Weak", 3: "Mixed", 4: "Good", 5: "Very good" }
+  },
+  de: {
+    quality: { 1: "Schwach", 2: "Unter den Erwartungen", 3: "Solide", 4: "Gut", 5: "Sehr gut" },
+    intensity: { 1: "Sehr niedrig", 2: "Niedrig", 3: "Mittel", 4: "Hoch", 5: "Sehr hoch" },
+    playerResponse: { 1: "Sehr schwach", 2: "Schwach", 3: "Durchwachsen", 4: "Gut", 5: "Sehr gut" }
+  }
+};
+
+export function sessionReviewRatingLabel(kind: SessionReviewRatingKind, value: number, locale: Locale = "en") {
+  return sessionReviewRatingAnchors[locale][kind][value] ?? "";
+}
+
+export function sessionReviewStarFillStates(value: number | "", hoverValue?: number) {
+  const activeValue = hoverValue ?? value;
+  return [1, 2, 3, 4, 5].map((rating) => typeof activeValue === "number" && rating <= activeValue);
+}
+
 export type TrainingSessionReviewSummary = Pick<
   TrainingSessionReview,
   "id" | "eventId" | "objectiveOutcome" | "overallQuality" | "intensity" | "updatedAt"
@@ -34,6 +59,7 @@ type ReviewRow = {
   objective_outcome: TrainingSessionObjectiveOutcome;
   overall_quality: number;
   intensity: number;
+  player_response: number | null;
   worked_well: string | null;
   needs_improvement: string | null;
   next_training_note: string | null;
@@ -135,6 +161,7 @@ function mapReviewRow(row: ReviewRow, drillRows: DrillReviewRow[]): TrainingSess
     objectiveOutcome: row.objective_outcome,
     overallQuality: row.overall_quality,
     intensity: row.intensity,
+    playerResponse: row.player_response ?? undefined,
     workedWell: row.worked_well ?? undefined,
     needsImprovement: row.needs_improvement ?? undefined,
     nextTrainingNote: row.next_training_note ?? undefined,

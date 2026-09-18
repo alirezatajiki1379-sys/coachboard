@@ -5,6 +5,7 @@ import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
 import { countTrainingObservations, getTrainingSessionReview } from "@/lib/squad/session-review";
 import { createClient } from "@/lib/supabase/server";
 import { trainingRatingStats, trainingSummaryCounts } from "@/lib/trainings/utils";
+import { getUserLocale } from "@/lib/i18n/server";
 
 type TrainingReviewPageProps = {
   params: Promise<{ id: string }>;
@@ -35,7 +36,8 @@ export default async function TrainingReviewPage({ params }: TrainingReviewPageP
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
 
-  const [review, drills, planInstance, observationCount] = await Promise.all([
+  const [locale, review, drills, planInstance, observationCount] = await Promise.all([
+    getUserLocale(supabase, user.id),
     getTrainingSessionReview(supabase, user.id, event.id),
     loadTrainingDrillInstances(supabase, user.id, event.id),
     loadPlanInstance(supabase, user.id, event.id),
@@ -58,6 +60,7 @@ export default async function TrainingReviewPage({ params }: TrainingReviewPageP
       ratingsSummary={ratings}
       observationCount={observationCount}
       planTitle={planInstance?.title ?? event.linkedTrainingSessionTitle}
+      locale={locale}
     />
   );
 }

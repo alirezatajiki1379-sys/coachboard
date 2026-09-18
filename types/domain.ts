@@ -463,6 +463,7 @@ export type TrainingSessionReview = {
   objectiveOutcome: TrainingSessionObjectiveOutcome;
   overallQuality: number;
   intensity: number;
+  playerResponse?: number;
   workedWell?: string;
   needsImprovement?: string;
   nextTrainingNote?: string;

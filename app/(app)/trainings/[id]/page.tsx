@@ -144,6 +144,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
             <div>
               <p className="text-sm font-semibold text-slate-700">
                 Objective {objectiveOutcomeLabels[review.objectiveOutcome].toLowerCase()} · Quality {review.overallQuality}/5 · Intensity {review.intensity}/5
+                {review.playerResponse ? ` · Player response ${review.playerResponse}/5` : ""}
               </p>
               <p className="mt-2 text-sm text-slate-500">{observationCount} linked player observation{observationCount === 1 ? "" : "s"}</p>
               {review.nextTrainingNote ? <p className="mt-3 rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800">{review.nextTrainingNote}</p> : null}

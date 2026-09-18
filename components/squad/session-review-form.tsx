@@ -5,8 +5,14 @@ import { useActionState, useEffect, useMemo, useRef, useState, type Dispatch, ty
 import { ArrowLeft, CheckCircle2, ClipboardCheck, Star } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { saveTrainingSessionReview, type SessionReviewActionState } from "@/lib/squad/session-review-actions";
-import { drillFeedbackStatusLabels, objectiveOutcomeLabels } from "@/lib/squad/session-review";
+import {
+  drillFeedbackStatusLabels,
+  sessionReviewRatingLabel,
+  sessionReviewStarFillStates,
+  type SessionReviewRatingKind
+} from "@/lib/squad/session-review";
 import { formatDateLabel, trainingTimeRange } from "@/lib/trainings/utils";
+import type { Locale } from "@/lib/i18n";
 import type {
   SquadTrainingEventDetail,
   TrainingSessionDrillFeedbackStatus,
@@ -31,13 +37,14 @@ type ReviewFormValues = {
   objectiveOutcome: "" | TrainingSessionObjectiveOutcome;
   overallQuality: number | "";
   intensity: number | "";
+  playerResponse: number | "";
   workedWell: string;
   needsImprovement: string;
   nextTrainingNote: string;
   drills: Record<string, DrillReviewValue>;
 };
 
-type ClientErrors = Partial<Record<"objectiveOutcome" | "overallQuality" | "intensity", string>>;
+type ClientErrors = Partial<Record<"objectiveOutcome" | "overallQuality" | "intensity" | "playerResponse", string>>;
 
 export function SessionReviewForm({
   event,
@@ -46,7 +53,8 @@ export function SessionReviewForm({
   attendanceSummary,
   ratingsSummary,
   observationCount,
-  planTitle
+  planTitle,
+  locale = "en"
 }: {
   event: SquadTrainingEventDetail;
   review: TrainingSessionReview | null;
@@ -55,13 +63,16 @@ export function SessionReviewForm({
   ratingsSummary: { rated: number; rateable: number };
   observationCount: number;
   planTitle?: string;
+  locale?: Locale;
 }) {
+  const copy = reviewCopy[locale];
   const [state, formAction, isPending] = useActionState<SessionReviewActionState, FormData>(saveTrainingSessionReview, {});
   const [values, setValues] = useState<ReviewFormValues>(() => initialValues(review, drills));
   const [clientErrors, setClientErrors] = useState<ClientErrors>({});
   const objectiveRef = useRef<HTMLDivElement>(null);
   const qualityRef = useRef<HTMLDivElement>(null);
   const intensityRef = useRef<HTMLDivElement>(null);
+  const playerResponseRef = useRef<HTMLDivElement>(null);
   const [baselineSignature, setBaselineSignature] = useState(() => JSON.stringify(initialValues(review, drills)));
   const currentSignature = useMemo(() => JSON.stringify(values), [values]);
   const isDirty = currentSignature !== baselineSignature;
@@ -104,13 +115,14 @@ export function SessionReviewForm({
 
   function validate() {
     const nextErrors: ClientErrors = {};
-    if (!values.objectiveOutcome) nextErrors.objectiveOutcome = "Choose an outcome.";
-    if (!values.overallQuality) nextErrors.overallQuality = "Choose a quality rating.";
-    if (!values.intensity) nextErrors.intensity = "Choose an intensity rating.";
+    if (!values.objectiveOutcome) nextErrors.objectiveOutcome = copy.errors.objectiveOutcome;
+    if (!values.overallQuality) nextErrors.overallQuality = copy.errors.overallQuality;
+    if (!values.intensity) nextErrors.intensity = copy.errors.intensity;
+    if (!values.playerResponse) nextErrors.playerResponse = copy.errors.playerResponse;
     setClientErrors(nextErrors);
     const first = Object.keys(nextErrors)[0] as keyof ClientErrors | undefined;
     if (first) {
-      const refs = { objectiveOutcome: objectiveRef, overallQuality: qualityRef, intensity: intensityRef };
+      const refs = { objectiveOutcome: objectiveRef, overallQuality: qualityRef, intensity: intensityRef, playerResponse: playerResponseRef };
       refs[first].current?.scrollIntoView({ behavior: "smooth", block: "center" });
       refs[first].current?.focus();
       return false;
@@ -130,6 +142,7 @@ export function SessionReviewForm({
       <input type="hidden" name="objectiveOutcome" value={values.objectiveOutcome} />
       <input type="hidden" name="overallQuality" value={values.overallQuality} />
       <input type="hidden" name="intensity" value={values.intensity} />
+      <input type="hidden" name="playerResponse" value={values.playerResponse} />
       <textarea hidden readOnly name="workedWell" value={values.workedWell} />
       <textarea hidden readOnly name="needsImprovement" value={values.needsImprovement} />
       <textarea hidden readOnly name="nextTrainingNote" value={values.nextTrainingNote} />
@@ -137,53 +150,69 @@ export function SessionReviewForm({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link href={`/trainings/${event.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
           <ArrowLeft className="h-4 w-4" />
-          Back to training
+          {copy.back}
         </Link>
         <div className="flex flex-wrap items-center gap-2">
-          {isDirty ? <span className="text-xs font-bold uppercase tracking-wide text-amber-700">Unsaved changes</span> : null}
-          {state.success ? <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-green-700"><CheckCircle2 className="h-4 w-4" />Saved</span> : null}
-          <ButtonLink href={`/trainings/${event.id}`} variant="secondary">Cancel</ButtonLink>
-          <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : "Save review"}</Button>
+          {isDirty ? <span className="text-xs font-bold uppercase tracking-wide text-amber-700">{copy.unsaved}</span> : null}
+          {state.success ? <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-green-700"><CheckCircle2 className="h-4 w-4" />{copy.saved}</span> : null}
+          <ButtonLink href={`/trainings/${event.id}`} variant="secondary">{copy.cancel}</ButtonLink>
+          <Button type="submit" disabled={isPending}>{isPending ? copy.saving : copy.save}</Button>
         </div>
       </div>
 
       {state.error ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{state.error}</p> : null}
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <p className="text-sm font-semibold uppercase text-board-green">CoachBoard Session Review &amp; Coach Reflection</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{event.label || "Training review"}</h1>
+        <p className="text-sm font-semibold uppercase text-board-green">{copy.eyebrow}</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{event.label || copy.fallbackTitle}</h1>
         <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-slate-600">
           <span className="rounded-md bg-slate-100 px-2 py-1">{formatDateLabel(event.date)} · {trainingTimeRange(event)}</span>
-          <span className="rounded-md bg-slate-100 px-2 py-1">{event.squadName ?? "Active Team"}</span>
+          <span className="rounded-md bg-slate-100 px-2 py-1">{event.squadName ?? copy.activeTeam}</span>
           {event.focus ? <span className="rounded-md bg-slate-100 px-2 py-1">{event.focus}</span> : null}
-          {planTitle ? <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">Plan: {planTitle}</span> : null}
+          {planTitle ? <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">{copy.plan}: {planTitle}</span> : null}
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <SummaryCard label="Attendance" value={`${attendanceSummary.present + attendanceSummary.late}/${attendanceSummary.total}`} helper={`${attendanceSummary.absent} absent · ${attendanceSummary.late} late`} />
-        <SummaryCard label="Ratings" value={`${ratingsSummary.rated}/${ratingsSummary.rateable}`} helper="Present players rated" />
-        <SummaryCard label="Observations" value={String(observationCount)} helper="Player observations linked to this training" />
+        <SummaryCard label={copy.summary.attendance} value={`${attendanceSummary.present + attendanceSummary.late}/${attendanceSummary.total}`} helper={copy.summary.attendanceHelper(attendanceSummary.absent, attendanceSummary.late)} />
+        <SummaryCard label={copy.summary.ratings} value={`${ratingsSummary.rated}/${ratingsSummary.rateable}`} helper={copy.summary.ratingsHelper} />
+        <SummaryCard label={copy.summary.observations} value={String(observationCount)} helper={copy.summary.observationsHelper} />
       </section>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <h2 className="flex items-center gap-2 text-xl font-bold text-board-navy"><ClipboardCheck className="h-5 w-5" />Session outcome</h2>
-        <div className="mt-5 grid gap-5 lg:grid-cols-3">
+        <h2 className="flex items-center gap-2 text-xl font-bold text-board-navy"><ClipboardCheck className="h-5 w-5" />{copy.sectionTitle}</h2>
+        {event.focus ? (
+          <div className="mt-4 rounded-lg border border-board-line bg-board-paper p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{copy.trainingObjective}</p>
+            <p className="mt-1 text-sm font-semibold text-board-navy">{event.focus}</p>
+          </div>
+        ) : null}
+        <div className="mt-5 grid gap-5 lg:grid-cols-4">
           <RequiredChoice
             refTarget={objectiveRef}
-            label="Objective outcome"
+            label={copy.objectiveOutcome}
             error={mergedErrors.objectiveOutcome}
-            options={objectiveOutcomes.map((option) => ({ value: option, label: objectiveOutcomeLabels[option] }))}
+            options={objectiveOutcomes.map((option) => ({ value: option, label: copy.objectiveLabels[option] }))}
             value={values.objectiveOutcome}
             onChange={(value) => setValues((current) => ({ ...current, objectiveOutcome: value as TrainingSessionObjectiveOutcome }))}
           />
-          <RatingPicker refTarget={qualityRef} label="Overall quality" value={values.overallQuality} error={mergedErrors.overallQuality} onChange={(value) => setValues((current) => ({ ...current, overallQuality: value }))} />
-          <RatingPicker refTarget={intensityRef} label="Intensity" value={values.intensity} error={mergedErrors.intensity} onChange={(value) => setValues((current) => ({ ...current, intensity: value }))} />
+          <StarRating refTarget={qualityRef} kind="quality" label={copy.overallQuality} value={values.overallQuality} error={mergedErrors.overallQuality} locale={locale} onChange={(value) => setValues((current) => ({ ...current, overallQuality: value }))} />
+          <StarRating refTarget={intensityRef} kind="intensity" label={copy.intensity} value={values.intensity} error={mergedErrors.intensity} locale={locale} onChange={(value) => setValues((current) => ({ ...current, intensity: value }))} />
+          <StarRating
+            refTarget={playerResponseRef}
+            kind="playerResponse"
+            label={copy.playerResponse}
+            helper={copy.playerResponseHelper}
+            value={values.playerResponse}
+            error={mergedErrors.playerResponse}
+            locale={locale}
+            onChange={(value) => setValues((current) => ({ ...current, playerResponse: value }))}
+          />
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          <TextArea label="What worked well?" value={values.workedWell} onChange={(value) => setValues((current) => ({ ...current, workedWell: value }))} />
-          <TextArea label="Needs improvement" value={values.needsImprovement} onChange={(value) => setValues((current) => ({ ...current, needsImprovement: value }))} />
-          <TextArea label="Next training note" value={values.nextTrainingNote} onChange={(value) => setValues((current) => ({ ...current, nextTrainingNote: value }))} />
+          <TextArea label={copy.workedWell} helper={copy.workedWellHelper} value={values.workedWell} onChange={(value) => setValues((current) => ({ ...current, workedWell: value }))} />
+          <TextArea label={copy.needsImprovement} helper={copy.needsImprovementHelper} value={values.needsImprovement} onChange={(value) => setValues((current) => ({ ...current, needsImprovement: value }))} />
+          <TextArea label={copy.nextTrainingNote} helper={copy.nextTrainingNoteHelper} value={values.nextTrainingNote} onChange={(value) => setValues((current) => ({ ...current, nextTrainingNote: value }))} />
         </div>
       </section>
 
@@ -253,9 +282,9 @@ export function SessionReviewForm({
       </section>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-        {isDirty ? <span className="text-xs font-bold uppercase tracking-wide text-amber-700">Unsaved changes</span> : null}
-        <ButtonLink href={`/trainings/${event.id}`} variant="secondary">Cancel</ButtonLink>
-        <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : "Save review"}</Button>
+        {isDirty ? <span className="text-xs font-bold uppercase tracking-wide text-amber-700">{copy.unsaved}</span> : null}
+        <ButtonLink href={`/trainings/${event.id}`} variant="secondary">{copy.cancel}</ButtonLink>
+        <Button type="submit" disabled={isPending}>{isPending ? copy.saving : copy.save}</Button>
       </div>
     </form>
   );
@@ -267,6 +296,7 @@ function initialValues(review: TrainingSessionReview | null, drills: ReviewDrill
     objectiveOutcome: review?.objectiveOutcome ?? "",
     overallQuality: review?.overallQuality ?? "",
     intensity: review?.intensity ?? "",
+    playerResponse: review?.playerResponse ?? "",
     workedWell: review?.workedWell ?? "",
     needsImprovement: review?.needsImprovement ?? "",
     nextTrainingNote: review?.nextTrainingNote ?? "",
@@ -316,44 +346,68 @@ function RequiredChoice({
   );
 }
 
-function RatingPicker({
+function StarRating({
   refTarget,
+  kind,
   label,
+  helper,
   value,
   error,
+  locale,
   onChange
 }: {
   refTarget: RefObject<HTMLDivElement | null>;
+  kind: SessionReviewRatingKind;
   label: string;
+  helper?: string;
   value: number | "";
   error?: string;
+  locale: Locale;
   onChange: (value: number) => void;
 }) {
+  const [hoverValue, setHoverValue] = useState<number>();
+  const fillStates = sessionReviewStarFillStates(value, hoverValue);
+  const displayValue = hoverValue ?? value;
+  const displayLabel = typeof displayValue === "number" ? sessionReviewRatingLabel(kind, displayValue, locale) : "";
+
   return (
-    <div ref={refTarget} tabIndex={-1} className="rounded-md focus:outline-none focus:ring-4 focus:ring-green-100">
+    <div ref={refTarget} tabIndex={-1} onPointerLeave={() => setHoverValue(undefined)} className="rounded-md focus:outline-none focus:ring-4 focus:ring-green-100">
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      {helper ? <p className="mt-1 text-xs font-semibold text-slate-500">{helper}</p> : null}
       <div className="mt-2 flex flex-wrap gap-2">
-        {[1, 2, 3, 4, 5].map((rating) => (
-          <button
-            key={rating}
-            type="button"
-            onClick={() => onChange(rating)}
-            className={`inline-flex h-10 w-10 items-center justify-center rounded-md border text-sm font-black transition ${value === rating ? "border-board-green bg-green-50 text-board-green" : "border-board-line bg-white text-board-navy hover:border-board-green"}`}
-            aria-label={`${label} ${rating}`}
-          >
-            <Star className={`h-4 w-4 ${value === rating ? "fill-current" : ""}`} />
-          </button>
-        ))}
+        {[1, 2, 3, 4, 5].map((rating, index) => {
+          const active = fillStates[index] ?? false;
+          const anchor = sessionReviewRatingLabel(kind, rating, locale);
+          return (
+            <button
+              key={rating}
+              type="button"
+              onClick={() => onChange(rating)}
+              onPointerEnter={() => setHoverValue(rating)}
+              onFocus={() => setHoverValue(rating)}
+              onBlur={() => setHoverValue(undefined)}
+              aria-pressed={value === rating}
+              aria-label={`${label}: ${rating} of 5 - ${anchor}`}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-md border text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-green-100 ${active ? "border-board-green bg-green-50 text-board-green" : "border-board-line bg-white text-slate-400 hover:border-board-green hover:text-board-navy"}`}
+            >
+              <Star className={`h-4 w-4 ${active ? "fill-current" : ""}`} />
+            </button>
+          );
+        })}
       </div>
+      <p className="mt-2 min-h-5 text-sm font-semibold text-slate-600" aria-live="polite">
+        {typeof displayValue === "number" ? `${displayValue}/5 · ${displayLabel}` : "-"}
+      </p>
       {error ? <p className="mt-2 text-sm font-semibold text-red-700">{error}</p> : null}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, rows = 4, className = "" }: { label: string; value: string; onChange: (value: string) => void; rows?: number; className?: string }) {
+function TextArea({ label, helper, value, onChange, rows = 4, className = "" }: { label: string; helper?: string; value: string; onChange: (value: string) => void; rows?: number; className?: string }) {
   return (
     <label className={`block ${className}`}>
       <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+      {helper ? <span className="mt-1 block text-xs font-semibold text-slate-500">{helper}</span> : null}
       <textarea
         value={value}
         rows={rows}
@@ -397,3 +451,128 @@ function updateDrillValue(
 
 const objectiveOutcomes: TrainingSessionObjectiveOutcome[] = ["achieved", "partly_achieved", "not_achieved"];
 const feedbackStatuses: TrainingSessionDrillFeedbackStatus[] = ["worked_well", "needs_adjustment", "not_effective"];
+
+const reviewCopy = {
+  en: {
+    back: "Back to training",
+    unsaved: "Unsaved changes",
+    saved: "Saved",
+    cancel: "Cancel",
+    saving: "Saving...",
+    save: "Save review",
+    eyebrow: "Session Review",
+    fallbackTitle: "Training review",
+    activeTeam: "Active Team",
+    plan: "Plan",
+    sectionTitle: "Coach reflection",
+    trainingObjective: "Training objective",
+    objectiveOutcome: "Objective outcome",
+    overallQuality: "Overall quality",
+    intensity: "Intensity",
+    playerResponse: "Player response",
+    playerResponseHelper: "How well did the players engage with, understand and apply the Training focus?",
+    workedWell: "What worked well?",
+    workedWellHelper: "What should you repeat?",
+    needsImprovement: "What needs adjustment?",
+    needsImprovementHelper: "What did not work as intended, and why?",
+    nextTrainingNote: "Take into next Training",
+    nextTrainingNoteHelper: "One concrete point to continue, change or revisit.",
+    objectiveLabels: {
+      achieved: "Achieved",
+      partly_achieved: "Partly achieved",
+      not_achieved: "Not achieved"
+    },
+    errors: {
+      objectiveOutcome: "Choose an outcome.",
+      overallQuality: "Choose a quality rating.",
+      intensity: "Choose an intensity rating.",
+      playerResponse: "Choose a player response rating."
+    },
+    summary: {
+      attendance: "Attendance",
+      attendanceHelper: (absent: number, late: number) => `${absent} absent · ${late} late`,
+      ratings: "Ratings",
+      ratingsHelper: "Present players rated",
+      observations: "Observations",
+      observationsHelper: "Player observations linked to this training"
+    }
+  },
+  de: {
+    back: "Zurück zum Training",
+    unsaved: "Ungespeicherte Änderungen",
+    saved: "Gespeichert",
+    cancel: "Abbrechen",
+    saving: "Speichern...",
+    save: "Reflexion speichern",
+    eyebrow: "Trainingsreflexion",
+    fallbackTitle: "Trainingsreflexion",
+    activeTeam: "Aktive Mannschaft",
+    plan: "Plan",
+    sectionTitle: "Trainerreflexion",
+    trainingObjective: "Trainingsziel",
+    objectiveOutcome: "Zielerreichung",
+    overallQuality: "Gesamtqualität",
+    intensity: "Intensität",
+    playerResponse: "Reaktion der Spieler",
+    playerResponseHelper: "Wie gut haben die Spieler den Trainingsschwerpunkt angenommen, verstanden und umgesetzt?",
+    workedWell: "Was hat gut funktioniert?",
+    workedWellHelper: "Was würdest du wieder so machen?",
+    needsImprovement: "Was möchtest du anpassen?",
+    needsImprovementHelper: "Was hat nicht wie geplant funktioniert - und warum?",
+    nextTrainingNote: "Für das nächste Training mitnehmen",
+    nextTrainingNoteHelper: "Ein konkreter Punkt, den du fortführen, verändern oder erneut aufgreifen möchtest.",
+    objectiveLabels: {
+      achieved: "Erreicht",
+      partly_achieved: "Teilweise erreicht",
+      not_achieved: "Nicht erreicht"
+    },
+    errors: {
+      objectiveOutcome: "Wähle eine Zielerreichung.",
+      overallQuality: "Wähle eine Bewertung für die Gesamtqualität.",
+      intensity: "Wähle eine Bewertung für die Intensität.",
+      playerResponse: "Wähle eine Bewertung für die Reaktion der Spieler."
+    },
+    summary: {
+      attendance: "Anwesenheit",
+      attendanceHelper: (absent: number, late: number) => `${absent} abwesend · ${late} zu spät`,
+      ratings: "Bewertungen",
+      ratingsHelper: "Anwesende Spieler bewertet",
+      observations: "Beobachtungen",
+      observationsHelper: "Spielerbeobachtungen zu diesem Training"
+    }
+  }
+} satisfies Record<Locale, {
+  back: string;
+  unsaved: string;
+  saved: string;
+  cancel: string;
+  saving: string;
+  save: string;
+  eyebrow: string;
+  fallbackTitle: string;
+  activeTeam: string;
+  plan: string;
+  sectionTitle: string;
+  trainingObjective: string;
+  objectiveOutcome: string;
+  overallQuality: string;
+  intensity: string;
+  playerResponse: string;
+  playerResponseHelper: string;
+  workedWell: string;
+  workedWellHelper: string;
+  needsImprovement: string;
+  needsImprovementHelper: string;
+  nextTrainingNote: string;
+  nextTrainingNoteHelper: string;
+  objectiveLabels: Record<TrainingSessionObjectiveOutcome, string>;
+  errors: Record<"objectiveOutcome" | "overallQuality" | "intensity" | "playerResponse", string>;
+  summary: {
+    attendance: string;
+    attendanceHelper: (absent: number, late: number) => string;
+    ratings: string;
+    ratingsHelper: string;
+    observations: string;
+    observationsHelper: string;
+  };
+}>;

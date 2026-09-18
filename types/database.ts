@@ -736,6 +736,7 @@ export type Database = {
           objective_outcome: "achieved" | "partly_achieved" | "not_achieved";
           overall_quality: number;
           intensity: number;
+          player_response: number | null;
           worked_well: string | null;
           needs_improvement: string | null;
           next_training_note: string | null;
@@ -750,6 +751,7 @@ export type Database = {
           objective_outcome: "achieved" | "partly_achieved" | "not_achieved";
           overall_quality: number;
           intensity: number;
+          player_response?: number | null;
           worked_well?: string | null;
           needs_improvement?: string | null;
           next_training_note?: string | null;
