@@ -12,7 +12,7 @@ import { attentionPriorityLabels, attentionTone } from "@/lib/squad/attention";
 import { getDashboardAttentionData } from "@/lib/squad/attention-queries";
 import { getDevelopmentDashboardSummary } from "@/lib/squad/development";
 import { ensureActiveSquad, getActiveSquadPlayerCounts } from "@/lib/squad/squads";
-import { sortTrainings, trainingDisplayTitle, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
+import { isTrainingUpcoming, sortTrainings, trainingDisplayTitle, trainingNowParts, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
 
 type RecentDrill = {
   id: string;
@@ -74,11 +74,11 @@ export default async function DashboardPage() {
     getDashboardAttentionData(supabase, user.id),
     listTrainingEventDetails(supabase, user.id, { squadId: activeTeam.id })
   ]);
-  const trainingEvents = sortTrainings(trainingEventsRaw);
-  const today = new Date().toISOString().slice(0, 10);
-  const nextTraining = trainingEvents.find((event) => event.date >= today);
+  const now = trainingNowParts();
+  const trainingEvents = sortTrainings(trainingEventsRaw, now);
+  const nextTraining = trainingEvents.find((event) => isTrainingUpcoming(event, now));
   const completedTrainings = trainingEvents.filter((event) => event.status === "completed").length;
-  const upcomingTrainings = trainingEvents.filter((event) => event.date >= today && event.status !== "completed").length;
+  const upcomingTrainings = trainingEvents.filter((event) => isTrainingUpcoming(event, now)).length;
   const assignedPlanIds = new Set(trainingEvents.map((event) => event.linkedTrainingSessionId).filter((id): id is string => Boolean(id)));
   const createdPlans = planCount.count ?? 0;
   const assignedPlans = Math.min(createdPlans, assignedPlanIds.size);

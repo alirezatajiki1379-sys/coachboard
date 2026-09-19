@@ -6,6 +6,7 @@ import {
   type PlayerAnalyticsRecord
 } from "@/lib/squad/analytics";
 import { getPlayerAnalytics } from "@/lib/squad/analytics-queries";
+import { trainingNowParts } from "@/lib/trainings/utils";
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
 import { formatEventDate, finalStatusLabel, plannedReasonLabel } from "@/lib/squad/attendance-format";
 import { getPlayerDevelopmentProfile, type PlayerDevelopmentProfile } from "@/lib/squad/development";
@@ -111,17 +112,17 @@ export async function getPlayerHubData(
   if (!playerData) return null;
 
   const player = mapSquadPlayerRow(playerData as SquadPlayerRow);
-  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, preferences] = await Promise.all([
+  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, preferences, analyticsBase] = await Promise.all([
     listPlayerRecords(db, userId, playerId),
     listAssessments(db, userId, playerId),
     getPlayerDevelopmentProfile(supabase, userId, playerId),
     listContacts(db, userId, playerId),
     listMedicalPeriods(db, userId, playerId),
     listAvailabilityPeriods(db, userId, playerId),
-    getHeaderPreferences(db, userId)
+    getHeaderPreferences(db, userId),
+    getPlayerAnalytics(supabase, userId, playerId, period, customFrom, customTo)
   ]);
 
-  const analyticsBase = await getPlayerAnalytics(supabase, userId, playerId, period, customFrom, customTo);
   if (!analyticsBase) return null;
   return {
     player,
@@ -145,7 +146,7 @@ export async function getPlayerHubData(
   };
 }
 
-export function currentMedicalPeriod(periods: PlayerMedicalPeriod[], date = new Date().toISOString().slice(0, 10)) {
+export function currentMedicalPeriod(periods: PlayerMedicalPeriod[], date = trainingNowParts().date) {
   return latestApplicableMedicalPeriod(periods, date);
 }
 
@@ -182,7 +183,7 @@ export function latestApplicableMedicalPeriod(periods: PlayerMedicalPeriod[], da
     .sort((a, b) => b.startDate.localeCompare(a.startDate) || b.updatedAt.localeCompare(a.updatedAt))[0];
 }
 
-export function medicalNeedsReview(period: PlayerMedicalPeriod, date = new Date().toISOString().slice(0, 10)) {
+export function medicalNeedsReview(period: PlayerMedicalPeriod, date = trainingNowParts().date) {
   return period.status === "active" && Boolean(period.expectedReturnDate) && !period.actualReturnDate && (period.expectedReturnDate ?? "") < date;
 }
 

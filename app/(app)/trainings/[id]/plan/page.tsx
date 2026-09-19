@@ -1,3 +1,5 @@
+import { getActiveLocale } from "@/lib/i18n/server";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -27,6 +29,8 @@ type TrainingPlanPageProps = {
 };
 
 export default async function TrainingPlanPage({ params, searchParams }: TrainingPlanPageProps) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const { id } = await params;
   const query = await searchParams;
   const drillSearch = typeof query.drillSearch === "string" ? query.drillSearch.trim() : "";
@@ -65,14 +69,13 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
     <div className="space-y-6">
       <Link href={`/trainings/${event.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
         <ArrowLeft className="h-4 w-4" />
-        Back to training
-      </Link>
+        {ui("Back to training")}</Link>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase text-board-green">Session Plan Builder</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Build Training Plan</h1>
+            <p className="text-sm font-semibold uppercase text-board-green">{ui("Session Plan Builder")}</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{ui("Build Training Plan")}</h1>
             <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-slate-600">
               <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1">
                 <CalendarDays className="h-4 w-4" />
@@ -83,29 +86,25 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                 {event.squadName ?? "Active Team"}
               </span>
               <span className="rounded-md bg-green-50 px-2 py-1 text-green-800">
-                {expected} expected
-              </span>
+                {expected} {ui(" expected")}</span>
               <span className={composition.goalkeepers === 0 ? "rounded-md bg-red-50 px-2 py-1 text-red-700" : "rounded-md bg-slate-100 px-2 py-1"}>
-                {composition.goalkeepers} GK
-              </span>
+                {composition.goalkeepers} {ui(" GK")}</span>
               <span className="rounded-md bg-slate-100 px-2 py-1">
-                {composition.fieldPlayers} field
-              </span>
+                {composition.fieldPlayers} {ui(" field")}</span>
               {composition.positionMissing ? (
                 <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">
-                  {composition.positionMissing} position missing
-                </span>
+                  {composition.positionMissing} {ui(" position missing")}</span>
               ) : null}
-              {plan?.sourceTrainingSessionId ? <span className="rounded-md bg-green-50 px-2 py-1 text-green-800">Template copy</span> : <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-800">Session-only plan</span>}
+              {plan?.sourceTrainingSessionId ? <span className="rounded-md bg-green-50 px-2 py-1 text-green-800">{ui("Template copy")}</span> : <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-800">{ui("Session-only plan")}</span>}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <ButtonLink href={`/trainings/${event.id}`} variant="secondary" className="justify-center">Training Hub</ButtonLink>
-            <ButtonLink href={`/trainings/${event.id}/check-in`} variant="secondary" className="justify-center">Quick Check-in</ButtonLink>
+            <ButtonLink href={`/trainings/${event.id}`} variant="secondary" className="justify-center">{ui("Training Hub")}</ButtonLink>
+            <ButtonLink href={`/trainings/${event.id}/check-in`} variant="secondary" className="justify-center">{ui("Quick Check-in")}</ButtonLink>
             {!plan ? (
               <form action={createBlankSessionPlan}>
                 <input type="hidden" name="eventId" value={event.id} />
-                <Button type="submit" className="justify-center">Create Plan</Button>
+                <Button type="submit" className="justify-center">{ui("Create Plan")}</Button>
               </form>
             ) : null}
           </div>
@@ -119,13 +118,12 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-board-navy">Training phases</h2>
-                <p className="mt-1 text-sm text-slate-600">Add existing Drills, create a session-only Drill, then arrange the plan into phases.</p>
+                <h2 className="text-lg font-bold text-board-navy">{ui("Training phases")}</h2>
+                <p className="mt-1 text-sm text-slate-600">{ui("Add existing Drills, create a session-only Drill, then arrange the plan into phases.")}</p>
               </div>
               <ButtonLink href={`/trainings/${event.id}/drills/new?mode=session`} className="justify-center">
                 <Plus className="h-4 w-4" />
-                Create Drill inside Plan
-              </ButtonLink>
+                {ui("Create Drill inside Plan")}</ButtonLink>
             </div>
 
             <div className="mt-5 space-y-4">
@@ -137,7 +135,7 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                   <section key={phase} className="rounded-lg border border-board-line bg-board-paper p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="font-bold text-board-navy">{phase}</h3>
-                      <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600">{phaseDuration} min</span>
+                      <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600">{phaseDuration} {ui(" min")}</span>
                     </div>
                     <div className="mt-3 space-y-3">
                       {drills.map((drill, index) => (
@@ -149,7 +147,7 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
               })}
               {planDrills.filter((drill) => !phaseOptions.includes(drill.phase)).length ? (
                 <section className="rounded-lg border border-board-line bg-board-paper p-4">
-                  <h3 className="font-bold text-board-navy">Other phases</h3>
+                  <h3 className="font-bold text-board-navy">{ui("Other phases")}</h3>
                   <div className="mt-3 space-y-3">
                     {planDrills.filter((drill) => !phaseOptions.includes(drill.phase)).map((drill, index) => (
                       <PlanDrillCard key={drill.id} eventId={event.id} drill={drill} index={index} isFirst={index === 0} isLast={index === planDrills.length - 1} players={boardPlayers} />
@@ -159,25 +157,24 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
               ) : null}
               {!planDrills.length ? (
                 <div className="rounded-lg border border-dashed border-board-line bg-board-paper p-6 text-center">
-                  <h3 className="text-lg font-bold text-board-navy">No Drills in this Session Plan yet</h3>
-                  <p className="mx-auto mt-2 max-w-xl text-sm text-slate-600">Select Drills from the Library below or create a session-only Drill for this plan.</p>
+                  <h3 className="text-lg font-bold text-board-navy">{ui("No Drills in this Session Plan yet")}</h3>
+                  <p className="mx-auto mt-2 max-w-xl text-sm text-slate-600">{ui("Select Drills from the Library below or create a session-only Drill for this plan.")}</p>
                 </div>
               ) : null}
             </div>
           </section>
 
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Add existing Drills</h2>
-            <p className="mt-1 text-sm text-slate-600">Choose several reusable Drills and add them as isolated Session Drill Instances.</p>
+            <h2 className="text-lg font-bold text-board-navy">{ui("Add existing Drills")}</h2>
+            <p className="mt-1 text-sm text-slate-600">{ui("Choose several reusable Drills and add them as isolated Session Drill Instances.")}</p>
             <form className="mt-4 flex flex-col gap-2 sm:flex-row" action={`/trainings/${event.id}/plan`}>
-              <input name="drillSearch" defaultValue={drillSearch} placeholder="Search Drill Library" className="h-10 min-w-0 flex-1 rounded-md border border-board-line px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-              <Button type="submit" variant="secondary" className="h-10 px-4">Search</Button>
+              <input name="drillSearch" defaultValue={drillSearch} placeholder={ui("Search Drill Library")} className="h-10 min-w-0 flex-1 rounded-md border border-board-line px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+              <Button type="submit" variant="secondary" className="h-10 px-4">{ui("Search")}</Button>
             </form>
             <form action={addExistingDrillsToSessionPlan} className="mt-4 space-y-3">
               <input type="hidden" name="eventId" value={event.id} />
               <label className="block text-sm font-bold text-board-navy">
-                Add to phase
-                <select name="phase" defaultValue="Main Part" className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+                {ui("Add to phase")}<select name="phase" defaultValue="Main Part" className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
                   {phaseOptions.map((phase) => <option key={phase} value={phase}>{phase}</option>)}
                 </select>
               </label>
@@ -187,12 +184,12 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                     <input name="drillIds" value={drill.id} type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
                     <span className="min-w-0">
                       <span className="flex flex-wrap items-center gap-1.5 font-bold text-board-navy">
-                        {drill.isFavorite ? <Star className="h-3.5 w-3.5 fill-board-green text-board-green" aria-label="Favorite" /> : null}
+                        {drill.isFavorite ? <Star className="h-3.5 w-3.5 fill-board-green text-board-green" aria-label={ui("Favorite")} /> : null}
                         {drill.title}
                       </span>
                       <span className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500">
-                        <span>{drill.durationMinutes} min · {drill.minPlayers}-{drill.maxPlayers} Players</span>
-                        {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Draft</span> : null}
+                        <span>{drill.durationMinutes} {ui(" min · ")}{drill.minPlayers}-{drill.maxPlayers} {ui(" Players")}</span>
+                        {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">{ui("Draft")}</span> : null}
                       </span>
                       <span className="mt-1 block text-xs font-semibold text-slate-500">
                         {drill.usage.usageUnavailable
@@ -205,8 +202,8 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                   </label>
                 ))}
               </div>
-              {!libraryDrills.length ? <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No matching active Drills found.</p> : null}
-              <Button type="submit" className="justify-center">Add selected Drills to Plan</Button>
+              {!libraryDrills.length ? <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">{ui("No matching active Drills found.")}</p> : null}
+              <Button type="submit" className="justify-center">{ui("Add selected Drills to Plan")}</Button>
             </form>
           </section>
         </div>
@@ -215,12 +212,12 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
           <PlanningContextSummary context={planningContext} event={event} scheduledDuration={scheduledDuration} />
 
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Duration summary</h2>
+            <h2 className="text-lg font-bold text-board-navy">{ui("Duration summary")}</h2>
             <div className="mt-3 space-y-2 text-sm font-semibold text-slate-700">
-              <p className="flex justify-between gap-3"><span>Planned content</span><span>{plannedDuration} min</span></p>
+              <p className="flex justify-between gap-3"><span>{ui("Planned content")}</span><span>{plannedDuration} {ui(" min")}</span></p>
               {scheduledDuration !== null ? (
                 <>
-                  <p className="flex justify-between gap-3"><span>Scheduled Training</span><span>{scheduledDuration} min</span></p>
+                  <p className="flex justify-between gap-3"><span>{ui("Scheduled Training")}</span><span>{scheduledDuration} {ui(" min")}</span></p>
                   <p className={`rounded-md px-3 py-2 ${plannedDuration > scheduledDuration ? "bg-red-50 text-red-700" : "bg-green-50 text-green-800"}`}>
                     {plannedDuration === scheduledDuration ? "Exact match" : plannedDuration > scheduledDuration ? `${plannedDuration - scheduledDuration} min over scheduled duration` : `${scheduledDuration - plannedDuration} min unplanned`}
                   </p>
@@ -232,8 +229,8 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
           <SessionPlayerBoard eventId={event.id} players={boardPlayers} groups={trainingGroups} />
           {!expected ? (
             <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-              <p className="text-sm font-semibold text-slate-600">0 expected Players.</p>
-              <ButtonLink href={`/trainings/${event.id}/edit`} variant="secondary" className="mt-3 h-9 px-3">Edit Training participants</ButtonLink>
+              <p className="text-sm font-semibold text-slate-600">{ui("0 expected Players.")}</p>
+              <ButtonLink href={`/trainings/${event.id}/edit`} variant="secondary" className="mt-3 h-9 px-3">{ui("Edit Training participants")}</ButtonLink>
             </section>
           ) : null}
         </aside>
@@ -383,7 +380,9 @@ function groupDrillsByPhase(drills: PlanDrill[]) {
   return map;
 }
 
-function PlanningInsightsPanel({ eventId, context }: { eventId: string; context: PlanningContext }) {
+async function PlanningInsightsPanel({ eventId, context }: { eventId: string; context: PlanningContext }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const previous = context.previousSession;
   const development = context.development;
   const balance = context.trainingBalance;
@@ -391,15 +390,15 @@ function PlanningInsightsPanel({ eventId, context }: { eventId: string; context:
     <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-board-green">Planning Insights</p>
-          <h2 className="mt-1 text-lg font-bold text-board-navy">Evidence for this Session Plan</h2>
-          <p className="mt-1 text-sm text-slate-600">Deterministic context from your team data. Nothing is added to the plan automatically.</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-board-green">{ui("Planning Insights")}</p>
+          <h2 className="mt-1 text-lg font-bold text-board-navy">{ui("Evidence for this Session Plan")}</h2>
+          <p className="mt-1 text-sm text-slate-600">{ui("Deterministic context from your team data. Nothing is added to the plan automatically.")}</p>
         </div>
-        {context.errors.length ? <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">Some insights unavailable</span> : null}
+        {context.errors.length ? <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">{ui("Some insights unavailable")}</span> : null}
       </div>
 
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <InsightCard title="Last Session" icon={<Lightbulb className="h-4 w-4" />}>
+        <InsightCard title={ui("Last Session")} icon={<Lightbulb className="h-4 w-4" />}>
           {previous ? (
             <div className="space-y-3 text-sm">
               <div>
@@ -410,27 +409,27 @@ function PlanningInsightsPanel({ eventId, context }: { eventId: string; context:
               </div>
               {previous.review?.nextTrainingNote ? (
                 <div className="rounded-md bg-green-50 p-3 text-green-900">
-                  <p className="text-xs font-bold uppercase tracking-wide text-green-700">From your last Session Review</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-green-700">{ui("From your last Session Review")}</p>
                   <p className="mt-1 font-semibold">{previous.review.nextTrainingNote}</p>
                 </div>
               ) : (
-                <p className="text-sm font-semibold text-slate-500">No “take into next Training” note recorded.</p>
+                <p className="text-sm font-semibold text-slate-500">{ui("No “take into next Training” note recorded.")}</p>
               )}
               {previous.review ? (
                 <p className="text-xs font-semibold text-slate-600">
-                  Previous objective: <span className="font-bold text-board-navy">{objectiveLabel(previous.review.objectiveOutcome)}</span>
+                  {ui("Previous objective: ")}<span className="font-bold text-board-navy">{objectiveLabel(previous.review.objectiveOutcome)}</span>
                 </p>
               ) : (
-                <p className="text-xs font-semibold text-slate-500">No Session Review recorded for the previous Training.</p>
+                <p className="text-xs font-semibold text-slate-500">{ui("No Session Review recorded for the previous Training.")}</p>
               )}
               {previous.drillFeedback.length ? (
                 <details>
-                  <summary className="cursor-pointer text-xs font-bold text-board-green">View drill feedback</summary>
+                  <summary className="cursor-pointer text-xs font-bold text-board-green">{ui("View drill feedback")}</summary>
                   <div className="mt-2 space-y-2">
                     {previous.drillFeedback.slice(0, 3).map((feedback) => (
                       <div key={`${feedback.title}-${feedback.feedbackStatus}`} className="rounded-md border border-slate-100 p-2">
                         <p className="font-bold text-board-navy">{feedback.title}</p>
-                        <p className="text-xs font-semibold text-slate-600">Last review: {feedbackLabel(feedback.feedbackStatus)}{feedback.effectivenessRating ? ` · ${feedback.effectivenessRating}/5` : ""}</p>
+                        <p className="text-xs font-semibold text-slate-600">{ui("Last review: ")}{feedbackLabel(feedback.feedbackStatus)}{feedback.effectivenessRating ? ` · ${feedback.effectivenessRating}/5` : ""}</p>
                         {feedback.note ? <p className="mt-1 text-xs text-slate-600">{feedback.note}</p> : null}
                       </div>
                     ))}
@@ -439,50 +438,50 @@ function PlanningInsightsPanel({ eventId, context }: { eventId: string; context:
               ) : null}
             </div>
           ) : (
-            <EmptyInsight>No previous same-team Training context yet.</EmptyInsight>
+            <EmptyInsight>{ui("No previous same-team Training context yet.")}</EmptyInsight>
           )}
         </InsightCard>
 
-        <InsightCard title="Player Development" icon={<Target className="h-4 w-4" />}>
+        <InsightCard title={ui("Player Development")} icon={<Target className="h-4 w-4" />}>
           {development.unavailable ? (
-            <EmptyInsight>Development insights unavailable.</EmptyInsight>
+            <EmptyInsight>{ui("Development insights unavailable.")}</EmptyInsight>
           ) : development.activeGoals ? (
             <div className="space-y-3 text-sm">
               <p className="font-semibold text-board-navy">
-                {development.expectedPlayersWithActiveGoals} expected Player{development.expectedPlayersWithActiveGoals === 1 ? "" : "s"} have {development.activeGoals} active Goal{development.activeGoals === 1 ? "" : "s"}.
+                {development.expectedPlayersWithActiveGoals} {ui(" expected Player")}{development.expectedPlayersWithActiveGoals === 1 ? "" : "s"} {ui(" have ")}{development.activeGoals} {ui(" active Goal")}{development.activeGoals === 1 ? "" : "s"}.
               </p>
               <div className="flex flex-wrap gap-2">
                 {development.categories.map((item) => (
                   <span key={item.category} className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{developmentCategoryLabel(item.category)} {item.count}</span>
                 ))}
-                {development.highPriorityGoals ? <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">{development.highPriorityGoals} high priority</span> : null}
-                {development.goalsDueForReview ? <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{development.goalsDueForReview} due for review</span> : null}
+                {development.highPriorityGoals ? <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">{development.highPriorityGoals} {ui(" high priority")}</span> : null}
+                {development.goalsDueForReview ? <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{development.goalsDueForReview} {ui(" due for review")}</span> : null}
               </div>
               <details>
-                <summary className="cursor-pointer text-xs font-bold text-board-green">View Goals</summary>
+                <summary className="cursor-pointer text-xs font-bold text-board-green">{ui("View Goals")}</summary>
                 <div className="mt-2 space-y-2">
                   {development.examples.map((goal) => (
                     <div key={`${goal.playerName}-${goal.title}`} className="rounded-md border border-slate-100 p-2">
                       <p className="font-bold text-board-navy">{goal.playerName}</p>
                       <p className="text-xs font-semibold text-slate-600">{goal.title}</p>
-                      <p className="mt-1 text-xs text-slate-500">{developmentCategoryLabel(goal.category)} · {goal.priority} priority{goal.reviewDue ? " · review due" : ""}{goal.latestProgress ? ` · ${progressLabel(goal.latestProgress)}` : ""}</p>
+                      <p className="mt-1 text-xs text-slate-500">{developmentCategoryLabel(goal.category)} · {goal.priority} {ui(" priority")}{goal.reviewDue ? " · review due" : ""}{goal.latestProgress ? ` · ${progressLabel(goal.latestProgress)}` : ""}</p>
                     </div>
                   ))}
                 </div>
               </details>
-              <ButtonLink href="/squad/development" variant="ghost" className="h-8 px-2 text-xs">Open Development</ButtonLink>
+              <ButtonLink href="/squad/development" variant="ghost" className="h-8 px-2 text-xs">{ui("Open Development")}</ButtonLink>
             </div>
           ) : (
-            <EmptyInsight>No active Development Goals for expected Players.</EmptyInsight>
+            <EmptyInsight>{ui("No active Development Goals for expected Players.")}</EmptyInsight>
           )}
         </InsightCard>
 
-        <InsightCard title="Training Balance" icon={<TrendingUp className="h-4 w-4" />}>
+        <InsightCard title={ui("Training Balance")} icon={<TrendingUp className="h-4 w-4" />}>
           {balance.unavailable ? (
-            <EmptyInsight>Training balance unavailable.</EmptyInsight>
+            <EmptyInsight>{ui("Training balance unavailable.")}</EmptyInsight>
           ) : balance.lookbackCount ? (
             <div className="space-y-3 text-sm">
-              <p className="font-semibold text-board-navy">Recent focus distribution from the last {balance.lookbackCount} same-team Training{balance.lookbackCount === 1 ? "" : "s"}.</p>
+              <p className="font-semibold text-board-navy">{ui("Recent focus distribution from the last ")}{balance.lookbackCount} {ui(" same-team Training")}{balance.lookbackCount === 1 ? "" : "s"}.</p>
               {balance.focusDistribution.length ? (
                 <div className="space-y-2">
                   {balance.focusDistribution.map((item) => (
@@ -493,25 +492,25 @@ function PlanningInsightsPanel({ eventId, context }: { eventId: string; context:
                   ))}
                 </div>
               ) : (
-                <p className="text-sm font-semibold text-slate-500">Focus recorded for 0 of {balance.lookbackCount} Trainings.</p>
+                <p className="text-sm font-semibold text-slate-500">{ui("Focus recorded for 0 of ")}{balance.lookbackCount} {ui(" Trainings.")}</p>
               )}
-              {balance.currentFocusCount !== undefined ? <p className="text-xs font-semibold text-slate-500">Current focus appeared in {balance.currentFocusCount} of those Trainings.</p> : null}
-              <ButtonLink href="/squad/analysis?section=training&period=last5" variant="ghost" className="h-8 px-2 text-xs">View Analytics</ButtonLink>
+              {balance.currentFocusCount !== undefined ? <p className="text-xs font-semibold text-slate-500">{ui("Current focus appeared in ")}{balance.currentFocusCount} {ui(" of those Trainings.")}</p> : null}
+              <ButtonLink href="/squad/analysis?section=training&period=last5" variant="ghost" className="h-8 px-2 text-xs">{ui("View Analytics")}</ButtonLink>
             </div>
           ) : (
-            <EmptyInsight>Planning insights will become richer as you complete more Trainings.</EmptyInsight>
+            <EmptyInsight>{ui("Planning insights will become richer as you complete more Trainings.")}</EmptyInsight>
           )}
         </InsightCard>
 
-        <InsightCard title="Suggested Drills" icon={<Dumbbell className="h-4 w-4" />}>
+        <InsightCard title={ui("Suggested Drills")} icon={<Dumbbell className="h-4 w-4" />}>
           {context.suggestedDrills.length ? (
             <div className="space-y-3">
               {context.suggestedDrills.map((suggestion) => <SuggestedDrillCard key={suggestion.drill.id} eventId={eventId} suggestion={suggestion} />)}
             </div>
           ) : (
             <div className="space-y-3">
-              <EmptyInsight>No strong Drill matches found for the current Session context.</EmptyInsight>
-              <ButtonLink href="/drills" variant="secondary" className="h-9 px-3">Browse Drill Library</ButtonLink>
+              <EmptyInsight>{ui("No strong Drill matches found for the current Session context.")}</EmptyInsight>
+              <ButtonLink href="/drills" variant="secondary" className="h-9 px-3">{ui("Browse Drill Library")}</ButtonLink>
             </div>
           )}
         </InsightCard>
@@ -520,18 +519,20 @@ function PlanningInsightsPanel({ eventId, context }: { eventId: string; context:
   );
 }
 
-function PlanningContextSummary({ context, event, scheduledDuration }: { context: PlanningContext; event: { focus?: string }; scheduledDuration: number | null }) {
+async function PlanningContextSummary({ context, event, scheduledDuration }: { context: PlanningContext; event: { focus?: string }; scheduledDuration: number | null }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const composition = context.participantComposition;
   return (
     <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-      <p className="text-xs font-bold uppercase tracking-wide text-board-green">Session Context</p>
+      <p className="text-xs font-bold uppercase tracking-wide text-board-green">{ui("Session Context")}</p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        <ContextMetric label="Expected" value={`${composition.expectedPlayers} Players`} />
-        <ContextMetric label="Positions" value={`${composition.goalkeepers} GK · ${composition.fieldPlayers} field`} />
-        <ContextMetric label="Duration" value={scheduledDuration !== null ? `${scheduledDuration} min` : "Not set"} />
-        <ContextMetric label="Age" value={composition.ageContext ? `U${composition.ageContext}` : "Unknown"} />
+        <ContextMetric label={ui("Expected")} value={`${composition.expectedPlayers} Players`} />
+        <ContextMetric label={ui("Positions")} value={`${composition.goalkeepers} GK · ${composition.fieldPlayers} field`} />
+        <ContextMetric label={ui("Duration")} value={scheduledDuration !== null ? `${scheduledDuration} min` : "Not set"} />
+        <ContextMetric label={ui("Age")} value={composition.ageContext ? `U${composition.ageContext}` : "Unknown"} />
       </div>
-      {event.focus ? <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">Focus: {event.focus}</p> : null}
+      {event.focus ? <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">{ui("Focus: ")}{event.focus}</p> : null}
     </section>
   );
 }
@@ -548,7 +549,9 @@ function InsightCard({ title, icon, children }: { title: string; icon: ReactNode
   );
 }
 
-function SuggestedDrillCard({ eventId, suggestion }: { eventId: string; suggestion: PlanningSuggestedDrill }) {
+async function SuggestedDrillCard({ eventId, suggestion }: { eventId: string; suggestion: PlanningSuggestedDrill }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const negativeFeedback = suggestion.latestFeedback?.feedbackStatus === "needs_adjustment" || suggestion.latestFeedback?.feedbackStatus === "not_effective";
   return (
     <div className="rounded-md border border-board-line bg-white p-3">
@@ -557,13 +560,13 @@ function SuggestedDrillCard({ eventId, suggestion }: { eventId: string; suggesti
           <Link href={`/drills/${suggestion.drill.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
             {suggestion.drill.title}
           </Link>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{suggestion.phase} · {suggestion.drill.durationMinutes} min</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{suggestion.phase} · {suggestion.drill.durationMinutes} {ui(" min")}</p>
         </div>
         <form action={addExistingDrillsToSessionPlan}>
           <input type="hidden" name="eventId" value={eventId} />
           <input type="hidden" name="phase" value={suggestion.phase} />
           <input type="hidden" name="drillIds" value={suggestion.drill.id} />
-          <Button type="submit" className="h-9 w-full justify-center px-3 sm:w-auto">Add to Plan</Button>
+          <Button type="submit" className="h-9 w-full justify-center px-3 sm:w-auto">{ui("Add to Plan")}</Button>
         </form>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -578,7 +581,7 @@ function SuggestedDrillCard({ eventId, suggestion }: { eventId: string; suggesti
       </div>
       {suggestion.latestFeedback ? (
         <div className={cn("mt-3 rounded-md px-3 py-2 text-xs font-semibold", negativeFeedback ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600")}>
-          Last review: {feedbackLabel(suggestion.latestFeedback.feedbackStatus)}{suggestion.latestFeedback.effectivenessRating ? ` · ${suggestion.latestFeedback.effectivenessRating}/5` : ""}
+          {ui("Last review: ")}{feedbackLabel(suggestion.latestFeedback.feedbackStatus)}{suggestion.latestFeedback.effectivenessRating ? ` · ${suggestion.latestFeedback.effectivenessRating}/5` : ""}
           {suggestion.latestFeedback.note ? <span className="mt-1 block">{suggestion.latestFeedback.note}</span> : null}
         </div>
       ) : null}
@@ -599,7 +602,9 @@ function EmptyInsight({ children }: { children: ReactNode }) {
   return <p className="rounded-md border border-dashed border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">{children}</p>;
 }
 
-function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { eventId: string; drill: PlanDrill; index: number; isFirst: boolean; isLast: boolean; players: SessionBoardPlayer[] }) {
+async function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { eventId: string; drill: PlanDrill; index: number; isFirst: boolean; isLast: boolean; players: SessionBoardPlayer[] }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const composition = getPlayerComposition(players);
   return (
     <article className="rounded-md border border-board-line bg-white p-3">
@@ -608,25 +613,22 @@ function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { ev
           <p className="text-xs font-bold uppercase text-slate-500">#{index + 1}</p>
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="font-bold text-board-navy">{drill.title || "Untitled Drill"}</h4>
-            {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Draft</span> : null}
-            {drill.status === "draft" && drill.sourceDrillId ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">Reusable Draft</span> : null}
-            {drill.status === "draft" && !drill.sourceDrillId ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">Session Draft</span> : null}
+            {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">{ui("Draft")}</span> : null}
+            {drill.status === "draft" && drill.sourceDrillId ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">{ui("Reusable Draft")}</span> : null}
+            {drill.status === "draft" && !drill.sourceDrillId ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">{ui("Session Draft")}</span> : null}
           </div>
           <p className="mt-1 text-xs font-semibold text-slate-500">
-            {drill.plannedDurationMinutes ?? "Duration missing"}{drill.plannedDurationMinutes ? " min" : ""} · All expected Players · {players.length} assigned
-          </p>
+            {drill.plannedDurationMinutes ?? "Duration missing"}{drill.plannedDurationMinutes ? " min" : ""} {ui(" · All expected Players · ")}{players.length} {ui(" assigned")}</p>
           {drill.status === "draft" ? (
             <p className="mt-1 text-xs font-semibold text-amber-700">
-              Draft can stay in the plan. Missing information is non-blocking.
-            </p>
+              {ui("Draft can stay in the plan. Missing information is non-blocking.")}</p>
           ) : null}
           {players.length ? (
             <p className="mt-1 text-xs font-semibold text-slate-500">
-              {composition.goalkeeper} GK · {composition.defensive} DEF · {composition.midfield} MID · {composition.attacking} ATT
-            </p>
+              {composition.goalkeeper} {ui(" GK · ")}{composition.defensive} {ui(" DEF · ")}{composition.midfield} {ui(" MID · ")}{composition.attacking} {ui(" ATT")}</p>
           ) : null}
           {drill.sourceDrillId ? (
-            <p className="mt-1 text-xs font-semibold text-slate-500">Recommended: source Drill range stays separate from assigned Session Players.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">{ui("Recommended: source Drill range stays separate from assigned Session Players.")}</p>
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -634,15 +636,15 @@ function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { ev
             <input type="hidden" name="eventId" value={eventId} />
             <input type="hidden" name="drillInstanceId" value={drill.id} />
             <input type="hidden" name="direction" value="up" />
-            <Button type="submit" variant="ghost" disabled={isFirst} className="h-8 px-2 text-xs">Up</Button>
+            <Button type="submit" variant="ghost" disabled={isFirst} className="h-8 px-2 text-xs">{ui("Up")}</Button>
           </form>
           <form action={moveSessionPlanDrill}>
             <input type="hidden" name="eventId" value={eventId} />
             <input type="hidden" name="drillInstanceId" value={drill.id} />
             <input type="hidden" name="direction" value="down" />
-            <Button type="submit" variant="ghost" disabled={isLast} className="h-8 px-2 text-xs">Down</Button>
+            <Button type="submit" variant="ghost" disabled={isLast} className="h-8 px-2 text-xs">{ui("Down")}</Button>
           </form>
-          {drill.sourceDrillId ? <ButtonLink href={`/drills/${drill.sourceDrillId}`} variant="ghost" className="h-8 px-2 text-xs">Preview</ButtonLink> : null}
+          {drill.sourceDrillId ? <ButtonLink href={`/drills/${drill.sourceDrillId}`} variant="ghost" className="h-8 px-2 text-xs">{ui("Preview")}</ButtonLink> : null}
           {drill.sourceDrillId ? <ButtonLink href={`/drills/${drill.sourceDrillId}/edit?returnTo=/trainings/${eventId}/plan`} variant="ghost" className="h-8 px-2 text-xs">{drill.status === "draft" ? "Continue editing" : "Edit source"}</ButtonLink> : null}
         </div>
       </div>
@@ -650,21 +652,19 @@ function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { ev
         <input type="hidden" name="eventId" value={eventId} />
         <input type="hidden" name="drillInstanceId" value={drill.id} />
         <label className="text-xs font-bold uppercase text-slate-500">
-          Phase
-          <select name="phase" defaultValue={drill.phase} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+          {ui("Phase")}<select name="phase" defaultValue={drill.phase} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
             {phaseOptions.map((phase) => <option key={phase} value={phase}>{phase}</option>)}
           </select>
         </label>
         <label className="text-xs font-bold uppercase text-slate-500">
-          Duration
-          <input name="plannedDurationMinutes" type="number" min="0" defaultValue={drill.plannedDurationMinutes ?? 0} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+          {ui("Duration")}<input name="plannedDurationMinutes" type="number" min="0" defaultValue={drill.plannedDurationMinutes ?? 0} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
         </label>
-        <Button type="submit" variant="secondary" className="h-9 self-end px-3">Update</Button>
+        <Button type="submit" variant="secondary" className="h-9 self-end px-3">{ui("Update")}</Button>
       </form>
       <form action={removeSessionPlanDrill} className="mt-2">
         <input type="hidden" name="eventId" value={eventId} />
         <input type="hidden" name="drillInstanceId" value={drill.id} />
-        <Button type="submit" variant="ghost" className="h-8 px-2 text-xs text-red-700 hover:bg-red-50">Remove from Plan</Button>
+        <Button type="submit" variant="ghost" className="h-8 px-2 text-xs text-red-700 hover:bg-red-50">{ui("Remove from Plan")}</Button>
       </form>
     </article>
   );

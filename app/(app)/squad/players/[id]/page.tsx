@@ -26,6 +26,7 @@ import { formatPositionLabel } from "@/lib/squad/positions";
 import { createClient } from "@/lib/supabase/server";
 import { getUserLocale } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
+import { trainingNowParts } from "@/lib/trainings/utils";
 import type { PlayerAvailabilityPeriod, PlayerContact, PlayerMedicalPeriod, SquadPlayer } from "@/types/domain";
 
 type PlayerDetailPageProps = {
@@ -1624,17 +1625,17 @@ function currentAvailabilityPeriod(periods: PlayerAvailabilityPeriod[]) {
 }
 
 function isAvailabilityCurrent(period: PlayerAvailabilityPeriod) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = trainingNowParts().date;
   return period.startsOn <= today && (!period.endsOn || period.endsOn >= today);
 }
 
 function isAvailabilityUpcoming(period: PlayerAvailabilityPeriod) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = trainingNowParts().date;
   return period.startsOn > today;
 }
 
 function isAvailabilityPast(period: PlayerAvailabilityPeriod) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = trainingNowParts().date;
   return Boolean(period.endsOn && period.endsOn < today);
 }
 

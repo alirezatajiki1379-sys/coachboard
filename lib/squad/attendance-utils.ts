@@ -37,7 +37,8 @@ export function isDefaultRatingCandidate(entry: Pick<SquadAttendanceEntry, "plan
 }
 
 export function overallRatingInitialValue(entry: Pick<SquadAttendanceEntry, "plannedStatus" | "finalStatus" | "overallRating">) {
-  if (typeof entry.overallRating === "number") return entry.overallRating;
+  if (!isRateableAttendance(entry)) return undefined;
+  if (typeof entry.overallRating === "number" && Number.isInteger(entry.overallRating) && entry.overallRating >= 1 && entry.overallRating <= 5) return entry.overallRating;
   return isDefaultRatingCandidate(entry) ? 3 : undefined;
 }
 

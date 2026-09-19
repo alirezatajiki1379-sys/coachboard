@@ -1,8 +1,11 @@
 "use client";
 
+import { useSystemText } from "@/components/i18n/use-system-text";
+
+
 import { Check, Clock3, HelpCircle, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState, useTransition } from "react";
+import { createContext, useActionState, useContext, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { developmentCategoryLabel, developmentGoalCategories } from "@/config/development";
 import { createPlayerObservation } from "@/lib/squad/development-actions";
@@ -24,6 +27,7 @@ import { actualAbsenceReasonLabel, attendanceDisplayName, effectiveActualAbsence
 import { attendanceCounts } from "@/lib/squad/attendance-format";
 import { attendanceReasonLabels, overallRatingInitialValue, toggleRatingValue } from "@/lib/squad/attendance-utils";
 import { cn } from "@/lib/utils";
+import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 import type { PlayerDevelopmentGoal, SquadActualAbsenceReason, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus, SquadTrainingEventDetail } from "@/types/domain";
 
 const plannedButtons: Array<{ status: SquadPlannedAttendanceStatus; label: string; icon: typeof Check; className: string }> = [
@@ -44,6 +48,14 @@ const actualAbsenceOptions: Array<{ reason: SquadActualAbsenceReason; label: str
   { reason: "other", label: "Other" }
 ];
 
+const CheckInTransitionContext = createContext<ReturnType<typeof useTransition> | null>(null);
+
+function useCheckInTransition() {
+  const transition = useContext(CheckInTransitionContext);
+  if (!transition) throw new Error("Check-in controls must be inside a check-in row.");
+  return transition;
+}
+
 type CheckInFilter = "all" | "present" | "absent" | "late" | "roster" | "trial";
 
 const checkInFilterLabels: Record<CheckInFilter, string> = {
@@ -56,6 +68,7 @@ const checkInFilterLabels: Record<CheckInFilter, string> = {
 };
 
 export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTrainingEventDetail; initialFilter?: CheckInFilter }) {
+  const ui = useSystemText();
   const [entries, setEntries] = useState(event.attendance);
   const [filter, setFilter] = useState<CheckInFilter>(initialFilter);
   useEffect(() => setEntries(event.attendance), [event.attendance]);
@@ -77,20 +90,19 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
   return (
     <>
       <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <CheckInMetric label="Present" value={counts.present} tone="success" />
-        <CheckInMetric label="Absent" value={counts.absent} tone="danger" />
-        <CheckInMetric label="Late" value={counts.late} tone="warning" />
-        <CheckInMetric label="Total" value={entries.length} />
+        <CheckInMetric label={ui("Present")} value={counts.present} tone="success" />
+        <CheckInMetric label={ui("Absent")} value={counts.absent} tone="danger" />
+        <CheckInMetric label={ui("Late")} value={counts.late} tone="warning" />
+        <CheckInMetric label={ui("Total")} value={entries.length} />
       </div>
       {presentEntries.length ? (
         <p className="mt-3 text-xs font-semibold text-slate-500">
-          {counts.goalkeepersPresent} GK present · {counts.trialPlayersPresent} trial player{counts.trialPlayersPresent === 1 ? "" : "s"} present
-        </p>
+          {counts.goalkeepersPresent} {ui(" GK present · ")}{counts.trialPlayersPresent} {ui(" trial player")}{counts.trialPlayersPresent === 1 ? "" : "s"} {ui(" present")}</p>
       ) : null}
       {entries.length ? <div className="mt-4"><CheckInActions eventId={event.id} /></div> : null}
 
       {entries.length ? (
-        <nav className="mt-5 flex gap-2 overflow-x-auto rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label="Check-in filters">
+        <nav className="mt-5 flex gap-2 overflow-x-auto rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label={ui("Check-in filters")}>
           {(Object.keys(checkInFilterLabels) as CheckInFilter[]).map((item) => (
             <button
               key={item}
@@ -113,13 +125,12 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
             visibleEntries.map((entry) => <CheckInRow key={entry.id} entry={entry} eventId={event.id} eventDate={event.date} onEntryChange={updateEntry} />)
           ) : (
             <p className="rounded-lg border border-dashed border-board-line bg-white p-5 text-center text-sm font-semibold text-slate-500 shadow-soft">
-              No players match this filter.
-            </p>
+              {ui("No players match this filter.")}</p>
           )
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="font-bold text-board-navy">No players to check in</h2>
-            <p className="mt-2 text-sm text-slate-600">Go back to the event and add squad or trial players first.</p>
+            <h2 className="font-bold text-board-navy">{ui("No players to check in")}</h2>
+            <p className="mt-2 text-sm text-slate-600">{ui("Go back to the event and add squad or trial players first.")}</p>
           </div>
         )}
       </section>
@@ -128,6 +139,7 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
 }
 
 export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry: SquadAttendanceEntry; eventId: string; returnTo: string }) {
+  const ui = useSystemText();
   const [currentEntry, setCurrentEntry] = useState(entry);
   const [reason, setReason] = useState(entry.plannedReason ?? "");
   const [reasonNote, setReasonNote] = useState(entry.plannedReasonNote ?? "");
@@ -163,7 +175,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
         if (nextReason) formData.set("plannedReason", nextReason);
         if (nextReasonNote) formData.set("plannedReasonNote", nextReasonNote);
       }
-      const result = await updatePlannedAttendanceInline(formData) as PlannedAttendanceMutationResult;
+      const result = await safeAttendanceMutation(() => updatePlannedAttendanceInline(formData));
       if (!result.ok) {
         setCurrentEntry(previous);
         setError(result.message || "Planned participation could not be updated.");
@@ -178,6 +190,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
       });
       setReason(result.plannedReason ?? "");
       setReasonNote(result.plannedReasonNote ?? "");
+      setError(result.warning ?? "");
       setSavedMessage("Saved");
     });
   }
@@ -220,9 +233,9 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             className="h-10 rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
-            aria-label="Not expected reason"
+            aria-label={ui("Not expected reason")}
           >
-            <option value="">Reason optional</option>
+            <option value="">{ui("Reason optional")}</option>
             {(["injured", "sick", "school", "work", "holiday", "private", "other", "V", "K", "E", "P", "S"] as const).map((reason) => (
               <option key={reason} value={reason}>{attendanceReasonLabels[reason]}</option>
             ))}
@@ -231,7 +244,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
             name="plannedReasonNote"
             value={reasonNote}
             onChange={(event) => setReasonNote(event.target.value)}
-            placeholder="Reason note optional"
+            placeholder={ui("Reason note optional")}
             className="h-10 min-w-0 flex-1 rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
           />
           <Button type="submit" variant="secondary" disabled={isPending} className="h-10 px-3">{isPending ? "Saving..." : "Save reason"}</Button>
@@ -244,11 +257,11 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
         <div className="inline-flex flex-wrap items-center gap-2 rounded-md bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
           <span className="inline-flex items-center gap-2">
             <Stethoscope className="h-3.5 w-3.5" />
-            Medical status: {currentEntry.medicalAvailability.label}
+            {ui("Medical status: ")}{currentEntry.medicalAvailability.label}
             {currentEntry.medicalAvailability.until ? ` until ${currentEntry.medicalAvailability.until}` : " until further notice"}
           </span>
-          {currentEntry.medicalAvailability.needsReview ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Return needs review</span> : null}
-          {currentEntry.plannedStatusSource === "manual" ? <span>Attendance override active</span> : null}
+          {currentEntry.medicalAvailability.needsReview ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{ui("Return needs review")}</span> : null}
+          {currentEntry.plannedStatusSource === "manual" ? <span>{ui("Attendance override active")}</span> : null}
         </div>
       ) : null}
     </div>
@@ -256,11 +269,12 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
 }
 
 export function CheckInActions({ eventId }: { eventId: string }) {
+  const ui = useSystemText();
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <form action={markAllExpectedPresent}>
         <input type="hidden" name="eventId" value={eventId} />
-        <Button type="submit" variant="secondary" className="h-10 w-full justify-center px-3 sm:w-auto">Mark expected as present</Button>
+        <Button type="submit" variant="secondary" className="h-10 w-full justify-center px-3 sm:w-auto">{ui("Mark expected as present")}</Button>
       </form>
       <form action={markAllPresent}>
         <input type="hidden" name="eventId" value={eventId} />
@@ -273,23 +287,25 @@ export function CheckInActions({ eventId }: { eventId: string }) {
             }
           }}
         >
-          Mark all present
-        </Button>
+          {ui("Mark all present")}</Button>
       </form>
     </div>
   );
 }
 
 export function MarkAllExpectedButton({ eventId }: { eventId: string }) {
+  const ui = useSystemText();
   return (
     <form action={markAllExpected}>
       <input type="hidden" name="eventId" value={eventId} />
-      <Button type="submit" variant="secondary" className="h-9 px-3">Mark all expected</Button>
+      <Button type="submit" variant="secondary" className="h-9 px-3">{ui("Mark all expected")}</Button>
     </form>
   );
 }
 
 export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry: SquadAttendanceEntry; eventId: string; eventDate: string; onEntryChange?: (entry: SquadAttendanceEntry) => void }) {
+  const ui = useSystemText();
+  const transition = useTransition();
   const [currentEntry, setCurrentEntry] = useState(entry);
   const [error, setError] = useState("");
   useEffect(() => setCurrentEntry(entry), [entry]);
@@ -309,22 +325,23 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
     : "bg-amber-50 text-amber-700";
 
   return (
+    <CheckInTransitionContext.Provider value={transition}>
     <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-      <div className="flex flex-col gap-3">
+      <fieldset disabled={transition[0]} className="min-w-0 flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-lg font-bold text-board-navy">
               {attendanceDisplayName(entryWithState)}
-              {entryWithState.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
+              {entryWithState.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{ui("Trial")}</span> : null}
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
               {entryWithState.player?.position ? <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entryWithState.player.position}</span> : null}
-              {entryWithState.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Trial player</span> : null}
+              {entryWithState.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{ui("Trial player")}</span> : null}
               <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
-                Planned: {plannedStatusLabel(entryWithState.plannedStatus)}{plannedReasonLabel(entryWithState.plannedReason) ? ` · ${plannedReasonLabel(entryWithState.plannedReason)}` : ""}
+                {ui("Planned: ")}{plannedStatusLabel(entryWithState.plannedStatus)}{plannedReasonLabel(entryWithState.plannedReason) ? ` · ${plannedReasonLabel(entryWithState.plannedReason)}` : ""}
               </span>
               <span className={`rounded-full px-2 py-1 ${statusTone}`}>
-                Actual: {isAbsent ? `Absent${actualAbsenceReason ? ` · ${actualAbsenceReasonLabel(actualAbsenceReason)}` : ""}` : finalStatusLabel(entryWithState.finalStatus)}
+                {ui("Actual: ")}{isAbsent ? `Absent${actualAbsenceReason ? ` · ${actualAbsenceReasonLabel(actualAbsenceReason)}` : ""}` : finalStatusLabel(entryWithState.finalStatus)}
               </span>
               {entryWithState.medicalAvailability ? (
                 <span className="rounded-full bg-red-50 px-2 py-1 text-red-700">
@@ -336,10 +353,10 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
             {entryWithState.coachNote ? <p className="mt-2 text-sm text-slate-600">{entryWithState.coachNote}</p> : null}
             {error ? <p className="mt-2 text-sm font-semibold text-red-700" role="alert">{error}</p> : null}
           </div>
-          <div className="flex w-full gap-2 sm:w-auto">
-            <FinalStatusButton entry={entryWithState} eventId={eventId} status="present" label="Present" icon={<Check className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
-            <FinalStatusButton entry={entryWithState} eventId={eventId} status="Z" label="Late" icon={<Clock3 className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
-            <FinalStatusButton entry={entryWithState} eventId={eventId} status="absent" label="Absent" icon={<UserMinus className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="present" label={ui("Present")} icon={<Check className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="Z" label={ui("Late")} icon={<Clock3 className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="absent" label={ui("Absent")} icon={<UserMinus className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
           </div>
         </div>
         {isParticipating ? (
@@ -352,14 +369,13 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
             <input type="hidden" name="finalStatus" value="Z" />
             <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
             <label>
-              <span className="text-xs font-bold uppercase text-amber-700">Late minutes</span>
+              <span className="text-xs font-bold uppercase text-amber-700">{ui("Late minutes")}</span>
               <input name="lateMinutes" type="number" min="0" defaultValue={entryWithState.lateMinutes ?? ""} className="mt-1 h-10 w-full rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
             </label>
             <label className="flex h-10 items-center gap-2 rounded-md border border-amber-200 bg-white px-3 text-sm font-semibold text-slate-600">
               <input name="latePenaltyApplied" type="checkbox" defaultChecked={entryWithState.latePenaltyApplied} className="h-4 w-4" />
-              Reliability penalty
-            </label>
-            <Button type="submit" variant="secondary" className="h-10">Save late details</Button>
+              {ui("Reliability penalty")}</label>
+            <Button type="submit" variant="secondary" className="h-10">{ui("Save late details")}</Button>
           </form>
         ) : null}
         {isAbsent ? (
@@ -367,8 +383,8 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
         ) : null}
         {entryWithState.medicalAvailability?.periodId && (entryWithState.finalStatus === "present" || entryWithState.finalStatus === "Z") ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-            <p className="text-sm font-bold text-amber-900">This player still has an active medical absence.</p>
-            <p className="mt-1 text-sm text-amber-800">Mark as returned, or keep the medical status active.</p>
+            <p className="text-sm font-bold text-amber-900">{ui("This player still has an active medical absence.")}</p>
+            <p className="mt-1 text-sm text-amber-800">{ui("Mark as returned, or keep the medical status active.")}</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <form action={updatePlayerMedicalPeriodStatus} className="flex flex-col gap-2 sm:flex-row">
                 <input type="hidden" name="playerId" value={entryWithState.playerId} />
@@ -376,86 +392,99 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
                 <input type="hidden" name="status" value="completed" />
                 <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
                 <input name="actualReturnDate" type="date" defaultValue={eventDate} className="h-10 rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-                <Button type="submit" variant="secondary" className="h-10">Mark returned</Button>
+                <Button type="submit" variant="secondary" className="h-10">{ui("Mark returned")}</Button>
               </form>
               <span className="inline-flex h-10 items-center rounded-md bg-white px-3 text-sm font-semibold text-amber-800 ring-1 ring-amber-200">
-                Keep medical status active
-              </span>
+                {ui("Keep medical status active")}</span>
             </div>
           </div>
         ) : null}
-      </div>
+      </fieldset>
     </article>
+    </CheckInTransitionContext.Provider>
   );
 }
 
 export function RatingRow({ entry, eventId, goals = [] }: { entry: SquadAttendanceEntry; eventId: string; goals?: PlayerDevelopmentGoal[] }) {
+  const ui = useSystemText();
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const [note, setNote] = useState(entry.coachNote ?? "");
+  const [sensitiveNote, setSensitiveNote] = useState(entry.sensitiveNote ?? false);
+  const [result, saveRating, isSaving] = useActionState<RatingMutationResult | null, FormData>(async (_previous, data) => {
+    return safeAttendanceMutation(() => updateAttendanceRating(data));
+  }, null);
   const initialOverallRating = overallRatingInitialValue(entry);
   return (
     <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-      <form action={updateAttendanceRating}>
+      <form action={saveRating}>
         <input type="hidden" name="eventId" value={eventId} />
         <input type="hidden" name="attendanceId" value={entry.id} />
         <div className="space-y-3">
           <div>
             <p className="font-bold text-board-navy">
               {attendanceDisplayName(entry)}
-              {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Trial</span> : null}
+              {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{ui("Trial")}</span> : null}
             </p>
-            <p className="text-sm text-slate-500">Actual: {finalStatusLabel(entry.finalStatus)}{entry.ratingAutoSuggestion ? ` · Suggested ${entry.ratingAutoSuggestion}` : ""}</p>
+            <p className="text-sm text-slate-500">{ui("Actual: ")}{finalStatusLabel(entry.finalStatus)}{entry.ratingAutoSuggestion ? ` · Suggested ${entry.ratingAutoSuggestion}` : ""}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <RatingSelect name="overallRating" label="Overall" defaultValue={initialOverallRating} />
-            <RatingSelect name="ratingTechnique" label="Technique" defaultValue={entry.ratingTechnique} />
-            <RatingSelect name="ratingGameUnderstanding" label="Game IQ" defaultValue={entry.ratingGameUnderstanding} />
-            <RatingSelect name="ratingIntensity" label="Intensity" defaultValue={entry.ratingIntensity} />
-            <RatingSelect name="ratingBehavior" label="Behavior" defaultValue={entry.ratingBehavior} />
+            <RatingSelect name="overallRating" label={ui("Overall")} defaultValue={result?.ok ? result.overallRating ?? undefined : initialOverallRating} />
+            <RatingSelect name="ratingTechnique" label={ui("Technique")} defaultValue={entry.ratingTechnique} />
+            <RatingSelect name="ratingGameUnderstanding" label={ui("Game IQ")} defaultValue={entry.ratingGameUnderstanding} />
+            <RatingSelect name="ratingIntensity" label={ui("Intensity")} defaultValue={entry.ratingIntensity} />
+            <RatingSelect name="ratingBehavior" label={ui("Behavior")} defaultValue={entry.ratingBehavior} />
           </div>
           <label className="block">
-            <span className="text-xs font-bold uppercase text-slate-500">Coach note</span>
-            <textarea name="coachNote" defaultValue={entry.coachNote ?? ""} rows={2} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+            <span className="text-xs font-bold uppercase text-slate-500">{ui("Coach note")}</span>
+            <textarea name="coachNote" value={note} onChange={(event) => setNote(event.target.value)} rows={2} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
           </label>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
-              <input name="sensitiveNote" type="checkbox" defaultChecked={entry.sensitiveNote} className="h-4 w-4" />
-              Sensitive note
-            </label>
-            <Button type="submit" variant="secondary" className="h-10">Save rating</Button>
+              <input name="sensitiveNote" type="checkbox" checked={sensitiveNote} onChange={(event) => setSensitiveNote(event.target.checked)} className="h-4 w-4" />
+              {ui("Sensitive note")}</label>
+            <Button type="submit" disabled={isSaving} variant="secondary" className="h-10">{isSaving ? "Saving..." : "Save rating"}</Button>
           </div>
+          {result ? <p role={result.ok ? "status" : "alert"} className={`text-sm font-semibold ${result.ok ? "text-green-700" : "text-red-700"}`}>
+            {result.ok
+              ? result.warning
+                ? locale === "de" ? "Bewertung gespeichert, aber der Trainingsstatus konnte nicht aktualisiert werden. Bitte lade die Seite neu." : result.warning
+                : locale === "de" ? "Bewertung gespeichert." : "Rating saved."
+              : locale === "de" ? "Bewertung konnte nicht gespeichert werden. Bitte prüfe die Anwesenheit und versuche es erneut. Deine Eingaben bleiben erhalten." : "Rating could not be saved. Check attendance and try again. Your entries have been kept."}
+          </p> : null}
         </div>
       </form>
       {entry.player ? (
         <details className="mt-4 rounded-md bg-board-paper p-3">
-          <summary className="cursor-pointer text-sm font-bold text-board-navy">Add observation</summary>
+          <summary className="cursor-pointer text-sm font-bold text-board-navy">{ui("Add observation")}</summary>
           <form action={createPlayerObservation} className="mt-3 grid gap-2">
             <input type="hidden" name="playerId" value={entry.player.id} />
             <input type="hidden" name="eventId" value={eventId} />
             <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/ratings`} />
             <div className="grid gap-2 sm:grid-cols-3">
               <label>
-                <span className="text-xs font-bold uppercase text-slate-500">Date</span>
+                <span className="text-xs font-bold uppercase text-slate-500">{ui("Date")}</span>
                 <input name="observationDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
               </label>
               <label>
-                <span className="text-xs font-bold uppercase text-slate-500">Goal</span>
+                <span className="text-xs font-bold uppercase text-slate-500">{ui("Goal")}</span>
                 <select name="goalId" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                  <option value="">No linked goal</option>
+                  <option value="">{ui("No linked goal")}</option>
                   {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
                 </select>
               </label>
               <label>
-                <span className="text-xs font-bold uppercase text-slate-500">Category</span>
+                <span className="text-xs font-bold uppercase text-slate-500">{ui("Category")}</span>
                 <select name="category" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                  <option value="">Optional</option>
+                  <option value="">{ui("Optional")}</option>
                   {developmentGoalCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
                 </select>
               </label>
             </div>
             {goals.length ? (
-              <p className="text-xs text-slate-500">Active goals: {goals.map((goal) => `${goal.title} (${developmentCategoryLabel(goal.category)})`).join(", ")}</p>
+              <p className="text-xs text-slate-500">{ui("Active goals: ")}{goals.map((goal) => `${goal.title} (${developmentCategoryLabel(goal.category)})`).join(", ")}</p>
             ) : null}
-            <textarea name="note" required rows={2} placeholder="What did you notice?" className="w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-            <Button type="submit" variant="secondary" className="h-10 w-full justify-center px-3 sm:w-auto">Save observation</Button>
+            <textarea name="note" required rows={2} placeholder={ui("What did you notice?")} className="w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+            <Button type="submit" variant="secondary" className="h-10 w-full justify-center px-3 sm:w-auto">{ui("Save observation")}</Button>
           </form>
         </details>
       ) : null}
@@ -464,12 +493,12 @@ export function RatingRow({ entry, eventId, goals = [] }: { entry: SquadAttendan
 }
 
 export function CompleteEventButton({ eventId }: { eventId: string }) {
+  const ui = useSystemText();
   return (
     <form action={completeTrainingEvent}>
       <input type="hidden" name="eventId" value={eventId} />
       <Button type="submit" variant="secondary" className="h-10 px-3">
-        Mark completed
-      </Button>
+        {ui("Mark completed")}</Button>
     </form>
   );
 }
@@ -485,7 +514,8 @@ function InlineRatingControl({
   onOptimisticEntry: (entry: SquadAttendanceEntry) => void;
   onError: (message: string) => void;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const ui = useSystemText();
+  const [isPending, startTransition] = useCheckInTransition();
 
   function updateRating(value: number | null) {
     if (isPending) return;
@@ -498,20 +528,21 @@ function InlineRatingControl({
       formData.set("eventId", eventId);
       formData.set("attendanceId", entry.id);
       if (value) formData.set("overallRating", String(value));
-      const result = await updateAttendanceRatingInline(formData) as RatingMutationResult;
+      const result = await safeAttendanceMutation(() => updateAttendanceRatingInline(formData));
       if (!result.ok) {
         onOptimisticEntry(previous);
         onError(result.message || "Rating could not be updated.");
         return;
       }
       onOptimisticEntry({ ...optimistic, overallRating: result.overallRating ?? undefined });
+      onError(result.warning ?? "");
     });
   }
 
   return (
     <div className="rounded-md bg-green-50 p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs font-bold uppercase text-green-700">Rating</p>
+        <p className="text-xs font-bold uppercase text-green-700">{ui("Rating")}</p>
         <div className="flex flex-wrap gap-1.5">
           {[1, 2, 3, 4, 5].map((rating) => {
             const active = entry.overallRating === rating;
@@ -534,7 +565,7 @@ function InlineRatingControl({
           })}
         </div>
       </div>
-      <p className="mt-1 text-xs text-green-800">Optional. Saved to the same rating used on the Ratings page.</p>
+      <p className="mt-1 text-xs text-green-800">{ui("Optional. Saved to the same rating used on the Ratings page.")}</p>
     </div>
   );
 }
@@ -550,7 +581,8 @@ function AbsenceReasonControl({
   onOptimisticEntry: (entry: SquadAttendanceEntry) => void;
   onError: (message: string) => void;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const ui = useSystemText();
+  const [isPending, startTransition] = useCheckInTransition();
   const currentReason = effectiveActualAbsenceReason(entry) ?? defaultActualAbsenceReason(entry);
 
   function updateReason(reason: SquadActualAbsenceReason) {
@@ -575,7 +607,7 @@ function AbsenceReasonControl({
       formData.set("attendanceId", entry.id);
       formData.set("finalStatus", "absent");
       formData.set("actualAbsenceReason", reason);
-      const result = await updateFinalAttendanceInline(formData) as AttendanceMutationResult;
+      const result = await safeAttendanceMutation(() => updateFinalAttendanceInline(formData));
       if (!result.ok) {
         onOptimisticEntry(previous);
         onError(result.message || "Absence reason could not be updated.");
@@ -587,13 +619,14 @@ function AbsenceReasonControl({
         actualAbsenceReason: result.actualAbsenceReason ?? undefined,
         overallRating: result.overallRating ?? undefined
       });
+      onError(result.warning ?? "");
     });
   }
 
   return (
     <div className="grid gap-2 rounded-md bg-red-50 p-3 sm:grid-cols-[minmax(180px,1fr)_auto] sm:items-end">
       <label>
-        <span className="text-xs font-bold uppercase text-red-700">Reason</span>
+        <span className="text-xs font-bold uppercase text-red-700">{ui("Reason")}</span>
         <select
           value={currentReason}
           onChange={(event) => updateReason(event.target.value as SquadActualAbsenceReason)}
@@ -630,7 +663,7 @@ function FinalStatusButton({
   const active = status === "absent"
     ? Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z")
     : entry.finalStatus === status;
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useCheckInTransition();
   const tone =
     status === "present"
       ? "bg-green-600 text-white hover:bg-green-700"
@@ -669,7 +702,7 @@ function FinalStatusButton({
       formData.set("finalStatus", status);
       if (actualAbsenceReason) formData.set("actualAbsenceReason", actualAbsenceReason);
       if (status === "Z" && entry.latePenaltyApplied) formData.set("latePenaltyApplied", "on");
-      const result = await updateFinalAttendanceInline(formData) as AttendanceMutationResult;
+      const result = await safeAttendanceMutation(() => updateFinalAttendanceInline(formData));
       if (!result.ok) {
         onOptimisticEntry(previous);
         onError(result.message || "Attendance could not be updated. The previous status was restored.");
@@ -683,6 +716,7 @@ function FinalStatusButton({
         latePenaltyApplied: result.latePenaltyApplied,
         overallRating: result.overallRating ?? undefined
       });
+      onError(result.warning ?? "");
     });
   }
 
@@ -699,6 +733,14 @@ function FinalStatusButton({
       {isPending ? "Saving..." : label}
     </button>
   );
+}
+
+async function safeAttendanceMutation<T extends AttendanceMutationResult | RatingMutationResult | PlannedAttendanceMutationResult>(save: () => Promise<T>): Promise<T | { ok: false; code: string; message: string }> {
+  try {
+    return await save();
+  } catch {
+    return { ok: false, code: "network_error", message: "Changes could not be saved. Please try again." };
+  }
 }
 
 function defaultActualAbsenceReason(entry: SquadAttendanceEntry): SquadActualAbsenceReason {
@@ -780,11 +822,11 @@ function RatingSelect({ name, label, defaultValue }: { name: string; label: stri
 }
 
 export function MissingStatusesNotice({ entries }: { entries: SquadAttendanceEntry[] }) {
+  const ui = useSystemText();
   const missing = entries.filter((entry) => !entry.finalStatus).length;
   return missing ? (
     <p className="inline-flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
       <ShieldAlert className="h-4 w-4" />
-      {missing} player{missing === 1 ? "" : "s"} still need an actual status.
-    </p>
+      {missing} {ui(" player")}{missing === 1 ? "" : "s"} {ui(" still need an actual status.")}</p>
   ) : null;
 }

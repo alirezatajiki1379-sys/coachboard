@@ -14,7 +14,7 @@ import { mapPlayerMedicalPeriodRow, mapSquadPlayerRow, type PlayerMedicalPeriodR
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
 import { getAvailabilityByPlayerOnDate } from "@/lib/squad/availability";
-import { trainingNowParts, type TrainingFilter } from "@/lib/trainings/utils";
+import { isTrainingUpcoming, trainingNowParts, type TrainingFilter } from "@/lib/trainings/utils";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -230,14 +230,15 @@ export async function getTrainingEventDetail(
     }
   >;
 
-  const playersById = await loadAttendancePlayersById(
-    db,
-    userId,
-    attendanceRows.map((row) => row.player_id)
-  );
-  const medicalByPlayer = await getMedicalByPlayer(db, userId, eventData.date, attendanceRows.map((row) => row.player_id));
+  const [playersById, medicalByPlayer] = await Promise.all([
+    loadAttendancePlayersById(db, userId, attendanceRows.map((row) => row.player_id)),
+    getMedicalByPlayer(db, userId, eventData.date, attendanceRows.map((row) => row.player_id))
+  ]);
+  const canUpdatePlanned = !eventData.deleted_at &&
+    isTrainingUpcoming({ date: eventData.date, startTime: eventData.start_time }) &&
+    (eventData.status === "draft" || eventData.status === "prepared");
   const attendance = attendanceRows.map((row) =>
-    applyMedicalPrefill(mapAttendanceRow(row, playersById.get(row.player_id) ?? row.squad_players ?? undefined), medicalByPlayer.get(row.player_id))
+    applyMedicalPrefill(mapAttendanceRow(row, playersById.get(row.player_id) ?? row.squad_players ?? undefined), medicalByPlayer.get(row.player_id), canUpdatePlanned)
   );
 
   const event = mapTrainingEventRow(
@@ -250,7 +251,7 @@ export async function getTrainingEventDetail(
   return { ...event, linkedTrainingSessionDuration: linked?.duration_target_minutes ?? undefined, attendance };
 }
 
-async function syncEligibleFutureEventsWithCurrentSquad(db: SupabaseClient, userId: string, events: Array<Pick<SquadTrainingEventDetail, "id" | "date" | "status" | "squadId" | "participantSourceMode" | "participantsLockedAt" | "deletedAt">>) {
+async function syncEligibleFutureEventsWithCurrentSquad(db: SupabaseClient, userId: string, events: Array<Pick<SquadTrainingEventDetail, "id" | "date" | "startTime" | "status" | "squadId" | "participantSourceMode" | "participantsLockedAt" | "deletedAt">>) {
   const eligibleEvents = events.filter((event) => isEligibleForCurrentSquadSync(event));
   if (!eligibleEvents.length) return;
   for (const event of eligibleEvents) {
@@ -258,12 +259,12 @@ async function syncEligibleFutureEventsWithCurrentSquad(db: SupabaseClient, user
   }
 }
 
-function isEligibleForCurrentSquadSync(event: Pick<SquadTrainingEventDetail, "date" | "status" | "participantSourceMode" | "participantsLockedAt" | "deletedAt">) {
+function isEligibleForCurrentSquadSync(event: Pick<SquadTrainingEventDetail, "date" | "startTime" | "status" | "participantSourceMode" | "participantsLockedAt" | "deletedAt">) {
   return (
     event.participantSourceMode === "current_squad_sync" &&
     !event.participantsLockedAt &&
     !event.deletedAt &&
-    event.date >= todayDateString() &&
+    isTrainingUpcoming(event) &&
     (event.status === "draft" || event.status === "prepared")
   );
 }
@@ -319,7 +320,14 @@ async function syncEventWithCurrentSquad(
     if (error) throw new Error(error.message);
   }
 
-  const defaultRows = existingRows.filter((row) => currentPlayerIdSet.has(row.player_id) && row.planned_status_source !== "manual" && !row.final_status);
+  const defaultRows = existingRows.filter((row) => {
+    if (!currentPlayerIdSet.has(row.player_id) || row.planned_status_source === "manual" || row.final_status) return false;
+    const availability = availabilityByPlayer.get(row.player_id);
+    return row.planned_status !== (availability ? "unavailable" : "expected") ||
+      row.planned_reason !== (availability?.plannedReason ?? null) ||
+      row.planned_reason_note !== (availability?.note ?? null) ||
+      row.planned_status_source !== (availability?.source ?? "default");
+  });
   const updateResults = await Promise.all(defaultRows.map((row) => {
     const availability = availabilityByPlayer.get(row.player_id);
     return db
@@ -336,7 +344,9 @@ async function syncEventWithCurrentSquad(
         planned_status_source: "default"
       })
       .eq("id", row.id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("final_status", null)
+      .or("planned_status_source.is.null,planned_status_source.neq.manual");
   }));
   const updateError = updateResults.find((result) => result.error)?.error;
   if (updateError) throw new Error(updateError.message);
@@ -398,14 +408,6 @@ function hasMeaningfulParticipantData(
   );
 }
 
-function todayDateString() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 async function getMedicalByPlayer(db: SupabaseClient, userId: string, eventDate: string, playerIds: string[]) {
   const result = new Map<string, PlayerMedicalPeriod>();
   if (!playerIds.length) return result;
@@ -431,9 +433,9 @@ async function getMedicalByPlayer(db: SupabaseClient, userId: string, eventDate:
   return result;
 }
 
-function applyMedicalPrefill<T extends ReturnType<typeof mapAttendanceRow>>(entry: T, medical: PlayerMedicalPeriod | undefined): T {
+function applyMedicalPrefill<T extends ReturnType<typeof mapAttendanceRow>>(entry: T, medical: PlayerMedicalPeriod | undefined, canUpdatePlanned: boolean): T {
   if (!medical) {
-    if (entry.plannedStatusSource === "medical" && !entry.finalStatus) {
+    if (canUpdatePlanned && entry.plannedStatusSource === "medical" && !entry.finalStatus) {
       return { ...entry, plannedStatus: "expected", plannedReason: undefined, plannedReasonNote: undefined, plannedStatusSource: "default" };
     }
     return entry;
@@ -446,7 +448,7 @@ function applyMedicalPrefill<T extends ReturnType<typeof mapAttendanceRow>>(entr
     description: medical.description,
     needsReview: medicalNeedsReview(medical)
   };
-  if (entry.finalStatus || entry.plannedStatusSource === "manual") return { ...entry, medicalAvailability: availability };
+  if (!canUpdatePlanned || entry.finalStatus || entry.plannedStatusSource === "manual") return { ...entry, medicalAvailability: availability };
   return {
     ...entry,
     plannedStatus: "unavailable",

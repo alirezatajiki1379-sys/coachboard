@@ -1,3 +1,5 @@
+import { getActiveLocale } from "@/lib/i18n/server";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -424,7 +426,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
   );
 }
 
-function AnalyticsSectionPanel({
+async function AnalyticsSectionPanel({
   section,
   teamAnalytics,
   summaries
@@ -433,25 +435,27 @@ function AnalyticsSectionPanel({
   teamAnalytics: TeamAnalyticsOverview;
   summaries: PlayerAnalyticsSummary[];
 }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   if (section === "training" || section === "overview") {
     return (
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <Panel title="Training Sessions" icon={<CalendarCheck className="h-5 w-5" />}>
+        <Panel title={ui("Training Sessions")} icon={<CalendarCheck className="h-5 w-5" />}>
           <div className="grid gap-3 sm:grid-cols-3">
-            <MiniStat label="Sessions" value={teamAnalytics.trainingSessions} />
-            <MiniStat label="Reviewed" value={`${teamAnalytics.reviewedSessions}/${teamAnalytics.trainingSessions}`} />
-            <MiniStat label="Review coverage" value={formatPercent(teamAnalytics.reviewCoverage)} />
-            <MiniStat label="Quality" value={formatRating(teamAnalytics.averageSessionQuality)} />
-            <MiniStat label="Intensity" value={formatRating(teamAnalytics.averageSessionIntensity)} />
-            <MiniStat label="Planned sessions" value={formatPercent(teamAnalytics.planCoverage.rate)} />
+            <MiniStat label={ui("Sessions")} value={teamAnalytics.trainingSessions} />
+            <MiniStat label={ui("Reviewed")} value={`${teamAnalytics.reviewedSessions}/${teamAnalytics.trainingSessions}`} />
+            <MiniStat label={ui("Review coverage")} value={formatPercent(teamAnalytics.reviewCoverage)} />
+            <MiniStat label={ui("Quality")} value={formatRating(teamAnalytics.averageSessionQuality)} />
+            <MiniStat label={ui("Intensity")} value={formatRating(teamAnalytics.averageSessionIntensity)} />
+            <MiniStat label={ui("Planned sessions")} value={formatPercent(teamAnalytics.planCoverage.rate)} />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <OutcomeBadge label="Achieved" value={teamAnalytics.objectiveOutcomes.achieved} />
-            <OutcomeBadge label="Partly" value={teamAnalytics.objectiveOutcomes.partly_achieved} />
-            <OutcomeBadge label="Not achieved" value={teamAnalytics.objectiveOutcomes.not_achieved} />
+            <OutcomeBadge label={ui("Achieved")} value={teamAnalytics.objectiveOutcomes.achieved} />
+            <OutcomeBadge label={ui("Partly")} value={teamAnalytics.objectiveOutcomes.partly_achieved} />
+            <OutcomeBadge label={ui("Not achieved")} value={teamAnalytics.objectiveOutcomes.not_achieved} />
           </div>
         </Panel>
-        <Panel title="Training Focus" icon={<Target className="h-5 w-5" />}>
+        <Panel title={ui("Training Focus")} icon={<Target className="h-5 w-5" />}>
           {teamAnalytics.focusDistribution.length ? (
             <div className="space-y-3">
               {teamAnalytics.focusDistribution.slice(0, 6).map((item) => (
@@ -459,7 +463,7 @@ function AnalyticsSectionPanel({
               ))}
             </div>
           ) : (
-            <EmptyPanelText>No structured focus has been saved for trainings in this period.</EmptyPanelText>
+            <EmptyPanelText>{ui("No structured focus has been saved for trainings in this period.")}</EmptyPanelText>
           )}
         </Panel>
       </section>
@@ -468,13 +472,13 @@ function AnalyticsSectionPanel({
 
   if (section === "attendance") {
     return (
-      <Panel title="Team Attendance" icon={<UserCheck className="h-5 w-5" />}>
+      <Panel title={ui("Team Attendance")} icon={<UserCheck className="h-5 w-5" />}>
         <div className="grid gap-3 sm:grid-cols-5">
-          <MiniStat label="Present" value={teamAnalytics.present} />
-          <MiniStat label="Late" value={teamAnalytics.late} />
-          <MiniStat label="Absent" value={teamAnalytics.absent} />
-          <MiniStat label="Not expected" value={teamAnalytics.notExpected} />
-          <MiniStat label="Not recorded" value={teamAnalytics.notRecorded} />
+          <MiniStat label={ui("Present")} value={teamAnalytics.present} />
+          <MiniStat label={ui("Late")} value={teamAnalytics.late} />
+          <MiniStat label={ui("Absent")} value={teamAnalytics.absent} />
+          <MiniStat label={ui("Not expected")} value={teamAnalytics.notExpected} />
+          <MiniStat label={ui("Not recorded")} value={teamAnalytics.notRecorded} />
         </div>
       </Panel>
     );
@@ -483,22 +487,22 @@ function AnalyticsSectionPanel({
   if (section === "development") {
     return (
       <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <Panel title="Development Goals" icon={<Target className="h-5 w-5" />}>
+        <Panel title={ui("Development Goals")} icon={<Target className="h-5 w-5" />}>
           <div className="grid gap-3 sm:grid-cols-2">
-            <MiniStat label="Active goals" value={teamAnalytics.activeDevelopmentGoals} />
-            <MiniStat label="Players with goals" value={teamAnalytics.playersWithActiveGoals} />
-            <MiniStat label="Due for review" value={teamAnalytics.goalsDueForReview} />
-            <MiniStat label="Achieved in period" value={teamAnalytics.goalsAchievedInPeriod} />
+            <MiniStat label={ui("Active goals")} value={teamAnalytics.activeDevelopmentGoals} />
+            <MiniStat label={ui("Players with goals")} value={teamAnalytics.playersWithActiveGoals} />
+            <MiniStat label={ui("Due for review")} value={teamAnalytics.goalsDueForReview} />
+            <MiniStat label={ui("Achieved in period")} value={teamAnalytics.goalsAchievedInPeriod} />
           </div>
           <div className="mt-4">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Active goals by category</p>
-            <ChipList items={teamAnalytics.activeGoalCategoryDistribution.map((item) => `${developmentCategoryLabel(item.category)}: ${item.count}`)} empty="No active goals yet." />
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">{ui("Active goals by category")}</p>
+            <ChipList items={teamAnalytics.activeGoalCategoryDistribution.map((item) => `${developmentCategoryLabel(item.category)}: ${item.count}`)} empty={ui("No active goals yet.")} />
           </div>
         </Panel>
-        <Panel title="Progress Updates" icon={<TrendingUp className="h-5 w-5" />}>
+        <Panel title={ui("Progress Updates")} icon={<TrendingUp className="h-5 w-5" />}>
           <div className="grid gap-3 sm:grid-cols-2">
-            <MiniStat label="Updates in period" value={teamAnalytics.progressUpdatesInPeriod} />
-            <MiniStat label="Players updated" value={teamAnalytics.progressPlayersInPeriod} />
+            <MiniStat label={ui("Updates in period")} value={teamAnalytics.progressUpdatesInPeriod} />
+            <MiniStat label={ui("Players updated")} value={teamAnalytics.progressPlayersInPeriod} />
           </div>
           <div className="mt-4 space-y-3">
             {teamAnalytics.latestProgressDistribution.length ? (
@@ -511,7 +515,7 @@ function AnalyticsSectionPanel({
                 />
               ))
             ) : (
-              <EmptyPanelText>No active goal progress to summarize yet.</EmptyPanelText>
+              <EmptyPanelText>{ui("No active goal progress to summarize yet.")}</EmptyPanelText>
             )}
           </div>
         </Panel>
@@ -521,23 +525,23 @@ function AnalyticsSectionPanel({
 
   if (section === "drills") {
     return (
-      <Panel title="Drill Usage" icon={<Dumbbell className="h-5 w-5" />}>
+      <Panel title={ui("Drill Usage")} icon={<Dumbbell className="h-5 w-5" />}>
         <div className="grid gap-3 sm:grid-cols-4">
-          <MiniStat label="Instances used" value={teamAnalytics.drillInstancesUsed} />
-          <MiniStat label="Unique linked drills" value={teamAnalytics.uniqueDrillsUsed} />
-          <MiniStat label="Reviewed" value={teamAnalytics.reviewedDrillInstances} />
-          <MiniStat label="Effectiveness" value={formatRating(teamAnalytics.averageDrillEffectiveness)} />
+          <MiniStat label={ui("Instances used")} value={teamAnalytics.drillInstancesUsed} />
+          <MiniStat label={ui("Unique linked drills")} value={teamAnalytics.uniqueDrillsUsed} />
+          <MiniStat label={ui("Reviewed")} value={teamAnalytics.reviewedDrillInstances} />
+          <MiniStat label={ui("Effectiveness")} value={formatRating(teamAnalytics.averageDrillEffectiveness)} />
         </div>
         {teamAnalytics.drillUsage.length ? (
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[620px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="py-2 pr-3">Drill</th>
-                  <th className="py-2 pr-3 text-right">Uses</th>
-                  <th className="py-2 pr-3 text-right">Reviewed</th>
-                  <th className="py-2 pr-3 text-right">Effectiveness</th>
-                  <th className="py-2 text-right">Last used</th>
+                  <th className="py-2 pr-3">{ui("Drill")}</th>
+                  <th className="py-2 pr-3 text-right">{ui("Uses")}</th>
+                  <th className="py-2 pr-3 text-right">{ui("Reviewed")}</th>
+                  <th className="py-2 pr-3 text-right">{ui("Effectiveness")}</th>
+                  <th className="py-2 text-right">{ui("Last used")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -554,25 +558,27 @@ function AnalyticsSectionPanel({
             </table>
           </div>
         ) : (
-          <EmptyPanelText>No drill usage in this team and period yet.</EmptyPanelText>
+          <EmptyPanelText>{ui("No drill usage in this team and period yet.")}</EmptyPanelText>
         )}
       </Panel>
     );
   }
 
   return (
-    <Panel title="Player Analytics" icon={<BarChart3 className="h-5 w-5" />}>
+    <Panel title={ui("Player Analytics")} icon={<BarChart3 className="h-5 w-5" />}>
       <div className="grid gap-3 sm:grid-cols-4">
-        <MiniStat label="Players shown" value={summaries.length} />
-        <MiniStat label="Rated players" value={summaries.filter((summary) => summary.rated > 0).length} />
-        <MiniStat label="Attendance data" value={summaries.filter((summary) => summary.attendanceRate !== null).length} />
-        <MiniStat label="Open assessments" value={summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length} />
+        <MiniStat label={ui("Players shown")} value={summaries.length} />
+        <MiniStat label={ui("Rated players")} value={summaries.filter((summary) => summary.rated > 0).length} />
+        <MiniStat label={ui("Attendance data")} value={summaries.filter((summary) => summary.attendanceRate !== null).length} />
+        <MiniStat label={ui("Open assessments")} value={summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length} />
       </div>
     </Panel>
   );
 }
 
-function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
+async function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   return (
     <tr className="align-middle hover:bg-slate-50/70">
       <td className="px-3 py-3">
@@ -601,7 +607,7 @@ function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsS
       </MetricCell>
       <MetricCell active={activeSort === "evidence"}>
         <span className={cn("inline-flex rounded-full px-2 py-1 text-xs font-bold", evidenceBadgeTone(summary.evidenceBase.label))}>{summary.evidenceBase.label}</span>
-        <p className="mt-1 text-xs text-slate-500">{summary.rated} rated</p>
+        <p className="mt-1 text-xs text-slate-500">{summary.rated} {ui(" rated")}</p>
       </MetricCell>
       <MetricCell active={activeSort === "coachAssessment"}>
         <span className="line-clamp-2 text-sm font-semibold text-board-navy">
@@ -612,7 +618,9 @@ function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsS
   );
 }
 
-function PlayerAnalyticsMobileCard({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
+async function PlayerAnalyticsMobileCard({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const primary = mobilePrimaryMetric(summary, activeSort);
   return (
     <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
@@ -629,8 +637,7 @@ function PlayerAnalyticsMobileCard({ summary, activeSort }: { summary: PlayerAna
         </div>
         <ButtonLink href={`/squad/players/${summary.player.id}/report`} variant="ghost" className="h-9 px-3">
           <Printer className="h-4 w-4" />
-          Report
-        </ButtonLink>
+          {ui("Report")}</ButtonLink>
       </div>
       <div className="mt-4 rounded-md bg-slate-50 p-3">
         <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{primary.label}</p>
@@ -638,17 +645,19 @@ function PlayerAnalyticsMobileCard({ summary, activeSort }: { summary: PlayerAna
         <p className="mt-1 text-sm text-slate-600">{primary.detail}</p>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        <CompactMetric label="Average" value={formatRating(summary.averageRating)} muted={activeSort === "average"} />
-        <CompactMetric label="Attendance" value={formatPercent(summary.attendanceRate)} muted={activeSort === "attendance"} />
-        <CompactMetric label="Trend" value={summary.trend.value === null ? summary.trend.label : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`} muted={activeSort === "trend"} />
-        <CompactMetric label="Evidence" value={summary.evidenceBase.label} />
+        <CompactMetric label={ui("Average")} value={formatRating(summary.averageRating)} muted={activeSort === "average"} />
+        <CompactMetric label={ui("Attendance")} value={formatPercent(summary.attendanceRate)} muted={activeSort === "attendance"} />
+        <CompactMetric label={ui("Trend")} value={summary.trend.value === null ? summary.trend.label : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`} muted={activeSort === "trend"} />
+        <CompactMetric label={ui("Evidence")} value={summary.evidenceBase.label} />
       </div>
     </article>
   );
 }
 
-function TrendLabel({ summary }: { summary: PlayerAnalyticsSummary }) {
-  if (summary.trend.value === null) return <span className="text-slate-500">No trend yet</span>;
+async function TrendLabel({ summary }: { summary: PlayerAnalyticsSummary }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
+  if (summary.trend.value === null) return <span className="text-slate-500">{ui("No trend yet")}</span>;
   const Icon = summary.trend.value >= 0.3 ? TrendingUp : summary.trend.value <= -0.3 ? TrendingDown : Minus;
   const tone = summary.trend.value >= 0.3 ? "text-green-700" : summary.trend.value <= -0.3 ? "text-red-700" : "text-slate-600";
   return (
@@ -658,7 +667,7 @@ function TrendLabel({ summary }: { summary: PlayerAnalyticsSummary }) {
         {summary.trend.value > 0 ? "+" : ""}{summary.trend.value.toFixed(1)} · {summary.trend.label}
       </span>
       {summary.trend.latestAverage !== undefined && summary.trend.previousAverage !== undefined ? (
-        <span className="text-xs font-semibold text-slate-500">Latest 5 {formatRating(summary.trend.latestAverage)} · Prev {formatRating(summary.trend.previousAverage)}</span>
+        <span className="text-xs font-semibold text-slate-500">{ui("Latest 5 ")}{formatRating(summary.trend.latestAverage)} {ui(" · Prev ")}{formatRating(summary.trend.previousAverage)}</span>
       ) : null}
     </span>
   );
@@ -758,7 +767,7 @@ function EmptyPanelText({ children }: { children: ReactNode }) {
   return <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">{children}</p>;
 }
 
-function SortableHeader({
+async function SortableHeader({
   label,
   sortKey,
   filters,
@@ -779,6 +788,8 @@ function SortableHeader({
   };
   align?: "right";
 }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const active = sortKey === filters.sort;
   return (
     <th aria-sort={active ? (filters.direction === "asc" ? "ascending" : "descending") : "none"} className={cn(STICKY_TABLE_HEADER_CLASS, "px-0 py-0 font-bold", active && "bg-green-50 text-board-green")}>
@@ -792,7 +803,7 @@ function SortableHeader({
       >
         {label}
         <ArrowUpDown className={cn("h-3.5 w-3.5", active ? "opacity-100" : "opacity-35")} />
-        {active ? <span className="sr-only">Sorted {filters.direction === "asc" ? "ascending" : "descending"}</span> : null}
+        {active ? <span className="sr-only">{ui("Sorted ")}{filters.direction === "asc" ? "ascending" : "descending"}</span> : null}
       </Link>
     </th>
   );

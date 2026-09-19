@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import { listTrainingSessionReviewSummaries } from "@/lib/squad/session-review";
 import { ensureActiveSquad } from "@/lib/squad/squads";
-import { filterTrainings, parseTrainingFilter, sortTrainings, type TrainingFilter } from "@/lib/trainings/utils";
+import { filterTrainings, parseTrainingFilter, sortTrainings, trainingNowParts, type TrainingFilter } from "@/lib/trainings/utils";
 import { getUserLocale } from "@/lib/i18n/server";
 
 type TrainingsPageProps = {
@@ -34,18 +34,19 @@ export default async function TrainingsPage({ searchParams }: TrainingsPageProps
     squadId: activeTeam.id,
     includeDeleted: false
   });
-  const queryFilteredEvents = filter === "all" || filter === "rating_open"
-    ? allEvents
-    : await listTrainingEventDetails(supabase, user.id, {
+  const now = trainingNowParts();
+  const queryFilteredEvents = filter === "trash"
+    ? await listTrainingEventDetails(supabase, user.id, {
       squadId: activeTeam.id,
       eventFilter: filter
-    });
-  const events = sortTrainings(filter === "rating_open" ? filterTrainings(queryFilteredEvents, filter) : queryFilteredEvents);
+    })
+    : allEvents;
+  const events = sortTrainings(filterTrainings(queryFilteredEvents, filter, now), now);
   const reviewSummaries = await listTrainingSessionReviewSummaries(supabase, user.id, events.map((event) => event.id));
-  const upcomingCount = filterTrainings(allEvents, "upcoming").length;
-  const pastCount = filterTrainings(allEvents, "past").length;
-  const completedCount = filterTrainings(allEvents, "completed").length;
-  const needsRatingsCount = filterTrainings(allEvents, "rating_open").length;
+  const upcomingCount = filterTrainings(allEvents, "upcoming", now).length;
+  const pastCount = filterTrainings(allEvents, "past", now).length;
+  const completedCount = filterTrainings(allEvents, "completed", now).length;
+  const needsRatingsCount = filterTrainings(allEvents, "rating_open", now).length;
 
   return (
     <PageContainer width="wide">

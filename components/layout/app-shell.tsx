@@ -286,17 +286,13 @@ function SidebarNav({
             key={item.href}
             href={item.href}
             onClick={(event) => {
-              if (pending) {
-                event.preventDefault();
-                return;
-              }
+              if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               if (!active) onPendingNavigation?.(item.href);
               onNavigate?.();
             }}
             title={collapsed ? item.label : undefined}
             aria-label={collapsed ? item.label : undefined}
             aria-current={active ? "page" : undefined}
-            aria-disabled={pending ? true : undefined}
             className={cn(
               "flex items-center gap-3 rounded-md text-sm font-medium transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-board-green",
               pending && "cursor-wait",

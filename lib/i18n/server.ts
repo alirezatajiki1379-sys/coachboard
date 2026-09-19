@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { localeCookieName, normalizeLocale, resolveLocale, type Locale } from "@/lib/i18n";
 import type { createClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseClient } from "@/lib/supabase/server";
 
 type PreferredLanguageRow = {
   preferred_language: string | null;
@@ -21,3 +23,10 @@ export async function getUserLocale(supabase: Awaited<ReturnType<typeof createCl
   const profile = data as PreferredLanguageRow | null;
   return getRequestLocale(profile?.preferred_language);
 }
+
+// Server subcomponents share one resolved language per request, not a global locale.
+export const getActiveLocale = cache(async (): Promise<Locale> => {
+  const supabase = await createSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return user ? getUserLocale(supabase, user.id) : getRequestLocale();
+});

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Locale } from "@/lib/i18n";
+import { trainingNowParts } from "@/lib/trainings/utils";
 
 type AvailabilityType = "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other";
 
@@ -61,7 +62,7 @@ const copy = {
 
 export function PlayerUnavailabilityForm({ playerId, returnTo, compact = false, locale, action }: PlayerUnavailabilityFormProps) {
   const labels = copy[locale];
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => trainingNowParts().date, []);
   const [type, setType] = useState<AvailabilityType>("injured");
   const isMedical = type === "injured" || type === "sick";
   const spanClass = compact ? "sm:col-span-2" : "md:col-span-2";

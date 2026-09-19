@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
-import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, seasonLabelForDate, weekdayForDate } from "@/lib/trainings/utils";
+import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, isTrainingUpcoming, seasonLabelForDate, trainingNowParts, weekdayForDate } from "@/lib/trainings/utils";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
 import { getAvailabilityByPlayerOnDate } from "@/lib/squad/availability";
@@ -47,6 +47,7 @@ const actualAbsenceReasons = ["unexcused", "excused", "sick", "injured", "school
 export type AttendanceMutationResult =
   | {
       ok: true;
+      warning?: string;
       attendanceId: string;
       playerId: string;
       status: (typeof finalStatuses)[number];
@@ -65,6 +66,7 @@ export type AttendanceMutationResult =
 export type RatingMutationResult =
   | {
       ok: true;
+      warning?: string;
       attendanceId: string;
       playerId: string;
       overallRating: number | null;
@@ -79,6 +81,7 @@ export type RatingMutationResult =
 export type PlannedAttendanceMutationResult =
   | {
       ok: true;
+      warning?: string;
       attendanceId: string;
       playerId: string;
       plannedStatus: (typeof plannedStatuses)[number];
@@ -163,8 +166,8 @@ export type BulkTrainingOperationResult =
     };
 
 function boundedRating(value: string) {
-  const parsed = numberOrNull(value);
-  return parsed && parsed >= 1 && parsed <= 5 ? parsed : null;
+  const parsed = Number(value);
+  return value.trim() && Number.isInteger(parsed) && parsed >= 1 && parsed <= 5 ? parsed : null;
 }
 
 function actualAbsenceReasonValue(value: string): (typeof actualAbsenceReasons)[number] | null {
@@ -195,21 +198,18 @@ function eventPath(eventId: string, suffix = "") {
   return `/trainings/${eventId}${suffix}`;
 }
 
-function todayDateString() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function revalidateEvent(eventId: string) {
+  revalidatePath("/trainings");
+  revalidatePath("/dashboard");
+  revalidatePath("/squad/analysis");
   revalidatePath("/squad");
   revalidatePath("/squad/attendance");
   revalidatePath("/squad/ratings");
   revalidatePath(eventPath(eventId));
   revalidatePath(eventPath(eventId, "/check-in"));
   revalidatePath(eventPath(eventId, "/ratings"));
+  revalidatePath(`/squad/attendance/${eventId}/ratings`);
+  revalidatePath(`/squad/attendance/${eventId}/check-in`);
 }
 
 export async function createTrainingEvent(_: TrainingEventActionState, formData: FormData): Promise<TrainingEventActionState> {
@@ -954,9 +954,11 @@ export async function updatePlannedAttendanceInline(formData: FormData): Promise
   if (error) return plannedAttendanceMutationError("database_error", "Planned participation could not be updated.");
   if (!data) return plannedAttendanceMutationError("not_found", "Attendance record not found.");
 
-  await markEventPrepared(db, user.id, eventId);
+  const warning = await eventStatusWarning(() => markEventPrepared(db, user.id, eventId));
+  revalidateEvent(eventId);
   return {
     ok: true,
+    warning,
     attendanceId: data.id,
     playerId: data.player_id,
     plannedStatus: plannedStatus as (typeof plannedStatuses)[number],
@@ -1067,9 +1069,11 @@ export async function updateFinalAttendanceInline(formData: FormData): Promise<A
   if (error) return attendanceMutationError("database_error", "Attendance could not be updated.");
   if (!data) return attendanceMutationError("not_found", "Attendance record not found.");
 
-  await markEventInProgress(db, user.id, eventId);
+  const warning = await eventStatusWarning(() => markEventInProgress(db, user.id, eventId));
+  revalidateEvent(eventId);
   return {
     ok: true,
+    warning,
     attendanceId: data.id,
     playerId: data.player_id,
     status: finalStatus as (typeof finalStatuses)[number],
@@ -1115,7 +1119,11 @@ export async function markAllPresent(formData: FormData) {
   redirect(eventPath(eventId, "/check-in"));
 }
 
-export async function updateAttendanceRating(formData: FormData) {
+export async function updateAttendanceRating(formData: FormData): Promise<RatingMutationResult> {
+  for (const field of ["overallRating", "ratingTechnique", "ratingGameUnderstanding", "ratingIntensity", "ratingBehavior"]) {
+    const value = formString(formData, field);
+    if (value && boundedRating(value) === null) return attendanceMutationError("invalid_rating", "Ratings must be whole numbers from 1 to 5.");
+  }
   const eventId = formString(formData, "eventId");
   const attendanceId = formString(formData, "attendanceId");
   const ratingTechnique = boundedRating(formString(formData, "ratingTechnique"));
@@ -1127,7 +1135,9 @@ export async function updateAttendanceRating(formData: FormData) {
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  const { error } = await db
+  const validation = await validateAttendanceMutation(db, user.id, eventId, attendanceId);
+  if (!validation.ok) return validation;
+  const { data, error } = await db
     .from("squad_attendance_records")
     .update({
       overall_rating: overallRating,
@@ -1141,15 +1151,21 @@ export async function updateAttendanceRating(formData: FormData) {
     })
     .eq("id", attendanceId)
     .eq("event_id", eventId)
-    .eq("user_id", user.id);
-  if (error) throw new Error(error.message);
+    .eq("user_id", user.id)
+    .in("final_status", ["present", "Z"])
+    .select("id,player_id,overall_rating,updated_at")
+    .maybeSingle();
+  if (error) return attendanceMutationError("database_error", "Rating could not be updated.");
+  if (!data) return attendanceMutationError("invalid_status", "Absent players cannot receive a performance rating.");
 
-  await markEventRatingOpen(db, user.id, eventId);
+  const warning = await eventStatusWarning(() => markEventRatingOpen(db, user.id, eventId));
   revalidateEvent(eventId);
-  redirect(eventPath(eventId, "/ratings"));
+  return { ok: true, warning, attendanceId: data.id, playerId: data.player_id, overallRating: data.overall_rating, updatedAt: data.updated_at };
 }
 
 export async function updateAttendanceRatingInline(formData: FormData): Promise<RatingMutationResult> {
+  const rawRating = formString(formData, "overallRating");
+  if (rawRating && boundedRating(rawRating) === null) return attendanceMutationError("invalid_rating", "Ratings must be whole numbers from 1 to 5.");
   const eventId = formString(formData, "eventId");
   const attendanceId = formString(formData, "attendanceId");
   const overallRating = boundedRating(formString(formData, "overallRating"));
@@ -1158,19 +1174,6 @@ export async function updateAttendanceRatingInline(formData: FormData): Promise<
   const db = supabase as unknown as SupabaseClient;
   const validation = await validateAttendanceMutation(db, user.id, eventId, attendanceId);
   if (!validation.ok) return validation;
-
-  const { data: current, error: currentError } = await db
-    .from("squad_attendance_records")
-    .select("final_status")
-    .eq("id", attendanceId)
-    .eq("event_id", eventId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (currentError) return attendanceMutationError("database_error", "Rating could not be updated.");
-  if (!current) return attendanceMutationError("not_found", "Attendance record not found.");
-  if (current.final_status !== "present" && current.final_status !== "Z") {
-    return attendanceMutationError("invalid_status", "Absent players cannot receive a performance rating.");
-  }
 
   const { data, error } = await db
     .from("squad_attendance_records")
@@ -1182,13 +1185,16 @@ export async function updateAttendanceRatingInline(formData: FormData): Promise<
     .eq("id", attendanceId)
     .eq("event_id", eventId)
     .eq("user_id", user.id)
+    .in("final_status", ["present", "Z"])
     .maybeSingle();
   if (error) return attendanceMutationError("database_error", "Rating could not be updated.");
-  if (!data) return attendanceMutationError("not_found", "Attendance record not found.");
+  if (!data) return attendanceMutationError("invalid_status", "Absent players cannot receive a performance rating.");
 
-  await markEventRatingOpen(db, user.id, eventId);
+  const warning = await eventStatusWarning(() => markEventRatingOpen(db, user.id, eventId));
+  revalidateEvent(eventId);
   return {
     ok: true,
+    warning,
     attendanceId: data.id,
     playerId: data.player_id,
     overallRating: data.overall_rating,
@@ -1239,6 +1245,7 @@ export async function convertTrialPlayerToSquadPlayer(formData: FormData) {
 }
 
 export async function syncFutureAutoSyncTrainingsForPlayer(db: SupabaseClient, userId: string, playerId: string) {
+  const now = trainingNowParts();
   const { data: player, error: playerError } = await db
     .from("squad_players")
     .select("id,squad_id")
@@ -1250,18 +1257,19 @@ export async function syncFutureAutoSyncTrainingsForPlayer(db: SupabaseClient, u
 
   let eventQuery = db
     .from("squad_training_events")
-    .select("id,date,squad_id")
+    .select("id,date,start_time,squad_id")
     .eq("user_id", userId)
     .eq("participant_source_mode", "current_squad_sync")
     .is("participants_locked_at", null)
     .is("deleted_at", null)
-    .gte("date", todayDateString())
+    .gte("date", now.date)
     .in("status", ["draft", "prepared"]);
   if (player.squad_id) eventQuery = eventQuery.eq("squad_id", player.squad_id);
 
   const { data: events, error: eventError } = await eventQuery;
   if (eventError) throw new Error(eventError.message);
-  for (const event of (events ?? []) as Array<{ id: string; date: string; squad_id: string | null }>) {
+  for (const event of (events ?? []) as Array<{ id: string; date: string; start_time: string; squad_id: string | null }>) {
+    if (!isTrainingUpcoming({ date: event.date, startTime: event.start_time }, now)) continue;
     const participantIds = await currentEligibleSquadPlayerIds(db, userId, event.date, event.squad_id ?? undefined);
     await syncTrainingParticipants(db, userId, event.id, event.date, participantIds, { squadId: event.squad_id ?? undefined, alreadyValidated: true });
     revalidateEvent(event.id);
@@ -1316,15 +1324,15 @@ async function syncTrainingParticipants(
     const [{ data: existingRows, error: existingRowsError }, availabilityByPlayer] = await Promise.all([
       db
         .from("squad_attendance_records")
-        .select("player_id,planned_status_source")
+        .select("player_id,planned_status_source,final_status")
         .eq("event_id", eventId)
         .eq("user_id", userId)
         .in("player_id", validPlayerIds),
       getAvailabilityByPlayerOnDate(db, userId, eventDate, validPlayerIds)
     ]);
     if (existingRowsError) throw new Error(existingRowsError.message);
-    const manualPlayerIds = new Set(((existingRows ?? []) as Array<{ player_id: string; planned_status_source: string | null }>)
-      .filter((row) => row.planned_status_source === "manual")
+    const manualPlayerIds = new Set(((existingRows ?? []) as Array<{ player_id: string; planned_status_source: string | null; final_status: string | null }>)
+      .filter((row) => row.planned_status_source === "manual" || row.final_status)
       .map((row) => row.player_id));
     const rows = validPlayerIds.filter((playerId) => !manualPlayerIds.has(playerId)).map((playerId) => {
       const availability = availabilityByPlayer.get(playerId);
@@ -1601,16 +1609,29 @@ async function createSessionPlanSnapshot(db: SupabaseClient, userId: string, eve
 }
 
 async function markEventPrepared(db: SupabaseClient, userId: string, eventId: string) {
-  await db.from("squad_training_events").update({ status: "prepared" }).eq("id", eventId).eq("user_id", userId).neq("status", "completed");
+  const { error } = await db.from("squad_training_events").update({ status: "prepared" }).eq("id", eventId).eq("user_id", userId).eq("status", "draft");
+  if (error) throw new Error(error.message);
+}
+
+// The attendance write has already succeeded; do not roll it back in the UI
+// when the separate workflow-status update fails.
+async function eventStatusWarning(update: () => Promise<void>) {
+  try {
+    await update();
+    return undefined;
+  } catch {
+    return "Changes were saved, but the training status could not be updated. Please reload before continuing.";
+  }
 }
 
 async function markEventInProgress(db: SupabaseClient, userId: string, eventId: string) {
-  await db
+  const { error } = await db
     .from("squad_training_events")
     .update({ status: "in_progress", participants_locked_at: new Date().toISOString() })
     .eq("id", eventId)
     .eq("user_id", userId)
-    .neq("status", "completed");
+    .in("status", ["draft", "prepared"]);
+  if (error) throw new Error(error.message);
 }
 
 function plannedAttendanceMutationError(code: string, message: string): PlannedAttendanceMutationResult {
@@ -1657,5 +1678,6 @@ async function validateAttendanceMutation(db: SupabaseClient, userId: string, ev
 }
 
 async function markEventRatingOpen(db: SupabaseClient, userId: string, eventId: string) {
-  await db.from("squad_training_events").update({ status: "rating_open" }).eq("id", eventId).eq("user_id", userId).neq("status", "completed");
+  const { error } = await db.from("squad_training_events").update({ status: "rating_open" }).eq("id", eventId).eq("user_id", userId).in("status", ["draft", "prepared", "in_progress"]);
+  if (error) throw new Error(error.message);
 }

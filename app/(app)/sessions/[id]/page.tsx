@@ -1,3 +1,5 @@
+import { getActiveLocale } from "@/lib/i18n/server";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
 import { ArrowLeft, Clock, Edit, FileText, MapPin, Users } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -30,6 +32,7 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
   const session = await getUserSession(supabase, user.id, id);
   if (!session) notFound();
   const locale = await getUserLocale(supabase, user.id);
+  const ui = createSystemTranslator(locale);
   const messages = getMessages(locale);
 
   const total = calculateSessionDuration(session.drills);
@@ -48,16 +51,15 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
     <div className="space-y-6">
       <Link href="/sessions" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
         <ArrowLeft className="h-4 w-4" />
-        Back to training plans
-      </Link>
+        {ui("Back to training plans")}</Link>
 
       <section className="rounded-lg border border-board-line bg-white p-6 shadow-soft">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold uppercase text-board-green">{session.mainFocus || "Training plan"}</p>
-              {view === "archived" ? <StatusBadge label="Archived" /> : null}
-              {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
+              {view === "archived" ? <StatusBadge label={ui("Archived")} /> : null}
+              {view === "trash" ? <StatusBadge label={ui("Trash")} danger /> : null}
             </div>
             <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{session.title}</h1>
             <p className="mt-2 text-slate-600">
@@ -75,20 +77,19 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
             </ButtonLink>
             {view !== "trash" ? <ButtonLink href={`/sessions/${session.id}/edit`} variant="secondary">
               <Edit className="h-4 w-4" />
-              Edit
-            </ButtonLink> : null}
+              {ui("Edit")}</ButtonLink> : null}
             <SessionActions sessionId={session.id} view={view} />
           </div>
         </div>
         <div className="mt-6 grid gap-3 md:grid-cols-4">
-          <Metric label="Total duration" value={`${total} min`} icon={<Clock className="h-4 w-4" />} />
-          <Metric label="Expected players" value={session.expectedPlayers ? String(session.expectedPlayers) : "Not set"} icon={<Users className="h-4 w-4" />} />
-          <Metric label="Location" value={session.location || "Not set"} icon={<MapPin className="h-4 w-4" />} />
-          <Metric label="Drills" value={String(session.drills.length)} />
+          <Metric label={ui("Total duration")} value={`${total} min`} icon={<Clock className="h-4 w-4" />} />
+          <Metric label={ui("Expected players")} value={session.expectedPlayers ? String(session.expectedPlayers) : "Not set"} icon={<Users className="h-4 w-4" />} />
+          <Metric label={ui("Location")} value={session.location || "Not set"} icon={<MapPin className="h-4 w-4" />} />
+          <Metric label={ui("Drills")} value={String(session.drills.length)} />
         </div>
         {session.durationTargetMinutes ? (
           <p className="mt-4 rounded-md bg-board-paper px-3 py-2 text-sm font-semibold text-slate-700">
-            Target: {session.durationTargetMinutes} min - {targetLabel}
+            {ui("Target: ")}{session.durationTargetMinutes} {ui(" min - ")}{targetLabel}
           </p>
         ) : null}
       </section>
@@ -109,16 +110,16 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
               <div className="flex flex-wrap items-start justify-between gap-4 border-b border-board-line pb-4">
                 <div>
                   <h2 className="text-xl font-bold text-board-navy">{block.block}</h2>
-                  <p className="text-sm text-slate-500">{formatTimelineRange(blockStart, block.duration, session.startTime)} - {block.items.length} drills - {block.duration} min</p>
+                  <p className="text-sm text-slate-500">{formatTimelineRange(blockStart, block.duration, session.startTime)} - {block.items.length} {ui(" drills - ")}{block.duration} {ui(" min")}</p>
                   {block.stationSets.length ? (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-                      {block.stationSets.map((set) => <span key={set.name} className="rounded-md bg-board-paper px-2 py-1">{set.name}: {set.duration} min</span>)}
+                      {block.stationSets.map((set) => <span key={set.name} className="rounded-md bg-board-paper px-2 py-1">{set.name}: {set.duration} {ui(" min")}</span>)}
                     </div>
                   ) : null}
                 </div>
                 {blockMaterials.length ? (
                   <div className="min-w-[220px] max-w-sm rounded-md border border-board-line bg-board-paper p-3 text-sm text-slate-600">
-                    <h3 className="text-xs font-bold uppercase text-board-green">Block materials</h3>
+                    <h3 className="text-xs font-bold uppercase text-board-green">{ui("Block materials")}</h3>
                     <div className="mt-2">
                       <MaterialSummaryList materials={blockMaterials} />
                     </div>
@@ -138,7 +139,7 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
                 })}
                 {block.items.some((item) => item.timingMode !== "simultaneous") ? (
                   <section className="rounded-md border border-board-line bg-board-paper p-3">
-                    <h3 className="mb-3 text-sm font-bold text-board-navy">Sequential drills</h3>
+                    <h3 className="mb-3 text-sm font-bold text-board-navy">{ui("Sequential drills")}</h3>
                     <div className="space-y-4">
                       {block.items
                         .filter((item) => item.timingMode !== "simultaneous")
@@ -154,7 +155,7 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
         </div>
         <aside className="space-y-4">
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Player groups</h2>
+            <h2 className="text-lg font-bold text-board-navy">{ui("Player groups")}</h2>
             <div className="mt-3 space-y-2 text-sm text-slate-600">
               {session.playerGroups.length ? (
                 session.playerGroups.map((group) => (
@@ -164,19 +165,19 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
                   </div>
                 ))
               ) : (
-                <p>No player groups set.</p>
+                <p>{ui("No player groups set.")}</p>
               )}
             </div>
           </section>
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Materials</h2>
-            <p className="mt-1 text-xs text-slate-500">Calculated based on simultaneous and sequential drill usage.</p>
+            <h2 className="text-lg font-bold text-board-navy">{ui("Materials")}</h2>
+            <p className="mt-1 text-xs text-slate-500">{ui("Calculated based on simultaneous and sequential drill usage.")}</p>
             <div className="mt-3 text-sm text-slate-600">
               <MaterialSummaryList materials={materials} />
             </div>
           </section>
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Notes</h2>
+            <h2 className="text-lg font-bold text-board-navy">{ui("Notes")}</h2>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{session.notes || "No notes yet."}</p>
           </section>
         </aside>
@@ -202,7 +203,9 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
   );
 }
 
-function SessionDrillDetailCard({ item, index, playerGroups }: { item: SessionDrillDetail; index: number; playerGroups: SessionPlayerGroup[] }) {
+async function SessionDrillDetailCard({ item, index, playerGroups }: { item: SessionDrillDetail; index: number; playerGroups: SessionPlayerGroup[] }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   return (
     <article className="rounded-lg border border-board-line bg-white p-4">
       <div className="grid gap-4 lg:grid-cols-[320px_1fr] xl:grid-cols-[360px_1fr]">
@@ -211,23 +214,23 @@ function SessionDrillDetailCard({ item, index, playerGroups }: { item: SessionDr
         </div>
         <div>
           <p className="text-xs font-bold uppercase text-board-green">
-            #{index + 1} - {item.plannedDurationMinutes} min - {item.timingMode === "simultaneous" ? `Simultaneous ${stationSetLabel(item.simultaneousGroup)}` : "Sequential"}
+            #{index + 1} - {item.plannedDurationMinutes} {ui(" min - ")}{item.timingMode === "simultaneous" ? `Simultaneous ${stationSetLabel(item.simultaneousGroup)}` : "Sequential"}
           </p>
           <h3 className="mt-1 text-xl font-bold text-board-navy">{item.drill.title}</h3>
           {item.timingMode === "simultaneous" ? (
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-              <span className="rounded-md bg-board-paper px-2 py-1">Station set: {stationSetLabel(item.simultaneousGroup)}</span>
+              <span className="rounded-md bg-board-paper px-2 py-1">{ui("Station set: ")}{stationSetLabel(item.simultaneousGroup)}</span>
               <span className="rounded-md bg-board-paper px-2 py-1">
-                Groups: {item.participatingGroups?.length ? item.participatingGroups.map((groupId) => resolveGroupName(playerGroups, groupId)).join(", ") : "Not set"}
+                {ui("Groups: ")}{item.participatingGroups?.length ? item.participatingGroups.map((groupId) => resolveGroupName(playerGroups, groupId)).join(", ") : "Not set"}
               </span>
-              <span className="rounded-md bg-board-paper px-2 py-1">Starts: {resolveGroupName(playerGroups, item.startingGroup) || "Not set"}</span>
-              <span className="rounded-md bg-board-paper px-2 py-1">{item.plannedDurationMinutes} min × {Math.max(1, item.participatingGroups?.length ?? 0)} groups = {effectiveStationDuration(item)} min</span>
+              <span className="rounded-md bg-board-paper px-2 py-1">{ui("Starts: ")}{resolveGroupName(playerGroups, item.startingGroup) || "Not set"}</span>
+              <span className="rounded-md bg-board-paper px-2 py-1">{item.plannedDurationMinutes} {ui(" min × ")}{Math.max(1, item.participatingGroups?.length ?? 0)} {ui(" groups = ")}{effectiveStationDuration(item)} {ui(" min")}</span>
             </div>
           ) : null}
           <p className="mt-2 text-sm leading-6 text-slate-600">{item.drill.organization || item.drill.shortDescription || "No organization notes yet."}</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600"><span className="font-semibold">Coaching:</span> {item.drill.coachingPoints || "No coaching points yet."}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600"><span className="font-semibold">{ui("Coaching:")}</span> {item.drill.coachingPoints || "No coaching points yet."}</p>
           {item.coachNotes ? <p className="mt-2 rounded-md bg-board-paper p-3 text-sm text-slate-700">{item.coachNotes}</p> : null}
-          <p className="mt-3 text-xs font-semibold text-slate-500">{item.drill.minPlayers}-{item.drill.maxPlayers} players - {materialSummary(item.drill.materials)}</p>
+          <p className="mt-3 text-xs font-semibold text-slate-500">{item.drill.minPlayers}-{item.drill.maxPlayers} {ui(" players - ")}{materialSummary(item.drill.materials)}</p>
         </div>
       </div>
     </article>

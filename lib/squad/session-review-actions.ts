@@ -150,7 +150,7 @@ function formString(formData: FormData, key: string) {
 function numberValue(formData: FormData, key: string) {
   const raw = formString(formData, key);
   if (!raw) return null;
-  const number = Number.parseInt(raw, 10);
+  const number = Number(raw);
   return Number.isInteger(number) && number >= 1 && number <= 5 ? number : null;
 }
 

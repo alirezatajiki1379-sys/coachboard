@@ -20,7 +20,8 @@
     "test:trial-sync": "node --experimental-strip-types scripts/trial-player-sync-regression.mjs",
     "test:availability": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/player-availability-regression.mjs",
     "test:rating-defaults": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/attendance-rating-defaults-regression.mjs",
-    "test:session-review": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/session-review-regression.mjs"
+    "test:session-review": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/session-review-regression.mjs",
+    "test:core-stability": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/core-stability-regression.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

@@ -10,11 +10,13 @@ type GermanLocalizationBoundaryProps = {
 };
 
 const attributeNames = ["placeholder", "title", "aria-label", "alt"];
+type Translation = { source: string; translated: string };
+const protectedText = "textarea,input,[contenteditable='true'],[translate='no'],[data-user-content]";
 
 export function GermanLocalizationBoundary({ locale, children }: GermanLocalizationBoundaryProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const textOriginalsRef = useRef(new Map<Node, string>());
-  const attributeOriginalsRef = useRef(new Map<Element, Map<string, string>>());
+  const textOriginalsRef = useRef(new Map<Node, Translation>());
+  const attributeOriginalsRef = useRef(new Map<Element, Map<string, Translation>>());
 
   useEffect(() => {
     const root = rootRef.current;
@@ -56,7 +58,7 @@ export function GermanLocalizationBoundary({ locale, children }: GermanLocalizat
   return <div ref={rootRef}>{children}</div>;
 }
 
-function translateTree(root: Element, textOriginals: Map<Node, string>, attributeOriginals: Map<Element, Map<string, string>>) {
+function translateTree(root: Element, textOriginals: Map<Node, Translation>, attributeOriginals: Map<Element, Map<string, Translation>>) {
   translateAttributes(root, attributeOriginals);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode();
@@ -69,43 +71,48 @@ function translateTree(root: Element, textOriginals: Map<Node, string>, attribut
   }
 }
 
-function translateAttributes(element: Element, attributeOriginals: Map<Element, Map<string, string>>) {
+function translateAttributes(element: Element, attributeOriginals: Map<Element, Map<string, Translation>>) {
+  if (element.closest("[translate='no'],[data-user-content]")) return;
   for (const name of attributeNames) {
     const value = element.getAttribute(name);
     if (!value) continue;
+    if (attributeOriginals.get(element)?.get(name)?.translated === value) continue;
+    attributeOriginals.get(element)?.delete(name);
     const translated = translatePhrase(value);
     if (translated !== value) {
-      const originals = attributeOriginals.get(element) ?? new Map<string, string>();
-      if (!originals.has(name)) originals.set(name, value);
+      const originals = attributeOriginals.get(element) ?? new Map<string, Translation>();
+      originals.set(name, { source: value, translated });
       attributeOriginals.set(element, originals);
       element.setAttribute(name, translated);
     }
   }
 }
 
-function translateTextNode(node: Node, textOriginals: Map<Node, string>) {
+function translateTextNode(node: Node, textOriginals: Map<Node, Translation>) {
   const current = node.textContent;
   if (!current || !current.trim()) return;
   if (isUserEditableText(node)) return;
+  if (textOriginals.get(node)?.translated === current) return;
+  textOriginals.delete(node);
   const translated = translatePhrase(current);
   if (translated !== current) {
-    if (!textOriginals.has(node)) textOriginals.set(node, current);
+    textOriginals.set(node, { source: current, translated });
     node.textContent = translated;
   }
 }
 
-function restoreOriginals(root: Element, textOriginals: Map<Node, string>, attributeOriginals: Map<Element, Map<string, string>>) {
+function restoreOriginals(root: Element, textOriginals: Map<Node, Translation>, attributeOriginals: Map<Element, Map<string, Translation>>) {
   for (const [element, originals] of attributeOriginals) {
     if (!root.contains(element)) continue;
     for (const [name, value] of originals) {
-      element.setAttribute(name, value);
+      if (element.getAttribute(name) === value.translated) element.setAttribute(name, value.source);
     }
   }
   attributeOriginals.clear();
 
   for (const [node, value] of textOriginals) {
     if (!root.contains(node)) continue;
-    node.textContent = value;
+    if (node.textContent === value.translated) node.textContent = value.source;
   }
   textOriginals.clear();
 }
@@ -126,5 +133,5 @@ function translatePhrase(value: string) {
 function isUserEditableText(node: Node) {
   const parent = node.parentElement;
   if (!parent) return false;
-  return Boolean(parent.closest("textarea,input,[contenteditable='true']"));
+  return Boolean(parent.closest(protectedText));
 }
