@@ -5,8 +5,9 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { ensureActiveSquad } from "@/lib/squad/squads";
-import { createSlotRowsForPlan, evaluatePlayerSlotFit, getPlayerFitForSlot, isFitAllowedByAutoFillEligibility, mapTacticalSlotRow, normalizeTacticalPlayerStatus, tacticalRoleScore, type AutoFillEligibility, type TacticalFitType, type TacticalPlanSlot } from "@/lib/squad/tactical-planner";
-import { getTacticalFormation } from "@/lib/squad/tactical-formations";
+import { createSlotRowsForPlan, evaluatePlayerSlotFit, getPlayerFitForSlot, isFitAllowedByAutoFillEligibility, mapTacticalAssignmentRow, mapTacticalSlotRow, normalizeTacticalPlayerStatus, tacticalRoleScore, type AutoFillEligibility, type TacticalFitType, type TacticalPlanSlot, type TacticalDepthAssignment } from "@/lib/squad/tactical-planner";
+import { getTacticalFormation, slot as makeSlotDefinition } from "@/lib/squad/tactical-formations";
+import { isCanonicalPosition, normalizeCanonicalPosition } from "@/lib/squad/positions";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { SquadPlayer } from "@/types/domain";
 
@@ -39,6 +40,8 @@ type AssignmentRow = {
   depth_order: number;
   is_preferred_starter: boolean;
   fit_type: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type PlayerStateActionRow = {
@@ -134,7 +137,15 @@ export async function createTacticalPlan(formData: FormData) {
     .single();
 
   if (error) throw new Error(error.message);
-  await db.from("squad_tactical_plan_slots").insert(createSlotRowsForPlan(user.id, plan.id, formationCode));
+  const { error: slotsError } = await db.from("squad_tactical_plan_slots").insert(createSlotRowsForPlan(user.id, plan.id, formationCode));
+  if (slotsError) {
+    await db.from("squad_tactical_plans").delete().eq("id", plan.id).eq("user_id", user.id);
+    throw new Error(slotsError.message);
+  }
+  if (formationCode === "Custom") {
+    revalidatePath("/squad/planner");
+    redirect(`/squad/planner?plan=${plan.id}&edit=1`);
+  }
   redirectToPlanner(plan.id);
 }
 
@@ -216,13 +227,33 @@ export async function duplicateTacticalPlan(formData: FormData) {
   if (!source) redirectToPlanner();
 
   const sourcePlan = source as Record<string, unknown> & PlanRow & { name: string; include_new_players_automatically: boolean; notes: string | null; status: string };
+  const asCustom = formData.get("asCustom") === "on";
+  const { data: sourceSlots, error: sourceSlotsError } = await db.from("squad_tactical_plan_slots").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId);
+  if (sourceSlotsError) throw new Error(sourceSlotsError.message);
+  if (!sourceSlots?.length) throw new Error("This plan has no positions to duplicate.");
+  const slotCopies = (sourceSlots as SlotRow[]).map((slotRow) => {
+    const code = asCustom ? (normalizeCanonicalPosition(slotRow.code) ?? normalizeCanonicalPosition(slotRow.accepted_positions?.[0])) : slotRow.code;
+    if (!code) throw new Error(`Cannot convert ${slotRow.code} to a canonical custom position.`);
+    const definition = makeSlotDefinition(slotRow.slot_key, code, Number(slotRow.x), Number(slotRow.y), slotRow.sort_order);
+    return {
+      user_id: user.id,
+      slot_key: slotRow.slot_key,
+      code,
+      label: slotRow.label,
+      family: asCustom ? definition.family : slotRow.family,
+      x: slotRow.x,
+      y: slotRow.y,
+      accepted_positions: asCustom ? definition.acceptedPositions : slotRow.accepted_positions ?? [],
+      sort_order: slotRow.sort_order
+    };
+  });
   const { data: copy, error: copyError } = await db
     .from("squad_tactical_plans")
     .insert({
       user_id: user.id,
       squad_id: sourcePlan.squad_id,
       name: `${sourcePlan.name} copy`,
-      formation_code: sourcePlan.formation_code,
+      formation_code: asCustom ? "Custom" : sourcePlan.formation_code,
       include_new_players_automatically: sourcePlan.include_new_players_automatically,
       notes: sourcePlan.notes,
       status: "active",
@@ -232,34 +263,21 @@ export async function duplicateTacticalPlan(formData: FormData) {
     .single();
   if (copyError) throw new Error(copyError.message);
 
-  const { data: sourceSlots } = await db.from("squad_tactical_plan_slots").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId);
   const slotIdMap = new Map<string, string>();
-  if (sourceSlots?.length) {
     const { data: copiedSlots, error: slotError } = await db
       .from("squad_tactical_plan_slots")
-      .insert((sourceSlots as SlotRow[]).map((slotRow) => ({
-        user_id: user.id,
-        tactical_plan_id: copy.id,
-        slot_key: slotRow.slot_key,
-        code: slotRow.code,
-        label: slotRow.label,
-        family: slotRow.family,
-        x: slotRow.x,
-        y: slotRow.y,
-        accepted_positions: slotRow.accepted_positions ?? [],
-        sort_order: slotRow.sort_order
-      })))
+      .insert(slotCopies.map((slotRow) => ({ ...slotRow, tactical_plan_id: copy.id })))
       .select("*");
-    if (slotError) throw new Error(slotError.message);
+    if (slotError) { await db.from("squad_tactical_plans").delete().eq("id", copy.id).eq("user_id", user.id); throw new Error(slotError.message); }
     (sourceSlots as SlotRow[]).forEach((slotRow) => {
       const copied = (copiedSlots as SlotRow[]).find((copiedSlot) => copiedSlot.slot_key === slotRow.slot_key);
       if (copied) slotIdMap.set(slotRow.id, copied.id);
     });
-  }
 
-  const { data: sourceStates } = await db.from("squad_tactical_plan_player_states").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId);
+  const { data: sourceStates, error: sourceStatesError } = await db.from("squad_tactical_plan_player_states").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId);
+  if (sourceStatesError) { await db.from("squad_tactical_plans").delete().eq("id", copy.id).eq("user_id", user.id); throw new Error(sourceStatesError.message); }
   if (sourceStates?.length) {
-    await db.from("squad_tactical_plan_player_states").insert((sourceStates as Array<Record<string, unknown>>).map((state) => ({
+    const { error: statesError } = await db.from("squad_tactical_plan_player_states").insert((sourceStates as Array<Record<string, unknown>>).map((state) => ({
       user_id: user.id,
       tactical_plan_id: copy.id,
       player_id: state.player_id,
@@ -268,9 +286,11 @@ export async function duplicateTacticalPlan(formData: FormData) {
       exclusion_reason: state.exclusion_reason,
       note: state.note
     })));
+    if (statesError) { await db.from("squad_tactical_plans").delete().eq("id", copy.id).eq("user_id", user.id); throw new Error(statesError.message); }
   }
 
-  const { data: sourceAssignments } = await db.from("squad_tactical_depth_assignments").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId);
+  const { data: sourceAssignments, error: sourceAssignmentsError } = await db.from("squad_tactical_depth_assignments").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId);
+  if (sourceAssignmentsError) { await db.from("squad_tactical_plans").delete().eq("id", copy.id).eq("user_id", user.id); throw new Error(sourceAssignmentsError.message); }
   const copiedAssignments = ((sourceAssignments ?? []) as AssignmentRow[]).flatMap((assignment) => {
     const slotId = slotIdMap.get(assignment.slot_id);
     if (!slotId) return [];
@@ -284,9 +304,143 @@ export async function duplicateTacticalPlan(formData: FormData) {
       fit_type: assignment.fit_type
     }];
   });
-  if (copiedAssignments.length) await db.from("squad_tactical_depth_assignments").insert(copiedAssignments);
+  if (copiedAssignments.length) {
+    const { error: assignmentsError } = await db.from("squad_tactical_depth_assignments").insert(copiedAssignments);
+    if (assignmentsError) { await db.from("squad_tactical_plans").delete().eq("id", copy.id).eq("user_id", user.id); throw new Error(assignmentsError.message); }
+  }
 
+  if (asCustom) {
+    revalidatePath("/squad/planner");
+    redirect(`/squad/planner?plan=${copy.id}&edit=1`);
+  }
   redirectToPlanner(copy.id);
+}
+
+type CustomSlotInput = { id: string; code: string; label: string; x: number; y: number };
+
+export async function saveCustomFormation(planId: string, name: string, slots: CustomSlotInput[]): Promise<{ ok: boolean; error?: string }> {
+  const { db, user } = await requireUser();
+  const plan = await getOwnedPlan(db, user.id, planId);
+  if (!plan || plan.formation_code !== "Custom") return { ok: false, error: "Duplicate a formation as custom before editing it." };
+  if (slots.length !== 11) return { ok: false, error: "A tactical formation needs exactly 11 positions." };
+  if (new Set(slots.map((item) => item.id)).size !== slots.length) return { ok: false, error: "Position IDs must be unique." };
+  if (slots.some((item) => !isCanonicalPosition(item.code) && !isCanonicalPosition(makeSlotDefinition("check", item.code, 50, 50, 0).acceptedPositions[0]) || !Number.isFinite(item.x) || !Number.isFinite(item.y) || item.x < 8 || item.x > 92 || item.y < 12 || item.y > 90 || item.label.length > 40)) {
+    return { ok: false, error: "Check each position, label and pitch location." };
+  }
+  const safeName = name.trim().slice(0, 100);
+  if (!safeName) return { ok: false, error: "Name the custom formation." };
+
+  const { data: stored, error: loadError } = await db.from("squad_tactical_plan_slots").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId);
+  if (loadError) return { ok: false, error: loadError.message };
+  const oldById = new Map(((stored ?? []) as SlotRow[]).map((item) => [item.id, item]));
+  const retained = new Set<string>();
+  const changedCodeSlots: TacticalPlanSlot[] = [];
+  const rows = slots.map((item, index) => {
+    const code = normalizeCanonicalPosition(item.code) ?? normalizeCanonicalPosition(makeSlotDefinition("check", item.code, 50, 50, 0).acceptedPositions[0])!;
+    const old = oldById.get(item.id);
+    const definition = makeSlotDefinition(old?.slot_key ?? `custom-${crypto.randomUUID()}`, code, item.x, item.y, index);
+    if (old) retained.add(old.id);
+    const row = {
+      id: old?.id ?? crypto.randomUUID(),
+      user_id: user.id,
+      tactical_plan_id: planId,
+      slot_key: definition.slotKey,
+      code,
+      label: item.label.trim() || definition.label,
+      family: definition.family,
+      x: Math.round(item.x * 100) / 100,
+      y: Math.round(item.y * 100) / 100,
+      accepted_positions: definition.acceptedPositions,
+      sort_order: index
+    };
+    if (old && old.code !== code) changedCodeSlots.push(mapTacticalSlotRow(row));
+    return row;
+  });
+  const { error: slotsError } = await db.from("squad_tactical_plan_slots").upsert(rows, { onConflict: "id" });
+  if (slotsError) return { ok: false, error: slotsError.message };
+  const { error } = await db.from("squad_tactical_plans").update({ name: safeName }).eq("id", planId).eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
+  const removedIds = [...oldById.keys()].filter((id) => !retained.has(id));
+  if (removedIds.length) {
+    const { error: removeError } = await db.from("squad_tactical_plan_slots").delete().eq("user_id", user.id).eq("tactical_plan_id", planId).in("id", removedIds);
+    if (removeError) return { ok: false, error: removeError.message };
+  }
+  if (changedCodeSlots.length) {
+    const changedIds = changedCodeSlots.map((slot) => slot.id);
+    const { data: assignments, error: assignmentError } = await db.from("squad_tactical_depth_assignments").select("id,slot_id,player_id").eq("user_id", user.id).eq("tactical_plan_id", planId).in("slot_id", changedIds);
+    if (assignmentError) return { ok: false, error: assignmentError.message };
+    const playerIds = [...new Set((assignments ?? []).map((assignment) => assignment.player_id))];
+    if (playerIds.length) {
+      const { data: playerRows, error: playerError } = await db.from("squad_players").select("*").eq("user_id", user.id).eq("squad_id", plan.squad_id).in("id", playerIds);
+      if (playerError) return { ok: false, error: playerError.message };
+      const playersById = new Map(((playerRows ?? []) as SquadPlayerRow[]).map((row) => [row.id, mapSquadPlayerRow(row)]));
+      const slotsById = new Map(changedCodeSlots.map((slot) => [slot.id, slot]));
+      for (const assignment of assignments ?? []) {
+        const changedSlot = slotsById.get(assignment.slot_id);
+        const assignedPlayer = playersById.get(assignment.player_id);
+        if (!changedSlot || !assignedPlayer) continue;
+        const { error: fitError } = await db.from("squad_tactical_depth_assignments").update({ fit_type: getPlayerFitForSlot(assignedPlayer, changedSlot) }).eq("id", assignment.id).eq("user_id", user.id);
+        if (fitError) return { ok: false, error: fitError.message };
+      }
+    }
+  }
+  revalidatePath("/squad/planner");
+  return { ok: true };
+}
+
+export async function assignStartingPlayer(planId: string, playerId: string, targetSlotId: string | null): Promise<{ ok: boolean; assignments?: TacticalDepthAssignment[]; error?: string }> {
+  const { db, user } = await requireUser();
+  const plan = await getOwnedPlan(db, user.id, planId);
+  if (!plan) return { ok: false, error: "Tactical plan not found." };
+  const player = await getOwnedPlayer(db, user.id, plan.squad_id, playerId);
+  if (!player) return { ok: false, error: "Player is not available for this team." };
+  const [slotsResult, assignmentsResult, stateResult] = await Promise.all([
+    db.from("squad_tactical_plan_slots").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId),
+    db.from("squad_tactical_depth_assignments").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId),
+    db.from("squad_tactical_plan_player_states").select("inclusion_status").eq("user_id", user.id).eq("tactical_plan_id", planId).eq("player_id", playerId).maybeSingle()
+  ]);
+  if (slotsResult.error || assignmentsResult.error || stateResult.error) return { ok: false, error: slotsResult.error?.message ?? assignmentsResult.error?.message ?? stateResult.error?.message };
+  if (stateResult.data?.inclusion_status === "excluded") return { ok: false, error: "This player is excluded from the plan." };
+  const slots = ((slotsResult.data ?? []) as SlotRow[]).map(mapTacticalSlotRow);
+  const target = targetSlotId ? slots.find((slot) => slot.id === targetSlotId) : undefined;
+  if (targetSlotId && !target) return { ok: false, error: "Position not found in this plan." };
+  const previous = (assignmentsResult.data ?? []) as AssignmentRow[];
+  const source = previous.find((row) => row.player_id === playerId && row.is_preferred_starter);
+  if (source?.slot_id === targetSlotId) return { ok: true, assignments: previous.map(mapTacticalAssignmentRow) };
+  const displaced = target ? previous.find((row) => row.slot_id === target.id && row.is_preferred_starter && row.player_id !== playerId) : undefined;
+  const inserted: string[] = [];
+  try {
+    const demoteIds = previous.filter((row) => row.is_preferred_starter && (row.player_id === playerId || row.id === displaced?.id || (displaced && row.player_id === displaced.player_id))).map((row) => row.id);
+    if (demoteIds.length) {
+      const { error } = await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: false }).eq("user_id", user.id).eq("tactical_plan_id", planId).in("id", demoteIds);
+      if (error) throw error;
+    }
+    const place = async (selectedPlayerId: string, slot: TacticalPlanSlot, selectedPlayer: SquadPlayer) => {
+      const existing = previous.find((row) => row.slot_id === slot.id && row.player_id === selectedPlayerId);
+      if (existing) {
+        const { error } = await db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: true, fit_type: getPlayerFitForSlot(selectedPlayer, slot) }).eq("id", existing.id).eq("user_id", user.id);
+        if (error) throw error;
+      } else {
+        const depthOrder = Math.max(0, ...previous.filter((row) => row.slot_id === slot.id).map((row) => row.depth_order)) + 1;
+        const { data, error } = await db.from("squad_tactical_depth_assignments").insert({ user_id: user.id, tactical_plan_id: planId, slot_id: slot.id, player_id: selectedPlayerId, depth_order: depthOrder, is_preferred_starter: true, fit_type: getPlayerFitForSlot(selectedPlayer, slot) }).select("id").single();
+        if (error) throw error;
+        inserted.push(data.id);
+      }
+    };
+    if (target) await place(playerId, target, player);
+    if (source && displaced && source.slot_id !== targetSlotId) {
+      const sourceSlot = slots.find((slot) => slot.id === source.slot_id);
+      const otherPlayer = await getOwnedPlayer(db, user.id, plan.squad_id, displaced.player_id);
+      if (sourceSlot && otherPlayer) await place(otherPlayer.id, sourceSlot, otherPlayer);
+    }
+  } catch (error) {
+    if (inserted.length) await db.from("squad_tactical_depth_assignments").delete().eq("user_id", user.id).in("id", inserted);
+    await Promise.all(previous.map((row) => db.from("squad_tactical_depth_assignments").update({ is_preferred_starter: row.is_preferred_starter }).eq("user_id", user.id).eq("id", row.id)));
+    return { ok: false, error: error instanceof Error ? error.message : "Could not update formation." };
+  }
+  const { data, error } = await db.from("squad_tactical_depth_assignments").select("*").eq("user_id", user.id).eq("tactical_plan_id", planId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, assignments: ((data ?? []) as AssignmentRow[]).map(mapTacticalAssignmentRow) };
 }
 
 export async function setDefaultTacticalPlan(formData: FormData) {
@@ -662,7 +816,9 @@ export async function autoFillTacticalPlan(formData: FormData) {
         player_id: row.player_id,
         depth_order: row.depth_order,
         is_preferred_starter: row.is_preferred_starter,
-        fit_type: row.fit_type
+        fit_type: row.fit_type,
+        created_at: "",
+        updated_at: ""
       }))
     ];
     for (const slot of orderedSlots) {

@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Archive, Copy, Goal, RotateCcw, Shield, Star, Trash2, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Archive, Copy, Goal, GripVertical, Plus, RotateCcw, Shield, Star, Trash2, Users } from "lucide-react";
 import {
   addDepthAssignment,
   addAllEligibleDepthAssignments,
+  assignStartingPlayer,
   archiveTacticalPlan,
   autoFillTacticalPlan,
   clearStartingXi,
@@ -18,6 +20,7 @@ import {
   restoreTacticalPlan,
   setDefaultTacticalPlan,
   setPreferredStarter,
+  saveCustomFormation,
   updatePlayerPlanState,
   updateTacticalPlan
 } from "@/lib/squad/tactical-planner-actions";
@@ -35,7 +38,9 @@ import {
   type TacticalPlanSlot,
   type TacticalFitType
 } from "@/lib/squad/tactical-planner";
-import { tacticalFormations } from "@/lib/squad/tactical-formations";
+import { tacticalFormations, slot as makeSlotDefinition } from "@/lib/squad/tactical-formations";
+import { canonicalPositionLabels } from "@/lib/squad/positions";
+import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getPositionFamily, positionFamilyMeta, positionFamilyOrder, type PositionFamily } from "@/lib/squad/positions";
@@ -64,16 +69,57 @@ const tacticalStatusOptions = [
   ...tacticalPlayerRoleOptions
 ];
 
-export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
+const plannerCopy = {
+  en: {
+    heading: "Squad Planner", nameRequired: "Name the custom formation.",
+    edit: "Edit formation", add: "Add position", remove: "Remove position", save: "Save formation", reset: "Reset changes", cancel: "Cancel",
+    duplicate: "Duplicate as custom", custom: "Custom formation", available: "Available players", unassigned: "Unassigned", drop: "Drop player here",
+    assign: "Assign", selectPlayer: "Select a player, then tap a position.", selectPosition: "Select a position to inspect its depth.", depthOptions: "options", removeFromXi: "Remove from XI", changeFailed: "Could not update formation.",
+    name: "Formation name", label: "Display label", position: "Position", eleven: "A formation needs 11 positions before it can be saved.",
+    starters: "starters", depthAssignments: "depth assignments", included: "included", excluded: "excluded", plan: "Plan", board: "Formation board", depthBoard: "Depth board", playerPool: "Player pool",
+    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position"
+  },
+  de: {
+    heading: "Kaderplaner", nameRequired: "Bitte einen Namen für die Formation eingeben.",
+    edit: "Formation bearbeiten", add: "Position hinzufügen", remove: "Position entfernen", save: "Formation speichern", reset: "Änderungen zurücksetzen", cancel: "Abbrechen",
+    duplicate: "Als individuelle Formation duplizieren", custom: "Individuelle Formation", available: "Verfügbare Spieler", unassigned: "Nicht zugeordnet", drop: "Spieler hier ablegen",
+    assign: "Zuweisen", selectPlayer: "Spieler auswählen und dann eine Position antippen.", selectPosition: "Position auswählen, um die Besetzung zu sehen.", depthOptions: "Optionen", removeFromXi: "Aus Startelf entfernen", changeFailed: "Formation konnte nicht aktualisiert werden.",
+    name: "Name der Formation", label: "Anzeigename", position: "Position", eleven: "Eine Formation braucht 11 Positionen, bevor sie gespeichert werden kann.",
+    starters: "Startspieler", depthAssignments: "Positionszuordnungen", included: "einbezogen", excluded: "ausgeschlossen", plan: "Plan", board: "Formationstafel", depthBoard: "Positionsbesetzung", playerPool: "Spielerpool",
+    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd"
+  }
+} as const;
+
+export function SquadTacticalPlanner({ data, startEditing = false }: { data: TacticalPlannerData; startEditing?: boolean }) {
+  const router = useRouter();
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const copy = plannerCopy[locale];
   const [mode, setMode] = useState<PlannerMode>("formation");
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [dragPlayerId, setDragPlayerId] = useState<string | null>(null);
+  const [dragPoint, setDragPoint] = useState<{ x: number; y: number } | null>(null);
+  const [hoverSlotId, setHoverSlotId] = useState<string | null>(null);
+  const [editingFormation, setEditingFormation] = useState(startEditing);
+  const [draftSlots, setDraftSlots] = useState(data.slots);
+  const [formationName, setFormationName] = useState(data.selectedPlan?.name ?? "");
+  const [savingFormation, setSavingFormation] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [plannerError, setPlannerError] = useState("");
+  const acceptedDrop = useRef(false);
   const [showTrials, setShowTrials] = useState(false);
   const [search, setSearch] = useState("");
   const [poolFilter, setPoolFilter] = useState<"all" | "unassigned" | "excluded">("unassigned");
   const [roleFilter, setRoleFilter] = useState("");
   const [positionFilter, setPositionFilter] = useState("");
 
-  const selectedSlot = selectedSlotId ? data.slots.find((slot) => slot.id === selectedSlotId) : undefined;
+  useEffect(() => {
+    setDraftSlots(data.slots);
+    setFormationName(data.selectedPlan?.name ?? "");
+    setEditingFormation(startEditing);
+  }, [data.selectedPlan?.id, data.selectedPlan?.name, data.slots, startEditing]);
+  const visibleSlots = editingFormation ? draftSlots : data.slots;
+  const selectedSlot = selectedSlotId ? visibleSlots.find((slot) => slot.id === selectedSlotId) : undefined;
   const playersById = useMemo(() => new Map(data.players.map((player) => [player.id, player])), [data.players]);
   const statesByPlayer = useMemo(() => new Map(data.playerStates.map((state) => [state.playerId, state])), [data.playerStates]);
   const excludedPlayerIds = useMemo(
@@ -101,13 +147,91 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
     if (player.playerType === "trial" && !showTrials) return false;
     return matchesSearch(player, search);
   });
-  const unassignedPlayers = includedPlayers.filter((player) => !assignedPlayerIds.has(player.id));
+  const startingPlayerIds = new Set(activeAssignments.filter((assignment) => assignment.isPreferredStarter).map((assignment) => assignment.playerId));
+  const unassignedPlayers = includedPlayers.filter((player) => !startingPlayerIds.has(player.id));
   const selectedSlotDepth = selectedSlot ? (assignmentsBySlot.get(selectedSlot.id) ?? []) : [];
   const starters = activeAssignments.filter((assignment) => assignment.isPreferredStarter);
   const activePlans = data.plans.filter((plan) => plan.status === "active");
   const archivedPlans = data.plans.filter((plan) => plan.status === "archived");
   const applyOptimisticUpdate = (update: OptimisticSlotUpdate) => {
     setActiveAssignments((current) => applyOptimisticSlotUpdate(current, data.selectedPlan?.id ?? "", update));
+  };
+  const assignPlayer = async (playerId: string, slotId: string | null) => {
+    if (!data.selectedPlan || assigning || editingFormation || excludedPlayerIds.has(playerId)) return;
+    const player = playersById.get(playerId);
+    if (!player) return;
+    const before = activeAssignments;
+    acceptedDrop.current = true;
+    setPlannerError("");
+    setSelectedPlayerId(null);
+    setSelectedSlotId(null);
+    setHoverSlotId(null);
+    setDragPlayerId(null);
+    setDragPoint(null);
+    setAssigning(true);
+    setActiveAssignments(optimisticStartingXi(before, data.selectedPlan.id, player, slotId, data.slots));
+    try {
+      const result = await assignStartingPlayer(data.selectedPlan.id, playerId, slotId);
+      if (!result.ok || !result.assignments) throw new Error(locale === "de" ? copy.changeFailed : result.error || copy.changeFailed);
+      setActiveAssignments(result.assignments);
+    } catch (error) {
+      setActiveAssignments(before);
+      setPlannerError(locale === "de" ? copy.changeFailed : error instanceof Error ? error.message : copy.changeFailed);
+    } finally {
+      setAssigning(false);
+    }
+  };
+  const startPlayerDrag = (event: React.DragEvent<HTMLElement>, playerId: string) => {
+    if (editingFormation || assigning) { event.preventDefault(); return; }
+    event.dataTransfer.setData("text/plain", playerId);
+    acceptedDrop.current = false;
+    event.dataTransfer.effectAllowed = "move";
+    const ghost = document.createElement("canvas");
+    ghost.width = 1;
+    ghost.height = 1;
+    event.dataTransfer.setDragImage(ghost, 0, 0);
+    setDragPlayerId(playerId);
+    setDragPoint({ x: event.clientX, y: event.clientY });
+    setSelectedSlotId(null);
+  };
+  const finishPlayerDrag = () => {
+    if (!acceptedDrop.current) setPlannerError(copy.dropInvalid);
+    acceptedDrop.current = true;
+    setDragPlayerId(null);
+    setDragPoint(null);
+    setHoverSlotId(null);
+  };
+  useEffect(() => {
+    if (!dragPlayerId) return;
+    const follow = (event: DragEvent) => {
+      if (event.clientX || event.clientY) setDragPoint({ x: event.clientX, y: event.clientY });
+    };
+    document.addEventListener("dragover", follow);
+    const end = () => { if (!acceptedDrop.current) setPlannerError(copy.dropInvalid); acceptedDrop.current = true; setDragPlayerId(null); setDragPoint(null); setHoverSlotId(null); };
+    document.addEventListener("dragend", end);
+    document.addEventListener("drop", end);
+    return () => { document.removeEventListener("dragover", follow); document.removeEventListener("dragend", end); document.removeEventListener("drop", end); };
+  }, [copy.dropInvalid, dragPlayerId]);
+  const saveFormation = async () => {
+    if (!data.selectedPlan || savingFormation) return;
+    setPlannerError("");
+    if (!formationName.trim()) { setPlannerError(copy.nameRequired); return; }
+    setSavingFormation(true);
+    try {
+      const result = await saveCustomFormation(data.selectedPlan.id, formationName, draftSlots.map((slot) => ({ id: slot.id, code: slot.code, label: slot.label, x: slot.x, y: slot.y })));
+      if (!result.ok) {
+        const message = locale === "de"
+          ? result.error === "A tactical formation needs exactly 11 positions." ? copy.eleven : copy.changeFailed
+          : result.error || copy.changeFailed;
+        throw new Error(message);
+      }
+      router.replace(`/squad/planner?plan=${data.selectedPlan.id}`);
+      router.refresh();
+      setSavingFormation(false);
+    } catch (error) {
+      setPlannerError(locale === "de" ? copy.changeFailed : error instanceof Error ? error.message : copy.changeFailed);
+      setSavingFormation(false);
+    }
   };
 
   useEffect(() => {
@@ -136,13 +260,13 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
       <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase text-board-green">Squad Planner · {data.squad.name}</p>
+            <p className="text-xs font-bold uppercase text-board-green">{copy.heading} · {data.squad.name}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <PlanSelect plans={activePlans} selectedPlanId={data.selectedPlan.id} />
               {data.selectedPlan.isDefault ? <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-bold text-green-700">Default</span> : null}
             </div>
             <p className="mt-1 text-sm text-slate-600">
-              {data.selectedPlan.formationCode} · {starters.length}/11 starters · {activeAssignments.length} depth assignments
+              {data.selectedPlan.formationCode === "Custom" ? copy.custom : data.selectedPlan.formationCode} · {starters.length}/{visibleSlots.length} {copy.starters} · {activeAssignments.length} {copy.depthAssignments}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -156,17 +280,18 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
                 <select
                   name="formationCode"
                   defaultValue={data.selectedPlan.formationCode}
+                  disabled={editingFormation}
                   className="h-10 rounded-md border border-board-line px-3 text-sm font-semibold"
                   onChange={(event) => {
                     const currentAssignments = activeAssignments.length;
-                    if (currentAssignments > 0 && !window.confirm("Change formation? Compatible Player assignments will be preserved. Assignments without a matching slot will return to Unassigned Players.")) {
+                    if ((currentAssignments > 0 || data.selectedPlan?.formationCode === "Custom") && !window.confirm("Change formation? The current slot layout will be replaced. Compatible Player assignments will be preserved where possible.")) {
                       event.currentTarget.value = data.selectedPlan?.formationCode ?? "4-3-3";
                       return;
                     }
                     event.currentTarget.form?.requestSubmit();
                   }}
                 >
-                  {tacticalFormations.map((formation) => (
+                  {tacticalFormations.filter((formation) => formation.code !== "Custom" || data.selectedPlan?.formationCode === "Custom").map((formation) => (
                     <option key={formation.code} value={formation.code}>{formation.name}</option>
                   ))}
                 </select>
@@ -186,15 +311,15 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
               </button>
             ))}
             <span className="self-center rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500" aria-live="polite">
-              Saved
+              {savingFormation || assigning ? copy.saving : editingFormation ? copy.unsaved : copy.saved}
             </span>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 border-t border-board-line pt-4">
-          <details className="rounded-md border border-board-line bg-slate-50 px-3 py-2">
+          <details className="group rounded-md border border-board-line bg-slate-50 px-3 py-2">
             <summary className="cursor-pointer text-sm font-bold text-board-navy">Rename / notes</summary>
-          <form action={updateTacticalPlan} className="mt-3 grid gap-3 md:grid-cols-2">
+          <form action={updateTacticalPlan} className="mt-3 hidden gap-3 group-open:grid md:grid-cols-2">
             <input type="hidden" name="planId" value={data.selectedPlan.id} />
             <input type="hidden" name="formationCode" value={data.selectedPlan.formationCode} />
             <label className="space-y-1 text-sm font-semibold text-slate-700">
@@ -212,10 +337,24 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
             <Button type="submit" className="self-end">Save</Button>
           </form>
           </details>
-            <CreatePlanForm compact />
-            <details className="relative rounded-md border border-board-line bg-slate-50 px-3 py-2">
+            <details className="group rounded-md border border-board-line bg-slate-50 px-3 py-2">
+              <summary className="cursor-pointer text-sm font-bold text-board-navy">New plan</summary>
+              <div className="mt-3 hidden group-open:block"><CreatePlanForm compact /></div>
+            </details>
+            {data.selectedPlan.formationCode === "Custom" ? (
+              <Button type="button" variant="secondary" onClick={() => { setDraftSlots(data.slots); setFormationName(data.selectedPlan?.name ?? ""); setEditingFormation(true); setMode("formation"); setSelectedSlotId(null); }}>
+                {copy.edit}
+              </Button>
+            ) : (
+              <form action={duplicateTacticalPlan}>
+                <input type="hidden" name="planId" value={data.selectedPlan.id} />
+                <input type="hidden" name="asCustom" value="on" />
+                <Button type="submit" variant="secondary"><Copy className="h-4 w-4" />{copy.duplicate}</Button>
+              </form>
+            )}
+            <details className="group relative rounded-md border border-board-line bg-slate-50 px-3 py-2">
               <summary className="cursor-pointer text-sm font-bold text-board-navy">More</summary>
-              <div className="absolute left-0 z-30 mt-2 w-56 space-y-2 rounded-lg border border-board-line bg-white p-3 shadow-xl">
+              <div className="absolute left-0 z-30 mt-2 hidden w-56 space-y-2 rounded-lg border border-board-line bg-white p-3 shadow-xl group-open:block max-sm:fixed max-sm:inset-x-4 max-sm:top-24 max-sm:mt-0 max-sm:w-auto">
                 <IconForm action={setDefaultTacticalPlan} planId={data.selectedPlan.id} label="Set default" icon={<Star className="h-4 w-4" />} disabled={data.selectedPlan.isDefault} />
                 <IconForm action={duplicateTacticalPlan} planId={data.selectedPlan.id} label="Duplicate" icon={<Copy className="h-4 w-4" />} />
                 <IconForm action={archiveTacticalPlan} planId={data.selectedPlan.id} label="Archive" icon={<Archive className="h-4 w-4" />} confirmMessage="Archive this tactical plan?" />
@@ -233,15 +372,15 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_410px]">
-        <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+        <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft" onDragOver={(event) => { if (dragPlayerId) event.preventDefault(); }} onDrop={(event) => { if (!dragPlayerId || acceptedDrop.current) return; event.preventDefault(); finishPlayerDrag(); }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="font-bold text-board-navy">{mode === "depth" ? "Depth board" : "Formation board"}</h3>
+              <h3 className="font-bold text-board-navy">{editingFormation ? copy.edit : mode === "depth" ? copy.depthBoard : copy.board}</h3>
               <p className="text-sm text-slate-600">
-                {mode === "depth" ? "Same formation geometry, focused on ordered tactical depth." : "Click a slot to manage starter and depth. The board does not change training sessions."}
+                {editingFormation ? copy.editHint : mode === "depth" ? "Same formation geometry, focused on ordered tactical depth." : copy.selectPlayer}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            {!editingFormation ? <div className="flex flex-wrap gap-2">
               <AutoFillMenu
                 planId={data.selectedPlan.id}
                 slots={data.slots}
@@ -250,33 +389,122 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
                 playerStates={data.playerStates}
               />
               <IconForm action={clearStartingXi} planId={data.selectedPlan.id} label="Clear XI" icon={<RotateCcw className="h-4 w-4" />} confirmMessage="Clear the current Starting XI? Depth rankings stay available." />
-            </div>
+            </div> : null}
           </div>
+
+          {editingFormation ? (
+            <div className="mt-4 space-y-3 border-t border-board-line pt-4">
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="min-w-0 flex-1 space-y-1 text-sm font-semibold text-slate-700">
+                  <span>{copy.name}</span>
+                  <input value={formationName} onChange={(event) => setFormationName(event.target.value)} maxLength={100} className="h-10 w-full rounded-md border border-board-line px-3" />
+                </label>
+                <Button type="button" variant="secondary" onClick={() => {
+                  const definition = makeSlotDefinition(`custom-${crypto.randomUUID()}`, "CM", 50, 50, draftSlots.length);
+                  const next = { ...definition, id: crypto.randomUUID(), userId: data.selectedPlan!.userId, planId: data.selectedPlan!.id };
+                  setDraftSlots((current) => [...current, next]);
+                  setSelectedSlotId(next.id);
+                }}><Plus className="h-4 w-4" />{copy.add}</Button>
+              </div>
+              {selectedSlot ? (
+                <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <label className="space-y-1 text-xs font-bold text-slate-700">{copy.position}
+                    <select value={selectedSlot.code} onChange={(event) => {
+                      const code = event.target.value;
+                      const definition = makeSlotDefinition(selectedSlot.slotKey, code, selectedSlot.x, selectedSlot.y, selectedSlot.sortOrder);
+                      setDraftSlots((current) => current.map((slot) => slot.id === selectedSlot.id ? { ...slot, code, family: definition.family, naturalPositions: definition.naturalPositions, compatiblePositions: definition.compatiblePositions, acceptedPositions: definition.acceptedPositions, label: definition.label } : slot));
+                    }} className="h-10 w-full rounded-md border border-board-line px-2">
+                      {!canonicalPositionLabels[selectedSlot.code] ? <option value={selectedSlot.code}>{selectedSlot.code} · {selectedSlot.label}</option> : null}
+                      {Object.entries(canonicalPositionLabels).map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs font-bold text-slate-700">{copy.label}
+                    <input value={selectedSlot.label} maxLength={40} onChange={(event) => setDraftSlots((current) => current.map((slot) => slot.id === selectedSlot.id ? { ...slot, label: event.target.value } : slot))} className="h-10 w-full rounded-md border border-board-line px-2" />
+                  </label>
+                  <Button type="button" variant="danger" onClick={() => {
+                    if (activeAssignments.some((assignment) => assignment.slotId === selectedSlot.id) && !window.confirm(copy.removeWarning)) return;
+                    setDraftSlots((current) => current.filter((slot) => slot.id !== selectedSlot.id));
+                    setSelectedSlotId(null);
+                  }}>{copy.remove}</Button>
+                </div>
+              ) : null}
+              {draftSlots.length !== 11 ? <p className="text-sm font-semibold text-amber-800">{copy.eleven} ({draftSlots.length}/11)</p> : null}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={saveFormation} disabled={savingFormation || draftSlots.length !== 11}>{savingFormation ? copy.saving : copy.save}</Button>
+                <Button type="button" variant="secondary" onClick={() => { setDraftSlots(data.slots); setFormationName(data.selectedPlan?.name ?? ""); setSelectedSlotId(null); }}>{copy.reset}</Button>
+                <Button type="button" variant="secondary" onClick={() => { setEditingFormation(false); setDraftSlots(data.slots); setSelectedSlotId(null); }}>{copy.cancel}</Button>
+              </div>
+            </div>
+          ) : null}
+          {plannerError ? <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{plannerError}</p> : null}
 
           <PlannerPitch className="mt-4" onClick={() => setSelectedSlotId(null)}>
             <FormationSlotRows
               planId={data.selectedPlan.id}
-              slots={data.slots}
+              slots={visibleSlots}
               selectedSlotId={selectedSlot?.id}
               assignmentsBySlot={assignmentsBySlot}
               playersById={playersById}
               includedPlayers={includedPlayers}
               mode={mode}
+              customLayout={data.selectedPlan.formationCode === "Custom"}
+              editingFormation={editingFormation}
+              selectedPlayerId={selectedPlayerId}
+              draggingPlayerId={dragPlayerId}
+              hoverSlotId={hoverSlotId}
+              onDragStart={startPlayerDrag}
+              onDragEnd={finishPlayerDrag}
+              onDragOverSlot={setHoverSlotId}
+              onAssign={assignPlayer}
+              onSelectPlayer={setSelectedPlayerId}
+              onMoveSlot={(slotId, x, y) => setDraftSlots((current) => current.map((slot) => slot.id === slotId ? { ...slot, x, y } : slot))}
               onOptimisticUpdate={applyOptimisticUpdate}
-              onSelect={(slotId) => setSelectedSlotId((current) => (current === slotId ? null : slotId))}
+              onSelect={(slotId) => {
+                if (selectedPlayerId && !editingFormation) { void assignPlayer(selectedPlayerId, slotId); return; }
+                setSelectedSlotId((current) => (current === slotId ? null : slotId));
+              }}
             />
           </PlannerPitch>
+          {!editingFormation && mode === "formation" && selectedSlot ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 md:hidden">
+              <span className="text-xs font-bold text-board-navy">{selectedSlot.label}</span>
+              {selectedSlotDepth.find((assignment) => assignment.isPreferredStarter) ? (
+                <>
+                  <Button type="button" variant="secondary" className="h-9 px-2 text-xs" onClick={() => setSelectedPlayerId(selectedSlotDepth.find((assignment) => assignment.isPreferredStarter)!.playerId)}>{copy.assign}</Button>
+                  <Button type="button" variant="secondary" className="h-9 px-2 text-xs" onClick={() => void assignPlayer(selectedSlotDepth.find((assignment) => assignment.isPreferredStarter)!.playerId, null)}>{copy.removeFromXi}</Button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+          {!editingFormation && mode === "formation" ? (
+            <div className="mt-4 rounded-md border border-board-line bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-bold text-board-navy">{copy.available}</h4>
+                <span className="text-xs text-slate-500">{unassignedPlayers.length}</span>
+              </div>
+              <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
+                {unassignedPlayers.map((player) => (
+                  <button key={player.id} type="button" draggable onDragStart={(event) => startPlayerDrag(event, player.id)} onDragEnd={finishPlayerDrag} onClick={() => setSelectedPlayerId((current) => current === player.id ? null : player.id)}
+                    className={cn("max-w-full rounded-md border bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-board-navy shadow-sm transition", selectedPlayerId === player.id ? "border-board-green ring-2 ring-board-green/30" : "border-board-line hover:border-board-green", dragPlayerId === player.id && "opacity-40")}
+                    aria-pressed={selectedPlayerId === player.id} title={copy.selectPlayer}>
+                    <span translate="no" className="block truncate">{playerName(player)}</span><span className="text-[10px] text-slate-500">{playerPositionText(player)}</span>
+                  </button>
+                ))}
+              </div>
+              <div data-planner-unassigned onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); const playerId = event.dataTransfer.getData("text/plain"); if (playerId) void assignPlayer(playerId, null); }} className={cn("mt-3 rounded-md border border-dashed px-3 py-2 text-center text-xs font-bold", dragPlayerId ? "border-board-green bg-green-50 text-board-green" : "border-board-line text-slate-500")}>{copy.unassigned}</div>
+            </div>
+          ) : null}
         </section>
 
         <aside className="space-y-4">
-          <SlotDepthPanel
+          {!editingFormation ? <SlotDepthPanel
             planId={data.selectedPlan.id}
-            slot={selectedSlot}
+            slot={editingFormation ? undefined : selectedSlot}
             depth={selectedSlotDepth}
             playersById={playersById}
             availablePlayers={includedPlayers}
             assignedPlayerIds={assignedPlayerIds}
-          />
+          /> : null}
 
           <PlayerPoolPanel
             planId={data.selectedPlan.id}
@@ -287,7 +515,7 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
             statesByPlayer={statesByPlayer}
             showTrials={showTrials}
             search={search}
-            selectedSlot={selectedSlot}
+            selectedSlot={editingFormation ? undefined : selectedSlot}
             assignments={activeAssignments}
             slots={data.slots}
             poolFilter={poolFilter}
@@ -298,6 +526,10 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
             onPositionFilterChange={setPositionFilter}
             onShowTrialsChange={setShowTrials}
             onSearchChange={setSearch}
+            onPlayerDragStart={startPlayerDrag}
+            draggingPlayerId={dragPlayerId}
+            selectedPlayerId={selectedPlayerId}
+            onSelectPlayer={(playerId) => { setSelectedPlayerId((current) => current === playerId ? null : playerId); setMode("formation"); }}
           />
 
           {data.warnings.length > 0 ? (
@@ -322,6 +554,11 @@ export function SquadTacticalPlanner({ data }: { data: TacticalPlannerData }) {
           <ArchivedPlans plans={archivedPlans} />
         </aside>
       </div>
+      {dragPlayerId && dragPoint ? (
+        <div data-planner-drag-ghost className="pointer-events-none fixed z-[100] max-w-40 -translate-x-1/2 -translate-y-1/2 rounded-md border border-board-green bg-white px-3 py-2 text-sm font-bold text-board-navy shadow-xl" style={{ left: dragPoint.x, top: dragPoint.y }} aria-hidden="true">
+          <span translate="no">{playersById.get(dragPlayerId) ? playerName(playersById.get(dragPlayerId)!) : ""}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -341,13 +578,14 @@ function CreatePlanForm({ compact = false, className }: { compact?: boolean; cla
 }
 
 function PlanSelect({ plans, selectedPlanId }: { plans: TacticalPlannerData["plans"]; selectedPlanId: string }) {
+  const router = useRouter();
   return (
     <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
       Plan
       <select
         value={selectedPlanId}
         onChange={(event) => {
-          window.location.href = `/squad/planner?plan=${event.target.value}`;
+          router.push(`/squad/planner?plan=${event.target.value}`);
         }}
         disabled={plans.length <= 1}
         className="h-10 min-w-48 rounded-md border border-board-line px-3 text-sm disabled:bg-slate-50 disabled:text-slate-500"
@@ -439,7 +677,7 @@ function AutoFillMenu({
   );
   const starterCount = assignments.filter((assignment) => assignment.isPreferredStarter).length;
   return (
-    <details className="relative">
+    <details className="group relative">
       <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded-md bg-board-green px-3 text-sm font-bold text-white shadow-sm transition hover:bg-board-green/90">
         <Users className="h-4 w-4" />
         Auto-fill
@@ -453,7 +691,7 @@ function AutoFillMenu({
             event.preventDefault();
           }
         }}
-        className="absolute right-0 z-30 mt-2 max-h-[min(760px,calc(100vh-7rem))] w-[30rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-board-line bg-white p-4 shadow-xl"
+        className="absolute right-0 z-30 mt-2 hidden max-h-[min(760px,calc(100vh-7rem))] w-[30rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-board-line bg-white p-4 shadow-xl group-open:block max-sm:fixed max-sm:inset-x-4 max-sm:top-24 max-sm:mt-0 max-sm:w-auto"
       >
         <input type="hidden" name="planId" value={planId} />
         <input type="hidden" name="mode" value={mode} />
@@ -621,6 +859,17 @@ function FormationSlotRows({
   playersById,
   includedPlayers,
   mode,
+  customLayout,
+  editingFormation,
+  selectedPlayerId,
+  draggingPlayerId,
+  hoverSlotId,
+  onDragStart,
+  onDragEnd,
+  onDragOverSlot,
+  onAssign,
+  onSelectPlayer,
+  onMoveSlot,
   onOptimisticUpdate,
   onSelect
 }: {
@@ -631,9 +880,80 @@ function FormationSlotRows({
   playersById: Map<string, SquadPlayer>;
   includedPlayers: SquadPlayer[];
   mode: PlannerMode;
+  customLayout: boolean;
+  editingFormation: boolean;
+  selectedPlayerId: string | null;
+  draggingPlayerId: string | null;
+  hoverSlotId: string | null;
+  onDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
+  onDragEnd: () => void;
+  onDragOverSlot: (slotId: string | null) => void;
+  onAssign: (playerId: string, slotId: string | null) => Promise<void>;
+  onSelectPlayer: (playerId: string | null) => void;
+  onMoveSlot: (slotId: string, x: number, y: number) => void;
   onOptimisticUpdate: (update: OptimisticSlotUpdate) => void;
   onSelect: (slotId: string) => void;
 }) {
+  const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
+  const movingSlot = useRef<string | null>(null);
+  if (mode === "formation" || editingFormation || customLayout) {
+    const selectedSlot = selectedSlotId ? slots.find((slot) => slot.id === selectedSlotId) : undefined;
+    const selectedStarter = selectedSlot ? assignmentsBySlot.get(selectedSlot.id)?.find((assignment) => assignment.isPreferredStarter) : undefined;
+    return (
+      <div className="relative h-full w-full">
+        {slots.map((slot) => {
+          const assignments = assignmentsBySlot.get(slot.id) ?? [];
+          const starter = assignments.find((assignment) => assignment.isPreferredStarter);
+          const player = starter ? playersById.get(starter.playerId) : undefined;
+          const isDropTarget = hoverSlotId === slot.id && Boolean(draggingPlayerId);
+          return (
+            <div key={slot.id} data-planner-slot={slot.id} role="button" tabIndex={0}
+              draggable={mode === "formation" && !editingFormation && Boolean(player)}
+              onDragStart={(event) => { if (player) onDragStart(event, player.id); }}
+              onDragEnd={onDragEnd}
+              onDragOver={(event) => { if (editingFormation || mode !== "formation") return; event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move"; onDragOverSlot(slot.id); }}
+              onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) onDragOverSlot(null); }}
+              onDrop={(event) => { event.preventDefault(); event.stopPropagation(); onDragOverSlot(null); const playerId = event.dataTransfer.getData("text/plain"); if (playerId) void onAssign(playerId, slot.id); }}
+              onPointerDown={(event) => { if (!editingFormation) return; movingSlot.current = slot.id; if (selectedSlotId !== slot.id) onSelect(slot.id); event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
+              onPointerMove={(event) => {
+                if (!editingFormation || movingSlot.current !== slot.id) return;
+                const rect = event.currentTarget.parentElement?.getBoundingClientRect();
+                if (!rect || !rect.width || !rect.height) return;
+                onMoveSlot(slot.id, Math.round(Math.max(8, Math.min(92, (event.clientX - rect.left) / rect.width * 100)) * 100) / 100, Math.round(Math.max(12, Math.min(90, (event.clientY - rect.top) / rect.height * 100)) * 100) / 100);
+              }}
+              onPointerUp={() => { movingSlot.current = null; }}
+              onPointerCancel={() => { movingSlot.current = null; }}
+              onClick={(event) => { event.stopPropagation(); if (!editingFormation) onSelect(slot.id); }}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(slot.id); } }}
+              style={{ left: `${slot.x}%`, top: `${slot.y}%`, transform: "translate(-50%, -50%)" }}
+              className={cn("absolute z-20 flex w-[18%] min-w-[3.25rem] max-w-[7rem] cursor-pointer flex-col gap-0.5 rounded-md border bg-white px-1.5 py-1.5 text-center text-board-navy shadow-md transition-[box-shadow,background-color,opacity] duration-200 sm:px-2 sm:py-2",
+                selectedSlotId === slot.id ? "border-board-green ring-2 ring-board-green/30" : "border-white/80",
+                isDropTarget && "border-board-green bg-emerald-50 ring-4 ring-emerald-200",
+                draggingPlayerId === player?.id && "opacity-40",
+                editingFormation && "cursor-grab border-dashed border-board-green touch-none active:cursor-grabbing")}
+              aria-label={`${slot.label}: ${player ? playerName(player) : copy.drop}`}>
+              <span className="truncate text-[10px] font-black uppercase text-board-green sm:text-xs" title={slot.label}>{slot.code}</span>
+              {canonicalPositionLabels[slot.code] && slot.label !== canonicalPositionLabels[slot.code] && slot.label !== slot.code ? <span className="truncate text-[9px] font-semibold text-slate-500" title={slot.label}>{slot.label}</span> : null}
+              <span translate="no" className="line-clamp-2 break-words text-[10px] font-bold leading-tight sm:text-xs" title={player ? playerName(player) : copy.drop}>{player ? playerName(player) : "+"}</span>
+              {mode === "depth" ? <span className="text-[9px] font-semibold text-slate-500">{assignments.length} {copy.depthOptions}</span> : null}
+              {starter?.fitType === "out_of_position" ? <span className="text-[9px] font-bold text-red-700" title={copy.outOfPosition}>!</span> : null}
+              {editingFormation ? <GripVertical className="mx-auto h-3 w-3 text-board-green" aria-hidden="true" /> : null}
+            </div>
+          );
+        })}
+        {selectedSlot && !editingFormation && !selectedPlayerId ? (
+          <SlotEditorOverlay planId={planId} slot={selectedSlot} depth={assignmentsBySlot.get(selectedSlot.id) ?? []} playersById={playersById} availablePlayers={includedPlayers}
+            eligibleCount={includedPlayers.filter((player) => isFitAllowedByAutoFillEligibility(evaluatePlayerSlotFit(player, selectedSlot, false).fitType, "natural_secondary", false)).length}
+            onOptimisticUpdate={onOptimisticUpdate}>
+            {selectedStarter ? <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className="rounded border border-board-line px-2 py-1 text-xs font-bold" onClick={() => onSelectPlayer(selectedStarter.playerId)}>{copy.assign}</button>
+              <button type="button" className="rounded border border-board-line px-2 py-1 text-xs font-bold" onClick={() => void onAssign(selectedStarter.playerId, null)}>{copy.removeFromXi}</button>
+            </div> : null}
+          </SlotEditorOverlay>
+        ) : null}
+      </div>
+    );
+  }
   const rows = groupSlotsIntoPitchRows(slots);
   const selectedSlot = selectedSlotId ? slots.find((slot) => slot.id === selectedSlotId) : undefined;
   const selectedDepth = selectedSlot ? (assignmentsBySlot.get(selectedSlot.id) ?? []) : [];
@@ -718,6 +1038,29 @@ function uniqueDepthAssignments(assignments: TacticalPlannerData["assignments"])
     }
   }
   return Array.from(best.values()).sort((a, b) => a.depthOrder - b.depthOrder);
+}
+
+function optimisticStartingXi(assignments: TacticalAssignment[], planId: string, player: SquadPlayer, targetSlotId: string | null, slots: TacticalPlanSlot[]): TacticalAssignment[] {
+  const source = assignments.find((item) => item.playerId === player.id && item.isPreferredStarter);
+  if (source?.slotId === targetSlotId) return assignments;
+  const displaced = targetSlotId ? assignments.find((item) => item.slotId === targetSlotId && item.isPreferredStarter && item.playerId !== player.id) : undefined;
+  let next = assignments.map((item) => source?.id === item.id || displaced?.id === item.id ? { ...item, isPreferredStarter: false } : item);
+  const place = (playerId: string, slotId: string) => {
+    const existing = next.find((item) => item.playerId === playerId && item.slotId === slotId);
+    if (existing) {
+      next = next.map((item) => item.id === existing.id ? { ...item, isPreferredStarter: true } : item);
+      return;
+    }
+    const slot = slots.find((item) => item.id === slotId);
+    if (!slot) return;
+    const now = new Date().toISOString();
+    next = [...next, { id: `optimistic-${playerId}-${slotId}`, userId: slot.userId, planId, slotId, playerId,
+      depthOrder: Math.max(0, ...next.filter((item) => item.slotId === slotId).map((item) => item.depthOrder)) + 1,
+      isPreferredStarter: true, fitType: playerId === player.id ? evaluatePlayerSlotFit(player, slot).fitType : "no_data", createdAt: now, updatedAt: now }];
+  };
+  if (targetSlotId) place(player.id, targetSlotId);
+  if (source && displaced && source.slotId !== targetSlotId) place(displaced.playerId, source.slotId);
+  return next;
 }
 
 function applyOptimisticSlotUpdate(assignments: TacticalAssignment[], planId: string, update: OptimisticSlotUpdate) {
@@ -906,7 +1249,8 @@ function SlotEditorOverlay({
   playersById,
   availablePlayers,
   eligibleCount,
-  onOptimisticUpdate
+  onOptimisticUpdate,
+  children
 }: {
   planId: string;
   slot: TacticalPlanSlot;
@@ -915,6 +1259,7 @@ function SlotEditorOverlay({
   availablePlayers: SquadPlayer[];
   eligibleCount: number;
   onOptimisticUpdate: (update: OptimisticSlotUpdate) => void;
+  children?: ReactNode;
 }) {
   const left = Math.min(Math.max(slot.x, 18), 82);
   const top = Math.min(Math.max(slot.y + 6, 14), 76);
@@ -925,7 +1270,7 @@ function SlotEditorOverlay({
     <div
       className={cn(
         "absolute z-40 max-h-[45%] w-[22rem] max-w-[calc(100%-2rem)] overflow-y-auto rounded-xl border border-board-green/30 bg-white p-3 shadow-2xl",
-        "max-md:fixed max-md:inset-x-3 max-md:bottom-3 max-md:top-auto max-md:max-h-[70vh] max-md:w-auto max-md:translate-x-0",
+        "max-md:hidden",
         alignClass
       )}
       style={style}
@@ -950,6 +1295,7 @@ function SlotEditorOverlay({
         onOptimisticUpdate={onOptimisticUpdate}
         compact
       />
+      {children}
     </div>
   );
 }
@@ -1160,12 +1506,13 @@ function SlotDepthPanel({
   availablePlayers: SquadPlayer[];
   assignedPlayerIds: Set<string>;
 }) {
+  const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
   const [managerEligibility, setManagerEligibility] = useState<AutoFillEligibility>("natural_secondary");
   if (!slot) {
     return (
       <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-        <h3 className="font-bold text-board-navy">No slots</h3>
-        <p className="mt-2 text-sm text-slate-600">Choose another formation or create a plan again.</p>
+        <h3 className="font-bold text-board-navy">{copy.position}</h3>
+        <p className="mt-2 text-sm text-slate-600">{copy.selectPosition}</p>
       </section>
     );
   }
@@ -1329,7 +1676,11 @@ function PlayerPoolPanel({
   onRoleFilterChange,
   onPositionFilterChange,
   onShowTrialsChange,
-  onSearchChange
+  onSearchChange,
+  onPlayerDragStart,
+  draggingPlayerId,
+  selectedPlayerId,
+  onSelectPlayer
 }: {
   planId: string;
   players: SquadPlayer[];
@@ -1350,7 +1701,12 @@ function PlayerPoolPanel({
   onPositionFilterChange: (value: string) => void;
   onShowTrialsChange: (value: boolean) => void;
   onSearchChange: (value: string) => void;
+  onPlayerDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
+  draggingPlayerId: string | null;
+  selectedPlayerId: string | null;
+  onSelectPlayer: (playerId: string) => void;
 }) {
+  const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
   const excludedPlayers = players.filter((player) => excludedPlayerIds.has(player.id));
   const slotById = new Map(slots.map((slot) => [slot.id, slot]));
   const assignmentsByPlayer = new Map<string, TacticalPlannerData["assignments"]>();
@@ -1373,8 +1729,8 @@ function PlayerPoolPanel({
     <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-board-navy">{selectedSlot ? `${selectedSlot.code} options` : "Player pool"}</h3>
-          <p className="text-sm text-slate-600">{includedPlayers.length} included · {unassignedPlayers.length} unassigned · {excludedPlayers.length} excluded</p>
+          <h3 className="font-bold text-board-navy">{selectedSlot ? `${selectedSlot.code} ${copy.depthOptions}` : copy.playerPool}</h3>
+          <p className="text-sm text-slate-600">{includedPlayers.length} {copy.included} · {unassignedPlayers.length} {copy.unassigned.toLowerCase()} · {excludedPlayers.length} {copy.excluded}</p>
         </div>
         <Shield className="h-5 w-5 text-board-green" />
       </div>
@@ -1434,6 +1790,10 @@ function PlayerPoolPanel({
             selectedSlot={poolFilter === "excluded" ? undefined : selectedSlot}
             assignmentsSummary={formatAssignmentsSummary(assignmentsByPlayer.get(player.id) ?? [], slotById)}
             alreadyInSelectedSlot={Boolean(selectedSlot && (assignmentsByPlayer.get(player.id) ?? []).some((assignment) => assignment.slotId === selectedSlot.id))}
+            onPlayerDragStart={onPlayerDragStart}
+            dragging={draggingPlayerId === player.id}
+            selectedForAssignment={selectedPlayerId === player.id}
+            onSelectPlayer={() => onSelectPlayer(player.id)}
           />
         ))}
       </div>
@@ -1448,7 +1808,11 @@ function PlayerStateCard({
   excluded,
   selectedSlot,
   assignmentsSummary,
-  alreadyInSelectedSlot
+  alreadyInSelectedSlot,
+  onPlayerDragStart,
+  dragging,
+  selectedForAssignment,
+  onSelectPlayer
 }: {
   planId: string;
   player: SquadPlayer;
@@ -1457,6 +1821,10 @@ function PlayerStateCard({
   selectedSlot?: TacticalPlanSlot;
   assignmentsSummary?: string;
   alreadyInSelectedSlot?: boolean;
+  onPlayerDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
+  dragging: boolean;
+  selectedForAssignment: boolean;
+  onSelectPlayer: () => void;
 }) {
   const selectedSlotFit = selectedSlot ? evaluatePlayerSlotFit(player, selectedSlot, true) : undefined;
   if (excluded) {
@@ -1484,9 +1852,10 @@ function PlayerStateCard({
   }
 
   return (
-    <div className="rounded-lg border border-board-line bg-white p-3">
+    <div className={cn("rounded-lg border border-board-line bg-white p-3 transition-opacity", dragging && "opacity-40", selectedForAssignment && "ring-2 ring-board-green")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
+          <button type="button" draggable onDragStart={(event) => onPlayerDragStart(event, player.id)} onClick={onSelectPlayer} className="mb-1 inline-flex items-center gap-1 rounded border border-board-line px-2 py-1 text-xs font-bold text-board-green touch-none" aria-pressed={selectedForAssignment} aria-label={`Select ${playerName(player)} for formation assignment`} title="Drag to formation or select, then tap a position"><GripVertical className="h-3 w-3" /> XI</button>
           <p translate="no" className="font-bold text-board-navy">{playerName(player)}</p>
           <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">

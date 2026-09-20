@@ -106,7 +106,7 @@ const roleLabels: Record<string, string> = {
   LST: "Left Striker"
 };
 
-function slot(slotKey: string, code: string, x: number, y: number, sortOrder: number): TacticalSlotDefinition {
+export function slot(slotKey: string, code: string, x: number, y: number, sortOrder: number): TacticalSlotDefinition {
   const baseCode = roleAcceptedPositions[code] ? code : code.replace(/^[RLC]/, "");
   const acceptedPositions = roleAcceptedPositions[code] ?? roleAcceptedPositions[baseCode] ?? [code];
   const naturalPositions = roleNaturalPositions[code] ?? roleNaturalPositions[baseCode] ?? [acceptedPositions[0]];
@@ -208,7 +208,7 @@ export const tacticalFormations: TacticalFormationDefinition[] = [
   ]),
   formation("Custom", [
     [["LB", 15], ["LCB", 37], ["RCB", 63], ["RB", 85]],
-    [["LCM", 34], ["RCM", 66]],
+    [["LCM", 30], ["CDM", 50], ["RCM", 70]],
     [["CAM", 50]],
     [["LST", 42], ["RST", 58]]
   ])

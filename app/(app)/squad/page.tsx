@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { FileSpreadsheet, Plus } from "lucide-react";
+import { FileSpreadsheet, Goal, Plus } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { CoachWorkspace } from "@/components/squad/coach-workspace";
 import { SquadNav } from "@/components/squad/squad-nav";
@@ -42,6 +42,10 @@ export default async function SquadPage({ searchParams }: SquadPageProps) {
         })}
         actions={(
           <>
+            <ButtonLink href="/squad/planner" className="justify-center">
+              <Goal className="h-4 w-4" />
+              {locale === "de" ? "Kaderplaner öffnen" : "Open Squad Planner"}
+            </ButtonLink>
             <ButtonLink href="/squad/players/new" className="justify-center">
               <Plus className="h-4 w-4" />
               {messages.squad.page.addPlayer}
