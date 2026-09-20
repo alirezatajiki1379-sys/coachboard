@@ -1,6 +1,7 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
+import Image from "next/image";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { usePathname } from "next/navigation";
 import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, LoaderCircle, Menu, PanelLeftClose, PanelLeftOpen, Settings, UserCircle, UsersRound, X } from "lucide-react";
@@ -136,11 +137,15 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
             >
               {pendingHref ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Menu className="h-5 w-5" />}
             </button>
-            <Link href="/dashboard" className="flex items-center gap-2 font-bold text-board-navy">
-              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-board-green text-white">
-                <BarChart3 className="h-5 w-5" />
-              </span>
-              {messages.app.name}
+            <Link href="/dashboard" className="min-w-0" aria-label={messages.app.name}>
+              <Image
+                src="/coachboard-brand/coachboard-logo-horizontal-light.png"
+                alt=""
+                width={1250}
+                height={365}
+                priority
+                className="h-auto w-36 max-w-full sm:w-40"
+              />
             </Link>
             <LogoutButton compact locale={locale} />
           </div>
@@ -166,11 +171,14 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
             onKeyDown={trapDrawerFocus}
           >
             <div className="flex h-16 items-center justify-between px-4">
-              <Link href="/dashboard" className="flex items-center gap-3 font-bold text-white" onClick={() => setDrawerOpen(false)}>
-                <span className="flex h-10 w-10 items-center justify-center rounded-md bg-board-green">
-                  <BarChart3 className="h-5 w-5" />
-                </span>
-                {messages.app.name}
+              <Link href="/dashboard" className="min-w-0" aria-label={messages.app.name} onClick={() => setDrawerOpen(false)}>
+                <Image
+                  src="/coachboard-brand/coachboard-logo-horizontal-dark.png"
+                  alt=""
+                  width={1250}
+                  height={365}
+                  className="h-auto w-[210px] max-w-full"
+                />
               </Link>
               <button
                 type="button"
@@ -223,16 +231,25 @@ function SidebarContent({
   return (
     <>
       <div className={cn("flex h-20 items-center gap-3 px-4", collapsed ? "justify-center" : "justify-between")}>
-        <Link href="/dashboard" className={cn("flex min-w-0 items-center gap-3 text-white", collapsed && "justify-center")} title={collapsed ? messages.app.name : undefined}>
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-board-green">
-            <BarChart3 className="h-6 w-6" />
-          </span>
-          {!collapsed ? (
-            <span className="min-w-0">
-              <span className="block text-lg font-bold">{messages.app.name}</span>
-              <span className="block text-xs text-slate-300">{messages.app.subtitle}</span>
-            </span>
-          ) : null}
+        <Link href="/dashboard" className={cn("flex min-w-0 items-center text-white", collapsed && "justify-center")} title={collapsed ? messages.app.name : undefined} aria-label={messages.app.name}>
+          {collapsed ? (
+            <Image
+              src="/coachboard-brand/coachboard-mark-dark.png"
+              alt=""
+              width={317}
+              height={327}
+              className="h-10 w-auto max-w-full"
+            />
+          ) : (
+            <Image
+              src="/coachboard-brand/coachboard-logo-horizontal-dark.png"
+              alt=""
+              width={1250}
+              height={365}
+              priority
+              className="h-auto w-[194px] max-w-full"
+            />
+          )}
         </Link>
         <button
           type="button"

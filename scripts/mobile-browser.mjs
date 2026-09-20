@@ -12,6 +12,7 @@ const { build } = qaRequire("esbuild");
 const { chromium, webkit } = qaRequire("playwright");
 const stubs = {
   "next/link": `import React from "react"; export const useLinkStatus=()=>({pending:false}); export default function Link({href,children,onClick,...props}) {return <a href={href} onClick={e=>{onClick?.(e);if(!e.defaultPrevented){e.preventDefault();window.qa.destination=href;}}} {...props}>{children}</a>}`,
+  "next/image": 'import React from "react"; export default function Image({src,alt,...props}) {return <img src={src} alt={alt} {...props}/>}',
   "next/navigation": 'export const usePathname=()=>"/squad"; export const useSearchParams=()=>new URLSearchParams(); export const useRouter=()=>({push(){},refresh(){}});',
   "@/lib/supabase/client": 'export const createClient=()=>({from:()=>({select:()=>({order:async()=>({data:[],error:null})})})});',
   "@/lib/supabase/server": 'export const createClient=()=>{throw new Error("No real Supabase access in mobile fixtures")};'
@@ -79,6 +80,13 @@ const bundle = await build({
 const css = process.env.COACHBOARD_QA_CSS ? readFileSync(process.env.COACHBOARD_QA_CSS, "utf8") : readdirSync(path.join(root, ".next/static/css")).filter(n => n.endsWith(".css")).map(n => readFileSync(path.join(root, ".next/static/css", n), "utf8")).join("\n");
 const server = createServer((req, res) => {
   if (req.url === "/bundle.js") { res.setHeader("Content-Type", "application/javascript"); res.end(bundle.outputFiles[0].text); }
+  else if (req.url?.startsWith("/coachboard-brand/")) {
+    const filename = path.basename(req.url);
+    const asset = path.join(root, "public/coachboard-brand", filename);
+    if (!existsSync(asset)) { res.writeHead(404); res.end(); return; }
+    res.setHeader("Content-Type", filename.endsWith(".ico") ? "image/x-icon" : "image/png");
+    res.end(readFileSync(asset));
+  }
   else { res.setHeader("Content-Type", "text/html"); res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>${css}</style></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>`); }
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -108,6 +116,10 @@ try {
       for (const view of ["shell", "availability", "player", "training", "plan", "drill", "import", "participants", "library", "dialog"]) {
         await go(view, locale);
         await checkOverflow(`${view} ${locale} ${width}`);
+        if (view === "shell") {
+          assert.ok(await page.locator("img[src*=coachboard-brand]").count(), "App shell contains the approved brand assets");
+          assert.ok(await page.locator("img[src*=coachboard-brand]").evaluateAll(images => images.every(image => image.complete && image.naturalWidth > 0)), "App shell brand assets load");
+        }
         if (width < 768) {
           const smallInputs = await page.locator('#fixture input:not([type=hidden]):not([type=checkbox]):not([type=radio]),#fixture select,#fixture textarea:not([hidden])').evaluateAll(elements => elements.filter(el => el.getBoundingClientRect().width && parseFloat(getComputedStyle(el).fontSize) < 16).length);
           assert.equal(smallInputs, 0, `iOS zoom-risk fields: ${view} ${width}`);
@@ -202,6 +214,22 @@ try {
     await go("participants", locale);
     await page.screenshot({ path: `/private/tmp/coachboard-mobile-participants-${locale}.png`, fullPage: true });
   }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await go("shell", "en");
+  await page.screenshot({ path: "/private/tmp/coachboard-brand-shell-mobile.png" });
+  await page.locator("header button[aria-expanded]").click();
+  await page.locator(".app-drawer img[src*=coachboard-logo-horizontal-dark]").waitFor();
+  await page.screenshot({ path: "/private/tmp/coachboard-brand-shell-drawer.png" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(() => localStorage.setItem("coachboard:ui:sidebar-mode", "collapsed"));
+  await go("shell", "en");
+  await page.locator("aside img[src*=coachboard-mark-dark]").waitFor();
+  await page.waitForFunction(() => Math.abs(document.querySelector("aside").getBoundingClientRect().width - 72) < 1);
+  await page.screenshot({ path: "/private/tmp/coachboard-brand-shell-collapsed.png" });
+  await page.locator("aside button[aria-label]").first().click();
+  await page.locator("aside img[src*=coachboard-logo-horizontal-dark]").waitFor();
+  await page.waitForFunction(() => Math.abs(document.querySelector("aside").getBoundingClientRect().width - 288) < 1);
+  await page.screenshot({ path: "/private/tmp/coachboard-brand-shell-expanded.png" });
   assert.deepEqual(errors, []);
   console.log("PASS: shell, headers, tabs, availability, player/training/plan/drill forms, material rows, import mapping, participants, library/popover, unsaved modal; EN/DE 320/360/375/390/430/768/1440; landscape drawer, reduced-height dialog, modal above drawer and keyboard focus; no real saves.");
 } finally {
