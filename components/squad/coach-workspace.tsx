@@ -1,5 +1,8 @@
 "use client";
 
+import { useDialogFocus } from "@/components/shared/use-dialog-focus";
+import { DialogPortal } from "@/components/shared/dialog-portal";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -155,7 +158,7 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
 
   return (
     <div className="space-y-6 [--squad-controls-top:0rem]">
-      <section className={cn("sticky top-[var(--squad-controls-top)] rounded-lg border border-board-line bg-white p-3 shadow-soft", PLAYER_TABLE_LAYER_CLASSES.toolbar)}>
+      <section className={cn("lg:sticky lg:top-[var(--squad-controls-top)] rounded-lg border border-board-line bg-white p-3 shadow-soft", PLAYER_TABLE_LAYER_CLASSES.toolbar)}>
         <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label={messages.squad.nav.label}>
           {quickViews.map((item) => (
             <Link
@@ -164,7 +167,7 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
               aria-selected={item.id === data.state.view}
               href={workspaceViewSwitchHref(data.state, item.id)}
               className={cn(
-                "min-w-fit rounded-md px-3 py-2 text-sm font-bold transition",
+                "inline-flex min-h-11 min-w-fit items-center rounded-md px-3 py-2 text-sm font-bold transition",
                 item.id === data.state.view ? "bg-board-green text-white" : "text-slate-600 hover:bg-green-50 hover:text-board-green"
               )}
             >
@@ -243,7 +246,7 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
                 <div className="space-y-5">
                   {grouped.map((group) => (
                     <section key={group.label} className="rounded-lg border border-board-line bg-white shadow-soft">
-                      <h3 className="border-b border-board-line px-4 py-3 text-sm font-bold uppercase tracking-wide text-slate-500">{group.label}</h3>
+                      <h3 translate="no" className="border-b border-board-line px-4 py-3 text-sm font-bold uppercase tracking-wide text-slate-500">{group.label}</h3>
                       <WorkspaceTable data={data} players={group.players} columns={columns} columnOrder={columnOrder} selectedPlayerId={selectedPlayer?.analytics.player.id} onSelectPlayer={toggleInspector} onColumnOrderChange={persistColumnOrder} isSavingColumnOrder={isSavingColumnOrder} selectionMode={selectionMode} selectedIds={selectedIdSet} onToggleSelected={toggleSelectedPlayer} messages={messages} />
                     </section>
                   ))}
@@ -279,6 +282,7 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
 type EmailRecipientMode = "players" | "parents" | "both";
 
 function EmailDraftDialog({ players, onClose }: { players: WorkspacePlayerSummary[]; onClose: () => void }) {
+  const dialogRef = useDialogFocus(true, onClose);
   const [mode, setMode] = useState<EmailRecipientMode>("parents");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -295,14 +299,14 @@ function EmailDraftDialog({ players, onClose }: { players: WorkspacePlayerSummar
   }
 
   return (
-    <div className={cn("fixed inset-0 flex items-center justify-center bg-board-navy/40 p-4", PLAYER_TABLE_LAYER_CLASSES.modal)} role="dialog" aria-modal="true" aria-labelledby="email-draft-title">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
+    <DialogPortal><div className={cn("fixed inset-0 flex items-center justify-center bg-board-navy/40 p-4", PLAYER_TABLE_LAYER_CLASSES.modal)} role="dialog" aria-modal="true" aria-labelledby="email-draft-title">
+      <div ref={dialogRef} tabIndex={-1} className="app-dialog-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl outline-none">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="email-draft-title" className="text-lg font-bold text-board-navy">Prepare group email</h2>
             <p className="mt-1 text-sm text-slate-600">Creates a BCC email draft. CoachBoard does not send the email.</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Close email draft">
+          <button type="button" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Close email draft">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -349,7 +353,7 @@ function EmailDraftDialog({ players, onClose }: { players: WorkspacePlayerSummar
         </div>
         {copied ? <p className="mt-2 text-sm font-semibold text-slate-600" aria-live="polite">{copied}</p> : null}
       </div>
-    </div>
+    </div></DialogPortal>
   );
 }
 
@@ -424,7 +428,7 @@ function WorkspaceFilters({ data, messages }: { data: WorkspaceData; messages: M
           <summary className="flex h-11 cursor-pointer list-none items-center justify-center rounded-md border border-board-line px-3 text-sm font-bold text-board-navy hover:bg-slate-50">
             {messages.squad.filters.view}
           </summary>
-          <div className={cn("mt-2 min-w-72 rounded-lg border border-board-line bg-white p-3 shadow-soft lg:absolute lg:right-0", PLAYER_TABLE_LAYER_CLASSES.popover)}>
+          <div className={cn("mt-2 min-w-0 rounded-lg border border-board-line bg-white p-3 shadow-soft lg:absolute lg:right-0 lg:min-w-72", PLAYER_TABLE_LAYER_CLASSES.popover)}>
             <SavedViewsCompact data={data} messages={messages} />
           </div>
         </details>
@@ -1231,7 +1235,7 @@ function WorkspaceMobileCard({
             </label>
           ) : null}
           <h2 className="text-lg font-bold text-board-navy">
-            <Link
+            <Link translate="no"
               href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))}
               aria-label={formatMessage(messages.squad.actions.openProfile, { name: playerName(summary.player) })}
               className="rounded underline-offset-4 hover:text-board-green hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-board-green/30"
@@ -1286,7 +1290,7 @@ function InspectorPanel({ player, returnTo, onClose, messages }: { player?: Work
     <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-board-navy">{playerName(summary.player)}</h2>
+          <h2 translate="no" className="text-xl font-bold text-board-navy">{playerName(summary.player)}</h2>
           <p className="mt-1 text-sm text-slate-600">{summary.player.position ?? messages.squad.labels.noPosition} · {calculateAge(summary.player.dateOfBirth) ?? "-"} {messages.squad.labels.years} · {playerTypeLabel(summary.player.playerType, messages)}</p>
         </div>
         <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label={messages.common.actions.close}>
@@ -1598,7 +1602,7 @@ function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: Works
   if (columnId === "player") {
     return (
       <div className="min-w-[190px]">
-        <Link href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))} className="font-bold text-board-navy hover:text-board-green">{playerName(summary.player)}</Link>
+        <Link translate="no" href={playerHubHref(summary.player.id, workspaceHref({ ...data.state, selectedPlayer: summary.player.id }, {}))} className="font-bold text-board-navy hover:text-board-green">{playerName(summary.player)}</Link>
         <div className="mt-1 flex flex-wrap gap-1.5">
           <Badge tone={summary.player.playerType === "trial" ? "amber" : "neutral"}>{playerTypeLabel(summary.player.playerType, messages)}</Badge>
           {(data.configuration.showAttentionIndicators || data.state.view === "needs-attention") && visibleAttention(player.attention).map((indicator) => <AttentionBadge key={indicator.id} indicator={indicator} />)}

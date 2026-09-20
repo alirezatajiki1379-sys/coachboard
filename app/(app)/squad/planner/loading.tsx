@@ -1,3 +1,6 @@
+"use client";
+
+import { useSystemText } from "@/components/i18n/use-system-text";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { SquadNav } from "@/components/squad/squad-nav";
 import { cn } from "@/lib/utils";
@@ -10,13 +13,14 @@ const skeletonRows = [
 ];
 
 export default function SquadPlannerLoading() {
+  const ui = useSystemText();
   return (
     <PageContainer width="full">
       <PageHeader
-        eyebrow="Squad"
-        title="Formation and Depth Planner"
-        description="Build tactical plans for the active team, assign starters and manage depth without changing training attendance or session plans."
-        metadata="Loading tactical planner..."
+        eyebrow={ui("Squad")}
+        title={ui("Formation and Depth Planner")}
+        description={ui("Build tactical plans for the active team, assign starters and manage depth without changing training attendance or session plans.")}
+        metadata={ui("Loading tactical planner...")}
       />
       <SquadNav />
       <div className="space-y-5">

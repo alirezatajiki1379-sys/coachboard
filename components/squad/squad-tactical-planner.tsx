@@ -880,7 +880,7 @@ function SlotButton({
           {alternatives.map((assignment) => {
             const player = playersById.get(assignment.playerId);
             if (!player) return null;
-            return <p key={assignment.id} className="line-clamp-2 text-xs font-semibold leading-tight text-slate-600" title={playerName(player)}>{playerName(player)}</p>;
+            return <p translate="no" key={assignment.id} className="line-clamp-2 text-xs font-semibold leading-tight text-slate-600" title={playerName(player)}>{playerName(player)}</p>;
           })}
           {remainingCount > 0 ? <p className="text-xs font-bold text-slate-500">+{remainingCount} more</p> : null}
         </div>
@@ -1254,7 +1254,7 @@ function SlotDepthPanel({
           <div key={player.id} className={cn("rounded-lg border p-3", fit.fitType === "natural" ? "border-emerald-200 bg-emerald-50" : "border-board-line bg-white")}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <p className="font-bold text-board-navy">{playerName(player)}</p>
+                <p translate="no" className="font-bold text-board-navy">{playerName(player)}</p>
                 <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}</p>
                 <p className="mt-1 text-xs text-slate-500">Matched {fit.matchedPosition ?? "position"} · {fitMeta[fit.fitType].label}</p>
               </div>
@@ -1469,7 +1469,7 @@ function PlayerStateCard({
         <input type="hidden" name="note" value={state?.note ?? ""} />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="font-bold text-board-navy">{playerName(player)}</p>
+            <p translate="no" className="font-bold text-board-navy">{playerName(player)}</p>
             <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <StatusChip label={tacticalRoleLabel(state?.tacticalStatus, true)} />
@@ -1487,7 +1487,7 @@ function PlayerStateCard({
     <div className="rounded-lg border border-board-line bg-white p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="font-bold text-board-navy">{playerName(player)}</p>
+          <p translate="no" className="font-bold text-board-navy">{playerName(player)}</p>
           <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <StatusChip label={tacticalRoleLabel(state?.tacticalStatus, true)} />

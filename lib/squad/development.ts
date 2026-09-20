@@ -32,6 +32,7 @@ export type DevelopmentTimelineItem = {
   type: "goal_created" | "goal_achieved" | "observation" | "review" | "progress";
   title: string;
   detail?: string;
+  progressLevel?: PlayerDevelopmentProgress;
 };
 
 export type DevelopmentDashboardSummary = {
@@ -355,7 +356,7 @@ function buildDevelopmentTimeline(goals: PlayerDevelopmentGoal[], observations: 
     if (goal.reviewDate && isActiveGoal(goal)) items.push({ id: `${goal.id}-review`, date: goal.reviewDate, type: "review", title: "Target review date", detail: goal.title });
     if (goal.achievedAt || goal.completedAt) items.push({ id: `${goal.id}-achieved`, date: (goal.achievedAt ?? goal.completedAt ?? "").slice(0, 10), type: "goal_achieved", title: "Goal achieved", detail: goal.title });
     for (const progress of goal.progressUpdates) {
-      items.push({ id: progress.id, date: progress.recordedAt, type: "progress", title: `Progress: ${progress.progressLevel.replaceAll("_", " ")}`, detail: progress.note });
+      items.push({ id: progress.id, date: progress.recordedAt, type: "progress", title: `Progress: ${progress.progressLevel.replaceAll("_", " ")}`, progressLevel: progress.progressLevel, detail: progress.note });
     }
   }
   for (const observation of observations) {

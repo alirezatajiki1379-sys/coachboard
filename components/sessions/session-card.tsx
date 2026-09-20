@@ -21,8 +21,8 @@ export function SessionCard({ session, view = "active" }: { session: SessionSumm
             {view === "archived" ? <StatusBadge label="Archived" /> : null}
             {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
           </div>
-          <h2 className="mt-1 text-xl font-bold tracking-normal text-board-navy underline-offset-4 group-hover:text-board-green group-hover:underline">{session.title}</h2>
-          {session.notes ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{session.notes}</p> : null}
+          <h2 translate="no" className="mt-1 text-xl font-bold tracking-normal text-board-navy underline-offset-4 group-hover:text-board-green group-hover:underline">{session.title}</h2>
+          {session.notes ? <p translate="no" className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{session.notes}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
             <span className="rounded-md bg-slate-100 px-2 py-1">{session.teamAgeGroup || "No team set"}</span>
             <span className="rounded-md bg-slate-100 px-2 py-1">{session.drillCount} drills</span>

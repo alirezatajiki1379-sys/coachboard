@@ -1,5 +1,6 @@
 import { getActiveLocale } from "@/lib/i18n/server";
 import { createSystemTranslator } from "@/lib/i18n/system-text";
+import { trainingSectionLabel, trainingFocusLabel } from "@/lib/i18n/training-labels";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -134,7 +135,7 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
                 return (
                   <section key={phase} className="rounded-lg border border-board-line bg-board-paper p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="font-bold text-board-navy">{phase}</h3>
+                      <h3 className="font-bold text-board-navy" translate="no">{trainingSectionLabel(phase, locale)}</h3>
                       <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600">{phaseDuration} {ui(" min")}</span>
                     </div>
                     <div className="mt-3 space-y-3">
@@ -175,7 +176,7 @@ export default async function TrainingPlanPage({ params, searchParams }: Trainin
               <input type="hidden" name="eventId" value={event.id} />
               <label className="block text-sm font-bold text-board-navy">
                 {ui("Add to phase")}<select name="phase" defaultValue="Main Part" className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                  {phaseOptions.map((phase) => <option key={phase} value={phase}>{phase}</option>)}
+                  {phaseOptions.map((phase) => <option key={phase} value={phase}>{trainingSectionLabel(phase, locale)}</option>)}
                 </select>
               </label>
               <div className="grid max-h-[32rem] gap-2 overflow-y-auto pr-1 md:grid-cols-2">
@@ -448,7 +449,7 @@ async function PlanningInsightsPanel({ eventId, context }: { eventId: string; co
           ) : development.activeGoals ? (
             <div className="space-y-3 text-sm">
               <p className="font-semibold text-board-navy">
-                {development.expectedPlayersWithActiveGoals} {ui(" expected Player")}{development.expectedPlayersWithActiveGoals === 1 ? "" : "s"} {ui(" have ")}{development.activeGoals} {ui(" active Goal")}{development.activeGoals === 1 ? "" : "s"}.
+                {ui("Expected players: {players} · Active development goals: {goals}", { players: development.expectedPlayersWithActiveGoals, goals: development.activeGoals })}
               </p>
               <div className="flex flex-wrap gap-2">
                 {development.categories.map((item) => (
@@ -463,7 +464,7 @@ async function PlanningInsightsPanel({ eventId, context }: { eventId: string; co
                   {development.examples.map((goal) => (
                     <div key={`${goal.playerName}-${goal.title}`} className="rounded-md border border-slate-100 p-2">
                       <p className="font-bold text-board-navy">{goal.playerName}</p>
-                      <p className="text-xs font-semibold text-slate-600">{goal.title}</p>
+                      <p translate="no" className="text-xs font-semibold text-slate-600">{goal.title}</p>
                       <p className="mt-1 text-xs text-slate-500">{developmentCategoryLabel(goal.category)} · {goal.priority} {ui(" priority")}{goal.reviewDue ? " · review due" : ""}{goal.latestProgress ? ` · ${progressLabel(goal.latestProgress)}` : ""}</p>
                     </div>
                   ))}
@@ -481,20 +482,20 @@ async function PlanningInsightsPanel({ eventId, context }: { eventId: string; co
             <EmptyInsight>{ui("Training balance unavailable.")}</EmptyInsight>
           ) : balance.lookbackCount ? (
             <div className="space-y-3 text-sm">
-              <p className="font-semibold text-board-navy">{ui("Recent focus distribution from the last ")}{balance.lookbackCount} {ui(" same-team Training")}{balance.lookbackCount === 1 ? "" : "s"}.</p>
+              <p className="font-semibold text-board-navy">{ui("Recent focus distribution · Same-team trainings: {count}", { count: balance.lookbackCount })}</p>
               {balance.focusDistribution.length ? (
                 <div className="space-y-2">
                   {balance.focusDistribution.map((item) => (
                     <div key={item.focus} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2">
-                      <span className="font-semibold text-slate-700">{item.focus}</span>
+                      <span className="font-semibold text-slate-700" translate="no">{trainingFocusLabel(item.focus, locale)}</span>
                       <span className="font-bold text-board-navy">{item.count}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm font-semibold text-slate-500">{ui("Focus recorded for 0 of ")}{balance.lookbackCount} {ui(" Trainings.")}</p>
+                <p className="text-sm font-semibold text-slate-500">{ui("Focus recorded for 0 of {count} trainings.", { count: balance.lookbackCount })}</p>
               )}
-              {balance.currentFocusCount !== undefined ? <p className="text-xs font-semibold text-slate-500">{ui("Current focus appeared in ")}{balance.currentFocusCount} {ui(" of those Trainings.")}</p> : null}
+              {balance.currentFocusCount !== undefined ? <p className="text-xs font-semibold text-slate-500">{ui("Trainings with the current focus: {count}", { count: balance.currentFocusCount })}</p> : null}
               <ButtonLink href="/squad/analysis?section=training&period=last5" variant="ghost" className="h-8 px-2 text-xs">{ui("View Analytics")}</ButtonLink>
             </div>
           ) : (
@@ -653,7 +654,7 @@ async function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }
         <input type="hidden" name="drillInstanceId" value={drill.id} />
         <label className="text-xs font-bold uppercase text-slate-500">
           {ui("Phase")}<select name="phase" defaultValue={drill.phase} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-            {phaseOptions.map((phase) => <option key={phase} value={phase}>{phase}</option>)}
+            {phaseOptions.map((phase) => <option key={phase} value={phase}>{trainingSectionLabel(phase, locale)}</option>)}
           </select>
         </label>
         <label className="text-xs font-bold uppercase text-slate-500">

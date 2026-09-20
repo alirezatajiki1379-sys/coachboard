@@ -1,6 +1,11 @@
+"use client";
+
+import { useSystemText } from "@/components/i18n/use-system-text";
+
 export default function ActionsLoading() {
+  const ui = useSystemText();
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading Action Center">
+    <div className="space-y-6" aria-busy="true" aria-label={ui("Loading Action Center")}>
       <section>
         <div className="h-4 w-36 animate-pulse rounded bg-green-100" />
         <div className="mt-3 h-9 w-64 animate-pulse rounded bg-slate-200" />
@@ -15,11 +20,11 @@ export default function ActionsLoading() {
         ))}
       </section>
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
               <div className="h-4 w-48 animate-pulse rounded bg-slate-200" />
-              <div className="mt-3 h-5 w-72 animate-pulse rounded bg-slate-200" />
+              <div className="mt-3 h-5 w-72 max-w-full animate-pulse rounded bg-slate-200" />
               <div className="mt-2 h-4 max-w-xl animate-pulse rounded bg-slate-200" />
             </div>
           ))}

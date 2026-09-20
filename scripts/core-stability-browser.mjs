@@ -7,7 +7,7 @@ import path from "node:path";
 // Optional QA tools are installed outside the app. No test routes or data enter Production.
 const qaRequire = createRequire(path.join(process.env.COACHBOARD_QA_DEPS ?? "/private/tmp/coachboard-stability-tests", "package.json"));
 const { build } = qaRequire("esbuild");
-const { chromium } = qaRequire("playwright");
+const { chromium, webkit } = qaRequire("playwright");
 const root = process.cwd();
 const stubs = {
   "next/link": 'import React from "react"; export default function Link({href,children,...props}) {return <a href={href} {...props}>{children}</a>}',
@@ -69,7 +69,7 @@ const bundle = await build({
   } }]
 });
 const cssDir = path.join(root, ".next/static/css");
-const css = existsSync(cssDir) ? readdirSync(cssDir).filter((name) => name.endsWith(".css")).map((name) => readFileSync(path.join(cssDir, name), "utf8")).join("\n") : "";
+const css = process.env.COACHBOARD_QA_CSS ? readFileSync(process.env.COACHBOARD_QA_CSS, "utf8") : existsSync(cssDir) ? readdirSync(cssDir).filter((name) => name.endsWith(".css")).map((name) => readFileSync(path.join(cssDir, name), "utf8")).join("\n") : "";
 assert.ok(css, "Run npm run build before responsive browser checks so the real app styles are available.");
 const server = createServer((request, response) => {
   if (request.url === "/bundle.js") { response.setHeader("Content-Type", "application/javascript"); response.end(bundle.outputFiles[0].text); }
@@ -78,7 +78,7 @@ const server = createServer((request, response) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 let browser;
 try {
-  browser = await chromium.launch({ headless: true, executablePath: process.env.COACHBOARD_QA_CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" });
+  browser = process.env.COACHBOARD_QA_WEBKIT ? await webkit.launch() : await chromium.launch({ headless: true, executablePath: process.env.COACHBOARD_QA_CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" });
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -145,20 +145,26 @@ try {
   assert.equal(await page.evaluate(() => window.qa.saves.length), 0);
   console.log("PASS: eligible default 3 has no save-on-open side effect");
   for (const locale of ["en", "de"]) {
-    for (const width of [375, 430, 768, 1440]) {
+    for (const width of [320, 360, 375, 390, 430, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       for (const view of ["review", "rating", "check-in"]) {
         await page.goto(`${base}?locale=${locale}&view=${view}`);
         await page.getByText(view === "review" ? "QA Training" : "Fictional Player", { exact: true }).waitFor();
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${view} ${locale} ${width}px overflow`);
+        const smallRatings = await page.locator('button[aria-pressed]').evaluateAll(elements => elements.filter(el => { const r=el.getBoundingClientRect();return r.width>0&&(r.width<43.5||r.height<43.5); }).map(el=>el.getAttribute("aria-label")));
+        assert.deepEqual(smallRatings, [], `${view}: rating/status touch targets`);
       }
     }
   }
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(`${base}?locale=de&view=check-in`);
+  await page.getByText("Fictional Player",{exact:true}).waitFor();
+  await page.screenshot({path:"/private/tmp/coachboard-mobile-checkin-de.png",fullPage:true});
   await page.goto(`${base}?locale=de`);
   await page.getByText("Übungsrückmeldung", { exact: true }).waitFor();
   await page.screenshot({ path: "/private/tmp/coachboard-review-qa.png", fullPage: true });
   assert.deepEqual(errors, []);
-  console.log("PASS: review, ratings and check-in at 375/430/768/1440px in EN/DE; no browser page errors");
+  console.log("PASS: review, ratings and check-in at 320/360/375/390/430/768/1440px in EN/DE; no browser page errors");
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));

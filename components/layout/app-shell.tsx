@@ -60,12 +60,20 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
     const trigger = menuButtonRef.current;
     const focusable = drawerRef.current?.querySelector<HTMLElement>("a,button,summary,input,select,textarea,[tabindex]:not([tabindex='-1'])");
     focusable?.focus();
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
       trigger?.focus();
     };
   }, [drawerOpen]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => { if (desktop.matches) setDrawerOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
 
   useEffect(() => {
     setPendingHref(null);
@@ -116,17 +124,17 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
       </aside>
 
       <div className="relative z-0 min-w-0 overflow-x-clip transition-[padding] duration-200 motion-reduce:transition-none lg:pl-[var(--app-sidebar-width)]">
-        <header className="sticky top-0 z-50 min-h-[var(--app-mobile-header-height)] border-b border-board-line bg-white/90 backdrop-blur lg:hidden">
+        <header className="app-mobile-header sticky top-0 z-50 min-h-[var(--app-mobile-header-height)] border-b border-board-line bg-white/90 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between px-4 py-3">
             <button
               ref={menuButtonRef}
               type="button"
               onClick={() => setDrawerOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded-md text-board-navy outline-none transition hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-board-green"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-board-navy outline-none transition hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-board-green"
               aria-label={messages.accessibility.openNavigationMenu}
               aria-expanded={drawerOpen}
             >
-              <Menu className="h-5 w-5" />
+              {pendingHref ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Menu className="h-5 w-5" />}
             </button>
             <Link href="/dashboard" className="flex items-center gap-2 font-bold text-board-navy">
               <span className="flex h-9 w-9 items-center justify-center rounded-md bg-board-green text-white">
@@ -134,7 +142,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
               </span>
               {messages.app.name}
             </Link>
-            <LogoutButton locale={locale} />
+            <LogoutButton compact locale={locale} />
           </div>
         </header>
         <I18nProvider locale={locale}>
@@ -154,7 +162,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
           />
           <div
             ref={drawerRef}
-            className="relative flex h-full w-[min(22rem,88vw)] flex-col bg-board-navy text-white shadow-2xl"
+            className="app-drawer relative flex h-full w-[min(22rem,88vw)] flex-col bg-board-navy text-white shadow-2xl"
             onKeyDown={trapDrawerFocus}
           >
             <div className="flex h-16 items-center justify-between px-4">
@@ -167,7 +175,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-md text-slate-200 outline-none transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-board-green"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-200 outline-none transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-board-green"
                 aria-label={messages.accessibility.closeNavigationMenu}
               >
                 <X className="h-5 w-5" />

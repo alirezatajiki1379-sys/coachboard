@@ -1765,8 +1765,8 @@ function TemplateButton({
         onClick={onClick}
         className="block min-h-20 w-full p-3 text-left transition hover:bg-green-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-board-green"
       >
-        <span className="block text-sm font-bold text-board-navy">{template.name}</span>
-        <span className="mt-1 line-clamp-2 block text-xs leading-5 text-slate-500">{template.description}</span>
+        <span translate="no" className="block text-sm font-bold text-board-navy">{template.name}</span>
+        <span translate="no" className="mt-1 line-clamp-2 block text-xs leading-5 text-slate-500">{template.description}</span>
         <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
           {template.source === "built-in" ? "Built-in" : "My template"}
         </span>

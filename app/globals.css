@@ -17,7 +17,7 @@
   --table-popover-z: 60;
   --app-sidebar-z: 80;
   --app-popover-z: 90;
-  --app-modal-z: 120;
+  --app-modal-z: 140;
   --app-drawer-z: 130;
 }
 
@@ -64,6 +64,81 @@ textarea {
     linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px),
     #28764a;
   background-size: 28px 28px;
+}
+
+/* Screen-only adaptations leave the A4/export rules and canvas geometry intact. */
+@media screen and (max-width: 1023px) {
+  .app-main {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .app-mobile-header {
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .app-drawer {
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .app-drawer > * { flex-shrink: 0; }
+  .app-drawer :is(nav a, summary) { min-height: 44px; }
+}
+
+@media screen and (max-width: 767px) {
+  /* 16px prevents Safari focus zoom; dates must be allowed to shrink as well. */
+  :root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]),
+  :root select,
+  :root textarea {
+    font-size: 16px;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 44px;
+  }
+
+  input::-webkit-date-and-time-value { text-align: left; }
+  form :is(label, fieldset), form .grid > * { min-width: 0; }
+
+  .app-button {
+    min-height: 44px;
+    min-width: 44px;
+    height: auto;
+    max-width: 100%;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .app-button > svg { flex-shrink: 0; }
+  .page-actions > * { max-width: 100%; }
+  .page-tabs { flex-wrap: nowrap; max-width: 100%; overscroll-behavior-x: contain; }
+  .page-tabs > * { flex-shrink: 0; min-height: 44px; white-space: nowrap; }
+}
+
+@media screen {
+  .app-dialog-host > .fixed {
+    top: var(--dialog-viewport-top, 0px);
+    bottom: auto;
+    height: var(--dialog-viewport-height, 100dvh);
+  }
+  .app-dialog-panel {
+    min-width: 0;
+    max-height: calc(var(--dialog-viewport-height, 100dvh) - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media screen and (min-width: 768px) {
+  .drill-filters > summary { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

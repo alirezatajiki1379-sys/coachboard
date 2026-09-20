@@ -13,7 +13,7 @@ const widthClasses = {
 };
 
 export function PageContainer({ children, width = "wide", className, ...props }: PageContainerProps) {
-  return <div className={cn("mx-auto w-full space-y-6", widthClasses[width], className)} {...props}>{children}</div>;
+  return <div className={cn("mx-auto w-full min-w-0 space-y-6", widthClasses[width], className)} {...props}>{children}</div>;
 }
 
 type PageHeaderProps = {
@@ -32,11 +32,11 @@ export function PageHeader({ eyebrow, title, description, metadata, actions, bre
       <div className="min-w-0">
         {breadcrumb ? <div className="mb-3">{breadcrumb}</div> : null}
         {eyebrow ? <p className="text-sm font-semibold uppercase text-board-green">{eyebrow}</p> : null}
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy sm:text-4xl">{title}</h1>
+        <h1 className="mt-2 break-words text-2xl font-bold tracking-normal text-board-navy sm:text-4xl">{title}</h1>
         {description ? <p className="mt-2 max-w-3xl text-slate-600">{description}</p> : null}
         {metadata ? <div className="mt-3 text-sm font-semibold text-slate-700">{metadata}</div> : null}
       </div>
-      {actions ? <div className="flex flex-wrap gap-2 md:justify-end">{actions}</div> : null}
+      {actions ? <div className="page-actions flex min-w-0 flex-wrap gap-2 md:justify-end">{actions}</div> : null}
     </section>
   );
 }

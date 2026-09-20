@@ -248,7 +248,7 @@ export default async function DashboardPage() {
                 <div key={drill.id} className="rounded-md border border-board-line p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <Link href={`/drills/${drill.id}`} className="font-semibold text-board-navy hover:text-board-green">
+                      <Link translate="no" href={`/drills/${drill.id}`} className="font-semibold text-board-navy hover:text-board-green">
                         {drill.title}
                       </Link>
                       <p className="mt-1 text-sm text-slate-500">{drill.main_focus}</p>
@@ -286,7 +286,7 @@ export default async function DashboardPage() {
                 <div key={session.id} className="rounded-md border border-board-line p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <Link href={`/sessions/${session.id}`} className="font-semibold text-board-navy hover:text-board-green">
+                      <Link translate="no" href={`/sessions/${session.id}`} className="font-semibold text-board-navy hover:text-board-green">
                         {session.title}
                       </Link>
                       <p className="mt-1 text-sm text-slate-500">

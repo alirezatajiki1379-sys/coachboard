@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useDialogFocus } from "@/components/shared/use-dialog-focus";
+import { DialogPortal } from "@/components/shared/dialog-portal";
 
 const draftVersion = 1;
 const autosaveDelayMs = 2000;
@@ -253,10 +255,12 @@ function DraftRecoveryDialog({
   onDiscard: () => void;
   onKeepCurrent: () => void;
 }) {
+  const dialogRef = useDialogFocus(true, onKeepCurrent);
   return (
-    <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-center justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
-      <div className="w-full max-w-lg rounded-lg border border-board-line bg-white p-4 shadow-2xl sm:p-5">
-        <h2 className="text-lg font-bold text-board-navy">{title ?? "Recover unsaved draft?"}</h2>
+    <DialogPortal>
+    <div role="dialog" aria-modal="true" aria-labelledby="draft-recovery-title" className="fixed inset-0 z-[var(--app-modal-z)] flex items-center justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
+      <div ref={dialogRef} tabIndex={-1} className="app-dialog-panel w-full max-w-lg rounded-lg border border-board-line bg-white p-4 shadow-2xl outline-none sm:p-5">
+        <h2 id="draft-recovery-title" className="text-lg font-bold text-board-navy">{title ?? "Recover unsaved draft?"}</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
           {description ?? "Unsaved work from an earlier visit was found."} Draft saved at{" "}
           <span className="font-semibold text-board-navy">{formatDraftTime(savedAt)}</span>.
@@ -279,6 +283,7 @@ function DraftRecoveryDialog({
         </div>
       </div>
     </div>
+    </DialogPortal>
   );
 }
 

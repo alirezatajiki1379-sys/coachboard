@@ -1,5 +1,8 @@
 "use client";
 
+import { useDialogFocus } from "@/components/shared/use-dialog-focus";
+import { DialogPortal } from "@/components/shared/dialog-portal";
+
 import Link from "next/link";
 import { useState } from "react";
 import { MoreHorizontal, Pencil, RotateCcw, Trash2 } from "lucide-react";
@@ -87,9 +90,11 @@ export function TrainingEventActions({ eventId, attendanceCount = 0, compact = f
 
 function EditScopeDialog({ eventId, onClose }: { eventId: string; onClose: () => void }) {
   const [scope, setScope] = useState("single");
+  const dialogRef = useDialogFocus(true, onClose);
   return (
+    <DialogPortal>
     <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-slate-950/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="edit-training-scope-title">
-      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+      <div ref={dialogRef} tabIndex={-1} className="app-dialog-panel w-full max-w-md rounded-lg bg-white p-5 shadow-xl outline-none">
         <h2 id="edit-training-scope-title" className="text-lg font-bold text-board-navy">Edit training</h2>
         <p className="mt-1 text-sm text-slate-600">Choose the scope for this recurring Training before opening the edit form.</p>
         <div className="mt-4 grid gap-2">
@@ -108,13 +113,16 @@ function EditScopeDialog({ eventId, onClose }: { eventId: string; onClose: () =>
         </div>
       </div>
     </div>
+    </DialogPortal>
   );
 }
 
 function TrashScopeDialog({ eventId, attendanceCount, isRecurring, onClose }: { eventId: string; attendanceCount: number; isRecurring: boolean; onClose: () => void }) {
+  const dialogRef = useDialogFocus<HTMLFormElement>(true, onClose);
   return (
+    <DialogPortal>
     <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-slate-950/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="trash-training-scope-title">
-      <form action={deleteTrainingEvent} className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+      <form ref={dialogRef} tabIndex={-1} action={deleteTrainingEvent} className="app-dialog-panel w-full max-w-md rounded-lg bg-white p-5 shadow-xl outline-none">
         <input type="hidden" name="eventId" value={eventId} />
         <h2 id="trash-training-scope-title" className="text-lg font-bold text-board-navy">Move Training to Trash</h2>
         <p className="mt-1 text-sm text-slate-600">Training data is preserved and can be restored later.</p>
@@ -151,5 +159,6 @@ function TrashScopeDialog({ eventId, attendanceCount, isRecurring, onClose }: { 
         </div>
       </form>
     </div>
+    </DialogPortal>
   );
 }

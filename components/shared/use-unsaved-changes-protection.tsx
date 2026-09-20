@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useDialogFocus } from "@/components/shared/use-dialog-focus";
+import { DialogPortal } from "@/components/shared/dialog-portal";
 
 const warningMessage = "You have unsaved changes.";
 
@@ -64,11 +66,13 @@ export function useUnsavedChangesProtection({ isDirty, isSaving = false, onSaveD
   const dismissDialog = useCallback(() => {
     setPendingHref(null);
   }, []);
+  const dialogRef = useDialogFocus(Boolean(pendingHref), dismissDialog);
 
   const dialog = useMemo(() => pendingHref ? (
-    <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-center justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
-      <div className="w-full max-w-md rounded-lg border border-board-line bg-white p-4 shadow-2xl sm:p-5">
-        <h2 className="text-lg font-bold text-board-navy">You have unsaved changes.</h2>
+    <DialogPortal>
+    <div role="dialog" aria-modal="true" aria-labelledby="unsaved-changes-title" className="fixed inset-0 z-[var(--app-modal-z)] flex items-center justify-center overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
+      <div ref={dialogRef} tabIndex={-1} className="app-dialog-panel w-full max-w-md rounded-lg border border-board-line bg-white p-4 shadow-2xl outline-none sm:p-5">
+        <h2 id="unsaved-changes-title" className="text-lg font-bold text-board-navy">You have unsaved changes.</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">Do you want to keep a local draft before leaving?</p>
         <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <Button type="button" variant="primary" className="w-full justify-center sm:w-auto" onClick={saveDraftAndLeave} disabled={isSaving}>
@@ -83,7 +87,8 @@ export function useUnsavedChangesProtection({ isDirty, isSaving = false, onSaveD
         </div>
       </div>
     </div>
-  ) : null, [dismissDialog, isSaving, leaveWithoutSaving, pendingHref, saveDraftAndLeave]);
+    </DialogPortal>
+  ) : null, [dialogRef, dismissDialog, isSaving, leaveWithoutSaving, pendingHref, saveDraftAndLeave]);
 
   return { dialog, dismissDialog };
 }

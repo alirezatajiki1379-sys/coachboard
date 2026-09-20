@@ -122,7 +122,7 @@ export default async function TeamsPage({ searchParams }: TeamsPageProps) {
                     <p className="text-xs font-bold uppercase tracking-wide text-board-green">{isCurrent ? "Active team" : isArchived ? "Archived" : "Team"}</p>
                     <h2 className="mt-1 flex items-center gap-2 text-xl font-bold text-board-navy">
                       <UsersRound className="h-5 w-5" />
-                      <span className="truncate">{team.name}</span>
+                      <span translate="no" className="truncate">{team.name}</span>
                     </h2>
                     <p className="mt-2 text-sm text-slate-500">One Team workspace with one Squad/Roster.</p>
                     <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-board-paper px-3 py-1 text-xs font-semibold text-slate-600">

@@ -7,6 +7,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { materialSummary } from "@/lib/drills/materials";
 import { formatArea, formatMeters } from "@/lib/drills/setup";
 import { formatDate, getMessages, localeToIntl } from "@/lib/i18n";
+import { trainingSectionLabel } from "@/lib/i18n/training-labels";
 import { getUserLocale } from "@/lib/i18n/server";
 import { getUserSession, type SessionDrillDetail } from "@/lib/sessions/queries";
 import { calculateSessionDuration, effectiveStationDuration, formatTimelineRange, groupByTrainingBlock, normalizeSimultaneousGroup, resolveGroupName, stationSetLabel, stationSetOptions } from "@/lib/sessions/utils";
@@ -51,7 +52,7 @@ export default async function FieldViewPage({ params }: FieldViewPageProps) {
       <article className="space-y-5 rounded-xl border border-board-line bg-white p-4 print:space-y-4 print:border-0 print:p-0 sm:p-6">
         <header className="print-avoid rounded-xl bg-board-navy p-5 text-white">
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-200">{messages.export.document.fieldView}</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-normal">{session.title}</h1>
+          <h1 translate="no" className="mt-2 text-3xl font-bold tracking-normal">{session.title}</h1>
           <p className="mt-2 text-sm text-white/80">
             {[session.teamAgeGroup, formatDate(session.date, locale, { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }), session.startTime, `${total} min`, session.location].filter(Boolean).join(" · ")}
           </p>
@@ -87,7 +88,7 @@ export default async function FieldViewPage({ params }: FieldViewPageProps) {
             <section key={block.block} className="space-y-3">
               <div className="print-avoid border-b border-board-line pb-2">
                 <p className="text-xs font-bold uppercase text-board-green">{formatTimelineRange(blockStart, block.duration, session.startTime)}</p>
-                <h2 className="text-xl font-bold text-board-navy">{block.block} · {block.duration} min</h2>
+                <h2 className="text-xl font-bold text-board-navy" translate="no">{trainingSectionLabel(block.block, locale)} · {block.duration} min</h2>
               </div>
 
               {stationSetOptions.map((set) => {
@@ -132,7 +133,7 @@ function FieldDrill({ item, index, playerGroups, locale }: { item: SessionDrillD
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-xs font-bold uppercase text-board-green">{String(index).padStart(2, "0")}</p>
-              <h3 className="text-lg font-bold text-board-navy">{drill.title}</h3>
+              <h3 translate="no" className="text-lg font-bold text-board-navy">{drill.title}</h3>
             </div>
             <span className="rounded-full bg-board-paper px-3 py-1 text-xs font-bold text-board-navy">{item.plannedDurationMinutes} min</span>
           </div>

@@ -42,13 +42,13 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
   }, [materialsOpen]);
 
   return (
-    <article className="rounded-lg border border-board-line bg-white shadow-soft">
+    <article className="min-w-0 break-words rounded-lg border border-board-line bg-white shadow-soft">
       <div className="overflow-hidden rounded-t-lg bg-board-grass">
         <SessionDrillPreview graphic={drill.graphic} previewMode="thumbnail" />
       </div>
       <div className="p-5">
         <div className="min-w-0">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs font-semibold uppercase text-board-green">{drill.mainFocus}</p>
@@ -57,7 +57,7 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
                 {view === "archived" ? <StatusBadge label="Archived" /> : null}
                 {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
               </div>
-              <h2 className="mt-1 line-clamp-2 text-xl font-bold tracking-normal text-board-navy">{drill.title}</h2>
+              <h2 translate="no" className="mt-1 line-clamp-2 text-xl font-bold tracking-normal text-board-navy">{drill.title}</h2>
             </div>
             <div className="shrink-0">
               <DrillActions drillId={drill.id} isFavorite={drill.isFavorite} view={view} compact isDraft={drill.status === "draft"} />
@@ -96,7 +96,7 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="relative mt-4">
             <p className="text-[11px] font-bold uppercase tracking-wide text-board-green">Materials</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {visibleMaterials.length ? (
@@ -110,19 +110,19 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
                     </span>
                   ))}
                   {extraMaterialCount ? (
-                    <span ref={materialsPopoverRef} className="relative inline-flex">
+                    <span ref={materialsPopoverRef} className="inline-flex">
                       <button
                         type="button"
                         aria-expanded={materialsOpen}
                         onClick={() => setMaterialsOpen((open) => !open)}
-                        className="rounded-md border border-dashed border-board-line bg-white px-2 py-1 text-xs font-semibold leading-none text-slate-500 transition hover:border-board-green hover:text-board-green focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-board-green"
+                        className="min-h-11 min-w-11 rounded-md border border-dashed border-board-line bg-white px-2 py-1 text-xs font-semibold leading-none text-slate-500 transition hover:border-board-green hover:text-board-green focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-board-green sm:min-h-0 sm:min-w-0"
                       >
                         +{extraMaterialCount} more
                       </button>
                       {materialsOpen ? (
-                        <div className="absolute right-0 top-full z-20 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-board-line bg-white p-3 text-left shadow-soft">
+                        <div className="absolute left-0 top-full z-20 mt-2 w-full max-w-72 rounded-lg border border-board-line bg-white p-3 text-left shadow-soft">
                           <p className="text-[11px] font-bold uppercase tracking-wide text-board-green">All materials</p>
-                          <div className="mt-2 flex max-h-[min(20rem,calc(100vh-8rem))] flex-wrap gap-1.5 overflow-y-auto pr-1">
+                          <div className="mt-2 flex max-h-[min(20rem,calc(100dvh-8rem))] flex-wrap gap-1.5 overflow-y-auto overscroll-contain pr-1">
                             {drill.materials.map((material, index) => (
                               <span
                                 key={`popover-${material.type}-${material.color ?? "none"}-${material.variant ?? "none"}-${material.label ?? "none"}-${index}`}

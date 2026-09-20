@@ -56,7 +56,7 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
               {view === "archived" ? <StatusBadge label="Archived" /> : null}
               {view === "trash" ? <StatusBadge label="Trash" danger /> : null}
             </div>
-            <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{drill.title}</h1>
+            <h1 translate="no" className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{drill.title}</h1>
             <p className="mt-3 max-w-3xl text-slate-600">{drill.shortDescription || "No short description yet."}</p>
           </div>
           <div className="flex flex-wrap gap-2">

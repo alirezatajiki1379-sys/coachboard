@@ -1,5 +1,10 @@
 "use client";
 
+import { useSystemText } from "@/components/i18n/use-system-text";
+import { useOptionalI18n } from "@/components/i18n/i18n-provider";
+import { trainingFocusLabel, trainingSectionLabel } from "@/lib/i18n/training-labels";
+
+
 import { useActionState, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ArrowDown, ArrowUp, Loader2, Plus, Save, Search, Trash2 } from "lucide-react";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
@@ -59,6 +64,8 @@ type VisibleBlockGroup = {
 const initialActionState: SessionActionState = {};
 
 export function SessionForm({ action, mode, drills, session }: SessionFormProps) {
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const ui = useSystemText();
   const [actionState, formAction, isPending] = useActionState(action, initialActionState);
   const initialFormValues = useMemo(() => initialValues(session), [session]);
   const [values, setValues] = useState<SessionFormValues>(() => actionState.values ?? initialFormValues);
@@ -401,69 +408,63 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <p className="text-sm text-slate-600">
-          Fields marked with <span className="font-bold text-red-600">*</span> are required.
-        </p>
+          {ui("Fields marked with ")}<span className="font-bold text-red-600">*</span> {ui(" are required.")}</p>
         {actionState.error ? <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{actionState.error}</p> : null}
       </section>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-bold text-board-navy">Training plan details</h2>
+        <h2 className="text-lg font-bold text-board-navy">{ui("Training plan details")}</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <TextInput label="Title" required value={values.title} error={actionState.fieldErrors?.title} onChange={(value) => updateField("title", value)} />
-          <TextInput label="Date" type="date" value={values.sessionDate} onChange={(value) => updateField("sessionDate", value)} />
-          <TextInput label="Start time" type="time" value={values.startTime} onChange={(value) => updateField("startTime", value)} />
-          <SelectInput label="Team / age group" value={values.teamAgeGroup} options={ageGroups} onChange={(value) => updateField("teamAgeGroup", value)} />
-          <SelectInput label="Main focus" value={values.mainFocus} options={mainFocuses} onChange={(value) => updateField("mainFocus", value)} />
-          <TextInput label="Secondary focus" value={values.secondaryFocus} onChange={(value) => updateField("secondaryFocus", value)} />
-          <TextInput label="Expected players" type="number" value={values.expectedPlayers} onChange={(value) => updateField("expectedPlayers", value)} />
-          <TextInput label="Target duration in minutes" type="number" value={values.durationTargetMinutes} onChange={(value) => updateField("durationTargetMinutes", value)} />
-          <TextInput label="Location" value={values.location} onChange={(value) => updateField("location", value)} />
+          <TextInput label={ui("Title")} required value={values.title} error={actionState.fieldErrors?.title} onChange={(value) => updateField("title", value)} />
+          <TextInput label={ui("Date")} type="date" value={values.sessionDate} onChange={(value) => updateField("sessionDate", value)} />
+          <TextInput label={ui("Start time")} type="time" value={values.startTime} onChange={(value) => updateField("startTime", value)} />
+          <SelectInput label={ui("Team / age group")} value={values.teamAgeGroup} options={ageGroups} onChange={(value) => updateField("teamAgeGroup", value)} />
+          <SelectInput label={ui("Main focus")} value={values.mainFocus} options={mainFocuses} onChange={(value) => updateField("mainFocus", value)} />
+          <TextInput label={ui("Secondary focus")} value={values.secondaryFocus} onChange={(value) => updateField("secondaryFocus", value)} />
+          <TextInput label={ui("Expected players")} type="number" value={values.expectedPlayers} onChange={(value) => updateField("expectedPlayers", value)} />
+          <TextInput label={ui("Target duration in minutes")} type="number" value={values.durationTargetMinutes} onChange={(value) => updateField("durationTargetMinutes", value)} />
+          <TextInput label={ui("Location")} value={values.location} onChange={(value) => updateField("location", value)} />
         </div>
-        <TextArea label="Notes" value={values.notes} onChange={(value) => updateField("notes", value)} />
+        <TextArea label={ui("Notes")} value={values.notes} onChange={(value) => updateField("notes", value)} />
       </section>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <details>
-          <summary className="cursor-pointer text-lg font-bold text-board-navy">Player groups</summary>
+          <summary className="cursor-pointer text-lg font-bold text-board-navy">{ui("Player groups")}</summary>
           <p className="mt-2 text-sm text-slate-500">
-            Player groups can be assigned to stations and rotated during the training plan. Notes can hold player names, levels, or quick coaching reminders.
-          </p>
+            {ui("Player groups can be assigned to stations and rotated during the training plan. Notes can hold player names, levels, or quick coaching reminders.")}</p>
           <div className="mt-4 space-y-3">
             {values.playerGroups.length ? (
               values.playerGroups.map((group, index) => (
                 <div key={group.id} className="grid gap-3 rounded-md border border-board-line bg-board-paper p-3 lg:grid-cols-[190px_minmax(0,1fr)_auto] lg:items-end">
-                  <TextInput label="Group name" value={group.name} onChange={(name) => updatePlayerGroup(group.id, { name })} />
-                  <TextInput label="Notes / player names" value={group.notes ?? ""} onChange={(notes) => updatePlayerGroup(group.id, { notes })} />
+                  <TextInput label={ui("Group name")} value={group.name} onChange={(name) => updatePlayerGroup(group.id, { name })} />
+                  <TextInput label={ui("Notes / player names")} value={group.notes ?? ""} onChange={(notes) => updatePlayerGroup(group.id, { notes })} />
                   <Button type="button" variant="danger" className="h-11 px-3" onClick={() => deletePlayerGroup(group.id, index)}>
                     <Trash2 className="h-4 w-4" />
-                    Delete
-                  </Button>
+                    {ui("Delete")}</Button>
                 </div>
               ))
             ) : (
               <div className="rounded-md border border-dashed border-board-line bg-board-paper p-4 text-sm font-medium text-slate-500">
-                No player groups yet. Add a group if you want to organize station rotations.
-              </div>
+                {ui("No player groups yet. Add a group if you want to organize station rotations.")}</div>
             )}
           </div>
           <Button type="button" variant="secondary" className="mt-4" onClick={addPlayerGroup}>
             <Plus className="h-4 w-4" />
-            Add player group
-          </Button>
+            {ui("Add player group")}</Button>
         </details>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-4 rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <h2 className="text-lg font-bold text-board-navy">Training plan drills</h2>
+            <h2 className="text-lg font-bold text-board-navy">{ui("Training plan drills")}</h2>
             <div className="text-sm font-semibold text-slate-600">
-              {total} min {targetLabel ? `- ${targetLabel}` : ""}
+              {total} {ui(" min ")}{targetLabel ? `- ${targetLabel}` : ""}
             </div>
           </div>
           <p className="text-sm leading-6 text-slate-500">
-            Add saved drills, group station work into sets, then drag cards between blocks or station sets to shape the timeline.
-          </p>
+            {ui("Add saved drills, group station work into sets, then drag cards between blocks or station sets to shape the timeline.")}</p>
           {visibleBlockGroups.length ? (
             <div className="space-y-4">
               {visibleBlockGroups.map((group) => {
@@ -496,8 +497,8 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
                     }}
                   >
                     <div className="flex items-center justify-between gap-3 px-1 pb-3">
-                      <h3 className="font-bold text-board-navy">{block}</h3>
-                      <span className="text-xs font-semibold text-slate-500">{group.duration} min</span>
+                      <h3 className="font-bold text-board-navy" translate="no">{trainingSectionLabel(block, locale)}</h3>
+                      <span className="text-xs font-semibold text-slate-500">{group.duration} {ui(" min")}</span>
                     </div>
                     <div className="space-y-4">
                       {visibleSections.map((section) => (
@@ -523,7 +524,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
                           <div className="mb-3 flex items-center justify-between gap-3">
                             <p className="text-sm font-bold text-board-navy">{section.label}</p>
                             {section.target.timingMode === "simultaneous" ? (
-                              <span className="rounded-full bg-board-paper px-2 py-1 text-xs font-semibold text-slate-500">Station set</span>
+                              <span className="rounded-full bg-board-paper px-2 py-1 text-xs font-semibold text-slate-500">{ui("Station set")}</span>
                             ) : null}
                           </div>
                           <div className="space-y-3">
@@ -563,8 +564,8 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                           <div className="min-w-0">
                                             <p className="text-xs font-bold uppercase text-board-green">#{index + 1} {item.block}</p>
-                                            <h3 className="text-lg font-bold text-board-navy">{drill.title}</h3>
-                                            <p className="text-sm text-slate-600">{drill.minPlayers}-{drill.maxPlayers} players - original {drill.durationMinutes} min - {materialSummary(drill.materials)}</p>
+                                            <h3 translate="no" className="text-lg font-bold text-board-navy">{drill.title}</h3>
+                                            <p className="text-sm text-slate-600">{drill.minPlayers}-{drill.maxPlayers} {ui(" players - original ")}{drill.durationMinutes} {ui(" min - ")}{materialSummary(drill.materials)}</p>
                                             <p className="mt-1 text-xs font-semibold text-slate-500">
                                               {item.timingMode === "simultaneous" ? `${item.plannedDurationMinutes} min × ${Math.max(1, item.participatingGroups.length)} groups = ${effectiveStationDuration(item)} min` : "Runs sequentially"}
                                             </p>
@@ -577,13 +578,13 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
                                         </div>
                                         <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                                           <div>
-                                            <SelectInput label="Training block" value={item.block} options={trainingBlocks} onChange={(nextBlock) => updateSessionDrill(item.id, { block: nextBlock })} />
-                                            <p className="mt-1 text-xs text-slate-500">Blocks keep the session readable on detail and print pages.</p>
+                                            <SelectInput label={ui("Training block")} value={item.block} options={trainingBlocks} onChange={(nextBlock) => updateSessionDrill(item.id, { block: nextBlock })} />
+                                            <p className="mt-1 text-xs text-slate-500">{ui("Blocks keep the session readable on detail and print pages.")}</p>
                                           </div>
-                                          <TextInput label="Planned duration" type="number" value={String(item.plannedDurationMinutes)} onChange={(value) => updateSessionDrill(item.id, { plannedDurationMinutes: Math.max(1, Number.parseInt(value, 10) || 1) })} />
+                                          <TextInput label={ui("Planned duration")} type="number" value={String(item.plannedDurationMinutes)} onChange={(value) => updateSessionDrill(item.id, { plannedDurationMinutes: Math.max(1, Number.parseInt(value, 10) || 1) })} />
                                           <div>
                                             <SelectInput
-                                              label="Run mode"
+                                              label={ui("Run mode")}
                                               value={item.timingMode}
                                               options={["sequential", "simultaneous"]}
                                               onChange={(timingMode) =>
@@ -591,20 +592,20 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
                                               }
                                               emptyLabel={null}
                                             />
-                                            <p className="mt-1 text-xs text-slate-500">Sequential runs one after another. Simultaneous runs as stations.</p>
+                                            <p className="mt-1 text-xs text-slate-500">{ui("Sequential runs one after another. Simultaneous runs as stations.")}</p>
                                           </div>
                                           {item.timingMode === "simultaneous" ? (
                                             <div>
-                                              <SelectInput label="Station set" value={normalizeSimultaneousGroup(item.simultaneousGroup)} options={stationSetOptions.map((option) => option.id)} onChange={(simultaneousGroup) => updateSessionDrill(item.id, { simultaneousGroup: normalizeSimultaneousGroup(simultaneousGroup) })} emptyLabel={null} optionLabel={stationSetLabel} />
-                                              <p className="mt-1 text-xs text-slate-500">Drills in the same station set run at the same time.</p>
+                                              <SelectInput label={ui("Station set")} value={normalizeSimultaneousGroup(item.simultaneousGroup)} options={stationSetOptions.map((option) => option.id)} onChange={(simultaneousGroup) => updateSessionDrill(item.id, { simultaneousGroup: normalizeSimultaneousGroup(simultaneousGroup) })} emptyLabel={null} optionLabel={stationSetLabel} />
+                                              <p className="mt-1 text-xs text-slate-500">{ui("Drills in the same station set run at the same time.")}</p>
                                             </div>
                                           ) : null}
                                         </div>
                                         {item.timingMode === "simultaneous" ? (
                                           <div className="grid gap-3 rounded-md border border-board-line bg-board-paper p-3 lg:grid-cols-[minmax(0,1fr)_220px]">
                                             <fieldset>
-                                              <legend className="text-xs font-semibold text-slate-500">Participating player groups</legend>
-                                              <p className="mt-1 text-xs text-slate-500">Player groups can be assigned to stations and rotated during the session.</p>
+                                              <legend className="text-xs font-semibold text-slate-500">{ui("Participating player groups")}</legend>
+                                              <p className="mt-1 text-xs text-slate-500">{ui("Player groups can be assigned to stations and rotated during the session.")}</p>
                                               <div className="mt-2 flex flex-wrap gap-2">
                                                 {playerGroupOptions().map((group) => (
                                                   <label key={group.id} className="inline-flex items-center gap-2 rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-board-line">
@@ -620,19 +621,19 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
                                               </div>
                                             </fieldset>
                                             <SelectInput
-                                              label="Starting player group"
+                                              label={ui("Starting player group")}
                                               value={item.startingGroup}
                                               options={item.participatingGroups}
                                               onChange={(startingGroup) => updateSessionDrill(item.id, { startingGroup })}
                                               emptyLabel="None"
                                               optionLabel={(groupId) => resolveGroupName(values.playerGroups, groupId)}
                                             />
-                                            <p className="text-xs text-slate-500 lg:col-start-2">Choose which group starts at this station.</p>
+                                            <p className="text-xs text-slate-500 lg:col-start-2">{ui("Choose which group starts at this station.")}</p>
                                           </div>
                                         ) : null}
                                         <details className="rounded-md border border-board-line bg-white px-3 py-2">
-                                          <summary className="cursor-pointer text-sm font-semibold text-slate-700">Coach notes for this drill</summary>
-                                          <TextArea label="Notes" value={item.coachNotes} onChange={(coachNotes) => updateSessionDrill(item.id, { coachNotes })} compact />
+                                          <summary className="cursor-pointer text-sm font-semibold text-slate-700">{ui("Coach notes for this drill")}</summary>
+                                          <TextArea label={ui("Notes")} value={item.coachNotes} onChange={(coachNotes) => updateSessionDrill(item.id, { coachNotes })} compact />
                                         </details>
                                       </div>
                                       </div>
@@ -649,7 +650,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
                           {draggedDrillId &&
                           isSameDropSection(dropTarget, section.target) &&
                           !dropTarget?.beforeId ? (
-                            <DropIndicator label="Drop at end" position="end" />
+                            <DropIndicator label={ui("Drop at end")} position="end" />
                           ) : null}
                         </section>
                       ))}
@@ -660,37 +661,37 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center">
-              <p className="font-semibold text-board-navy">No drills added yet.</p>
-            <p className="mt-2 text-sm text-slate-500">Search your drill library and add the blocks for this training plan.</p>
+              <p className="font-semibold text-board-navy">{ui("No drills added yet.")}</p>
+            <p className="mt-2 text-sm text-slate-500">{ui("Search your drill library and add the blocks for this training plan.")}</p>
             </div>
           )}
         </div>
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Material summary</h2>
-            <p className="mt-1 text-xs text-slate-500">Calculated based on simultaneous and sequential drill usage.</p>
+            <h2 className="text-lg font-bold text-board-navy">{ui("Material summary")}</h2>
+            <p className="mt-1 text-xs text-slate-500">{ui("Calculated based on simultaneous and sequential drill usage.")}</p>
             <div className="mt-3 text-sm text-slate-600">
               <MaterialSummaryList materials={materials} />
             </div>
           </section>
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Block structure</h2>
+            <h2 className="text-lg font-bold text-board-navy">{ui("Block structure")}</h2>
             <div className="mt-3 space-y-2">
               {blockGroups.length ? (
                 blockGroups.map((group) => (
                   <div key={group.block} className="rounded-md bg-board-paper px-3 py-2">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-board-navy">{group.block}</span>
-                      <span className="text-slate-600">{group.items.length} drills - {group.duration} min</span>
+                      <span className="font-semibold text-board-navy" translate="no">{trainingSectionLabel(group.block, locale)}</span>
+                      <span className="text-slate-600">{group.items.length} {ui(" drills - ")}{group.duration} {ui(" min")}</span>
                     </div>
                     {group.stationSets.map((set) => (
-                      <p key={`${group.block}-${set.name}`} className="mt-1 text-xs font-semibold text-slate-500">{set.name}: {set.duration} min</p>
+                      <p key={`${group.block}-${set.name}`} className="mt-1 text-xs font-semibold text-slate-500">{set.name}: {set.duration} {ui(" min")}</p>
                     ))}
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-slate-500">Blocks appear after you add drills.</p>
+                <p className="text-sm text-slate-500">{ui("Blocks appear after you add drills.")}</p>
               )}
             </div>
           </section>
@@ -698,20 +699,20 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
       </section>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-bold text-board-navy">Add drills from library</h2>
-        <p className="mt-1 text-sm text-slate-500">Only saved drills appear here. Create drills first, then add them to this training plan.</p>
+        <h2 className="text-lg font-bold text-board-navy">{ui("Add drills from library")}</h2>
+        <p className="mt-1 text-sm text-slate-500">{ui("Only saved drills appear here. Create drills first, then add them to this training plan.")}</p>
         <div className="mt-4 grid gap-3 md:grid-cols-5">
           <label className="md:col-span-2">
-            <span className="text-xs font-semibold text-slate-500">Search</span>
+            <span className="text-xs font-semibold text-slate-500">{ui("Search")}</span>
             <div className="relative mt-1">
               <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 w-full rounded-md border border-board-line bg-white pl-9 pr-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
             </div>
           </label>
-          <SelectInput label="Age group" value={ageGroup} options={ageGroups} onChange={setAgeGroup} />
-          <SelectInput label="Focus" value={mainFocus} options={mainFocuses} onChange={setMainFocus} />
-          <SelectInput label="Block" value={trainingBlock} options={trainingBlocks} onChange={setTrainingBlock} />
-          <SelectInput label="Drill type" value={drillType} options={drillTypes} onChange={setDrillType} />
+          <SelectInput label={ui("Age group")} value={ageGroup} options={ageGroups} onChange={setAgeGroup} />
+          <SelectInput label={ui("Focus")} value={mainFocus} options={mainFocuses} onChange={setMainFocus} />
+          <SelectInput label={ui("Block")} value={trainingBlock} options={trainingBlocks} onChange={setTrainingBlock} />
+          <SelectInput label={ui("Drill type")} value={drillType} options={drillTypes} onChange={setDrillType} />
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {filteredDrills.length ? filteredDrills.map((drill) => (
@@ -719,11 +720,11 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-bold text-board-navy">{drill.title}</h3>
-                    {selectedCounts.get(drill.id) ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-board-green">Added</span> : null}
+                    <h3 translate="no" className="font-bold text-board-navy">{drill.title}</h3>
+                    {selectedCounts.get(drill.id) ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-board-green">{ui("Added")}</span> : null}
                   </div>
-                  <p className="mt-1 text-sm text-slate-600">{drill.durationMinutes} min - {drill.mainFocus} - {drill.trainingBlocks.join(", ")}</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">{drill.minPlayers}-{drill.maxPlayers} players - {materialSummary(drill.materials)}</p>
+                  <p translate="no" className="mt-1 text-sm text-slate-600">{drill.durationMinutes} {ui(" min - ")}{trainingFocusLabel(drill.mainFocus, locale)} - {drill.trainingBlocks.map((block) => trainingSectionLabel(block, locale)).join(", ")}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{drill.minPlayers}-{drill.maxPlayers} {ui(" players - ")}{materialSummary(drill.materials)}</p>
                 </div>
                 <Button type="button" variant={selectedCounts.get(drill.id) ? "secondary" : "primary"} className="h-9 justify-center px-3 sm:shrink-0" onClick={() => addDrill(drill)}>
                   <Plus className="h-4 w-4" />
@@ -733,18 +734,17 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
             </article>
           )) : (
             <div className="rounded-lg border border-dashed border-board-line bg-board-paper p-6 text-center text-sm text-slate-500 lg:col-span-2">
-              No drills match these filters. Clear the filters or create a drill in the library first.
-            </div>
+              {ui("No drills match these filters. Clear the filters or create a drill in the library first.")}</div>
           )}
         </div>
       </section>
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
         {autosaveIndicator}
-        <ButtonLink href={session ? `/sessions/${session.id}` : "/sessions"} variant="secondary" className="justify-center">Cancel</ButtonLink>
+        <ButtonLink href={session ? `/sessions/${session.id}` : "/sessions"} variant="secondary" className="justify-center">{ui("Cancel")}</ButtonLink>
         <Button type="submit" disabled={isPending} className="justify-center">
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {mode === "create" ? "Create training plan" : "Save training plan"}
+          {ui(mode === "create" ? "Create training plan" : "Save training plan")}
         </Button>
       </div>
     </form>
@@ -877,7 +877,7 @@ function SelectInput({
   options,
   onChange,
   emptyLabel = "Any",
-  optionLabel = (option: string) => option
+  optionLabel
 }: {
   label: string;
   value: string;
@@ -886,12 +886,13 @@ function SelectInput({
   emptyLabel?: string | null;
   optionLabel?: (option: string) => string;
 }) {
+  const ui = useSystemText();
   return (
     <label className="block">
       <span className="whitespace-nowrap text-xs font-semibold text-slate-500">{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-        {emptyLabel !== null ? <option value="">{emptyLabel}</option> : null}
-        {options.map((option) => <option key={option} value={option}>{optionLabel(option)}</option>)}
+        {emptyLabel !== null ? <option value="">{ui(emptyLabel)}</option> : null}
+        {options.map((option) => <option key={option} value={option} translate="no">{optionLabel ? optionLabel(option) : ui(option)}</option>)}
       </select>
     </label>
   );

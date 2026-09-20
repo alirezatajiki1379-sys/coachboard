@@ -35,7 +35,7 @@ export default async function EditDrillPage({ params, searchParams }: EditDrillP
       <div>
         <p className="text-sm font-semibold uppercase text-board-green">Edit Drill</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-3xl font-bold tracking-normal text-board-navy">{drill.title}</h1>
+          <h1 translate="no" className="text-3xl font-bold tracking-normal text-board-navy">{drill.title}</h1>
           {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Draft</span> : null}
         </div>
         <p className="mt-2 text-slate-600">{drill.status === "draft" ? "Continue this reusable draft. Use Publish Drill when it is ready for normal library use." : "Update metadata, coaching notes, materials, and categorization."}</p>

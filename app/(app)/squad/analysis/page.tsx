@@ -1,5 +1,7 @@
 import { getActiveLocale } from "@/lib/i18n/server";
 import { createSystemTranslator } from "@/lib/i18n/system-text";
+import { formatDate, formatNumber, type Locale } from "@/lib/i18n";
+import { trainingFocusLabel } from "@/lib/i18n/training-labels";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -249,7 +251,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
   const activeFilters = countActiveFilters(filters);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer width="wide" translate="no">
       <PageHeader
         eyebrow={copy.eyebrow}
         title={copy.title}
@@ -361,7 +363,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryMetric icon={<Users className="h-4 w-4" />} label={copy.metrics.players} value={String(summaries.length)} hint={`${copy.activeTeam}: ${teamAnalytics.activeSquad.name}`} />
         <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label={copy.metrics.trainings} value={String(teamAnalytics.trainingSessions)} hint={periodDefinition.shortLabel} />
-        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label={copy.metrics.teamAttendance} value={formatPercent(teamAnalytics.teamAttendanceRate)} hint={copy.attended(teamAnalytics.present + teamAnalytics.late)} />
+        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label={copy.metrics.teamAttendance} value={formatPercent(teamAnalytics.teamAttendanceRate, locale)} hint={copy.attended(teamAnalytics.present + teamAnalytics.late)} />
         <SummaryMetric icon={<Star className="h-4 w-4" />} label={copy.metrics.ratedPerformances} value={String(totalRated)} hint={copy.finalRatingsOnly} />
         <SummaryMetric icon={<Info className="h-4 w-4" />} label={copy.metrics.openAssessments} value={String(openAssessments)} hint={copy.manualCoachStatus} />
       </section>
@@ -444,10 +446,10 @@ async function AnalyticsSectionPanel({
           <div className="grid gap-3 sm:grid-cols-3">
             <MiniStat label={ui("Sessions")} value={teamAnalytics.trainingSessions} />
             <MiniStat label={ui("Reviewed")} value={`${teamAnalytics.reviewedSessions}/${teamAnalytics.trainingSessions}`} />
-            <MiniStat label={ui("Review coverage")} value={formatPercent(teamAnalytics.reviewCoverage)} />
-            <MiniStat label={ui("Quality")} value={formatRating(teamAnalytics.averageSessionQuality)} />
-            <MiniStat label={ui("Intensity")} value={formatRating(teamAnalytics.averageSessionIntensity)} />
-            <MiniStat label={ui("Planned sessions")} value={formatPercent(teamAnalytics.planCoverage.rate)} />
+            <MiniStat label={ui("Review coverage")} value={formatPercent(teamAnalytics.reviewCoverage, locale)} />
+            <MiniStat label={ui("Quality")} value={formatRating(teamAnalytics.averageSessionQuality, locale)} />
+            <MiniStat label={ui("Intensity")} value={formatRating(teamAnalytics.averageSessionIntensity, locale)} />
+            <MiniStat label={ui("Planned sessions")} value={formatPercent(teamAnalytics.planCoverage.rate, locale)} />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <OutcomeBadge label={ui("Achieved")} value={teamAnalytics.objectiveOutcomes.achieved} />
@@ -459,7 +461,7 @@ async function AnalyticsSectionPanel({
           {teamAnalytics.focusDistribution.length ? (
             <div className="space-y-3">
               {teamAnalytics.focusDistribution.slice(0, 6).map((item) => (
-                <ProgressRow key={item.label} label={item.label} value={`${item.count}x`} percent={item.percentage} />
+                <ProgressRow key={item.label} label={trainingFocusLabel(item.label, locale)} value={`${item.count}x`} percent={item.percentage} />
               ))}
             </div>
           ) : (
@@ -496,7 +498,7 @@ async function AnalyticsSectionPanel({
           </div>
           <div className="mt-4">
             <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">{ui("Active goals by category")}</p>
-            <ChipList items={teamAnalytics.activeGoalCategoryDistribution.map((item) => `${developmentCategoryLabel(item.category)}: ${item.count}`)} empty={ui("No active goals yet.")} />
+            <ChipList items={teamAnalytics.activeGoalCategoryDistribution.map((item) => `${ui(developmentCategoryLabel(item.category, locale))}: ${item.count}`)} empty={ui("No active goals yet.")} />
           </div>
         </Panel>
         <Panel title={ui("Progress Updates")} icon={<TrendingUp className="h-5 w-5" />}>
@@ -509,7 +511,7 @@ async function AnalyticsSectionPanel({
               teamAnalytics.latestProgressDistribution.map((item) => (
                 <ProgressRow
                   key={item.progress}
-                  label={progressLabel(item.progress)}
+                  label={ui(progressLabel(item.progress))}
                   value={String(item.count)}
                   percent={teamAnalytics.activeDevelopmentGoals ? item.count / teamAnalytics.activeDevelopmentGoals : 0}
                 />
@@ -530,7 +532,7 @@ async function AnalyticsSectionPanel({
           <MiniStat label={ui("Instances used")} value={teamAnalytics.drillInstancesUsed} />
           <MiniStat label={ui("Unique linked drills")} value={teamAnalytics.uniqueDrillsUsed} />
           <MiniStat label={ui("Reviewed")} value={teamAnalytics.reviewedDrillInstances} />
-          <MiniStat label={ui("Effectiveness")} value={formatRating(teamAnalytics.averageDrillEffectiveness)} />
+          <MiniStat label={ui("Effectiveness")} value={formatRating(teamAnalytics.averageDrillEffectiveness, locale)} />
         </div>
         {teamAnalytics.drillUsage.length ? (
           <div className="mt-5 overflow-x-auto">
@@ -547,11 +549,11 @@ async function AnalyticsSectionPanel({
               <tbody className="divide-y divide-slate-100">
                 {teamAnalytics.drillUsage.slice(0, 12).map((drill) => (
                   <tr key={`${drill.drillId ?? drill.title}-${drill.lastUsedAt ?? "never"}`}>
-                    <td className="py-3 pr-3 font-bold text-board-navy">{drill.title}</td>
+                    <td translate="no" className="py-3 pr-3 font-bold text-board-navy">{drill.title}</td>
                     <td className="py-3 pr-3 text-right tabular-nums">{drill.uses}</td>
                     <td className="py-3 pr-3 text-right tabular-nums">{drill.reviewed}</td>
-                    <td className="py-3 pr-3 text-right tabular-nums">{formatRating(drill.averageEffectiveness)}</td>
-                    <td className="py-3 text-right tabular-nums">{drill.lastUsedAt ? formatShortDate(drill.lastUsedAt) : "-"}</td>
+                    <td className="py-3 pr-3 text-right tabular-nums">{formatRating(drill.averageEffectiveness, locale)}</td>
+                    <td className="py-3 text-right tabular-nums">{drill.lastUsedAt ? formatShortDate(drill.lastUsedAt, locale) : "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -582,36 +584,36 @@ async function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnal
   return (
     <tr className="align-middle hover:bg-slate-50/70">
       <td className="px-3 py-3">
-        <Link href={`/squad/players/${summary.player.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
+        <Link translate="no" href={`/squad/players/${summary.player.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
           {playerName(summary.player)}
         </Link>
-        <p className="mt-1 text-xs text-slate-500">{summary.latestTraining?.event?.label || "No latest training"}</p>
+        <p className="mt-1 text-xs text-slate-500">{summary.latestTraining?.event?.label || ui("No latest training")}</p>
       </td>
       <MetricCell active={activeSort === "position"}>
-        <span className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{summary.player.position || "No position"}</span>
+        <span className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{summary.player.position || ui("No position")}</span>
       </MetricCell>
-      <MetricCell active={activeSort === "status"}>{summary.player.playerType === "trial" ? "Trial" : "Roster"}</MetricCell>
+      <MetricCell active={activeSort === "status"}>{ui(summary.player.playerType === "trial" ? "Trial" : "Roster")}</MetricCell>
       <MetricCell active={activeSort === "trainings"} align="right">{summary.trainings}</MetricCell>
       <MetricCell active={activeSort === "attendance"} align="right">
-        <MetricStack value={formatPercent(summary.attendanceRate)} detail={`${summary.attended} of ${summary.trainings}`} />
+        <MetricStack value={formatPercent(summary.attendanceRate, locale)} detail={ui("{attended} of {total}", { attended: summary.attended, total: summary.trainings })} />
       </MetricCell>
       <MetricCell active={activeSort === "average"} align="right">
-        <MetricStack value={formatRating(summary.averageRating)} detail={`${summary.rated} ratings`} />
+        <MetricStack value={formatRating(summary.averageRating, locale)} detail={ui("{count} ratings", { count: summary.rated })} />
       </MetricCell>
-      <MetricCell active={activeSort === "latestFive"} align="right">{formatRating(summary.latestFiveAverage)}</MetricCell>
+      <MetricCell active={activeSort === "latestFive"} align="right">{formatRating(summary.latestFiveAverage, locale)}</MetricCell>
       <MetricCell active={activeSort === "trend"} align="right">
         <TrendLabel summary={summary} />
       </MetricCell>
       <MetricCell active={activeSort === "reliability"} align="right">
-        <MetricStack value={summary.reliabilityPenalty.toFixed(1)} detail={`${summary.late} late · ${summary.unexcused} unexcused`} />
+        <MetricStack value={formatNumber(summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 })} detail={ui("{count} late · {unexcused} unexcused", { count: summary.late, unexcused: summary.unexcused })} />
       </MetricCell>
       <MetricCell active={activeSort === "evidence"}>
-        <span className={cn("inline-flex rounded-full px-2 py-1 text-xs font-bold", evidenceBadgeTone(summary.evidenceBase.label))}>{summary.evidenceBase.label}</span>
-        <p className="mt-1 text-xs text-slate-500">{summary.rated} {ui(" rated")}</p>
+        <span className={cn("inline-flex rounded-full px-2 py-1 text-xs font-bold", evidenceBadgeTone(summary.evidenceBase.label))}>{ui(summary.evidenceBase.label)}</span>
+        <p className="mt-1 text-xs text-slate-500">{ui("{count} rated", { count: summary.rated })}</p>
       </MetricCell>
       <MetricCell active={activeSort === "coachAssessment"}>
         <span className="line-clamp-2 text-sm font-semibold text-board-navy">
-          {summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : "Decision open"}
+          {ui(summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : ui("Decision open"))}
         </span>
       </MetricCell>
     </tr>
@@ -621,18 +623,18 @@ async function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnal
 async function PlayerAnalyticsMobileCard({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
   const locale = await getActiveLocale();
   const ui = createSystemTranslator(locale);
-  const primary = mobilePrimaryMetric(summary, activeSort);
+  const primary = mobilePrimaryMetric(summary, activeSort, locale);
   return (
     <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <Link href={`/squad/players/${summary.player.id}`} className="text-lg font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
+          <Link translate="no" href={`/squad/players/${summary.player.id}`} className="text-lg font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
             {playerName(summary.player)}
           </Link>
           <p className="mt-1 text-sm text-slate-600">
-            <span className={cn(activeSort === "position" && "font-bold text-board-navy")}>{summary.player.position || "No position"}</span>
+            <span className={cn(activeSort === "position" && "font-bold text-board-navy")}>{summary.player.position || ui("No position")}</span>
             {" · "}
-            {summary.player.playerType === "trial" ? "Trial" : "Roster"}
+            {ui(summary.player.playerType === "trial" ? "Trial" : "Roster")}
           </p>
         </div>
         <ButtonLink href={`/squad/players/${summary.player.id}/report`} variant="ghost" className="h-9 px-3">
@@ -645,10 +647,10 @@ async function PlayerAnalyticsMobileCard({ summary, activeSort }: { summary: Pla
         <p className="mt-1 text-sm text-slate-600">{primary.detail}</p>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        <CompactMetric label={ui("Average")} value={formatRating(summary.averageRating)} muted={activeSort === "average"} />
-        <CompactMetric label={ui("Attendance")} value={formatPercent(summary.attendanceRate)} muted={activeSort === "attendance"} />
-        <CompactMetric label={ui("Trend")} value={summary.trend.value === null ? summary.trend.label : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`} muted={activeSort === "trend"} />
-        <CompactMetric label={ui("Evidence")} value={summary.evidenceBase.label} />
+        <CompactMetric label={ui("Average")} value={formatRating(summary.averageRating, locale)} muted={activeSort === "average"} />
+        <CompactMetric label={ui("Attendance")} value={formatPercent(summary.attendanceRate, locale)} muted={activeSort === "attendance"} />
+        <CompactMetric label={ui("Trend")} value={summary.trend.value === null ? ui(summary.trend.label) : formatNumber(summary.trend.value, locale, { minimumFractionDigits: 1, signDisplay: "exceptZero" })} muted={activeSort === "trend"} />
+        <CompactMetric label={ui("Evidence")} value={ui(summary.evidenceBase.label)} />
       </div>
     </article>
   );
@@ -664,10 +666,10 @@ async function TrendLabel({ summary }: { summary: PlayerAnalyticsSummary }) {
     <span className={cn("inline-flex flex-col items-end gap-0.5", tone)}>
       <span className="inline-flex items-center gap-1 font-bold">
         <Icon className="h-3.5 w-3.5" />
-        {summary.trend.value > 0 ? "+" : ""}{summary.trend.value.toFixed(1)} · {summary.trend.label}
+        {formatNumber(summary.trend.value, locale, { minimumFractionDigits: 1, signDisplay: "exceptZero" })} · {ui(summary.trend.label)}
       </span>
       {summary.trend.latestAverage !== undefined && summary.trend.previousAverage !== undefined ? (
-        <span className="text-xs font-semibold text-slate-500">{ui("Latest 5 ")}{formatRating(summary.trend.latestAverage)} {ui(" · Prev ")}{formatRating(summary.trend.previousAverage)}</span>
+        <span className="text-xs font-semibold text-slate-500">{ui("Latest 5 ")}{formatRating(summary.trend.latestAverage, locale)} {ui(" · Prev ")}{formatRating(summary.trend.previousAverage, locale)}</span>
       ) : null}
     </span>
   );
@@ -799,11 +801,11 @@ async function SortableHeader({
           "flex min-h-11 items-center gap-1 px-3 py-3 underline-offset-4 hover:text-board-green hover:underline focus:outline-none focus:ring-4 focus:ring-green-100",
           align === "right" && "justify-end text-right"
         )}
-        title={`Sort by ${label}`}
+        title={ui("Sort by {label}", { label })}
       >
         {label}
         <ArrowUpDown className={cn("h-3.5 w-3.5", active ? "opacity-100" : "opacity-35")} />
-        {active ? <span className="sr-only">{ui("Sorted ")}{filters.direction === "asc" ? "ascending" : "descending"}</span> : null}
+        {active ? <span className="sr-only">{ui(filters.direction === "asc" ? "Sorted ascending" : "Sorted descending")}</span> : null}
       </Link>
     </th>
   );
@@ -831,18 +833,20 @@ function CompactMetric({ label, value, muted }: { label: string; value: string; 
   );
 }
 
-function mobilePrimaryMetric(summary: PlayerAnalyticsSummary, sort: AnalyticsSortKey) {
-  if (sort === "position") return { label: "Position", value: summary.player.position || "No position", detail: `${summary.player.playerType === "trial" ? "Trial player" : "Roster player"}` };
-  if (sort === "status") return { label: "Status", value: summary.player.playerType === "trial" ? "Trial" : "Roster", detail: summary.player.position || "No position" };
-  if (sort === "average") return { label: "Average rating", value: formatRating(summary.averageRating), detail: `${summary.rated} rated trainings` };
-  if (sort === "latestFive") return { label: "Latest 5", value: formatRating(summary.latestFiveAverage), detail: "Average of latest five rated trainings" };
-  if (sort === "attendance") return { label: "Attendance", value: formatPercent(summary.attendanceRate), detail: `${summary.attended} of ${summary.trainings} trainings` };
-  if (sort === "trend") return { label: "Trend", value: summary.trend.value === null ? "No trend yet" : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`, detail: summary.trend.label };
-  if (sort === "reliability") return { label: "Reliability malus", value: summary.reliabilityPenalty.toFixed(1), detail: `${summary.late} late · ${summary.unexcused} unexcused` };
-  if (sort === "lastTraining") return { label: "Last training", value: summary.latestTraining?.event?.date ? formatShortDate(summary.latestTraining.event.date) : "No data", detail: summary.latestTraining?.event?.label || "No latest training" };
-  if (sort === "evidence") return { label: "Evidence", value: summary.evidenceBase.label, detail: `${summary.rated} rated trainings` };
-  if (sort === "coachAssessment") return { label: "Coach assessment", value: summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : "Decision open", detail: "Manual coach marker" };
-  return { label: "Trainings", value: String(summary.trainings), detail: `${summary.rated} rated · ${summary.attended} present` };
+function mobilePrimaryMetric(summary: PlayerAnalyticsSummary, sort: AnalyticsSortKey, locale: Locale) {
+  const ui = createSystemTranslator(locale);
+  const rated = ui("{count} rated trainings", { count: summary.rated });
+  if (sort === "position") return { label: ui("Position"), value: summary.player.position || ui("No position"), detail: ui(summary.player.playerType === "trial" ? "Trial player" : "Roster player") };
+  if (sort === "status") return { label: ui("Status"), value: ui(summary.player.playerType === "trial" ? "Trial" : "Roster"), detail: summary.player.position || ui("No position") };
+  if (sort === "average") return { label: ui("Average rating"), value: formatRating(summary.averageRating, locale), detail: rated };
+  if (sort === "latestFive") return { label: ui("Latest 5"), value: formatRating(summary.latestFiveAverage, locale), detail: ui("Average of latest five rated trainings") };
+  if (sort === "attendance") return { label: ui("Attendance"), value: formatPercent(summary.attendanceRate, locale), detail: ui("{attended} of {total}", { attended: summary.attended, total: summary.trainings }) };
+  if (sort === "trend") return { label: ui("Trend"), value: summary.trend.value === null ? ui("No trend yet") : formatNumber(summary.trend.value, locale, { minimumFractionDigits: 1, signDisplay: "exceptZero" }), detail: ui(summary.trend.label) };
+  if (sort === "reliability") return { label: ui("Reliability malus"), value: formatNumber(summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 }), detail: ui("{count} late · {unexcused} unexcused", { count: summary.late, unexcused: summary.unexcused }) };
+  if (sort === "lastTraining") return { label: ui("Last training"), value: summary.latestTraining?.event?.date ? formatShortDate(summary.latestTraining.event.date, locale) : ui("No data"), detail: summary.latestTraining?.event?.label || ui("No latest training") };
+  if (sort === "evidence") return { label: ui("Evidence"), value: ui(summary.evidenceBase.label), detail: rated };
+  if (sort === "coachAssessment") return { label: ui("Coach assessment"), value: ui(summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : "Decision open"), detail: ui("Manual coach marker") };
+  return { label: ui("Trainings"), value: String(summary.trainings), detail: `${rated} · ${summary.attended} ${ui("present")}` };
 }
 
 function getPeriodDefinition(
@@ -860,25 +864,25 @@ function getPeriodDefinition(
   if (filters.period === "custom") {
     if (!filters.customFrom || !filters.customTo) return { shortLabel: copy.periods.custom, rangeLabel: locale === "de" ? "Von- und Bis-Datum wählen" : "Choose from and to dates", note: locale === "de" ? "Nutze TT.MM.JJJJ, zum Beispiel 01.07.2026." : "Use dd.mm.yyyy, for example 01.07.2026." };
     if (filters.customFrom > filters.customTo) return { shortLabel: copy.periods.custom, rangeLabel: locale === "de" ? "Ungültiger Zeitraum" : "Invalid custom range", note: locale === "de" ? "Das Von-Datum muss vor dem Bis-Datum liegen." : "The from date must be before the to date." };
-    return { shortLabel: copy.periods.custom, rangeLabel: `${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)}` };
+    return { shortLabel: copy.periods.custom, rangeLabel: `${formatDate(filters.customFrom, locale)} – ${formatDate(filters.customTo, locale)}` };
   }
   if (filters.period === "season") {
     const range = seasonDateRange(today, seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay);
-    return { shortLabel: copy.periods.season, rangeLabel: `${formatGermanDate(range.from)} – ${formatGermanDate(range.to)}` };
+    return { shortLabel: copy.periods.season, rangeLabel: `${formatDate(range.from, locale)} – ${formatDate(range.to, locale)}` };
   }
   if (filters.period === "30d" || filters.period === "90d") {
     const days = filters.period === "30d" ? 30 : 90;
     const to = dateOnly(today);
     const fromDate = new Date(today);
     fromDate.setDate(fromDate.getDate() - days + 1);
-    return { shortLabel: copy.periods[filters.period], rangeLabel: `${formatGermanDate(dateOnly(fromDate))} – ${formatGermanDate(to)}` };
+    return { shortLabel: copy.periods[filters.period], rangeLabel: `${formatDate(dateOnly(fromDate), locale)} – ${formatDate(to, locale)}` };
   }
 
   const dates = Array.from(new Set(records.map((record) => record.event?.date).filter((date): date is string => Boolean(date)))).sort();
   if (!dates.length) return { shortLabel: copy.periods[filters.period], rangeLabel: copy.noTrainingData };
   return {
     shortLabel: copy.periods[filters.period],
-    rangeLabel: `${formatGermanDate(dates[0])} – ${formatGermanDate(dates[dates.length - 1])}`,
+    rangeLabel: `${formatDate(dates[0], locale)} – ${formatDate(dates[dates.length - 1], locale)}`,
     note: filters.period === "last5" || filters.period === "last10" ? copy.availableTrainings(dates.length) : undefined
   };
 }
@@ -898,13 +902,11 @@ function dateOnly(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function formatShortDate(date: string) {
-  const parsed = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+function formatShortDate(date: string, locale: Locale = "en") {
+  return formatDate(date, locale, { day: "2-digit", month: "short" });
 }
 
-function developmentCategoryLabel(category: string) {
+function developmentCategoryLabel(category: string, locale: Locale = "en") {
   const labels: Record<string, string> = {
     technical: "Technical",
     tactical: "Tactical",
@@ -912,7 +914,8 @@ function developmentCategoryLabel(category: string) {
     mental: "Mental",
     other: "Other"
   };
-  return labels[category] ?? category;
+  if (category === "physical" && locale === "de") return "Körperlich";
+  return createSystemTranslator(locale)(labels[category] ?? category);
 }
 
 function progressLabel(progress: string) {

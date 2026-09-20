@@ -1,7 +1,10 @@
 import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
+import { formatDate, type Locale } from "@/lib/i18n";
+import { systemText } from "@/lib/i18n/system-text";
 import { attendanceReasonLabels, calculateAttendanceForecast, calculateReliabilityPenalty } from "@/lib/squad/attendance-utils";
 
-export function formatEventDate(value: string) {
+export function formatEventDate(value: string, locale?: Locale) {
+  if (locale) return formatDate(value, locale, { day: "2-digit", month: "2-digit", year: "numeric" });
   const [year, month, day] = value.split("-");
   if (!year || !month || !day) return value;
   return `${day}.${month}.${year}`;
@@ -24,18 +27,15 @@ export function attendanceCounts(entries: SquadAttendanceEntry[]) {
   return calculateAttendanceForecast(entries);
 }
 
-export function plannedStatusLabel(status?: SquadAttendanceEntry["plannedStatus"]) {
-  if (status === "expected") return "Expected";
-  if (status === "unavailable") return "Not expected";
-  if (status === "unclear") return "Not expected";
-  return "Expected";
+export function plannedStatusLabel(status?: SquadAttendanceEntry["plannedStatus"], locale: Locale = "en") {
+  return systemText(locale, status === "unavailable" || status === "unclear" ? "Not expected" : "Expected");
 }
 
-export function plannedReasonLabel(reason?: SquadAttendanceEntry["plannedReason"]) {
-  return reason ? attendanceReasonLabels[reason] : "";
+export function plannedReasonLabel(reason?: SquadAttendanceEntry["plannedReason"], locale: Locale = "en") {
+  return reason ? systemText(locale, attendanceReasonLabels[reason]) : "";
 }
 
-export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"]) {
+export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"], locale: Locale = "en") {
   const labels: Record<NonNullable<SquadAttendanceEntry["finalStatus"]>, string> = {
     present: "Present",
     absent: "Absent",
@@ -47,10 +47,10 @@ export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"]) {
     S: "Late cancellation",
     U: "Unexcused"
   };
-  return status ? labels[status] : "Not recorded yet";
+  return systemText(locale, status ? labels[status] : "Not recorded");
 }
 
-export function actualAbsenceReasonLabel(reason?: SquadAttendanceEntry["actualAbsenceReason"]) {
+export function actualAbsenceReasonLabel(reason?: SquadAttendanceEntry["actualAbsenceReason"], locale: Locale = "en") {
   const labels: Record<NonNullable<SquadAttendanceEntry["actualAbsenceReason"]>, string> = {
     unexcused: "Unexcused",
     excused: "Excused",
@@ -62,7 +62,7 @@ export function actualAbsenceReasonLabel(reason?: SquadAttendanceEntry["actualAb
     private: "Private",
     other: "Other"
   };
-  return reason ? labels[reason] : "";
+  return reason ? systemText(locale, labels[reason]) : "";
 }
 
 export function effectiveActualAbsenceReason(entry: SquadAttendanceEntry): SquadAttendanceEntry["actualAbsenceReason"] {

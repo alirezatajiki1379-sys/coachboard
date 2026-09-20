@@ -9,6 +9,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { materialSummary } from "@/lib/drills/materials";
 import { formatArea, formatMeters } from "@/lib/drills/setup";
 import { formatDate, formatMessage, getMessages, localeToIntl } from "@/lib/i18n";
+import { trainingSectionLabel } from "@/lib/i18n/training-labels";
 import { getUserLocale } from "@/lib/i18n/server";
 import { calculateSessionDuration, calculateSessionMaterials, durationDeltaLabel, effectiveStationDuration, formatTimelineRange, groupByTrainingBlock, normalizeSimultaneousGroup, resolveGroupName, stationSetLabel, stationSetOptions } from "@/lib/sessions/utils";
 import { createClient } from "@/lib/supabase/server";
@@ -63,7 +64,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
         <header className="print-avoid overflow-hidden rounded-xl border border-board-line">
           <div className="bg-board-navy px-6 py-5 text-white print:bg-board-navy">
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-200">{messages.export.document.footballTrainingPlan}</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-normal print:text-3xl sm:text-4xl">{session.title}</h1>
+            <h1 translate="no" className="mt-2 text-3xl font-bold tracking-normal print:text-3xl sm:text-4xl">{session.title}</h1>
             <p className="mt-2 text-sm text-white/80">
               {session.mainFocus || messages.export.document.trainingPlan}
               {session.secondaryFocus ? ` · ${session.secondaryFocus}` : ""}
@@ -94,7 +95,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
               <ul className="space-y-2 text-sm">
                 {session.playerGroups.map((group) => (
                   <li key={group.id}>
-                    <span className="font-bold text-board-navy">{group.name}</span>
+                    <span translate="no" className="font-bold text-board-navy">{group.name}</span>
                     {group.notes ? <span>: {group.notes}</span> : null}
                   </li>
                 ))}
@@ -105,7 +106,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
 
         {session.notes ? (
           <PrintPanel title={messages.export.document.trainingPlanNotes}>
-            <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{session.notes}</p>
+            <p translate="no" className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{session.notes}</p>
           </PrintPanel>
         ) : null}
 
@@ -132,7 +133,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-board-line bg-slate-50 px-5 py-4">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide text-board-green">{formatTimelineRange(blockStart, block.duration, session.startTime)}</p>
-                    <h3 className="mt-1 text-xl font-bold text-board-navy">{block.block}</h3>
+                    <h3 className="mt-1 text-xl font-bold text-board-navy" translate="no">{trainingSectionLabel(block.block, locale)}</h3>
                     <p className="mt-1 text-sm text-slate-600">{block.duration} min · {formatMessage(messages.export.document.drillsCount, { count: block.items.length })}</p>
                   </div>
                   {block.stationSets.length ? (
@@ -145,7 +146,7 @@ export default async function SessionPrintPage({ params }: SessionPrintPageProps
                 <div className="space-y-4 p-4">
                   {blockMaterials.length ? (
                     <section className="print-avoid rounded-lg border border-board-line bg-white p-4">
-                      <h4 className="text-sm font-bold uppercase tracking-wide text-board-green">{formatMessage(messages.export.document.materialsForBlock, { block: block.block })}</h4>
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-board-green" translate="no">{formatMessage(messages.export.document.materialsForBlock, { block: trainingSectionLabel(block.block, locale) })}</h4>
                       <div className="mt-2 text-sm text-slate-700">
                         <MaterialSummaryList materials={blockMaterials} />
                       </div>
@@ -214,7 +215,7 @@ function PrintableDrill({ item, playerGroups, locale }: { item: SessionDrillDeta
         <div>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <h5 className="text-base font-bold text-board-navy">{drill.title}</h5>
+              <h5 translate="no" className="text-base font-bold text-board-navy">{drill.title}</h5>
               <p className="mt-1 text-xs font-semibold text-slate-500">
                 {item.timingMode === "simultaneous" ? `${messages.export.document.stationSet}: ${stationSetLabel(item.simultaneousGroup)}` : messages.export.document.sequentialDrills} · {item.plannedDurationMinutes} min
               </p>

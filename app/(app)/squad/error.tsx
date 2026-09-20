@@ -2,14 +2,13 @@
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 
 export default function SquadError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  const isGerman = useOptionalI18n()?.locale === "de";
   useEffect(() => {
     console.error("squad_workspace_render_failed", error);
   }, [error]);
-
-  const language = typeof document !== "undefined" ? document.documentElement.lang : "";
-  const isGerman = language.toLowerCase().startsWith("de") || (typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("de"));
 
   return (
     <div className="rounded-lg border border-red-100 bg-white p-6 shadow-soft">

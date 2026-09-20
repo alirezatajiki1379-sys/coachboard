@@ -1,5 +1,8 @@
 "use client";
 
+import { useSystemText } from "@/components/i18n/use-system-text";
+
+
 import { useMemo, useState, useTransition, type TransitionStartFunction } from "react";
 import { useRouter } from "next/navigation";
 import { Shield, UsersRound } from "lucide-react";
@@ -60,6 +63,7 @@ const filterLabels: Record<BoardFilter, string> = {
 };
 
 export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBoardProps) {
+  const ui = useSystemText();
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -141,28 +145,28 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
     <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft lg:sticky lg:top-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-board-navy">Session Players</h2>
-          <p className="mt-1 text-xs font-semibold text-slate-500">Automatic participant board from this Training.</p>
+          <h2 className="text-lg font-bold text-board-navy">{ui("Session Players")}</h2>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{ui("Automatic participant board from this Training.")}</p>
         </div>
         <UsersRound className="mt-1 h-5 w-5 text-board-green" />
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
-        <CountPill label="Expected" value={statusCounts.expected} />
-        <CountPill label="Not expected" value={statusCounts.notExpected} tone={statusCounts.notExpected ? "warning" : "normal"} />
-        <CountPill label="Total players" value={statusCounts.total} />
-        <CountPill label="Present" value={statusCounts.present} />
-        <CountPill label="Late" value={statusCounts.late} />
-        <CountPill label="Roster" value={statusCounts.roster} />
-        <CountPill label="Trial" value={statusCounts.trial} />
-        <CountPill label="Guest" value={statusCounts.guest} />
+        <CountPill label={ui("Expected")} value={statusCounts.expected} />
+        <CountPill label={ui("Not expected")} value={statusCounts.notExpected} tone={statusCounts.notExpected ? "warning" : "normal"} />
+        <CountPill label={ui("Total players")} value={statusCounts.total} />
+        <CountPill label={ui("Present")} value={statusCounts.present} />
+        <CountPill label={ui("Late")} value={statusCounts.late} />
+        <CountPill label={ui("Roster")} value={statusCounts.roster} />
+        <CountPill label={ui("Trial")} value={statusCounts.trial} />
+        <CountPill label={ui("Guest")} value={statusCounts.guest} />
       </div>
 
       <div className="mt-4 rounded-md border border-board-line bg-board-paper p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-wide text-slate-500">{compositionScope === "all" ? "All participant composition" : `${compositionScope} player composition`}</p>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">Uses only the participant snapshot for this Training.</p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">{ui("Uses only the participant snapshot for this Training.")}</p>
           </div>
           <div className="flex flex-wrap gap-1">
             {(["expected", "all", "present"] as CompositionScope[]).map((scope) => (
@@ -189,11 +193,11 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
 
       <div className="mt-4 space-y-2">
         <label className="block">
-          <span className="sr-only">Search Players</span>
+          <span className="sr-only">{ui("Search Players")}</span>
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search Players"
+            placeholder={ui("Search Players")}
             className="h-9 w-full rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
           />
         </label>
@@ -215,17 +219,17 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
       </div>
 
       <div className="mt-4 rounded-md border border-board-line bg-board-paper p-3">
-        <p className="text-sm font-bold text-board-navy">{selectedCount} Player{selectedCount === 1 ? "" : "s"} selected</p>
+        <p className="text-sm font-bold text-board-navy">{selectedCount} {ui(" Player")}{selectedCount === 1 ? "" : "s"} {ui(" selected")}</p>
         <div className="mt-2 flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={allVisibleSelected ? () => setSelectedIds([]) : selectAllVisible} className="h-8 px-2 text-xs">
             {allVisibleSelected ? "Clear visible" : "Select all visible"}
           </Button>
           {positionFamilyOrder.filter((family) => family !== "unassigned").map((family) => (
             <Button key={family} type="button" variant="secondary" onClick={() => selectCompositionFamily(family)} className="h-8 px-2 text-xs">
-              Select {positionFamilyMeta[family].shortLabel}
+              {ui("Select ")}{positionFamilyMeta[family].shortLabel}
             </Button>
           ))}
-          <Button type="button" variant="ghost" onClick={() => setSelectedIds([])} className="h-8 px-2 text-xs">Clear selection</Button>
+          <Button type="button" variant="ghost" onClick={() => setSelectedIds([])} className="h-8 px-2 text-xs">{ui("Clear selection")}</Button>
         </div>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row lg:flex-col">
           <select
@@ -233,9 +237,9 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
             onChange={(event) => setTargetGroupId(event.target.value)}
             className="h-9 min-w-0 flex-1 rounded-md border border-board-line px-2 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
           >
-            <option value="">Choose group</option>
-            {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-            <option value="__create__">+ Create new group</option>
+            <option value="">{ui("Choose group")}</option>
+            {groups.map((group) => <option translate="no" key={group.id} value={group.id}>{group.name}</option>)}
+            <option value="__create__">{ui("+ Create new group")}</option>
           </select>
           {targetGroupId === "__create__" ? (
             <CreateGroupInline eventId={eventId} selectedIds={selectedIds} defaultName={`Group ${groups.length + 1}`} isPending={isPending} startTransition={startTransition} setMessage={setMessage} setSelectedIds={setSelectedIds} />
@@ -276,12 +280,12 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
         })}
         {customMembers.length ? (
           <section aria-labelledby="custom-members">
-            <h3 id="custom-members" className="mb-1 text-[11px] font-black uppercase tracking-wide text-slate-500">Guests and custom members · {customMembers.length}</h3>
+            <h3 id="custom-members" className="mb-1 text-[11px] font-black uppercase tracking-wide text-slate-500">{ui("Guests and custom members · ")}{customMembers.length}</h3>
             <div className="space-y-1.5">
               {customMembers.map((member) => (
                 <div key={member.id} className="rounded-md border border-dashed border-purple-200 bg-purple-50 px-2 py-1.5 text-xs">
                   <p className="font-bold text-board-navy">{member.customName}</p>
-                  <p className="mt-0.5 font-semibold text-purple-700">GUEST · {member.groupName}</p>
+                  <p className="mt-0.5 font-semibold text-purple-700">{ui("GUEST · ")}{member.groupName}</p>
                 </div>
               ))}
             </div>
@@ -291,13 +295,13 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
 
       {groups.length ? (
         <div className="mt-4 space-y-2 border-t border-board-line pt-4">
-          <h3 className="text-sm font-bold text-board-navy">Group balance</h3>
+          <h3 className="text-sm font-bold text-board-navy">{ui("Group balance")}</h3>
           {groups.map((group) => <GroupBalance key={group.id} group={group} players={players} />)}
         </div>
       ) : (
         <div className="mt-4 rounded-md border border-dashed border-board-line p-3 text-sm text-slate-600">
-          <p>No groups created yet.</p>
-          <button type="button" onClick={() => setTargetGroupId("__create__")} className="mt-2 text-sm font-bold text-board-green hover:underline">Create first group</button>
+          <p>{ui("No groups created yet.")}</p>
+          <button type="button" onClick={() => setTargetGroupId("__create__")} className="mt-2 text-sm font-bold text-board-green hover:underline">{ui("Create first group")}</button>
         </div>
       )}
     </section>
@@ -353,6 +357,7 @@ function CreateGroupInline({
   setMessage: (message: string) => void;
   setSelectedIds: (ids: string[]) => void;
 }) {
+  const ui = useSystemText();
   const [name, setName] = useState(defaultName);
   const router = useRouter();
   function createGroup() {
@@ -373,8 +378,7 @@ function CreateGroupInline({
   return (
     <div className="grid gap-2 rounded-md border border-board-line bg-white p-2">
       <label className="text-xs font-bold uppercase text-slate-500">
-        Group name
-        <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+        {ui("Group name")}<input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
       </label>
       <Button type="button" onClick={createGroup} disabled={isPending || !name.trim()} className="h-9 px-3 text-xs">
         {selectedIds.length ? `Create and add ${selectedIds.length}` : "Create group"}
@@ -384,6 +388,7 @@ function CreateGroupInline({
 }
 
 function PlayerChip({ player, selected, groupLabels, positionMissing, onToggle }: { player: SessionBoardPlayer; selected: boolean; groupLabels: string[]; positionMissing: boolean; onToggle: () => void }) {
+  const ui = useSystemText();
   const position = resolveBoardPosition(player);
   const family = getPositionFamily(position);
   const meta = positionFamilyMeta[family];
@@ -404,13 +409,13 @@ function PlayerChip({ player, selected, groupLabels, positionMissing, onToggle }
     >
       <span className="flex items-center gap-1.5">
         <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-black", meta.badgeClassName)}>{formatPositionAbbreviation(position)}</span>
-        <span className="min-w-0 flex-1 truncate text-xs font-bold text-board-navy">{player.name}</span>
-        {player.playerType === "trial" ? <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-black text-purple-700">TRIAL</span> : null}
+        <span translate="no" className="min-w-0 flex-1 truncate text-xs font-bold text-board-navy">{player.name}</span>
+        {player.playerType === "trial" ? <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-black text-purple-700">{ui("TRIAL")}</span> : null}
         <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-200">{status}</span>
       </span>
       <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px] font-semibold text-slate-500">
         {position ? <span>{formatPositionLabel(position) ?? formatPositionAbbreviation(position)}</span> : null}
-        {secondary.length ? <span>Also {secondary.join(" · ")}</span> : null}
+        {secondary.length ? <span>{ui("Also ")}{secondary.join(" · ")}</span> : null}
         {groupLabels.length ? <span>{groupLabels.join(" · ")}</span> : <span>{positionMissing ? "Position missing" : "No group"}</span>}
       </span>
     </button>
@@ -441,6 +446,7 @@ function FamilyCount({ family, count, onClick }: { family: PositionFamily; count
 }
 
 function GroupBalance({ group, players }: { group: SessionBoardGroup; players: SessionBoardPlayer[] }) {
+  const ui = useSystemText();
   const playerById = new Map(players.map((player) => [player.id, player]));
   const linkedPlayers = group.members.map((member) => member.playerId ? playerById.get(member.playerId) : undefined).filter(Boolean) as SessionBoardPlayer[];
   const customCount = group.members.filter((member) => member.customName).length;
@@ -452,12 +458,12 @@ function GroupBalance({ group, players }: { group: SessionBoardGroup; players: S
   };
   return (
     <div className="rounded-md border border-board-line bg-board-paper p-2">
-      <p className="text-xs font-bold text-board-navy">{group.name} · {group.members.length} member{group.members.length === 1 ? "" : "s"}</p>
+      <p className="text-xs font-bold text-board-navy" translate="no">{group.name} · {ui(group.members.length === 1 ? "{count} member" : "{count} members", { count: group.members.length })}</p>
       <p className="mt-1 text-[11px] font-semibold text-slate-600">
-        {composition.goalkeeper} GK · {composition.defensive} DEF · {composition.midfield} MID · {composition.attacking} ATT{customCount ? ` · ${customCount} Guest` : ""}
+        {composition.goalkeeper} {ui(" GK · ")}{composition.defensive} {ui(" DEF · ")}{composition.midfield} {ui(" MID · ")}{composition.attacking} {ui(" ATT")}{customCount ? ` · ${customCount} Guest` : ""}
       </p>
       {group.groupType === "exclusive" && linkedPlayers.length && composition.goalkeeper === 0 ? (
-        <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700">No Goalkeeper in this group.</p>
+        <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700">{ui("No Goalkeeper in this group.")}</p>
       ) : null}
     </div>
   );

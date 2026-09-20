@@ -1,5 +1,7 @@
 import { attendanceReasonLabels, calculateReliabilityPenalty } from "@/lib/squad/attendance-utils";
 import { seasonLabelForDate } from "@/lib/trainings/utils";
+import { formatNumber, type Locale } from "@/lib/i18n";
+import { systemText } from "@/lib/i18n/system-text";
 import type {
   PlayerDevelopmentGoalCategory,
   PlayerDevelopmentProgress,
@@ -480,12 +482,12 @@ export function evidenceBadgeTone(evidence: EvidenceBase["label"]) {
   return "bg-green-50 text-green-700";
 }
 
-export function formatRating(value: number | null) {
-  return value === null ? "No ratings" : roundOne(value).toFixed(1);
+export function formatRating(value: number | null, locale: Locale = "en") {
+  return value === null ? systemText(locale, "No ratings") : formatNumber(roundOne(value), locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-export function formatPercent(value: number | null) {
-  return value === null ? "No data" : `${Math.round(value * 100)}%`;
+export function formatPercent(value: number | null, locale: Locale = "en") {
+  return value === null ? systemText(locale, "No data") : formatNumber(value, locale, { style: "percent", maximumFractionDigits: 0 });
 }
 
 export function playerName(player: SquadPlayer) {

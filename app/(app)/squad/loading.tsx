@@ -1,12 +1,16 @@
+"use client";
+
+import { useSystemText } from "@/components/i18n/use-system-text";
 import { PageContainer } from "@/components/layout/page";
 
 export default function SquadLoading() {
+  const ui = useSystemText();
   return (
-    <PageContainer width="wide" aria-busy="true" aria-label="Loading Coach Workspace">
+    <PageContainer width="wide" aria-busy="true" aria-label={ui("Loading Coach Workspace")}>
       <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="h-4 w-20 animate-pulse rounded bg-green-100" />
-          <div className="mt-3 h-9 w-72 animate-pulse rounded bg-slate-200" />
+          <div className="mt-3 h-9 w-72 max-w-full animate-pulse rounded bg-slate-200" />
           <div className="mt-3 h-4 max-w-2xl animate-pulse rounded bg-slate-200" />
         </div>
         <div className="flex gap-2">

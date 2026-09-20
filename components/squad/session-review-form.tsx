@@ -171,7 +171,7 @@ export function SessionReviewForm({
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <p className="text-sm font-semibold uppercase text-board-green">{copy.eyebrow}</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{event.label || copy.fallbackTitle}</h1>
+        <h1 className="mt-2 break-words text-2xl font-bold tracking-normal text-board-navy sm:text-3xl">{event.label || copy.fallbackTitle}</h1>
         <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-slate-600">
           <span className="rounded-md bg-slate-100 px-2 py-1">{formatDateLabel(event.date)} · {trainingTimeRange(event)}</span>
           <span className="rounded-md bg-slate-100 px-2 py-1">{event.squadName ?? copy.activeTeam}</span>
@@ -186,7 +186,7 @@ export function SessionReviewForm({
         <SummaryCard label={copy.summary.observations} value={String(observationCount)} helper={copy.summary.observationsHelper} />
       </section>
 
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <section className="rounded-lg border border-board-line bg-white p-3 shadow-soft sm:p-5">
         <h2 className="flex items-center gap-2 text-xl font-bold text-board-navy"><ClipboardCheck className="h-5 w-5" />{copy.sectionTitle}</h2>
         {event.focus ? (
           <div className="mt-4 rounded-lg border border-board-line bg-board-paper p-4">
@@ -223,7 +223,7 @@ export function SessionReviewForm({
         </div>
       </section>
 
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <section className="rounded-lg border border-board-line bg-white p-3 shadow-soft sm:p-5">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-bold text-board-navy">{copy.drillFeedback}</h2>
@@ -236,14 +236,14 @@ export function SessionReviewForm({
             {drills.map((drill) => {
               const value = values.drills[drill.id] ?? emptyDrillReview();
               return (
-                <article key={drill.id} className="rounded-lg border border-board-line bg-board-paper p-4">
+                <article key={drill.id} className="rounded-lg border border-board-line bg-board-paper p-3 sm:p-4">
                   <input type="hidden" name="drillInstanceId" value={drill.id} />
                   <input type="hidden" name={`drillStatus:${drill.id}`} value={value.feedbackStatus} />
                   <input type="hidden" name={`drillRating:${drill.id}`} value={value.effectivenessRating} />
                   <textarea hidden readOnly name={`drillNote:${drill.id}`} value={value.note} />
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
                     <div>
-                      <h3 className="font-bold text-board-navy">{drill.title}</h3>
+                      <h3 translate="no" className="font-bold text-board-navy">{drill.title}</h3>
                       <p className="text-xs font-semibold text-slate-500">{drill.block ?? copy.trainingBlock}{drill.plannedDurationMinutes ? ` · ${drill.plannedDurationMinutes} min` : ""}</p>
                     </div>
                     <label className="block">
@@ -381,7 +381,7 @@ function StarRating({
     <div ref={refTarget} tabIndex={-1} onPointerLeave={() => setHoverValue(undefined)} className="rounded-md focus:outline-none focus:ring-4 focus:ring-green-100">
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
       {helper ? <p className="mt-1 text-xs font-semibold text-slate-500">{helper}</p> : null}
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap gap-1">
         {[1, 2, 3, 4, 5].map((rating, index) => {
           const active = fillStates[index] ?? false;
           const anchor = sessionReviewRatingLabel(kind, rating, locale);
@@ -395,7 +395,7 @@ function StarRating({
               onBlur={() => setHoverValue(undefined)}
               aria-pressed={value === rating}
               aria-label={`${label}: ${rating}/5 - ${anchor}`}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-md border text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-green-100 ${active ? "border-board-green bg-green-50 text-board-green" : "border-board-line bg-white text-slate-400 hover:border-board-green hover:text-board-navy"}`}
+              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-green-100 ${active ? "border-board-green bg-green-50 text-board-green" : "border-board-line bg-white text-slate-400 hover:border-board-green hover:text-board-navy"}`}
             >
               <Star className={`h-4 w-4 ${active ? "fill-current" : ""}`} />
             </button>

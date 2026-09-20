@@ -97,7 +97,7 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
       </div>
       {presentEntries.length ? (
         <p className="mt-3 text-xs font-semibold text-slate-500">
-          {counts.goalkeepersPresent} {ui(" GK present · ")}{counts.trialPlayersPresent} {ui(" trial player")}{counts.trialPlayersPresent === 1 ? "" : "s"} {ui(" present")}</p>
+          {ui("{count} goalkeepers present · {trials} trial players present", { count: counts.goalkeepersPresent, trials: counts.trialPlayersPresent })}</p>
       ) : null}
       {entries.length ? <div className="mt-4"><CheckInActions eventId={event.id} /></div> : null}
 
@@ -113,7 +113,7 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
                 filter === item ? "bg-board-green text-white" : "text-slate-600 hover:bg-slate-100 hover:text-board-navy"
               )}
             >
-              {checkInFilterLabels[item]}
+              {ui(checkInFilterLabels[item])}
             </button>
           ))}
         </nav>
@@ -206,11 +206,12 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
               key={button.status}
               type="button"
               disabled={isPending && !active}
+              aria-label={ui(button.label)}
               onClick={() => applyPlannedStatus(button.status)}
               className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${active ? button.className : "bg-white text-board-navy ring-1 ring-board-line hover:bg-slate-50"}`}
             >
               <Icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{isPending && active ? "Saving..." : button.label}</span>
+              <span className="hidden sm:inline">{ui(isPending && active ? "Saving..." : button.label)}</span>
             </button>
           );
         })}
@@ -237,7 +238,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
           >
             <option value="">{ui("Reason optional")}</option>
             {(["injured", "sick", "school", "work", "holiday", "private", "other", "V", "K", "E", "P", "S"] as const).map((reason) => (
-              <option key={reason} value={reason}>{attendanceReasonLabels[reason]}</option>
+              <option key={reason} value={reason}>{ui(attendanceReasonLabels[reason])}</option>
             ))}
           </select>
           <input
@@ -247,17 +248,17 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
             placeholder={ui("Reason note optional")}
             className="h-10 min-w-0 flex-1 rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
           />
-          <Button type="submit" variant="secondary" disabled={isPending} className="h-10 px-3">{isPending ? "Saving..." : "Save reason"}</Button>
+          <Button type="submit" variant="secondary" disabled={isPending} className="h-10 px-3">{ui(isPending ? "Saving..." : "Save reason")}</Button>
         </form>
       ) : null}
       <div aria-live="polite" className="min-h-4 text-xs font-semibold">
-        {error ? <span className="text-red-700">{error}</span> : savedMessage ? <span className="text-board-green">{savedMessage}</span> : null}
+        {error ? <span className="text-red-700">{ui(error)}</span> : savedMessage ? <span className="text-board-green">{ui(savedMessage)}</span> : null}
       </div>
       {currentEntry.medicalAvailability ? (
         <div className="inline-flex flex-wrap items-center gap-2 rounded-md bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
           <span className="inline-flex items-center gap-2">
             <Stethoscope className="h-3.5 w-3.5" />
-            {ui("Medical status: ")}{currentEntry.medicalAvailability.label}
+            {ui("Medical status: ")}{ui(currentEntry.medicalAvailability.label)}
             {currentEntry.medicalAvailability.until ? ` until ${currentEntry.medicalAvailability.until}` : " until further notice"}
           </span>
           {currentEntry.medicalAvailability.needsReview ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{ui("Return needs review")}</span> : null}
@@ -326,32 +327,32 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
 
   return (
     <CheckInTransitionContext.Provider value={transition}>
-    <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+    <article className="min-w-0 break-words rounded-lg border border-board-line bg-white p-3 shadow-soft sm:p-4">
       <fieldset disabled={transition[0]} className="min-w-0 flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-lg font-bold text-board-navy">
-              {attendanceDisplayName(entryWithState)}
+              <span translate="no">{attendanceDisplayName(entryWithState)}</span>
               {entryWithState.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{ui("Trial")}</span> : null}
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
               {entryWithState.player?.position ? <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entryWithState.player.position}</span> : null}
               {entryWithState.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{ui("Trial player")}</span> : null}
               <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
-                {ui("Planned: ")}{plannedStatusLabel(entryWithState.plannedStatus)}{plannedReasonLabel(entryWithState.plannedReason) ? ` · ${plannedReasonLabel(entryWithState.plannedReason)}` : ""}
+                {ui("Planned: ")}{ui(plannedStatusLabel(entryWithState.plannedStatus))}{plannedReasonLabel(entryWithState.plannedReason) ? ` · ${ui(plannedReasonLabel(entryWithState.plannedReason))}` : ""}
               </span>
               <span className={`rounded-full px-2 py-1 ${statusTone}`}>
-                {ui("Actual: ")}{isAbsent ? `Absent${actualAbsenceReason ? ` · ${actualAbsenceReasonLabel(actualAbsenceReason)}` : ""}` : finalStatusLabel(entryWithState.finalStatus)}
+                {ui("Actual: ")}{isAbsent ? `${ui("Absent")}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}` : ui(finalStatusLabel(entryWithState.finalStatus))}
               </span>
               {entryWithState.medicalAvailability ? (
                 <span className="rounded-full bg-red-50 px-2 py-1 text-red-700">
-                  {entryWithState.medicalAvailability.label}
+                  {ui(entryWithState.medicalAvailability.label)}
                   {entryWithState.medicalAvailability.needsReview ? " · review" : ""}
                 </span>
               ) : null}
             </div>
             {entryWithState.coachNote ? <p className="mt-2 text-sm text-slate-600">{entryWithState.coachNote}</p> : null}
-            {error ? <p className="mt-2 text-sm font-semibold text-red-700" role="alert">{error}</p> : null}
+            {error ? <p className="mt-2 text-sm font-semibold text-red-700" role="alert">{ui(error)}</p> : null}
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <FinalStatusButton entry={entryWithState} eventId={eventId} status="present" label={ui("Present")} icon={<Check className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
@@ -422,10 +423,10 @@ export function RatingRow({ entry, eventId, goals = [] }: { entry: SquadAttendan
         <div className="space-y-3">
           <div>
             <p className="font-bold text-board-navy">
-              {attendanceDisplayName(entry)}
+              <span translate="no">{attendanceDisplayName(entry)}</span>
               {entry.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{ui("Trial")}</span> : null}
             </p>
-            <p className="text-sm text-slate-500">{ui("Actual: ")}{finalStatusLabel(entry.finalStatus)}{entry.ratingAutoSuggestion ? ` · Suggested ${entry.ratingAutoSuggestion}` : ""}</p>
+            <p className="text-sm text-slate-500">{ui("Actual: ")}{ui(finalStatusLabel(entry.finalStatus))}{entry.ratingAutoSuggestion ? ` · ${ui("Suggested {rating}", { rating: entry.ratingAutoSuggestion })}` : ""}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <RatingSelect name="overallRating" label={ui("Overall")} defaultValue={result?.ok ? result.overallRating ?? undefined : initialOverallRating} />
@@ -469,19 +470,19 @@ export function RatingRow({ entry, eventId, goals = [] }: { entry: SquadAttendan
                 <span className="text-xs font-bold uppercase text-slate-500">{ui("Goal")}</span>
                 <select name="goalId" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
                   <option value="">{ui("No linked goal")}</option>
-                  {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
+                  {goals.map((goal) => <option translate="no" key={goal.id} value={goal.id}>{goal.title}</option>)}
                 </select>
               </label>
               <label>
                 <span className="text-xs font-bold uppercase text-slate-500">{ui("Category")}</span>
                 <select name="category" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
                   <option value="">{ui("Optional")}</option>
-                  {developmentGoalCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+                  {developmentGoalCategories.map((category) => <option key={category.value} value={category.value}>{ui(category.label)}</option>)}
                 </select>
               </label>
             </div>
             {goals.length ? (
-              <p className="text-xs text-slate-500">{ui("Active goals: ")}{goals.map((goal) => `${goal.title} (${developmentCategoryLabel(goal.category)})`).join(", ")}</p>
+              <p className="text-xs text-slate-500" translate="no">{ui("Active goals: ")}{goals.map((goal) => `${goal.title} (${ui(developmentCategoryLabel(goal.category))})`).join(", ")}</p>
             ) : null}
             <textarea name="note" required rows={2} placeholder={ui("What did you notice?")} className="w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
             <Button type="submit" variant="secondary" className="h-10 w-full justify-center px-3 sm:w-auto">{ui("Save observation")}</Button>
@@ -552,10 +553,10 @@ function InlineRatingControl({
                 type="button"
                 disabled={isPending}
                 aria-pressed={active}
-                aria-label={`Rating ${rating}${active ? ", selected. Press again to remove rating." : ""}`}
+                aria-label={ui(active ? "Rating {rating}, selected. Press again to remove rating." : "Rating {rating}", { rating })}
                 onClick={() => updateRating(toggleRatingValue(entry.overallRating, rating))}
                 className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-md text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-70",
+                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sm font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-board-green disabled:cursor-not-allowed disabled:opacity-70",
                   active ? "bg-board-green text-white" : "bg-white text-board-navy ring-1 ring-green-200 hover:bg-green-100"
                 )}
               >
@@ -633,7 +634,7 @@ function AbsenceReasonControl({
           disabled={isPending}
           className="mt-1 h-10 w-full rounded-md border border-red-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 disabled:cursor-wait disabled:opacity-70"
         >
-          {actualAbsenceOptions.map((option) => <option key={option.reason} value={option.reason}>{option.label}</option>)}
+          {actualAbsenceOptions.map((option) => <option key={option.reason} value={option.reason}>{ui(option.label)}</option>)}
         </select>
       </label>
       <span className="inline-flex h-10 items-center rounded-md bg-white px-3 text-xs font-bold text-red-700 ring-1 ring-red-200">
@@ -660,6 +661,7 @@ function FinalStatusButton({
   onOptimisticEntry: (entry: SquadAttendanceEntry) => void;
   onError: (message: string) => void;
 }) {
+  const ui = useSystemText();
   const active = status === "absent"
     ? Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z")
     : entry.finalStatus === status;
@@ -730,7 +732,7 @@ function FinalStatusButton({
       className={`inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70 sm:flex-none sm:w-auto ${active ? tone : idle}`}
     >
       {icon}
-      {isPending ? "Saving..." : label}
+      {ui(isPending ? "Saving..." : label)}
     </button>
   );
 }
@@ -787,6 +789,7 @@ function CheckInMetric({ label, value, tone = "neutral" }: { label: string; valu
 }
 
 function RatingSelect({ name, label, defaultValue }: { name: string; label: string; defaultValue?: number }) {
+  const ui = useSystemText();
   const [value, setValue] = useState<number | null>(defaultValue ?? null);
 
   useEffect(() => {
@@ -805,10 +808,10 @@ function RatingSelect({ name, label, defaultValue }: { name: string; label: stri
               key={rating}
               type="button"
               aria-pressed={active}
-              aria-label={`${label} ${rating}${active ? ", selected. Press again to remove rating." : ""}`}
+              aria-label={ui(active ? "{label} {rating}, selected. Press again to remove rating." : "{label} {rating}", { label, rating })}
               onClick={() => setValue(toggleRatingValue(value, rating))}
               className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-md text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-green-100",
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-green-100",
                 active ? "bg-board-green text-white" : "bg-white text-board-navy ring-1 ring-board-line hover:bg-green-50 hover:ring-board-green"
               )}
             >
@@ -827,6 +830,6 @@ export function MissingStatusesNotice({ entries }: { entries: SquadAttendanceEnt
   return missing ? (
     <p className="inline-flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
       <ShieldAlert className="h-4 w-4" />
-      {missing} {ui(" player")}{missing === 1 ? "" : "s"} {ui(" still need an actual status.")}</p>
+      {ui("{count} players still need an actual status.", { count: missing })}</p>
   ) : null;
 }

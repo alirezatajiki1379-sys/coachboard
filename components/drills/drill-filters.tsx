@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Filter, Search } from "lucide-react";
 import { drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -12,6 +15,15 @@ type DrillFiltersProps = {
 
 export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
   const copy = drillFilterCopy[locale];
+  const [desktop, setDesktop] = useState(false);
+  const [expanded, setExpanded] = useState(() => Boolean(filters.ageGroup || filters.mainFocus || filters.trainingBlock || filters.drillType || filters.subFocus || filters.minPlayers || filters.maxPlayers || filters.minDuration || filters.maxDuration || filters.material || (filters.usage && filters.usage !== "all") || (filters.sort && filters.sort !== "updated")));
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)");
+    const update = () => setDesktop(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const usageViews = [
     { value: "all", label: copy.usage.all },
     { value: "favorites", label: copy.usage.favorites },
@@ -20,15 +32,26 @@ export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
   ] as const;
 
   return (
-    <form className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+    <form className="min-w-0 rounded-lg border border-board-line bg-white p-3 shadow-soft sm:p-5">
       <input type="hidden" name="view" value={filters.view} />
+      <div className="flex min-w-0 gap-2">
+        <label className="relative block min-w-0 flex-1">
+          <span className="sr-only">{copy.searchPlaceholder}</span>
+          <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+          <input name="search" defaultValue={filters.search} className="h-10 w-full rounded-md border border-board-line bg-white pl-9 pr-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" placeholder={copy.searchPlaceholder} />
+        </label>
+        <Button type="submit" className="shrink-0 px-3">
+          <Filter className="h-4 w-4" />{copy.filter}
+        </Button>
+      </div>
+      <details className="drill-filters mt-3" open={desktop || expanded} onToggle={(event) => { if (!desktop) setExpanded(event.currentTarget.open); }}>
+      <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-board-navy focus-visible:outline-board-green">{copy.filterOptions}</summary>
+      <div className="drill-filter-content">
       <div className="mb-4 flex flex-wrap gap-2" aria-label={copy.usageLabel}>
         {usageViews.map((view) => (
           <label
             key={view.value}
-            className={`cursor-pointer rounded-md px-3 py-2 text-sm font-semibold transition ${
-              filters.usage === view.value ? "bg-board-green text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-board-navy"
-            }`}
+            className="inline-flex min-h-11 cursor-pointer items-center rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-200 has-[:focus-visible]:ring-2 has-[:checked]:bg-board-green has-[:checked]:text-white"
           >
             <input type="radio" name="usage" value={view.value} defaultChecked={filters.usage === view.value} className="sr-only" />
             {view.label}
@@ -36,17 +59,7 @@ export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
         ))}
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[1.5fr_repeat(5,1fr)_auto]">
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-          <input
-            name="search"
-            defaultValue={filters.search}
-            className="h-10 w-full rounded-md border border-board-line bg-white pl-9 pr-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100"
-            placeholder={copy.searchPlaceholder}
-          />
-        </label>
-
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Select name="ageGroup" label={copy.anyAge} value={filters.ageGroup} options={localizeAgeOptions(ageFilterOptions(), locale)} />
         <Select name="mainFocus" label={copy.mainFocus} value={filters.mainFocus} options={mainFocuses} />
         <Select name="trainingBlock" label={copy.block} value={filters.trainingBlock} options={trainingBlocks} />
@@ -60,13 +73,9 @@ export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
           { value: "effectiveness", label: copy.sortOptions.effectiveness }
         ]} />
 
-        <Button type="submit" className="h-10 justify-center">
-          <Filter className="h-4 w-4" />
-          {copy.filter}
-        </Button>
       </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-6">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Input name="subFocus" label={copy.subFocus} value={filters.subFocus} />
         <Input name="minPlayers" label={copy.minPlayers} value={filters.minPlayers?.toString()} type="number" />
         <Input name="maxPlayers" label={copy.maxPlayers} value={filters.maxPlayers?.toString()} type="number" />
@@ -76,10 +85,13 @@ export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+        <Button type="submit" className="justify-center">{copy.filter}</Button>
         <ButtonLink href="/drills" variant="ghost" className="h-9 justify-center px-3">
           {copy.clearFilters}
         </ButtonLink>
       </div>
+      </div>
+      </details>
     </form>
   );
 }
@@ -95,6 +107,7 @@ const drillFilterCopy = {
     drillType: "Drill type",
     sort: "Sort",
     filter: "Filter",
+    filterOptions: "Filters and sorting",
     subFocus: "Sub focus",
     minPlayers: "Min players",
     maxPlayers: "Max players",
@@ -120,6 +133,7 @@ const drillFilterCopy = {
     drillType: "Übungstyp",
     sort: "Sortierung",
     filter: "Filtern",
+    filterOptions: "Filter und Sortierung",
     subFocus: "Unterschwerpunkt",
     minPlayers: "Min. Spieler",
     maxPlayers: "Max. Spieler",

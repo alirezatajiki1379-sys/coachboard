@@ -42,7 +42,7 @@ export default async function TeamSettingsPage({ params, searchParams }: TeamSet
     <PageContainer width="standard">
       <PageHeader
         eyebrow="Team settings"
-        title={team.name}
+        title={<span translate="no">{team.name}</span>}
         description="Edit this Team and manage the one Squad that belongs to it."
         metadata={locationSummary(team)}
         actions={(

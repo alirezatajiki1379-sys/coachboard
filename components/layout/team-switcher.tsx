@@ -63,7 +63,7 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false, 
                     disabled={team.id === activeTeam.id}
                   >
                     {team.id === activeTeam.id ? "✓" : ""}
-                    <span className="truncate">{team.name}</span>
+                    <span translate="no" className="truncate">{team.name}</span>
                   </Button>
                 </form>
               ))}
@@ -104,7 +104,7 @@ export function TeamSwitcher({ teams, returnTo = "/dashboard", compact = false, 
                   disabled={team.id === activeTeam.id}
                 >
                   {team.id === activeTeam.id ? "✓" : ""}
-                  <span className="truncate">{team.name}</span>
+                  <span translate="no" className="truncate">{team.name}</span>
                 </Button>
               </form>
             ))}

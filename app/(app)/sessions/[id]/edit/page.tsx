@@ -34,7 +34,7 @@ export default async function EditSessionPage({ params }: EditSessionPageProps) 
       </Link>
       <div>
         <p className="text-sm font-semibold uppercase text-board-green">Edit Training Plan</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{session.title}</h1>
+        <h1 translate="no" className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{session.title}</h1>
         <p className="mt-2 text-slate-600">Update the timeline, planned duration, notes, and equipment list.</p>
       </div>
       <SessionForm action={updateSession} mode="edit" session={session} drills={drills} />

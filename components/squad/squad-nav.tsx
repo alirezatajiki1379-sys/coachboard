@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { PageTabs } from "@/components/layout/page";
 import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 import { getMessages, type Locale } from "@/lib/i18n";
@@ -11,6 +12,7 @@ type SquadNavProps = {
 };
 
 export function SquadNav({ locale }: SquadNavProps) {
+  const pathname = usePathname();
   const context = useOptionalI18n();
   const messages = context?.messages ?? getMessages(locale ?? "en");
   const items = [
@@ -27,7 +29,8 @@ export function SquadNav({ locale }: SquadNavProps) {
         <Link
           key={item.href}
           href={item.href}
-          className={cn("rounded-md px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-board-navy")}
+          aria-current={(item.href === "/squad" ? pathname === "/squad" || pathname.startsWith("/squad/players") : pathname.startsWith(item.href)) ? "page" : undefined}
+          className={cn("inline-flex items-center rounded-md px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-board-navy aria-[current=page]:bg-board-green aria-[current=page]:text-white")}
         >
           {item.label}
         </Link>

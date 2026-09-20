@@ -1,5 +1,8 @@
 "use client";
 
+import { useSystemText } from "@/components/i18n/use-system-text";
+
+
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent } from "react";
@@ -7,8 +10,8 @@ import { ArrowDown, ArrowUp, CheckSquare, Columns3, GripVertical, Search, Settin
 import { Button, ButtonLink } from "@/components/ui/button";
 import { PlannedAttendanceControls } from "@/components/squad/attendance-controls";
 import { PLAYER_TABLE_LAYER_CLASSES } from "@/components/squad/player-table-layers";
-import { attendanceDisplayName, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
-import { effectiveParticipantPositionFamily, effectiveParticipantPositionLabel } from "@/lib/squad/attendance-utils";
+import { attendanceDisplayName, finalStatusLabel, plannedReasonLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
+import { effectiveParticipantPositionFamily, effectiveParticipantPositionLabel, isExpectedFromPlannedStatus } from "@/lib/squad/attendance-utils";
 import { calculateAge } from "@/lib/squad/format";
 import { formatPositionLabel } from "@/lib/squad/positions";
 import { cn } from "@/lib/utils";
@@ -80,6 +83,7 @@ type TrainingParticipantsTableProps = {
 };
 
 export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPlayerId, summary }: TrainingParticipantsTableProps) {
+  const ui = useSystemText();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -117,8 +121,8 @@ export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPl
         playerTypeLabel(entry)
       ].filter(Boolean).join(" ").toLowerCase().includes(needle);
       if (!matchesSearch) return false;
-      if (filter === "expected") return plannedStatusLabel(entry.plannedStatus) === "Expected";
-      if (filter === "notExpected") return plannedStatusLabel(entry.plannedStatus) === "Not expected";
+      if (filter === "expected") return isExpectedFromPlannedStatus(entry);
+      if (filter === "notExpected") return !isExpectedFromPlannedStatus(entry);
       if (filter === "noGroup") return !player || !(groupLabels.get(player.id)?.length);
       if (filter === "exceptional") return Boolean(playerTypeLabel(entry));
       return true;
@@ -200,7 +204,7 @@ export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPl
   }
 
   function selectAllExpected() {
-    setSelectedIds(sortedAttendance.filter((entry) => plannedStatusLabel(entry.plannedStatus) === "Expected").map((entry) => entry.id));
+    setSelectedIds(sortedAttendance.filter(isExpectedFromPlannedStatus).map((entry) => entry.id));
   }
 
   function toggleSelected(id: string) {
@@ -230,41 +234,40 @@ export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPl
 
   return (
     <div className="space-y-4" style={layoutStyle}>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Metric label="Expected" value={String(summary.expected)} />
-        <Metric label="Not expected" value={String(summary.notExpected)} tone={summary.notExpected > 0 ? "warning" : "normal"} />
-        <Metric label="Goalkeepers" value={String(summary.goalkeepers)} tone={summary.goalkeepers === 0 ? "warning" : "normal"} />
-        <Metric label="Field players" value={String(summary.fieldPlayers)} />
-        <Metric label="Position missing" value={String(summary.positionMissing)} tone={summary.positionMissing > 0 ? "warning" : "normal"} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Metric label={ui("Expected")} value={String(summary.expected)} />
+        <Metric label={ui("Not expected")} value={String(summary.notExpected)} tone={summary.notExpected > 0 ? "warning" : "normal"} />
+        <Metric label={ui("Goalkeepers")} value={String(summary.goalkeepers)} tone={summary.goalkeepers === 0 ? "warning" : "normal"} />
+        <Metric label={ui("Field players")} value={String(summary.fieldPlayers)} />
+        <Metric label={ui("Position missing")} value={String(summary.positionMissing)} tone={summary.positionMissing > 0 ? "warning" : "normal"} />
       </div>
       <p className="text-xs font-semibold text-slate-500">
-        Defensive: {summary.defensive} · Midfield: {summary.midfield} · Attacking: {summary.attacking} · Groups: {new Set(groupLabelsByPlayerId.flatMap(([, labels]) => labels)).size} · No group: {attendance.filter((entry) => entry.player && !(groupLabels.get(entry.player.id)?.length)).length}
+        {ui("Defensive: ")}{summary.defensive} {ui(" · Midfield: ")}{summary.midfield} {ui(" · Attacking: ")}{summary.attacking} {ui(" · Groups: ")}{new Set(groupLabelsByPlayerId.flatMap(([, labels]) => labels)).size} {ui(" · No group: ")}{attendance.filter((entry) => entry.player && !(groupLabels.get(entry.player.id)?.length)).length}
       </p>
 
-      <div className={cn("sticky top-[var(--table-sticky-top)] rounded-lg border border-board-line bg-white p-3 shadow-soft", PLAYER_TABLE_LAYER_CLASSES.toolbar)}>
+      <div className={cn("lg:sticky lg:top-[var(--table-sticky-top)] rounded-lg border border-board-line bg-white p-3 shadow-soft", PLAYER_TABLE_LAYER_CLASSES.toolbar)}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="font-bold text-board-navy">Training participants</h3>
-            <p className="text-sm text-slate-600">{sortedAttendance.length} shown · {summary.expected} expected · {summary.notExpected} not expected</p>
+            <h3 className="font-bold text-board-navy">{ui("Training participants")}</h3>
+            <p className="text-sm text-slate-600">{sortedAttendance.length} {ui(" shown · ")}{summary.expected} {ui(" expected · ")}{summary.notExpected} {ui(" not expected")}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <label className="relative min-w-0 sm:w-64">
-              <span className="sr-only">Search participants</span>
+              <span className="sr-only">{ui("Search participants")}</span>
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search participants..." className="h-10 w-full rounded-md border border-board-line bg-white pl-9 pr-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={ui("Search participants...")} className="h-10 w-full rounded-md border border-board-line bg-white pl-9 pr-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
             </label>
             <select value={filter} onChange={(event) => setFilter(event.target.value)} className="h-10 rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-              <option value="all">All</option>
-              <option value="expected">Expected</option>
-              <option value="notExpected">Not expected</option>
-              <option value="noGroup">No group</option>
-              <option value="exceptional">Trial / inactive</option>
+              <option value="all">{ui("All")}</option>
+              <option value="expected">{ui("Expected")}</option>
+              <option value="notExpected">{ui("Not expected")}</option>
+              <option value="noGroup">{ui("No group")}</option>
+              <option value="exceptional">{ui("Trial / inactive")}</option>
             </select>
             <div ref={panelRef} className="relative">
               <Button type="button" variant={columnsOpen ? "primary" : "secondary"} className="h-10 px-3" onClick={openColumns} aria-expanded={columnsOpen}>
                 <Columns3 className="h-4 w-4" />
-                Columns
-              </Button>
+                {ui("Columns")}</Button>
               {columnsOpen ? (
                 <ColumnsPanel
                   visibleColumns={draftVisibleColumns}
@@ -285,27 +288,27 @@ export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPl
         </div>
         {selectionMode ? (
           <div className="mt-3 flex flex-col gap-2 rounded-md bg-board-paper p-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <p className="text-sm font-bold text-board-navy">{selectedIds.length} selected</p>
-            <Button type="button" variant="secondary" className="h-9 px-3 text-xs" onClick={selectAllVisible}>Select all visible</Button>
-            <Button type="button" variant="secondary" className="h-9 px-3 text-xs" onClick={selectAllExpected}>Select all expected</Button>
-            <Button type="button" variant="ghost" className="h-9 px-3 text-xs" onClick={() => setSelectedIds([])}>Clear selection</Button>
-            <ButtonLink href={`/trainings/${eventId}/edit`} variant="secondary" className="h-9 px-3 text-xs">Edit participants</ButtonLink>
-            <ButtonLink href={`/trainings/${eventId}/check-in`} variant="secondary" className="h-9 px-3 text-xs">Attendance</ButtonLink>
-            <ButtonLink href="#training-groups" variant="secondary" className="h-9 px-3 text-xs">Groups</ButtonLink>
+            <p className="text-sm font-bold text-board-navy">{selectedIds.length} {ui(" selected")}</p>
+            <Button type="button" variant="secondary" className="h-9 px-3 text-xs" onClick={selectAllVisible}>{ui("Select all visible")}</Button>
+            <Button type="button" variant="secondary" className="h-9 px-3 text-xs" onClick={selectAllExpected}>{ui("Select all expected")}</Button>
+            <Button type="button" variant="ghost" className="h-9 px-3 text-xs" onClick={() => setSelectedIds([])}>{ui("Clear selection")}</Button>
+            <ButtonLink href={`/trainings/${eventId}/edit`} variant="secondary" className="h-9 px-3 text-xs">{ui("Edit participants")}</ButtonLink>
+            <ButtonLink href={`/trainings/${eventId}/check-in`} variant="secondary" className="h-9 px-3 text-xs">{ui("Attendance")}</ButtonLink>
+            <ButtonLink href="#training-groups" variant="secondary" className="h-9 px-3 text-xs">{ui("Groups")}</ButtonLink>
           </div>
         ) : null}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-board-line">
         {!attendance.length ? (
-          <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">No participants in this Training. Open the edit page to add squad players or trial players.</p>
+          <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">{ui("No participants in this Training. Open the edit page to add squad players or trial players.")}</p>
         ) : !sortedAttendance.length ? (
           <div className="p-4 text-sm text-slate-600">
-            <p className="font-semibold text-board-navy">No participants match the current filters.</p>
+            <p className="font-semibold text-board-navy">{ui("No participants match the current filters.")}</p>
             <Button type="button" variant="secondary" className="mt-3 h-9 px-3" onClick={() => {
               setQuery("");
               setFilter("all");
-            }}>Clear filters</Button>
+            }}>{ui("Clear filters")}</Button>
           </div>
         ) : (
           <>
@@ -317,7 +320,7 @@ export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPl
                 </colgroup>
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
                   <tr className="border-b border-board-line">
-                    {selectionMode ? <th scope="col" className={cn("left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>Select</th> : null}
+                    {selectionMode ? <th scope="col" className={cn("left-0 w-12 bg-slate-50 px-3 py-3 shadow-[1px_0_0_#d9e2dc]", PLAYER_TABLE_LAYER_CLASSES.cornerHeaderCell)}>{ui("Select")}</th> : null}
                     {shownColumns.map((column) => (
                       <ParticipantHeaderCell
                         key={column.id}
@@ -363,22 +366,23 @@ export function TrainingParticipantsTable({ eventId, attendance, groupLabelsByPl
           </>
         )}
       </div>
-      {hasFilters ? <p className="text-xs font-semibold text-slate-500">Filtered participant view. Clear filters to see the full Training list.</p> : null}
+      {hasFilters ? <p className="text-xs font-semibold text-slate-500">{ui("Filtered participant view. Clear filters to see the full Training list.")}</p> : null}
     </div>
   );
 }
 
 function ParticipantCell({ eventId, entry, columnId, groupLabels }: { eventId: string; entry: SquadAttendanceEntry; columnId: ParticipantColumnId; groupLabels: string[] }) {
+  const ui = useSystemText();
   const player = entry.player;
   if (columnId === "player") {
     return (
       <div className="min-w-0">
         {player ? (
-          <Link href={playerProfileHref(player.id, eventId)} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
+          <Link translate="no" href={playerProfileHref(player.id, eventId)} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
             {attendanceDisplayName(entry)}
           </Link>
         ) : (
-          <p className="font-bold text-board-navy">{attendanceDisplayName(entry)}</p>
+          <p translate="no" className="font-bold text-board-navy">{attendanceDisplayName(entry)}</p>
         )}
         <ExceptionalPlayerBadge entry={entry} />
       </div>
@@ -386,25 +390,26 @@ function ParticipantCell({ eventId, entry, columnId, groupLabels }: { eventId: s
   }
   if (columnId === "position") return <PositionCell entry={entry} />;
   if (columnId === "planned") return <PlannedAttendanceControls entry={entry} eventId={eventId} returnTo={`/trainings/${eventId}`} />;
-  if (columnId === "reason") return <span className="font-semibold text-slate-600">{entry.plannedReason ? plannedReasonLabel(entry.plannedReason) : "-"}</span>;
+  if (columnId === "reason") return <span className="font-semibold text-slate-600">{entry.plannedReason ? ui(plannedReasonLabel(entry.plannedReason)) : "-"}</span>;
   if (columnId === "group") return <GroupCell eventId={eventId} labels={groupLabels} />;
   if (columnId === "age") return <span className="font-semibold text-slate-700">{calculateAge(player?.dateOfBirth) ?? "-"}</span>;
-  if (columnId === "availability") return <span className="font-semibold text-slate-700">{availabilityLabel(entry)}</span>;
-  if (columnId === "actual") return <span className="font-semibold text-slate-700">{entry.finalStatus ? finalStatusLabel(entry.finalStatus) : "Not recorded"}</span>;
-  if (columnId === "rating") return <span className="font-semibold text-slate-700">{entry.overallRating ? `${entry.overallRating}/5` : "Not rated"}</span>;
+  if (columnId === "availability") return <span className="font-semibold text-slate-700">{ui(availabilityLabel(entry))}</span>;
+  if (columnId === "actual") return <span className="font-semibold text-slate-700">{ui(finalStatusLabel(entry.finalStatus))}</span>;
+  if (columnId === "rating") return <span className="font-semibold text-slate-700">{entry.overallRating ? `${entry.overallRating}/5` : ui("Not rated")}</span>;
   if (columnId === "malus") return <span className="font-semibold text-slate-700">{reliabilityMalus(entry)}</span>;
   if (columnId === "secondaryPositions") return <span className="font-semibold text-slate-700">{player?.secondaryPositions.map(formatPositionLabel).filter(Boolean).join(", ") || "-"}</span>;
-  if (columnId === "medical") return <span className="font-semibold text-slate-700">{entry.medicalAvailability?.label ?? "-"}</span>;
-  if (columnId === "squadStatus") return <span className="font-semibold text-slate-700">{squadStatusLabel(entry)}</span>;
+  if (columnId === "medical") return <span className="font-semibold text-slate-700">{ui(entry.medicalAvailability?.label ?? "-")}</span>;
+  if (columnId === "squadStatus") return <span className="font-semibold text-slate-700">{ui(squadStatusLabel(entry))}</span>;
   return (
     <div className="flex flex-wrap gap-2">
-      {player ? <ButtonLink href={playerProfileHref(player.id, eventId)} variant="ghost" className="h-8 px-2 text-xs">Profile</ButtonLink> : null}
-      <ButtonLink href={`/trainings/${eventId}/edit`} variant="ghost" className="h-8 px-2 text-xs">More</ButtonLink>
+      {player ? <ButtonLink href={playerProfileHref(player.id, eventId)} variant="ghost" className="h-8 px-2 text-xs">{ui("Profile")}</ButtonLink> : null}
+      <ButtonLink href={`/trainings/${eventId}/edit`} variant="ghost" className="h-8 px-2 text-xs">{ui("More")}</ButtonLink>
     </div>
   );
 }
 
 function ParticipantHeaderCell({ column, selectionMode, sort, onSort, onMoveColumn }: { column: ParticipantColumn; selectionMode: boolean; sort: ParticipantSort; onSort: (column: ParticipantColumn) => void; onMoveColumn: (columnId: ParticipantColumnId, targetId: ParticipantColumnId, side: "before" | "after") => void }) {
+  const ui = useSystemText();
   const [draggedColumn, setDraggedColumn] = useState<ParticipantColumnId | null>(null);
   const [dropSide, setDropSide] = useState<"before" | "after" | null>(null);
   const fixed = column.id === "player" || column.id === "actions";
@@ -457,27 +462,28 @@ function ParticipantHeaderCell({ column, selectionMode, sort, onSort, onMoveColu
               event.dataTransfer.setData("text/plain", column.id);
             }}
             className="cursor-grab rounded p-0.5 text-slate-400 active:cursor-grabbing"
-            aria-label={`Drag ${column.label} column`}
-            title={`Drag ${column.label} column`}
+            aria-label={ui("Drag {label} column", { label: ui(column.label) })}
+            title={ui("Drag {label} column", { label: ui(column.label) })}
           >
             <GripVertical className="h-3.5 w-3.5" />
           </span>
         ) : null}
         {column.sortable ? (
-          <button type="button" onClick={() => onSort(column)} className="inline-flex items-center gap-1 text-left underline-offset-4 hover:underline" aria-label={`Sort by ${column.label}. Next: ${nextSortLabel}.`}>
-            {shortColumnLabel(column)}
+          <button type="button" onClick={() => onSort(column)} className="inline-flex items-center gap-1 text-left underline-offset-4 hover:underline" aria-label={ui("Sort by {label}. Next: {direction}.", { label: ui(column.label), direction: ui(nextSortLabel) })}>
+            {ui(shortColumnLabel(column))}
             {active ? (sort.direction === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : null}
           </button>
         ) : (
-          <span>{shortColumnLabel(column)}</span>
+          <span>{ui(shortColumnLabel(column))}</span>
         )}
       </div>
-      {draggedColumn ? <span className="sr-only">Drop {draggedColumn} {dropSide} {column.id}</span> : null}
+      {draggedColumn ? <span className="sr-only">{ui("Drop ")}{draggedColumn} {dropSide} {column.id}</span> : null}
     </th>
   );
 }
 
 function ParticipantCard({ eventId, entry, groupLabels, selectionMode, selected, onToggleSelected, columns }: { eventId: string; entry: SquadAttendanceEntry; groupLabels: string[]; selectionMode: boolean; selected: boolean; onToggleSelected: () => void; columns: ParticipantColumnId[] }) {
+  const ui = useSystemText();
   return (
     <article className={cn("rounded-lg border bg-white p-3", selected ? "border-board-green ring-2 ring-board-green/20" : "border-board-line")}>
       <div className="flex items-start gap-3">
@@ -487,7 +493,7 @@ function ParticipantCard({ eventId, entry, groupLabels, selectionMode, selected,
           <div className="mt-2 grid gap-2 text-sm">
             {columns.filter((column) => column !== "player").map((column) => (
               <div key={column} className="flex items-start justify-between gap-3">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{shortColumnLabel(participantColumns.find((item) => item.id === column) ?? participantColumns[0])}</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{ui(shortColumnLabel(participantColumns.find((item) => item.id === column) ?? participantColumns[0]))}</span>
                 <div className="text-right"><ParticipantCell eventId={eventId} entry={entry} columnId={column} groupLabels={groupLabels} /></div>
               </div>
             ))}
@@ -499,6 +505,7 @@ function ParticipantCard({ eventId, entry, groupLabels, selectionMode, selected,
 }
 
 function ColumnsPanel({ visibleColumns, columnOrder, onVisibleColumnsChange, onColumnOrderChange, onApply, onCancel, onReset }: { visibleColumns: ParticipantColumnId[]; columnOrder: ParticipantColumnId[]; onVisibleColumnsChange: (columns: ParticipantColumnId[]) => void; onColumnOrderChange: (columns: ParticipantColumnId[]) => void; onApply: () => void; onCancel: () => void; onReset: () => void }) {
+  const ui = useSystemText();
   const [draggedColumn, setDraggedColumn] = useState<ParticipantColumnId | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: ParticipantColumnId; side: "before" | "after" } | null>(null);
   const visibleSet = new Set(visibleColumns);
@@ -544,13 +551,13 @@ function ColumnsPanel({ visibleColumns, columnOrder, onVisibleColumnsChange, onC
     <div className={cn("absolute right-0 top-12 w-[min(92vw,420px)] rounded-lg border border-board-line bg-white p-4 text-left shadow-xl", PLAYER_TABLE_LAYER_CLASSES.popover)}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className="font-bold text-board-navy">Participant columns</h4>
-          <p className="mt-1 text-xs font-semibold text-slate-500">Separate from Squad table preferences.</p>
+          <h4 className="font-bold text-board-navy">{ui("Participant columns")}</h4>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{ui("Separate from Squad table preferences.")}</p>
         </div>
-        <button type="button" onClick={onCancel} className="rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label="Close columns panel"><X className="h-4 w-4" /></button>
+        <button type="button" onClick={onCancel} className="rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label={ui("Close columns panel")}><X className="h-4 w-4" /></button>
       </div>
       <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-        <p className="text-xs font-black uppercase tracking-wide text-slate-500">Visible</p>
+        <p className="text-xs font-black uppercase tracking-wide text-slate-500">{ui("Visible")}</p>
         {visibleOrderedColumns.map((column, index) => {
           const fixed = column.id === "player" || column.id === "actions";
           const isDropBefore = dropTarget?.id === column.id && dropTarget.side === "before";
@@ -586,33 +593,33 @@ function ColumnsPanel({ visibleColumns, columnOrder, onVisibleColumnsChange, onC
               isDropAfter && "after:absolute after:inset-x-2 after:-bottom-1 after:h-1 after:rounded-full after:bg-board-green"
             )}
           >
-            <span className={cn("rounded p-1 text-slate-400", fixed ? "opacity-30" : "cursor-grab active:cursor-grabbing")} aria-label={fixed ? `${column.label} is fixed` : `Drag ${column.label}`}>
+            <span className={cn("rounded p-1 text-slate-400", fixed ? "opacity-30" : "cursor-grab active:cursor-grabbing")} aria-label={ui(fixed ? "{label} is fixed" : "Drag {label}", { label: ui(column.label) })}>
               <GripVertical className="h-4 w-4" />
             </span>
             <label className="flex min-w-0 flex-1 items-center gap-2 text-sm font-semibold text-board-navy">
               <input type="checkbox" checked={column.required || visibleSet.has(column.id)} disabled={column.required} onChange={() => toggleColumn(column)} className="h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
-              <span className="truncate">{column.label}</span>
+              <span className="truncate">{ui(column.label)}</span>
             </label>
-            <button type="button" disabled={fixed || index <= 1} onClick={() => moveColumn(column.id, -1)} className="rounded-md p-1 text-slate-500 hover:bg-white disabled:opacity-40" aria-label={`Move ${column.label} up`}><ArrowUp className="h-4 w-4" /></button>
-            <button type="button" disabled={fixed || index >= visibleOrderedColumns.length - 2} onClick={() => moveColumn(column.id, 1)} className="rounded-md p-1 text-slate-500 hover:bg-white disabled:opacity-40" aria-label={`Move ${column.label} down`}><ArrowDown className="h-4 w-4" /></button>
+            <button type="button" disabled={fixed || index <= 1} onClick={() => moveColumn(column.id, -1)} className="rounded-md p-1 text-slate-500 hover:bg-white disabled:opacity-40" aria-label={ui("Move {label} up", { label: ui(column.label) })}><ArrowUp className="h-4 w-4" /></button>
+            <button type="button" disabled={fixed || index >= visibleOrderedColumns.length - 2} onClick={() => moveColumn(column.id, 1)} className="rounded-md p-1 text-slate-500 hover:bg-white disabled:opacity-40" aria-label={ui("Move {label} down", { label: ui(column.label) })}><ArrowDown className="h-4 w-4" /></button>
           </div>
         );})}
         <div className="pt-2">
-          <p className="text-xs font-black uppercase tracking-wide text-slate-500">Available</p>
+          <p className="text-xs font-black uppercase tracking-wide text-slate-500">{ui("Available")}</p>
           <div className="mt-2 grid gap-2">
             {availableColumns.length ? availableColumns.map((column) => (
               <label key={column.id} className="flex items-center gap-2 rounded-md border border-board-line bg-white p-2 text-sm font-semibold text-board-navy">
                 <input type="checkbox" checked={false} onChange={() => toggleColumn(columnsById.get(column.id) ?? column)} className="h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
-                {column.label}
+                {ui(column.label)}
               </label>
-            )) : <p className="text-sm font-semibold text-slate-500">All optional columns are visible.</p>}
+            )) : <p className="text-sm font-semibold text-slate-500">{ui("All optional columns are visible.")}</p>}
           </div>
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button type="button" className="h-9 px-3" onClick={onApply}>Apply</Button>
-        <Button type="button" variant="secondary" className="h-9 px-3" onClick={onReset}><Settings2 className="h-4 w-4" />Reset</Button>
-        <Button type="button" variant="ghost" className="h-9 px-3" onClick={onCancel}>Cancel</Button>
+        <Button type="button" className="h-9 px-3" onClick={onApply}>{ui("Apply")}</Button>
+        <Button type="button" variant="secondary" className="h-9 px-3" onClick={onReset}><Settings2 className="h-4 w-4" />{ui("Reset")}</Button>
+        <Button type="button" variant="ghost" className="h-9 px-3" onClick={onCancel}>{ui("Cancel")}</Button>
       </div>
     </div>
   );
@@ -630,18 +637,20 @@ function PositionCell({ entry }: { entry: SquadAttendanceEntry }) {
 }
 
 function GroupCell({ eventId, labels }: { eventId: string; labels: string[] }) {
+  const ui = useSystemText();
   return (
     <Link href="#training-groups" className="font-semibold text-slate-700 underline-offset-4 hover:text-board-green hover:underline">
       {labels.length ? labels.join(", ") : "No group"}
-      <span className="sr-only"> for Training {eventId}</span>
+      <span className="sr-only"> {ui(" for Training ")}{eventId}</span>
     </Link>
   );
 }
 
 function ExceptionalPlayerBadge({ entry }: { entry: SquadAttendanceEntry }) {
+  const ui = useSystemText();
   const label = playerTypeLabel(entry);
   if (!label) return null;
-  return <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">{label}</span>;
+  return <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">{ui(label)}</span>;
 }
 
 function playerTypeLabel(entry: SquadAttendanceEntry) {
@@ -722,7 +731,7 @@ function sortValue(entry: SquadAttendanceEntry, columnId: ParticipantColumnId, g
   const player = entry.player;
   if (columnId === "player") return attendanceDisplayName(entry).toLowerCase();
   if (columnId === "position") return positionSortRank(entry);
-  if (columnId === "planned") return plannedStatusLabel(entry.plannedStatus) === "Expected" ? 0 : 1;
+  if (columnId === "planned") return isExpectedFromPlannedStatus(entry) ? 0 : 1;
   if (columnId === "group") {
     const label = player ? groupLabels.get(player.id)?.[0] : undefined;
     return label ? `0:${label.toLowerCase()}` : "1:zz-no-group";

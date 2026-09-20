@@ -62,7 +62,7 @@ export default async function DrillPrintPage({ params }: DrillPrintPageProps) {
         <header className="print-avoid overflow-hidden rounded-xl border border-board-line">
           <div className="bg-board-navy px-6 py-5 text-white">
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-200">{messages.export.document.drillSheet}</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-normal sm:text-4xl">{drill.title}</h1>
+            <h1 translate="no" className="mt-2 text-3xl font-bold tracking-normal sm:text-4xl">{drill.title}</h1>
             <p className="mt-2 text-sm text-white/80">{[drill.mainFocus, drill.subFocus, drill.drillType].filter(Boolean).join(" · ")}</p>
           </div>
           <div className="grid gap-px bg-board-line sm:grid-cols-4 print:grid-cols-4">

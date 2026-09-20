@@ -59,7 +59,7 @@ export default async function SquadDevelopmentPage({ searchParams }: Development
   const { players, stats } = await getDevelopmentOverview(supabase, user.id, filters);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer width="wide" translate="no">
       <PageHeader eyebrow={ui("Squad")} title={ui("Development")} description={ui("Track player goals, progress updates, observations and review dates for the active Team.")} />
       <SquadNav />
 
@@ -141,7 +141,7 @@ async function DevelopmentRow({ item }: { item: DevelopmentOverviewPlayer }) {
         <Link href={`/squad/players/${item.player.id}?tab=development`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
           {[item.player.firstName, item.player.lastName].filter(Boolean).join(" ")}
         </Link>
-        <p className="mt-1 text-xs font-semibold text-slate-500">{item.player.position ?? "No position"} · {item.player.playerType === "trial" ? "Trial" : "Roster"}</p>
+        <p className="mt-1 text-xs font-semibold text-slate-500">{item.player.position ?? ui("No position")} · {item.player.playerType === "trial" ? ui("Trial") : ui("Roster")}</p>
       </td>
       <td className="px-4 py-4">
         <p className="font-bold text-board-navy">{item.activeGoals.length}</p>
@@ -151,17 +151,17 @@ async function DevelopmentRow({ item }: { item: DevelopmentOverviewPlayer }) {
       <td className="px-4 py-4">
         {latestProgress ? (
           <>
-            <p className="font-bold text-board-navy">{developmentProgressLabel(latestProgress.progressLevel)}</p>
+            <p className="font-bold text-board-navy">{developmentProgressLabel(latestProgress.progressLevel, locale)}</p>
             <p className="mt-1 line-clamp-2 text-xs text-slate-600">{latestProgress.note}</p>
           </>
         ) : latestGoal ? (
-          <p className="font-bold text-board-navy">{developmentProgressLabel(latestGoal.progress)}</p>
+          <p className="font-bold text-board-navy">{developmentProgressLabel(latestGoal.progress, locale)}</p>
         ) : (
           <span className="text-slate-500">-</span>
         )}
       </td>
-      <td className="px-4 py-4">{item.nextReviewDate ? formatEventDate(item.nextReviewDate) : "Not set"}</td>
-      <td className="px-4 py-4">{item.lastDevelopmentUpdate ? formatEventDate(item.lastDevelopmentUpdate) : "No update"}</td>
+      <td className="px-4 py-4">{item.nextReviewDate ? formatEventDate(item.nextReviewDate, locale) : ui("Not set")}</td>
+      <td className="px-4 py-4">{item.lastDevelopmentUpdate ? formatEventDate(item.lastDevelopmentUpdate, locale) : ui("No update")}</td>
       <td className="px-4 py-4"><ButtonLink href={`/squad/players/${item.player.id}?tab=development`} variant="secondary" className="h-8 px-2 text-xs">{ui("Open Development")}</ButtonLink></td>
     </tr>
   );
@@ -177,17 +177,17 @@ async function DevelopmentCard({ item }: { item: DevelopmentOverviewPlayer }) {
       <Link href={`/squad/players/${item.player.id}?tab=development`} className="text-lg font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
         {[item.player.firstName, item.player.lastName].filter(Boolean).join(" ")}
       </Link>
-      <p className="mt-1 text-sm text-slate-600">{item.player.position ?? "No position"}</p>
+      <p className="mt-1 text-sm text-slate-600">{item.player.position ?? ui("No position")}</p>
       <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{item.activeGoals.length} {ui(" active Goals")}</span>
-        <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{item.highPriorityGoalCount} {ui(" high priority")}</span>
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{ui(item.activeGoals.length === 1 ? "{count} active goal" : "{count} active goals", { count: item.activeGoals.length })}</span>
+        <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{ui("{count} high priority", { count: item.highPriorityGoalCount })}</span>
       </div>
       {latestGoal ? (
         <div className="mt-3 rounded-md bg-board-paper p-3">
           <p className="text-xs font-bold uppercase text-slate-500">{ui("Latest")}</p>
           <p className="mt-1 font-bold text-board-navy">{latestGoal.title}</p>
-          <p className="mt-1 text-sm text-slate-600">{latestProgress ? developmentProgressLabel(latestProgress.progressLevel) : developmentProgressLabel(latestGoal.progress)}</p>
-          <p className="mt-1 text-xs text-slate-500">{ui("Next review: ")}{item.nextReviewDate ? formatEventDate(item.nextReviewDate) : "Not set"}</p>
+          <p className="mt-1 text-sm text-slate-600">{latestProgress ? developmentProgressLabel(latestProgress.progressLevel, locale) : developmentProgressLabel(latestGoal.progress, locale)}</p>
+          <p className="mt-1 text-xs text-slate-500">{ui("Next review: ")}{item.nextReviewDate ? formatEventDate(item.nextReviewDate, locale) : ui("Not set")}</p>
         </div>
       ) : (
         <div className="mt-3 rounded-md border border-dashed border-board-line p-3">
@@ -225,12 +225,13 @@ function Metric({ label, value, tone = "normal" }: { label: string; value: strin
   );
 }
 
-function Select<T extends string>({ name, label, value, options }: { name: string; label: string; value: string; options: Array<{ value: T; label: string }> }) {
+async function Select<T extends string>({ name, label, value, options }: { name: string; label: string; value: string; options: Array<{ value: T; label: string }> }) {
+  const ui = createSystemTranslator(await getActiveLocale());
   return (
     <label>
       <span className="text-xs font-bold uppercase text-slate-500">{label}</span>
       <select name={name} defaultValue={value} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {options.map((option) => <option key={option.value} value={option.value}>{ui(option.label)}</option>)}
       </select>
     </label>
   );

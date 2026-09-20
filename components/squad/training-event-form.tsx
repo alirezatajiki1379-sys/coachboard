@@ -160,7 +160,7 @@ export function TrainingEventForm({ sessions, squads, participants, event, mode 
               <select name="linkedTrainingSessionId" defaultValue={values.linkedTrainingSessionId} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
                 <option value="">No linked plan</option>
                 {sessions.map((session) => (
-                  <option key={session.id} value={session.id}>
+                  <option translate="no" key={session.id} value={session.id}>
                     {session.title}
                   </option>
                 ))}

@@ -17,7 +17,7 @@ export function Button({ className, variant = "primary", ...props }: ButtonProps
   return (
     <button
       className={cn(
-        "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+        "app-button inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
         variants[variant],
         className
       )}
@@ -37,7 +37,7 @@ export function ButtonLink({ className, variant = "primary", href, children, ...
     <Link
       href={href}
       className={cn(
-        "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition",
+        "app-button inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition",
         variants[variant],
         className
       )}

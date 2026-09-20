@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { localeCookieName, localeFromAcceptLanguage, normalizeLocale } from "@/lib/i18n";
@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   title: "CoachBoard",
   description: "Football training planner for coaches"
 };
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default async function RootLayout({
   children

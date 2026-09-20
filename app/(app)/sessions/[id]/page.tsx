@@ -1,5 +1,6 @@
 import { getActiveLocale } from "@/lib/i18n/server";
 import { createSystemTranslator } from "@/lib/i18n/system-text";
+import { trainingSectionLabel } from "@/lib/i18n/training-labels";
 import { ArrowLeft, Clock, Edit, FileText, MapPin, Users } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -61,7 +62,7 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
               {view === "archived" ? <StatusBadge label={ui("Archived")} /> : null}
               {view === "trash" ? <StatusBadge label={ui("Trash")} danger /> : null}
             </div>
-            <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{session.title}</h1>
+            <h1 translate="no" className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{session.title}</h1>
             <p className="mt-2 text-slate-600">
               {session.date || "No date"} {session.startTime ? `- ${session.startTime}` : ""} {session.teamAgeGroup ? `- ${session.teamAgeGroup}` : ""}
             </p>
@@ -109,7 +110,7 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
             <section key={block.block} className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
               <div className="flex flex-wrap items-start justify-between gap-4 border-b border-board-line pb-4">
                 <div>
-                  <h2 className="text-xl font-bold text-board-navy">{block.block}</h2>
+                  <h2 className="text-xl font-bold text-board-navy" translate="no">{trainingSectionLabel(block.block, locale)}</h2>
                   <p className="text-sm text-slate-500">{formatTimelineRange(blockStart, block.duration, session.startTime)} - {block.items.length} {ui(" drills - ")}{block.duration} {ui(" min")}</p>
                   {block.stationSets.length ? (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
@@ -160,8 +161,8 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
               {session.playerGroups.length ? (
                 session.playerGroups.map((group) => (
                   <div key={group.id} className="rounded-md bg-board-paper px-3 py-2">
-                    <p className="font-semibold text-board-navy">{group.name}</p>
-                    {group.notes ? <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-600">{group.notes}</p> : null}
+                    <p translate="no" className="font-semibold text-board-navy">{group.name}</p>
+                    {group.notes ? <p translate="no" className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-600">{group.notes}</p> : null}
                   </div>
                 ))
               ) : (

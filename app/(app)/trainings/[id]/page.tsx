@@ -178,7 +178,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
               <article key={drill.id} className="rounded-md border border-board-line bg-board-paper p-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="font-bold text-board-navy">{drill.title}</p>
+                    <p translate="no" className="font-bold text-board-navy">{drill.title}</p>
                     <p className="text-xs font-semibold text-slate-500">
                       {drill.block ?? "Training block"} · {drill.plannedDurationMinutes ? `${drill.plannedDurationMinutes} min` : "Duration open"}
                       {drill.sourceDrillId ? " · reusable Drill copy" : " · session-only Drill"}
@@ -226,7 +226,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
                 <form action={applyTrainingPlanTemplate} className="mt-3 flex flex-col gap-2">
                   <input type="hidden" name="eventId" value={event.id} />
                   <select name="templateId" required className="h-10 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                    {planTemplates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
+                    {planTemplates.map((template) => <option translate="no" key={template.id} value={template.id}>{template.title}</option>)}
                   </select>
                   <Button type="submit" variant="secondary" className="h-10 px-3">Replace current Plan</Button>
                 </form>
@@ -522,7 +522,7 @@ function TrainingGroupsPanel({ eventId, attendance, groups }: { eventId: string;
             <section key={group.id} className="rounded-lg border border-board-line bg-board-paper p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-bold text-board-navy">{group.name}</h3>
+                  <h3 translate="no" className="text-lg font-bold text-board-navy">{group.name}</h3>
                   <p className="text-xs font-semibold text-slate-500">
                     {group.members.length} member{group.members.length === 1 ? "" : "s"} · {group.groupType === "label" ? "Additional label group" : "Exclusive playing group"}
                   </p>
@@ -574,7 +574,7 @@ function TrainingGroupsPanel({ eventId, attendance, groups }: { eventId: string;
                           <label key={entry.id} className="flex items-center gap-3 rounded-md border border-board-line px-3 py-2 text-sm font-semibold text-board-navy">
                             <input name="playerIds" value={player.id} type="checkbox" disabled={alreadyInGroup} className="h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate">{attendanceDisplayName(entry)}</span>
+                              <span translate="no" className="block truncate">{attendanceDisplayName(entry)}</span>
                               <span className="text-xs font-medium text-slate-500">{statusLabel(entry)}{player.playerType === "trial" ? " · Trial" : ""}{assignedElsewhere ? " · Already in another group" : ""}</span>
                             </span>
                           </label>

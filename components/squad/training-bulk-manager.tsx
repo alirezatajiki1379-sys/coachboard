@@ -1,5 +1,13 @@
 "use client";
 
+import { useDialogFocus } from "@/components/shared/use-dialog-focus";
+import { DialogPortal } from "@/components/shared/dialog-portal";
+
+import { useSystemText } from "@/components/i18n/use-system-text";
+import { useOptionalI18n } from "@/components/i18n/i18n-provider";
+import { formatDate } from "@/lib/i18n";
+
+
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { CheckSquare, RotateCcw, Trash2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -11,7 +19,7 @@ import {
   type BulkTrainingOperationResult
 } from "@/lib/squad/attendance-actions";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
-import { formatDateLabel, trainingDisplayTitle, trainingTimeRange, weekdayLabel } from "@/lib/trainings/utils";
+import { trainingTimeRange } from "@/lib/trainings/utils";
 import type { Locale } from "@/lib/i18n";
 import type { SquadAttendanceEntry, SquadTrainingEventDetail } from "@/types/domain";
 
@@ -293,8 +301,10 @@ const trainingBulkCopy = {
 } as const;
 
 function SelectableTrainingCard({ event, attendance, selected, onToggle }: { event: SquadTrainingEventDetail; attendance: SquadAttendanceEntry[]; selected: boolean; onToggle: () => void }) {
+  const ui = useSystemText();
+  const locale = useOptionalI18n()?.locale ?? "en";
   const counts = attendanceCounts(attendance);
-  const title = trainingDisplayTitle(event);
+  const title = event.label || ui("Training on {date}", { date: formatDate(event.date, locale) });
   return (
     <article
       className={`rounded-lg border bg-white p-4 shadow-soft transition ${selected ? "border-board-green ring-2 ring-board-green/20" : "border-board-line hover:border-board-green/40"}`}
@@ -307,22 +317,22 @@ function SelectableTrainingCard({ event, attendance, selected, onToggle }: { eve
             readOnly
             tabIndex={-1}
             className="h-5 w-5 rounded border-slate-300 text-board-green focus:ring-board-green"
-            aria-label={`Select ${title} on ${formatDateLabel(event.date)}`}
+            aria-label={ui("Select {title} on {date}", { title, date: formatDate(event.date, locale) })}
           />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-bold uppercase tracking-wide text-board-green">
-            {weekdayLabel(event.date)} · {formatDateLabel(event.date)} · {trainingTimeRange(event)}
+            {formatDate(event.date, locale, { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} · {trainingTimeRange(event)}
           </span>
-          <span className="mt-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{event.status.replaceAll("_", " ")}</span>
-          <span className="mt-1 block text-xl font-bold tracking-normal text-board-navy">{title}</span>
+          <span className="mt-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{ui({ draft: "Draft", prepared: "Prepared", in_progress: "In progress", rating_open: "Rating open", completed: "Completed" }[event.status])}</span>
+          <span translate="no" className="mt-1 block text-xl font-bold tracking-normal text-board-navy">{title}</span>
           <span className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-            <span className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.present || counts.plannedExpected} present/expected</span>
-            <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.absent || counts.unavailable + counts.unclear} absence/not expected</span>
-            <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{counts.late} late</span>
-            <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-700">{attendance.length} participant records</span>
-            {event.recurrenceSeriesId ? <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">Recurring</span> : null}
-            {event.linkedTrainingSessionTitle ? <span className="rounded-md bg-green-50 px-2 py-1 text-board-green">Plan: {event.linkedTrainingSessionTitle}</span> : null}
+            <span className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.present || counts.plannedExpected} {ui(" present/expected")}</span>
+            <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.absent || counts.unavailable + counts.unclear} {ui(" absence/not expected")}</span>
+            <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{counts.late} {ui(" late")}</span>
+            <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-700">{attendance.length} {ui(" participant records")}</span>
+            {event.recurrenceSeriesId ? <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">{ui("Recurring")}</span> : null}
+            {event.linkedTrainingSessionTitle ? <span className="rounded-md bg-green-50 px-2 py-1 text-board-green">{ui("Plan: ")}{event.linkedTrainingSessionTitle}</span> : null}
           </span>
         </span>
       </button>
@@ -353,55 +363,58 @@ function BulkConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const dialogRef = useDialogFocus(true, () => { if (!isPending) onCancel(); });
+  const ui = useSystemText();
+  const locale = useOptionalI18n()?.locale ?? "en";
   const count = selectedEvents.length;
-  const dateRange = selectedDateRange(selectedEvents);
+  const dateRange = selectedDateRange(selectedEvents, locale);
   const recurringCount = selectedEvents.filter((event) => event.recurrenceSeriesId).length;
   const expectedConfirmation = `DELETE ${count} TRAININGS`;
   const title =
     action === "restore"
-      ? `Restore ${count} Training${count === 1 ? "" : "s"}?`
+      ? ui(count === 1 ? "Restore {count} Training?" : "Restore {count} Trainings?", { count })
       : action === "permanent"
-        ? `Permanently delete ${count} Training${count === 1 ? "" : "s"}?`
-        : `Delete ${count} Training${count === 1 ? "" : "s"}?`;
+        ? ui(count === 1 ? "Permanently delete {count} Training?" : "Permanently delete {count} Trainings?", { count })
+        : ui(count === 1 ? "Delete {count} Training?" : "Delete {count} Trainings?", { count });
   return (
-    <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-slate-950/50 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="bulk-training-dialog-title">
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl">
+    <DialogPortal><div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-slate-950/50 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="bulk-training-dialog-title">
+      <div ref={dialogRef} tabIndex={-1} className="app-dialog-panel max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl outline-none">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="bulk-training-dialog-title" className="text-xl font-bold text-board-navy">{title}</h2>
             <p className="mt-1 text-sm text-slate-600">
-              {action === "trash"
+              {ui(action === "trash"
                 ? "These Trainings will be moved to Trash and removed from the normal Training Calendar. You can restore them later."
                 : action === "restore"
                   ? "These Trainings and their related coaching data will return to the normal Training Calendar."
-                  : "This permanently removes the selected Trainings and associated coaching data. This action cannot be undone."}
+                  : "This permanently removes the selected Trainings and associated coaching data. This action cannot be undone.")}
             </p>
           </div>
-          <button type="button" onClick={onCancel} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Close confirmation">
+          <button type="button" onClick={onCancel} disabled={isPending} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label={ui("Close confirmation")}>
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="mt-4 grid gap-3 rounded-lg border border-board-line bg-board-paper p-4 text-sm text-slate-700 sm:grid-cols-2">
-          <SummaryItem label="Team" value={teamName} />
-          <SummaryItem label="Filter scope" value={filterLabel} />
-          <SummaryItem label="Trainings" value={String(count)} />
-          <SummaryItem label="Period" value={dateRange} />
+          <SummaryItem label={ui("Team")} value={teamName} />
+          <SummaryItem label={ui("Filter scope")} value={filterLabel} />
+          <SummaryItem label={ui("Trainings")} value={String(count)} />
+          <SummaryItem label={ui("Period")} value={dateRange} />
         </div>
         <div className="mt-4 rounded-lg border border-board-line p-4">
-          <p className="text-sm font-bold text-board-navy">Related data summary</p>
+          <p className="text-sm font-bold text-board-navy">{ui("Related data summary")}</p>
           <ul className="mt-2 space-y-1 text-sm text-slate-600">
-            <li>{relatedSummary.participants} participant records</li>
-            <li>{relatedSummary.ratings} ratings</li>
-            <li>{relatedSummary.plans} linked Training Plans</li>
-            {recurringCount ? <li>{recurringCount} selected Training{recurringCount === 1 ? "" : "s"} belong to recurring series. Only selected concrete Trainings are affected.</li> : null}
+            <li>{relatedSummary.participants} {ui(" participant records")}</li>
+            <li>{relatedSummary.ratings} {ui(" ratings")}</li>
+            <li>{relatedSummary.plans} {ui(" linked Training Plans")}</li>
+            {recurringCount ? <li>{ui("Selected trainings in recurring series: {count}. Only selected dates are affected.", { count: recurringCount })}</li> : null}
           </ul>
           {action !== "permanent" ? (
-            <p className="mt-2 text-xs font-semibold text-slate-500">This data is preserved and restored with the Trainings.</p>
+            <p className="mt-2 text-xs font-semibold text-slate-500">{ui("This data is preserved and restored with the Trainings.")}</p>
           ) : null}
         </div>
         {action === "permanent" ? (
           <label className="mt-4 block">
-            <span className="text-sm font-bold text-red-700">Type {expectedConfirmation}</span>
+            <span translate="no" className="text-sm font-bold text-red-700">{ui("Type {confirmation}", { confirmation: expectedConfirmation })}</span>
             <input
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}
@@ -410,18 +423,18 @@ function BulkConfirmDialog({
           </label>
         ) : null}
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="secondary" onClick={onCancel} disabled={isPending}>Cancel</Button>
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={isPending}>{ui("Cancel")}</Button>
           <Button
             type="button"
             variant={action === "restore" ? "primary" : "danger"}
             onClick={onConfirm}
             disabled={isPending || (action === "permanent" && confirmation !== expectedConfirmation)}
           >
-            {isPending ? "Working..." : actionLabel(action, count)}
+            {isPending ? ui("Working...") : action === "permanent" ? ui("Delete permanently") : action === "restore" ? ui(count === 1 ? "Restore {count} Training" : "Restore {count} Trainings", { count }) : ui(count === 1 ? "Move {count} Training to Trash" : "Move {count} Trainings to Trash", { count })}
           </Button>
         </div>
       </div>
-    </div>
+    </div></DialogPortal>
   );
 }
 
@@ -445,12 +458,12 @@ function summarizeRelatedData(events: SquadTrainingEventDetail[]): RelatedSummar
   );
 }
 
-function selectedDateRange(events: SquadTrainingEventDetail[]) {
+function selectedDateRange(events: SquadTrainingEventDetail[], locale: Locale) {
   if (!events.length) return "-";
   const dates = events.map((event) => event.date).sort();
   const first = dates[0] ?? "";
   const last = dates.at(-1) ?? "";
-  return first === last ? formatDateLabel(first) : `${formatDateLabel(first)} to ${formatDateLabel(last)}`;
+  return first === last ? formatDate(first, locale) : `${formatDate(first, locale)} – ${formatDate(last, locale)}`;
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
@@ -466,12 +479,6 @@ function selectionLabel(count: number, locale: Locale = "en") {
   if (locale === "de") return `${count} Trainingseinheit${count === 1 ? "" : "en"} ausgewählt`;
   if (count === 1) return "1 Training selected";
   return `${count} Trainings selected`;
-}
-
-function actionLabel(action: BulkAction, count: number) {
-  if (action === "restore") return `Restore ${count} Training${count === 1 ? "" : "s"}`;
-  if (action === "permanent") return `Delete permanently`;
-  return `Move ${count} Training${count === 1 ? "" : "s"} to Trash`;
 }
 
 async function executeBulkAction(action: BulkAction, input: { squadId: string; trainingIds: string[]; confirmation: string }) {

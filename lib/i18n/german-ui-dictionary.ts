@@ -1,3 +1,5 @@
+import { workflowCopyDe } from "@/lib/i18n/workflow-copy-de";
+
 export const germanUiDictionary: Record<string, string> = {
   "Action Center": "Aktionen",
   "Coaching actions could not be loaded": "Traineraktionen konnten nicht geladen werden",
@@ -602,7 +604,8 @@ export const germanUiDictionary: Record<string, string> = {
   "Delete Team": "Mannschaft löschen",
   "Profile": "Profil",
   "Account": "Konto",
-  "Logout": "Abmelden"
+  "Logout": "Abmelden",
+  ...workflowCopyDe
 };
 
 export const germanUiPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [

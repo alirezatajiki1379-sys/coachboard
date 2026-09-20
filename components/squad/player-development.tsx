@@ -31,7 +31,7 @@ export async function PlayerDevelopmentSection({ playerId, development }: { play
   const highPriorityGoals = activeGoals.filter((goal) => goal.priority === "high");
   const dueGoals = activeGoals.filter((goal) => goal.reviewDate && goal.reviewDate <= new Date().toISOString().slice(0, 10));
   return (
-    <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+    <section translate="no" className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Target className="h-5 w-5" />{ui("Development")}</h2>
@@ -41,9 +41,9 @@ export async function PlayerDevelopmentSection({ playerId, development }: { play
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
-        <span className="rounded-md bg-slate-100 px-3 py-2 text-slate-700">{activeGoals.length} {ui(" active goal")}{activeGoals.length === 1 ? "" : "s"}</span>
-        <span className="rounded-md bg-amber-50 px-3 py-2 text-amber-700">{highPriorityGoals.length} {ui(" high priority")}</span>
-        <span className={dueGoals.length ? "rounded-md bg-red-50 px-3 py-2 text-red-700" : "rounded-md bg-green-50 px-3 py-2 text-green-700"}>{dueGoals.length} {ui(" due for review")}</span>
+        <span className="rounded-md bg-slate-100 px-3 py-2 text-slate-700">{ui(activeGoals.length === 1 ? "{count} active goal" : "{count} active goals", { count: activeGoals.length })}</span>
+        <span className="rounded-md bg-amber-50 px-3 py-2 text-amber-700">{ui("{count} high priority", { count: highPriorityGoals.length })}</span>
+        <span className={dueGoals.length ? "rounded-md bg-red-50 px-3 py-2 text-red-700" : "rounded-md bg-green-50 px-3 py-2 text-green-700"}>{ui("{count} due for review", { count: dueGoals.length })}</span>
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
@@ -102,17 +102,17 @@ export async function ObservationForm({
           <input name="observationDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
         </label>
         <label>
-          <span className="text-xs font-bold uppercase text-slate-500">{ui("Goal")}</span>
+          <span className="text-xs font-bold uppercase text-slate-500">{ui("Development Goal")}</span>
           <select name="goalId" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
             <option value="">{ui("No linked goal")}</option>
-            {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
+            {goals.map((goal) => <option translate="no" key={goal.id} value={goal.id}>{goal.title}</option>)}
           </select>
         </label>
         <label>
           <span className="text-xs font-bold uppercase text-slate-500">{ui("Category")}</span>
           <select name="category" className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
             <option value="">{ui("Optional")}</option>
-            {developmentGoalCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+            {developmentGoalCategories.map((category) => <option key={category.value} value={category.value}>{developmentCategoryLabel(category.value, locale)}</option>)}
           </select>
         </label>
       </div>
@@ -173,19 +173,19 @@ async function DevelopmentGoalCard({ goal, playerId }: { goal: PlayerDevelopment
     <article className="rounded-md border border-board-line bg-white p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-lg font-bold text-board-navy">{goal.title}</h3>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{goal.successCriteria}</p>
+          <h3 translate="no" className="text-lg font-bold text-board-navy">{goal.title}</h3>
+          <p translate="no" className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{goal.successCriteria}</p>
           {goal.coachNotes ? <p className="mt-2 whitespace-pre-wrap text-xs font-semibold text-slate-500">{ui("Coach context: ")}{goal.coachNotes}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{developmentCategoryLabel(goal.category)}</span>
-            <span className={priorityTone(goal.priority)}>{developmentPriorityLabel(goal.priority)}</span>
-            <span className="rounded-full bg-green-50 px-2 py-1 text-green-700">{developmentStatusLabel(goal.status)}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{ui("Latest: ")}{latestProgress ? developmentProgressLabel(latestProgress.progressLevel) : developmentProgressLabel(goal.progress)}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{developmentCategoryLabel(goal.category, locale)}</span>
+            <span className={priorityTone(goal.priority)}>{developmentPriorityLabel(goal.priority, locale)}</span>
+            <span className="rounded-full bg-green-50 px-2 py-1 text-green-700">{developmentStatusLabel(goal.status, locale)}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{ui("Latest: ")}{latestProgress ? developmentProgressLabel(latestProgress.progressLevel, locale) : developmentProgressLabel(goal.progress, locale)}</span>
           </div>
         </div>
         <div className="text-sm text-slate-600 sm:text-right">
-          <p><span className="font-bold text-board-navy">{ui("Review:")}</span> {goal.reviewDate ? formatEventDate(goal.reviewDate) : "Not set"}</p>
-          <p className="mt-1"><span className="font-bold text-board-navy">{ui("Started:")}</span> {formatEventDate(goal.startDate)}</p>
+          <p><span className="font-bold text-board-navy">{ui("Review:")}</span> {goal.reviewDate ? formatEventDate(goal.reviewDate, locale) : ui("Not set")}</p>
+          <p className="mt-1"><span className="font-bold text-board-navy">{ui("Started:")}</span> {formatEventDate(goal.startDate, locale)}</p>
         </div>
       </div>
 
@@ -225,8 +225,8 @@ async function DevelopmentGoalCard({ goal, playerId }: { goal: PlayerDevelopment
           <div className="mt-2 space-y-2">
             {goal.progressUpdates.length ? goal.progressUpdates.slice(0, 4).map((progress) => (
               <div key={progress.id} className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
-                <p className="text-xs font-bold uppercase text-slate-500">{formatEventDate(progress.recordedAt)} · {developmentProgressLabel(progress.progressLevel)}</p>
-                <p className="mt-1 whitespace-pre-wrap">{progress.note}</p>
+                <p className="text-xs font-bold uppercase text-slate-500">{formatEventDate(progress.recordedAt, locale)} · {developmentProgressLabel(progress.progressLevel, locale)}</p>
+                <p translate="no" className="mt-1 whitespace-pre-wrap">{progress.note}</p>
                 {progress.trainingLabel || progress.trainingDate ? <p className="mt-1 text-xs font-semibold text-slate-500">{ui("Training: ")}{progress.trainingLabel ?? progress.trainingDate}</p> : null}
               </div>
             )) : <p className="rounded-md border border-dashed border-board-line p-3 text-sm text-slate-500">{ui("No progress updates yet.")}</p>}
@@ -255,8 +255,8 @@ async function DevelopmentGoalCard({ goal, playerId }: { goal: PlayerDevelopment
                   <input name="completed" type="checkbox" defaultChecked={action.completed} className="mt-1 h-4 w-4" />
                   <span>
                     {action.description}
-                    {action.dueDate ? <span className="block text-xs text-slate-500">{ui("Due ")}{formatEventDate(action.dueDate)}</span> : null}
-                    {action.notes ? <span className="block text-xs text-slate-500">{action.notes}</span> : null}
+                    {action.dueDate ? <span className="block text-xs text-slate-500">{ui("Due ")}{formatEventDate(action.dueDate, locale)}</span> : null}
+                    {action.notes ? <span translate="no" className="block text-xs text-slate-500">{action.notes}</span> : null}
                   </span>
                 </label>
                 <button type="submit" className="mt-2 text-xs font-bold text-board-green underline-offset-4 hover:underline">{ui("Save action status")}</button>
@@ -278,8 +278,8 @@ async function DevelopmentGoalCard({ goal, playerId }: { goal: PlayerDevelopment
           <div className="mt-2 space-y-2">
             {recentObservations.length ? recentObservations.map((observation) => (
               <div key={observation.id} className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
-                <p className="text-xs font-bold uppercase text-slate-500">{formatEventDate(observation.observationDate)}{observation.category ? ` · ${developmentCategoryLabel(observation.category)}` : ""}</p>
-                <p className="mt-1 whitespace-pre-wrap">{observation.note}</p>
+                <p className="text-xs font-bold uppercase text-slate-500">{formatEventDate(observation.observationDate, locale)}{observation.category ? ` · ${developmentCategoryLabel(observation.category, locale)}` : ""}</p>
+                <p translate="no" className="mt-1 whitespace-pre-wrap">{observation.note}</p>
               </div>
             )) : <p className="rounded-md border border-dashed border-board-line p-3 text-sm text-slate-500">{ui("No observations linked to this goal.")}</p>}
           </div>
@@ -302,8 +302,8 @@ async function DevelopmentTimeline({ development }: { development: PlayerDevelop
       <div className="mt-3 space-y-3">
         {development.timeline.length ? development.timeline.slice(0, 8).map((item) => (
           <div key={item.id} className="border-l-2 border-board-line pl-3">
-            <p className="text-xs font-bold uppercase text-slate-500">{formatEventDate(item.date)}</p>
-            <p className="mt-1 text-sm font-bold text-board-navy">{item.title}</p>
+            <p className="text-xs font-bold uppercase text-slate-500">{formatEventDate(item.date, locale)}</p>
+            <p className="mt-1 text-sm font-bold text-board-navy">{item.progressLevel ? ui("Progress: {progress}", { progress: developmentProgressLabel(item.progressLevel, locale) }) : ui(item.title)}</p>
             {item.detail ? <p className="mt-1 line-clamp-3 text-sm text-slate-600">{item.detail}</p> : null}
           </div>
         )) : (
@@ -314,12 +314,14 @@ async function DevelopmentTimeline({ development }: { development: PlayerDevelop
   );
 }
 
-function SelectField<T extends string>({ name, label, options, defaultValue, compact }: { name: string; label: string; options: Array<{ value: T; label: string }>; defaultValue: T; compact?: boolean }) {
+async function SelectField<T extends string>({ name, label, options, defaultValue, compact }: { name: string; label: string; options: Array<{ value: T; label: string }>; defaultValue: T; compact?: boolean }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   return (
     <label>
       <span className="text-xs font-bold uppercase text-slate-500">{label}</span>
       <select name={name} defaultValue={defaultValue} className={`${compact ? "mt-1 h-10" : "mt-1 h-10"} w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100`}>
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {options.map((option) => <option key={option.value} value={option.value}>{name === "category" ? developmentCategoryLabel(option.value, locale) : ui(option.label)}</option>)}
       </select>
     </label>
   );
