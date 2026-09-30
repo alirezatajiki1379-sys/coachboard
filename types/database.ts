@@ -889,58 +889,6 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["squad_training_events"]["Insert"]>;
         Relationships: [];
       };
-      squad_staff: {
-        Row: {
-          id: string;
-          user_id: string;
-          squad_id: string;
-          name: string;
-          role: string;
-          is_active: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          squad_id: string;
-          name: string;
-          role?: string;
-          is_active?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["squad_staff"]["Insert"]>;
-        Relationships: [];
-      };
-      training_section_briefs: {
-        Row: {
-          id: string;
-          user_id: string;
-          squad_id: string;
-          event_id: string;
-          section_key: string;
-          staff_id: string | null;
-          planning_status: "ready" | "needs_planning";
-          instruction: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          squad_id: string;
-          event_id: string;
-          section_key: string;
-          staff_id?: string | null;
-          planning_status?: "ready" | "needs_planning";
-          instruction?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["training_section_briefs"]["Insert"]>;
-        Relationships: [];
-      };
       training_session_plan_instances: {
         Row: {
           id: string;
