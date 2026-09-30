@@ -77,7 +77,7 @@ const plannerCopy = {
     assign: "Assign", selectPlayer: "Select a player, then tap a position.", selectPosition: "Select a position to inspect its depth.", depthOptions: "options", removeFromXi: "Remove from XI", changeFailed: "Could not update formation.",
     name: "Formation name", label: "Display label", position: "Position", eleven: "A formation needs 11 positions before it can be saved.",
     starters: "starters", depthAssignments: "depth assignments", included: "included", excluded: "excluded", plan: "Plan", board: "Formation board", depthBoard: "Depth board", playerPool: "Player pool",
-    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position"
+    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options"
   },
   de: {
     heading: "Kaderplaner", nameRequired: "Bitte einen Namen für die Formation eingeben.",
@@ -86,7 +86,7 @@ const plannerCopy = {
     assign: "Zuweisen", selectPlayer: "Spieler auswählen und dann eine Position antippen.", selectPosition: "Position auswählen, um die Besetzung zu sehen.", depthOptions: "Optionen", removeFromXi: "Aus Startelf entfernen", changeFailed: "Formation konnte nicht aktualisiert werden.",
     name: "Name der Formation", label: "Anzeigename", position: "Position", eleven: "Eine Formation braucht 11 Positionen, bevor sie gespeichert werden kann.",
     starters: "Startspieler", depthAssignments: "Positionszuordnungen", included: "einbezogen", excluded: "ausgeschlossen", plan: "Plan", board: "Formationstafel", depthBoard: "Positionsbesetzung", playerPool: "Spielerpool",
-    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd"
+    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen"
   }
 } as const;
 
@@ -254,12 +254,12 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <div className="space-y-3">
+      <section className="rounded-md border border-board-line bg-white p-3 shadow-soft">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase text-board-green">{copy.heading} · {data.squad.name}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <PlanSelect plans={activePlans} selectedPlanId={data.selectedPlan.id} />
               {data.selectedPlan.isDefault ? <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-bold text-green-700">Default</span> : null}
             </div>
@@ -267,7 +267,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
               {data.selectedPlan.formationCode === "Custom" ? copy.custom : data.selectedPlan.formationCode} · {starters.length}/{visibleSlots.length} {copy.starters} · {activeAssignments.length} {copy.depthAssignments}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <form action={updateTacticalPlan} className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="planId" value={data.selectedPlan.id} />
               <input type="hidden" name="name" value={data.selectedPlan.name} />
@@ -279,7 +279,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
                   name="formationCode"
                   defaultValue={data.selectedPlan.formationCode}
                   disabled={editingFormation}
-                  className="h-10 rounded-md border border-board-line px-3 text-sm font-semibold"
+                  className="h-9 rounded-md border border-board-line px-2 text-sm font-semibold"
                   onChange={(event) => {
                     const currentAssignments = activeAssignments.length;
                     if ((currentAssignments > 0 || data.selectedPlan?.formationCode === "Custom") && !window.confirm("Change formation? The current slot layout will be replaced. Compatible Player assignments will be preserved where possible.")) {
@@ -301,7 +301,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
                 type="button"
                 onClick={() => setMode(item)}
                 className={cn(
-                  "h-10 rounded-md px-3 text-sm font-bold transition",
+                  "h-9 rounded-md px-3 text-sm font-bold transition",
                   mode === item ? "bg-board-navy text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 )}
               >
@@ -314,8 +314,8 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-board-line pt-4">
-          <details className="group rounded-md border border-board-line bg-slate-50 px-3 py-2">
+        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-board-line pt-3">
+          <details className="group rounded-md border border-board-line bg-slate-50 px-2.5 py-1.5">
             <summary className="cursor-pointer text-sm font-bold text-board-navy">Rename / notes</summary>
           <form action={updateTacticalPlan} className="mt-3 hidden gap-3 group-open:grid md:grid-cols-2">
             <input type="hidden" name="planId" value={data.selectedPlan.id} />
@@ -335,7 +335,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
             <Button type="submit" className="self-end">Save</Button>
           </form>
           </details>
-            <details className="group rounded-md border border-board-line bg-slate-50 px-3 py-2">
+            <details className="group rounded-md border border-board-line bg-slate-50 px-2.5 py-1.5">
               <summary className="cursor-pointer text-sm font-bold text-board-navy">New plan</summary>
               <div className="mt-3 hidden group-open:block"><CreatePlanForm compact /></div>
             </details>
@@ -350,7 +350,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
                 <Button type="submit" variant="secondary"><Copy className="h-4 w-4" />{copy.duplicate}</Button>
               </form>
             )}
-            <details className="group relative rounded-md border border-board-line bg-slate-50 px-3 py-2">
+            <details className="group relative rounded-md border border-board-line bg-slate-50 px-2.5 py-1.5">
               <summary className="cursor-pointer text-sm font-bold text-board-navy">More</summary>
               <div className="absolute left-0 z-30 mt-2 hidden w-56 space-y-2 rounded-lg border border-board-line bg-white p-3 shadow-xl group-open:block max-sm:fixed max-sm:inset-x-4 max-sm:top-24 max-sm:mt-0 max-sm:w-auto">
                 <IconForm action={setDefaultTacticalPlan} planId={data.selectedPlan.id} label="Set default" icon={<Star className="h-4 w-4" />} disabled={data.selectedPlan.isDefault} />
@@ -369,12 +369,12 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_410px]">
-        <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft" onDragOver={(event) => { if (dragPlayerId) event.preventDefault(); }} onDrop={(event) => { if (!dragPlayerId || acceptedDrop.current) return; event.preventDefault(); finishPlayerDrag(); }}>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="min-w-0 rounded-md border border-board-line bg-white p-3 shadow-soft" onDragOver={(event) => { if (dragPlayerId) event.preventDefault(); }} onDrop={(event) => { if (!dragPlayerId || acceptedDrop.current) return; event.preventDefault(); finishPlayerDrag(); }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="font-bold text-board-navy">{editingFormation ? copy.edit : mode === "depth" ? copy.depthBoard : copy.board}</h3>
-              <p className="text-sm text-slate-600">
+              <p className="text-xs text-slate-600">
                 {editingFormation ? copy.editHint : mode === "depth" ? "Same formation geometry, focused on ordered tactical depth." : copy.selectPlayer}
               </p>
             </div>
@@ -455,7 +455,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
           ) : null}
           {plannerError ? <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{plannerError}</p> : null}
 
-          <PlannerPitch className="mt-4" onClick={() => setSelectedSlotId(null)}>
+          <PlannerPitch className="mt-3" onClick={() => setSelectedSlotId(null)}>
             <FormationSlotRows
               planId={data.selectedPlan.id}
               slots={visibleSlots}
@@ -495,10 +495,16 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
           ) : null}
         </section>
 
-        <aside className="space-y-4">
-          {!editingFormation ? <SlotDepthPanel
+        <aside className="min-w-0 space-y-3">
+          {!editingFormation ? <PositionDepthOverview
+            slots={visibleSlots}
+            assignmentsBySlot={assignmentsBySlot}
+            selectedSlotId={selectedSlot?.id}
+            onSelect={setSelectedSlotId}
+          /> : null}
+          {!editingFormation && selectedSlot ? <SlotDepthPanel
             planId={data.selectedPlan.id}
-            slot={editingFormation ? undefined : selectedSlot}
+            slot={selectedSlot}
             depth={selectedSlotDepth}
             playersById={playersById}
             availablePlayers={includedPlayers}
@@ -558,7 +564,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
       {dragPlayerId && dragPoint ? (
         <div
           data-planner-drag-ghost
-          className="pointer-events-none fixed z-[100] min-w-40 max-w-56 -translate-x-1/2 -translate-y-1/2 scale-105 rounded-md border border-board-green bg-white px-3 py-2 text-board-navy shadow-xl"
+          className="pointer-events-none fixed z-[100] min-w-32 max-w-48 -translate-x-1/2 -translate-y-1/2 rounded border border-board-green bg-white px-2 py-1.5 text-board-navy shadow-xl"
           style={{ left: dragPoint.x, top: dragPoint.y }}
           aria-hidden="true"
         >
@@ -1207,9 +1213,6 @@ function SlotButton({
   const depthCount = orderedAssignments.length;
   const isDropTarget = hoverSlotId === slot.id && Boolean(draggingPlayerId);
   const displayText = starterPlayer ? playerName(starterPlayer) : "No Player ranked";
-  const alternatives = orderedAssignments.filter((assignment) => assignment.id !== starter?.id).slice(0, 2);
-  const rankingPreview = orderedAssignments.slice(0, 3);
-  const remainingCount = Math.max(0, orderedAssignments.length - (mode === "depth" ? rankingPreview.length : 1 + alternatives.length));
   const additionalEligibleCount = Math.max(0, eligibleCount - depthCount);
   const depthTitle =
     depthCount === 0
@@ -1247,7 +1250,7 @@ function SlotButton({
         onSelect();
       }}
       className={cn(
-        "min-h-12 w-full rounded-md border p-1.5 text-left shadow-sm transition-[border-color,background-color,box-shadow,opacity,transform] duration-200 sm:min-h-[5.4rem] sm:p-2",
+        "min-h-11 w-full rounded border p-1.5 text-left shadow-sm transition-[border-color,background-color,box-shadow,opacity,transform] duration-200 sm:min-h-[3.9rem] sm:p-1.5",
         selected ? "border-board-green bg-white text-board-navy ring-2 ring-board-green/25" : "border-white/80 bg-white text-slate-800 hover:border-emerald-200",
         draggingPlayerId && !isDropTarget && "border-emerald-200",
         isDropTarget && "scale-[1.02] border-board-green bg-emerald-50 ring-4 ring-emerald-200",
@@ -1278,28 +1281,7 @@ function SlotButton({
           {depthCount}
         </span>
       </span>
-      <span className="mt-1 hidden text-sm font-black leading-tight text-board-navy sm:line-clamp-2" title={displayText}>{displayText}</span>
-      {!selected && mode === "formation" && alternatives.length > 0 ? (
-        <div className="mt-1 hidden space-y-0.5 sm:block">
-          <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Alternatives</p>
-          {alternatives.map((assignment) => {
-            const player = playersById.get(assignment.playerId);
-            if (!player) return null;
-            return <p translate="no" key={assignment.id} className="line-clamp-2 text-xs font-semibold leading-tight text-slate-600" title={playerName(player)}>{playerName(player)}</p>;
-          })}
-          {remainingCount > 0 ? <p className="text-xs font-bold text-slate-500">+{remainingCount} more</p> : null}
-        </div>
-      ) : null}
-      {!selected && mode === "depth" ? (
-        <div className="mt-1 hidden space-y-0.5 sm:block">
-          {rankingPreview.length === 0 ? <p className="text-xs font-semibold text-slate-500">No Player ranked</p> : rankingPreview.map((assignment, index) => {
-            const player = playersById.get(assignment.playerId);
-            if (!player) return null;
-            return <p key={assignment.id} className="line-clamp-2 text-xs font-semibold leading-tight text-slate-700" title={playerName(player)}>{index + 1}. {playerName(player)}</p>;
-          })}
-          {remainingCount > 0 ? <p className="text-xs font-bold text-slate-500">+{remainingCount} more</p> : null}
-        </div>
-      ) : null}
+      <span translate="no" className="mt-0.5 hidden truncate text-xs font-black leading-tight text-board-navy sm:block" title={displayText}>{displayText}</span>
     </div>
   );
 }
@@ -1553,6 +1535,49 @@ function DepthIconActionLabel({ label }: { label: string }) {
   return pending ? "…" : label;
 }
 
+function PositionDepthOverview({
+  slots,
+  assignmentsBySlot,
+  selectedSlotId,
+  onSelect
+}: {
+  slots: TacticalPlanSlot[];
+  assignmentsBySlot: Map<string, TacticalPlannerData["assignments"]>;
+  selectedSlotId?: string;
+  onSelect: (slotId: string) => void;
+}) {
+  const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
+  return (
+    <section className="rounded-md border border-board-line bg-white p-3 shadow-soft">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-board-navy">{copy.depthOverview}</h3>
+        <span className="text-[11px] font-semibold text-slate-500">{slots.length} {copy.positions}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+        {[...slots].sort((a, b) => a.sortOrder - b.sortOrder).map((slot) => {
+          const count = uniqueDepthAssignments(assignmentsBySlot.get(slot.id) ?? []).length;
+          return (
+            <button
+              key={slot.id}
+              type="button"
+              onClick={() => onSelect(slot.id)}
+              className={cn(
+                "flex min-w-0 items-center justify-between gap-2 rounded border px-2 py-1.5 text-left transition",
+                selectedSlotId === slot.id ? "border-board-green bg-emerald-50 ring-1 ring-board-green/20" : "border-board-line bg-slate-50 hover:border-emerald-300"
+              )}
+              aria-pressed={selectedSlotId === slot.id}
+              title={`${slot.label}: ${count} ${copy.playersShort}`}
+            >
+              <span className="truncate text-xs font-black text-board-navy">{slot.code}</span>
+              <span className={cn("inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-black", count <= 1 ? "bg-red-100 text-red-800" : "bg-white text-slate-700 ring-1 ring-slate-200")}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function SlotDepthPanel({
   planId,
   slot,
@@ -1585,15 +1610,17 @@ function SlotDepthPanel({
     .sort((a, b) => b.fit.baseScore - a.fit.baseScore || playerName(a.player).localeCompare(playerName(b.player)));
 
   return (
-    <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+    <section className="rounded-md border border-board-line bg-white p-3 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-board-navy">{slot.code} depth</h3>
-          <p className="text-sm text-slate-600">{slot.label} · accepts {slot.acceptedPositions.join(", ")}</p>
+          <h3 className="text-sm font-bold text-board-navy">{slot.code} depth</h3>
+          <p className="text-xs text-slate-600">{slot.label} · {slot.acceptedPositions.join(", ")}</p>
         </div>
         <Goal className="h-5 w-5 text-board-green" />
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+      <details className="group mt-2 rounded border border-board-line bg-slate-50 px-2.5 py-2">
+        <summary className="cursor-pointer text-xs font-bold text-board-navy">{copy.addDepth}</summary>
+      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
         <label className="space-y-1 text-xs font-bold text-slate-600">
           Available filter
           <select value={managerEligibility} onChange={(event) => setManagerEligibility(event.target.value as AutoFillEligibility)} className="h-9 w-full rounded-md border border-board-line px-2 text-xs font-semibold">
@@ -1610,10 +1637,10 @@ function SlotDepthPanel({
         </form>
       </div>
 
-      <form action={addDepthAssignment} className="mt-4 flex flex-col gap-2 sm:flex-row">
+      <form action={addDepthAssignment} className="mt-3 flex flex-col gap-2 sm:flex-row">
         <input type="hidden" name="planId" value={planId} />
         <input type="hidden" name="slotId" value={slot.id} />
-        <select name="playerId" className="h-10 min-w-0 flex-1 rounded-md border border-board-line px-3 text-sm" required>
+        <select name="playerId" className="h-9 min-w-0 flex-1 rounded-md border border-board-line px-2 text-xs" required>
           <option value="">Add player to {slot.code}</option>
           {sortPlayersByFit(addablePlayers, slot, assignedPlayerIds).map((player) => (
             <option key={player.id} value={player.id}>
@@ -1621,29 +1648,30 @@ function SlotDepthPanel({
             </option>
           ))}
         </select>
-        <Button type="submit" className="shrink-0">Add</Button>
+        <Button type="submit" className="h-9 shrink-0 px-3 text-xs">Add</Button>
       </form>
+      </details>
 
-      <div className="mt-4 space-y-2">
+      <div className="mt-3 space-y-1.5">
         <h4 className="text-xs font-black uppercase tracking-wide text-slate-500">Assigned depth</h4>
         {depth.length === 0 ? (
-          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">No depth option yet. Add a player from the squad pool.</p>
+          <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">No depth option yet. Add a player from the squad pool.</p>
         ) : depth.map((assignment, index) => {
           const player = playersById.get(assignment.playerId);
           if (!player) return null;
           return (
-            <div key={assignment.id} className="rounded-lg border border-board-line p-3">
-              <div className="flex items-start justify-between gap-3">
+            <div key={assignment.id} className="rounded border border-board-line p-2">
+              <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-bold text-board-navy">{index + 1}. {playerName(player)}</p>
+                  <p className="truncate text-sm font-bold text-board-navy" title={playerName(player)}>{index + 1}. {playerName(player)}</p>
                   <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}{player.playerType === "trial" ? " · Trial" : ""}</p>
                 </div>
-                {assignment.isPreferredStarter ? <span className="rounded-full bg-board-green px-2 py-1 text-xs font-bold text-white">Starter</span> : null}
+                {assignment.isPreferredStarter ? <span className="rounded bg-board-green px-1.5 py-0.5 text-[10px] font-bold text-white">Starter</span> : null}
               </div>
-              <span className={cn("mt-2 inline-flex rounded-full border px-2 py-1 text-xs font-bold", fitMeta[assignment.fitType].className)}>
+              <span className={cn("mt-1 inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold", fitMeta[assignment.fitType].className)}>
                 {fitMeta[assignment.fitType].label}
               </span>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-1">
                 <DepthAction action={setPreferredStarter} planId={planId} assignmentId={assignment.id} label="Set starter" disabled={assignment.isPreferredStarter} />
                 <DepthAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="Up" extra={{ direction: "up" }} disabled={index === 0} />
                 <DepthAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="Down" extra={{ direction: "down" }} disabled={index === depth.length - 1} />
@@ -1655,12 +1683,13 @@ function SlotDepthPanel({
         })}
       </div>
 
-      <div className="mt-5 space-y-2">
-        <h4 className="text-xs font-black uppercase tracking-wide text-slate-500">Available options</h4>
+      <details className="group mt-3 rounded border border-board-line bg-slate-50 px-2.5 py-2">
+        <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-slate-500">{copy.availableOptions} ({availableCandidates.length})</summary>
+      <div className="mt-2 space-y-1.5">
         {availableCandidates.length === 0 ? (
-          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">No unassigned eligible options for this slot.</p>
+          <p className="rounded bg-white p-2 text-xs text-slate-600">No unassigned eligible options for this slot.</p>
         ) : availableCandidates.map(({ player, fit }) => (
-          <div key={player.id} className={cn("rounded-lg border p-3", fit.fitType === "natural" ? "border-emerald-200 bg-emerald-50" : "border-board-line bg-white")}>
+          <div key={player.id} className={cn("rounded border p-2", fit.fitType === "natural" ? "border-emerald-200 bg-emerald-50" : "border-board-line bg-white")}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p translate="no" className="font-bold text-board-navy">{playerName(player)}</p>
@@ -1677,6 +1706,7 @@ function SlotDepthPanel({
           </div>
         ))}
       </div>
+      </details>
     </section>
   );
 }
@@ -1805,31 +1835,33 @@ function PlayerPoolPanel({
         if (playerId) void onPlayerDropToPool(playerId);
       }}
       className={cn(
-        "rounded-lg border bg-white p-4 shadow-soft transition-colors",
+        "rounded-md border bg-white p-3 shadow-soft transition-colors",
         draggingPlayerId ? "border-board-green bg-emerald-50/40" : "border-board-line"
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-board-navy">{selectedSlot ? `${selectedSlot.code} ${copy.depthOptions}` : copy.playerPool}</h3>
-          <p className="text-sm text-slate-600">{includedPlayers.length} {copy.included} · {unassignedPlayers.length} {copy.unassigned.toLowerCase()} · {excludedPlayers.length} {copy.excluded}</p>
+          <h3 className="text-sm font-bold text-board-navy">{selectedSlot ? `${selectedSlot.code} ${copy.depthOptions}` : copy.playerPool}</h3>
+          <p className="text-xs text-slate-600">{includedPlayers.length} {copy.included} · {unassignedPlayers.length} {copy.unassigned.toLowerCase()} · {excludedPlayers.length} {copy.excluded}</p>
         </div>
         <Shield className="h-5 w-5 text-board-green" />
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+      <div className="mt-2 grid gap-1.5 sm:grid-cols-[1fr_auto]">
         <input
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Search players"
-          className="h-10 rounded-md border border-board-line px-3 text-sm"
+          className="h-9 rounded-md border border-board-line px-2.5 text-sm"
         />
-        <label className="flex h-10 items-center gap-2 rounded-md border border-board-line px-3 text-sm font-semibold text-slate-700">
+        <label className="flex h-9 items-center gap-2 rounded-md border border-board-line px-2.5 text-xs font-semibold text-slate-700">
           <input type="checkbox" checked={showTrials} onChange={(event) => onShowTrialsChange(event.target.checked)} />
           Show trial
         </label>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <details className="group mt-2 rounded border border-board-line bg-slate-50 px-2.5 py-2">
+        <summary className="cursor-pointer text-xs font-bold text-board-navy">{copy.filters}</summary>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
         <label className="space-y-1 text-xs font-bold text-slate-600">
           Pool
           <select value={poolFilter} onChange={(event) => onPoolFilterChange(event.target.value as "all" | "unassigned" | "excluded")} className="h-9 w-full rounded-md border border-board-line px-2 text-xs font-semibold">
@@ -1858,8 +1890,9 @@ function PlayerPoolPanel({
           </select>
         </label>
       </div>
+      </details>
 
-      <div className="mt-3 max-h-96 space-y-2 overflow-y-auto pr-1">
+      <div className="mt-2 max-h-[32rem] space-y-1 overflow-y-auto pr-1">
         {list.length === 0 ? (
           <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">No matching players for this filter.</p>
         ) : list.map((player) => (
@@ -1944,43 +1977,53 @@ function PlayerStateCard({
       onDragStart={(event) => onPlayerDragStart(event, player.id)}
       onDragEnd={onPlayerDragEnd}
       className={cn(
-        "cursor-grab rounded-md border border-board-line bg-white p-2.5 transition-[opacity,border-color,box-shadow] active:cursor-grabbing",
+        "cursor-grab rounded border border-board-line bg-white px-2 py-1.5 transition-[opacity,border-color,box-shadow] active:cursor-grabbing",
         dragging && "opacity-40",
         selectedForAssignment && "border-board-green ring-2 ring-board-green/25"
       )}
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <button type="button" draggable onDragStart={(event) => { event.stopPropagation(); onPlayerDragStart(event, player.id); }} onDragEnd={(event) => { event.stopPropagation(); onPlayerDragEnd(); }} onClick={onSelectPlayer} className="flex max-w-full items-center gap-2 text-left" aria-pressed={selectedForAssignment} aria-label={`Select ${playerName(player)} for formation assignment`} title={copy.selectPlayer}>
-            <GripVertical className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
-            <span className="min-w-0">
-              <span translate="no" className="block truncate text-sm font-bold text-board-navy" title={playerName(player)}>{playerName(player)}</span>
-              <span className="block truncate text-xs font-semibold text-slate-500">{playerPositionText(player)}</span>
-            </span>
-          </button>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <StatusChip label={tacticalRoleLabel(state?.tacticalStatus, true)} />
-            <StatusChip label="Available" tone="green" />
-            {player.playerType === "trial" ? <StatusChip label="Trial" tone="amber" /> : null}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">{assignmentsSummary || "No depth assignment yet"}</p>
+      <div className="flex min-w-0 items-center gap-2">
+        <button type="button" draggable onDragStart={(event) => { event.stopPropagation(); onPlayerDragStart(event, player.id); }} onDragEnd={(event) => { event.stopPropagation(); onPlayerDragEnd(); }} onClick={onSelectPlayer} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-pressed={selectedForAssignment} aria-label={`Select ${playerName(player)} for formation assignment`} title={copy.selectPlayer}>
+          <GripVertical className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span translate="no" className="block truncate text-sm font-bold text-board-navy" title={playerName(player)}>{playerName(player)}</span>
+            <span className="block truncate text-[11px] font-semibold text-slate-500">{playerPositionText(player)}{state?.tacticalStatus ? ` · ${tacticalRoleLabel(state.tacticalStatus, true)}` : ""}</span>
+          </span>
+        </button>
+        {player.playerType === "trial" ? <StatusChip label="Trial" tone="amber" /> : null}
+        {selectedSlot ? (
+          <form action={addDepthAssignment} className="shrink-0">
+            <input type="hidden" name="planId" value={planId} />
+            <input type="hidden" name="slotId" value={selectedSlot.id} />
+            <input type="hidden" name="playerId" value={player.id} />
+            <Button type="submit" variant="secondary" disabled={alreadyInSelectedSlot} className="h-7 px-2 text-[11px]">
+              {alreadyInSelectedSlot ? "Assigned" : `+ ${selectedSlot.code}`}
+            </Button>
+          </form>
+        ) : null}
+      </div>
+      <details className="group mt-1 border-t border-slate-100 pt-1">
+        <summary className="cursor-pointer truncate text-[11px] font-semibold text-slate-500">
+          {assignmentsSummary || "No depth assignment yet"}{selectedSlotFit ? ` · ${selectedSlot?.code}: ${fitMeta[selectedSlotFit.fitType].label}` : ""}
+        </summary>
+        <div className="mt-2 space-y-2">
           {selectedSlotFit ? (
-            <p className={cn("mt-1 text-xs font-semibold", selectedSlotFit.fitType === "out_of_position" ? "text-red-700" : "text-board-green")}>
+            <p className={cn("text-xs font-semibold", selectedSlotFit.fitType === "out_of_position" ? "text-red-700" : "text-board-green")}>
               Fit for {selectedSlot?.code}: {fitMeta[selectedSlotFit.fitType].label}{selectedSlotFit.matchedPosition ? ` · matched ${selectedSlotFit.matchedPosition}` : ""}
             </p>
           ) : null}
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
-          {selectedSlot ? (
-            <form action={addDepthAssignment}>
-              <input type="hidden" name="planId" value={planId} />
-              <input type="hidden" name="slotId" value={selectedSlot.id} />
-              <input type="hidden" name="playerId" value={player.id} />
-              <Button type="submit" variant="secondary" disabled={alreadyInSelectedSlot} className="h-8 px-2 text-xs">
-                {alreadyInSelectedSlot ? "Assigned" : `Add ${selectedSlot.code}`}
-              </Button>
-            </form>
-          ) : null}
+          <form action={updatePlayerPlanState} className="grid gap-1.5 sm:grid-cols-[1fr_1fr_auto] lg:grid-cols-1 xl:grid-cols-[1fr_1fr_auto]">
+            <input type="hidden" name="planId" value={planId} />
+            <input type="hidden" name="playerId" value={player.id} />
+            <input type="hidden" name="inclusionStatus" value="included" />
+            <select name="tacticalStatus" defaultValue={state?.tacticalStatus ?? ""} className="h-8 rounded border border-board-line px-2 text-xs">
+              {tacticalStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <input name="note" defaultValue={state?.note ?? ""} placeholder="Short note" className="h-8 rounded border border-board-line px-2 text-xs" />
+            <Button type="submit" variant="secondary" className="h-8 px-2 text-xs">Save</Button>
+          </form>
           <form action={updatePlayerPlanState}>
             <input type="hidden" name="planId" value={planId} />
             <input type="hidden" name="playerId" value={player.id} />
@@ -1988,22 +2031,10 @@ function PlayerStateCard({
             <input type="hidden" name="tacticalStatus" value={state?.tacticalStatus ?? ""} />
             <input type="hidden" name="note" value={state?.note ?? ""} />
             <input type="hidden" name="exclusionReason" value="Not in this tactical plan" />
-            <Button type="submit" variant="danger" className="h-8 px-2 text-xs">Exclude</Button>
+            <Button type="submit" variant="danger" className="h-7 px-2 text-[11px]">Exclude</Button>
           </form>
         </div>
-      </div>
-      <form action={updatePlayerPlanState} className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-        <input type="hidden" name="planId" value={planId} />
-        <input type="hidden" name="playerId" value={player.id} />
-        <input type="hidden" name="inclusionStatus" value="included" />
-          <select name="tacticalStatus" defaultValue={state?.tacticalStatus ?? ""} className="h-9 rounded-md border border-board-line px-2 text-xs">
-            {tacticalStatusOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-          <input name="note" defaultValue={state?.note ?? ""} placeholder="Short note" className="h-9 rounded-md border border-board-line px-2 text-xs" />
-        <Button type="submit" variant="secondary" className="h-9 px-2 text-xs">Save</Button>
-      </form>
+      </details>
     </div>
   );
 }

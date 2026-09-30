@@ -46,10 +46,14 @@ const bundle = await build({
     const player={id:"player",firstName:"Alexandermilian",lastName:"Fictional-Testname",playerType:"roster",position:"CM",secondaryPositions:[],positionFamilies:[]};
     const trial={...player,id:"trial",firstName:"Taylor",lastName:"Test",playerType:"trial",position:"RW"};
     const plannerPlayers=[{...player,id:"gk",firstName:"Gina",position:"GK"},{...player,id:"striker",firstName:"Sam",position:"ST"},{...player,id:"winger",firstName:"Max",position:"RW"},{...player,id:"reserve",firstName:"Riley",position:"CM"}];
-    const plannerSlots=tacticalFormations[0].slots.map((slot,index)=>({...slot,id:"slot-"+index,userId:"user",planId:"plan"}));
+    const plannerFormationCode=params.get("formation")||"4-3-3";
+    const plannerCustomView=params.get("view")==="planner-custom";
+    const plannerFormation=tacticalFormations.find(item=>item.code===plannerFormationCode)||tacticalFormations[0];
+    const plannerCustomOffsets=[0,-3,2,-2,3,-4,0,4,-2,0,3];
+    const plannerSlots=plannerFormation.slots.map((slot,index)=>({...slot,x:plannerCustomView?Math.max(10,Math.min(90,slot.x+(plannerCustomOffsets[index]||0))):slot.x,id:"slot-"+index,userId:"user",planId:"plan"}));
     const plannerAssignments=[{id:"assignment-gk",userId:"user",planId:"plan",slotId:plannerSlots[0].id,playerId:"gk",depthOrder:1,isPreferredStarter:true,fitType:"natural",createdAt:"2026-01-01",updatedAt:"2026-01-01"},{id:"assignment-st",userId:"user",planId:"plan",slotId:plannerSlots[9].id,playerId:"striker",depthOrder:1,isPreferredStarter:true,fitType:"natural",createdAt:"2026-01-01",updatedAt:"2026-01-01"}];
     window.qa.plannerAssignments=plannerAssignments;
-    const plannerData={squad:team,plans:[{id:"plan",userId:"user",squadId:"team",name:"Fictional 4-3-3",formationCode:"4-3-3",isDefault:true,includeNewPlayersAutomatically:true,status:"active"}],selectedPlan:{id:"plan",userId:"user",squadId:"team",name:"Fictional 4-3-3",formationCode:params.get("view")==="planner-custom"?"Custom":"4-3-3",isDefault:true,includeNewPlayersAutomatically:true,status:"active"},slots:plannerSlots,assignments:plannerAssignments,playerStates:[],players:plannerPlayers,warnings:[]};
+    const plannerData={squad:team,plans:[{id:"plan",userId:"user",squadId:"team",name:"Fictional "+plannerFormationCode,formationCode:plannerFormationCode,isDefault:true,includeNewPlayersAutomatically:true,status:"active"}],selectedPlan:{id:"plan",userId:"user",squadId:"team",name:"Fictional "+plannerFormationCode,formationCode:params.get("view")==="planner-custom"?"Custom":plannerFormationCode,isDefault:true,includeNewPlayersAutomatically:true,status:"active"},slots:plannerSlots,assignments:plannerAssignments,playerStates:[],players:plannerPlayers,warnings:[]};
     const attendance=[{id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player},{id:"trial-entry",eventId:"event",playerId:"trial",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player:trial}];
     const developmentGoal={id:"goal",title:"Receiving under pressure",category:"technical",priority:"medium",successCriteria:"Receive on the back foot",reviewDate:"2026-10-01",latestProgress:{level:"developing",note:"Improving",recordedAt:"2026-09-18"}};
     const brief={eventId:"event",title:"Fictional Training",date:"2026-09-21",startTime:"18:00",endTime:"19:30",location:"Example pitch",objective:"Create overloads",focus:"Wide play",counts:{expected:18,goalkeepers:2,fieldPlayers:16,positionOpen:0,trialPlayers:1,notExpected:4,unclear:0},expectedNames:["Fictional Player One","Fictional Player Two"],sections:[{key:"Warm-up",durationMinutes:10,startMinute:0,drills:["Ball activation"],responsibleCoach:"Tobi Example",planningStatus:"needs_planning",instruction:"Plan a short activation."},{key:"Main Part",durationMinutes:25,startMinute:10,drills:["Passing sequence"],responsibleCoach:"Alex Example",planningStatus:"ready"}]};
@@ -371,10 +375,27 @@ try {
         assert.equal(await page.locator("[data-planner-slot]").count(), 11, `planner keeps 11 slots at ${width}px`);
         assert.equal(await page.locator("[data-planner-player]").count(), 2, `planner pool remains readable at ${width}px`);
         assert.equal(await page.locator("[data-planner-depth-count]").count(), 11, `depth counts remain visible at ${width}px`);
-        if (width === 390 || width === 1024 || width === 1440) {
+        if (width === 390 || width === 1024 || width === 1280 || width === 1440) {
           await page.screenshot({ path: `/private/tmp/coachboard-planner-${locale}-${width}.png`, fullPage: true });
         }
       }
+    }
+    for (const formation of ["4-3-3", "4-2-3-1", "3-5-2"]) {
+      for (const width of [390, 1024, 1280, 1440]) {
+        await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
+        await page.goto(`${base}?view=planner&locale=en&formation=${encodeURIComponent(formation)}`);
+        await page.locator("#fixture").waitFor();
+        await checkOverflow(`${formation} planner ${width}`);
+        assert.equal(await page.locator("[data-planner-slot]").count(), 11, `${formation} keeps 11 slots at ${width}px`);
+        await page.screenshot({ path: `/private/tmp/coachboard-planner-${formation}-${width}.png`, fullPage: true });
+      }
+    }
+    for (const width of [390, 1024, 1280, 1440]) {
+      await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
+      await go("planner-custom", "en");
+      await checkOverflow(`custom asymmetric planner ${width}`);
+      assert.equal(await page.locator("[data-planner-slot]").count(), 11, `custom asymmetric formation keeps 11 slots at ${width}px`);
+      await page.screenshot({ path: `/private/tmp/coachboard-planner-custom-${width}.png`, fullPage: true });
     }
   }
   await page.setViewportSize({ width: 1440, height: 900 });
