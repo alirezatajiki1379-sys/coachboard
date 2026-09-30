@@ -186,10 +186,11 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
     event.dataTransfer.setData("text/plain", playerId);
     acceptedDrop.current = false;
     event.dataTransfer.effectAllowed = "move";
-    const ghost = document.createElement("canvas");
-    ghost.width = 1;
-    ghost.height = 1;
-    event.dataTransfer.setDragImage(ghost, 0, 0);
+    event.dataTransfer.setData("application/x-coachboard-player", playerId);
+    const nativeGhost = document.createElement("canvas");
+    nativeGhost.width = 1;
+    nativeGhost.height = 1;
+    event.dataTransfer.setDragImage(nativeGhost, 0, 0);
     setDragPlayerId(playerId);
     setDragPoint({ x: event.clientX, y: event.clientY });
     setSelectedSlotId(null);
@@ -207,11 +208,8 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
       if (event.clientX || event.clientY) setDragPoint({ x: event.clientX, y: event.clientY });
     };
     document.addEventListener("dragover", follow);
-    const end = () => { if (!acceptedDrop.current) setPlannerError(copy.dropInvalid); acceptedDrop.current = true; setDragPlayerId(null); setDragPoint(null); setHoverSlotId(null); };
-    document.addEventListener("dragend", end);
-    document.addEventListener("drop", end);
-    return () => { document.removeEventListener("dragover", follow); document.removeEventListener("dragend", end); document.removeEventListener("drop", end); };
-  }, [copy.dropInvalid, dragPlayerId]);
+    return () => document.removeEventListener("dragover", follow);
+  }, [dragPlayerId]);
   const saveFormation = async () => {
     if (!data.selectedPlan || savingFormation) return;
     setPlannerError("");
@@ -389,6 +387,25 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
                 playerStates={data.playerStates}
               />
               <IconForm action={clearStartingXi} planId={data.selectedPlan.id} label="Clear XI" icon={<RotateCcw className="h-4 w-4" />} confirmMessage="Clear the current Starting XI? Depth rankings stay available." />
+              <div
+                data-planner-unassigned
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const playerId = draggedPlayerId(event.dataTransfer);
+                  if (playerId) void assignPlayer(playerId, null);
+                }}
+                className={cn(
+                  "flex h-10 items-center rounded-md border border-dashed px-3 text-xs font-bold transition-colors",
+                  dragPlayerId ? "border-board-green bg-emerald-50 text-board-green" : "border-board-line bg-slate-50 text-slate-500"
+                )}
+              >
+                {copy.unassigned}
+              </div>
             </div> : null}
           </div>
 
@@ -476,24 +493,6 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
               ) : null}
             </div>
           ) : null}
-          {!editingFormation && mode === "formation" ? (
-            <div className="mt-4 rounded-md border border-board-line bg-slate-50 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-sm font-bold text-board-navy">{copy.available}</h4>
-                <span className="text-xs text-slate-500">{unassignedPlayers.length}</span>
-              </div>
-              <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
-                {unassignedPlayers.map((player) => (
-                  <button key={player.id} type="button" draggable onDragStart={(event) => startPlayerDrag(event, player.id)} onDragEnd={finishPlayerDrag} onClick={() => setSelectedPlayerId((current) => current === player.id ? null : player.id)}
-                    className={cn("max-w-full rounded-md border bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-board-navy shadow-sm transition", selectedPlayerId === player.id ? "border-board-green ring-2 ring-board-green/30" : "border-board-line hover:border-board-green", dragPlayerId === player.id && "opacity-40")}
-                    aria-pressed={selectedPlayerId === player.id} title={copy.selectPlayer}>
-                    <span translate="no" className="block truncate">{playerName(player)}</span><span className="text-[10px] text-slate-500">{playerPositionText(player)}</span>
-                  </button>
-                ))}
-              </div>
-              <div data-planner-unassigned onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); const playerId = event.dataTransfer.getData("text/plain"); if (playerId) void assignPlayer(playerId, null); }} className={cn("mt-3 rounded-md border border-dashed px-3 py-2 text-center text-xs font-bold", dragPlayerId ? "border-board-green bg-green-50 text-board-green" : "border-board-line text-slate-500")}>{copy.unassigned}</div>
-            </div>
-          ) : null}
         </section>
 
         <aside className="space-y-4">
@@ -527,6 +526,8 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
             onShowTrialsChange={setShowTrials}
             onSearchChange={setSearch}
             onPlayerDragStart={startPlayerDrag}
+            onPlayerDragEnd={finishPlayerDrag}
+            onPlayerDropToPool={(playerId) => assignPlayer(playerId, null)}
             draggingPlayerId={dragPlayerId}
             selectedPlayerId={selectedPlayerId}
             onSelectPlayer={(playerId) => { setSelectedPlayerId((current) => current === playerId ? null : playerId); setMode("formation"); }}
@@ -555,8 +556,14 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
         </aside>
       </div>
       {dragPlayerId && dragPoint ? (
-        <div data-planner-drag-ghost className="pointer-events-none fixed z-[100] max-w-40 -translate-x-1/2 -translate-y-1/2 rounded-md border border-board-green bg-white px-3 py-2 text-sm font-bold text-board-navy shadow-xl" style={{ left: dragPoint.x, top: dragPoint.y }} aria-hidden="true">
-          <span translate="no">{playersById.get(dragPlayerId) ? playerName(playersById.get(dragPlayerId)!) : ""}</span>
+        <div
+          data-planner-drag-ghost
+          className="pointer-events-none fixed z-[100] min-w-40 max-w-56 -translate-x-1/2 -translate-y-1/2 scale-105 rounded-md border border-board-green bg-white px-3 py-2 text-board-navy shadow-xl"
+          style={{ left: dragPoint.x, top: dragPoint.y }}
+          aria-hidden="true"
+        >
+          <span translate="no" className="block truncate text-sm font-bold">{playersById.get(dragPlayerId) ? playerName(playersById.get(dragPlayerId)!) : ""}</span>
+          <span className="block truncate text-xs font-semibold text-slate-500">{playersById.get(dragPlayerId) ? playerPositionText(playersById.get(dragPlayerId)!) : ""}</span>
         </div>
       ) : null}
     </div>
@@ -896,7 +903,7 @@ function FormationSlotRows({
 }) {
   const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
   const movingSlot = useRef<string | null>(null);
-  if (mode === "formation" || editingFormation || customLayout) {
+  if (editingFormation || customLayout) {
     const selectedSlot = selectedSlotId ? slots.find((slot) => slot.id === selectedSlotId) : undefined;
     const selectedStarter = selectedSlot ? assignmentsBySlot.get(selectedSlot.id)?.find((assignment) => assignment.isPreferredStarter) : undefined;
     return (
@@ -913,7 +920,7 @@ function FormationSlotRows({
               onDragEnd={onDragEnd}
               onDragOver={(event) => { if (editingFormation || mode !== "formation") return; event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move"; onDragOverSlot(slot.id); }}
               onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) onDragOverSlot(null); }}
-              onDrop={(event) => { event.preventDefault(); event.stopPropagation(); onDragOverSlot(null); const playerId = event.dataTransfer.getData("text/plain"); if (playerId) void onAssign(playerId, slot.id); }}
+              onDrop={(event) => { event.preventDefault(); event.stopPropagation(); onDragOverSlot(null); const playerId = draggedPlayerId(event.dataTransfer); if (playerId) void onAssign(playerId, slot.id); }}
               onPointerDown={(event) => { if (!editingFormation) return; movingSlot.current = slot.id; if (selectedSlotId !== slot.id) onSelect(slot.id); event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
               onPointerMove={(event) => {
                 if (!editingFormation || movingSlot.current !== slot.id) return;
@@ -926,16 +933,17 @@ function FormationSlotRows({
               onClick={(event) => { event.stopPropagation(); if (!editingFormation) onSelect(slot.id); }}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(slot.id); } }}
               style={{ left: `${slot.x}%`, top: `${slot.y}%`, transform: "translate(-50%, -50%)" }}
-              className={cn("absolute z-20 flex w-[18%] min-w-[3.25rem] max-w-[7rem] cursor-pointer flex-col gap-0.5 rounded-md border bg-white px-1.5 py-1.5 text-center text-board-navy shadow-md transition-[box-shadow,background-color,opacity] duration-200 sm:px-2 sm:py-2",
+              className={cn("absolute z-20 flex w-[17%] min-w-[3.25rem] max-w-[6.5rem] cursor-pointer flex-col gap-0.5 rounded-md border bg-white px-1.5 py-1.5 text-center text-board-navy shadow-sm transition-[box-shadow,background-color,opacity,transform] duration-200 sm:px-2 sm:py-2",
                 selectedSlotId === slot.id ? "border-board-green ring-2 ring-board-green/30" : "border-white/80",
                 isDropTarget && "border-board-green bg-emerald-50 ring-4 ring-emerald-200",
+                draggingPlayerId && !isDropTarget && "border-emerald-200",
                 draggingPlayerId === player?.id && "opacity-40",
                 editingFormation && "cursor-grab border-dashed border-board-green touch-none active:cursor-grabbing")}
               aria-label={`${slot.label}: ${player ? playerName(player) : copy.drop}`}>
               <span className="truncate text-[10px] font-black uppercase text-board-green sm:text-xs" title={slot.label}>{slot.code}</span>
               {canonicalPositionLabels[slot.code] && slot.label !== canonicalPositionLabels[slot.code] && slot.label !== slot.code ? <span className="truncate text-[9px] font-semibold text-slate-500" title={slot.label}>{slot.label}</span> : null}
               <span translate="no" className="line-clamp-2 break-words text-[10px] font-bold leading-tight sm:text-xs" title={player ? playerName(player) : copy.drop}>{player ? playerName(player) : "+"}</span>
-              {mode === "depth" ? <span className="text-[9px] font-semibold text-slate-500">{assignments.length} {copy.depthOptions}</span> : null}
+              <span data-planner-depth-count={assignments.length} className="mx-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-100 px-1 text-[9px] font-black text-slate-700 ring-1 ring-slate-200" title={`${assignments.length} ${copy.depthOptions}`}>{assignments.length}</span>
               {starter?.fitType === "out_of_position" ? <span className="text-[9px] font-bold text-red-700" title={copy.outOfPosition}>!</span> : null}
               {editingFormation ? <GripVertical className="mx-auto h-3 w-3 text-board-green" aria-hidden="true" /> : null}
             </div>
@@ -957,6 +965,7 @@ function FormationSlotRows({
   const rows = groupSlotsIntoPitchRows(slots);
   const selectedSlot = selectedSlotId ? slots.find((slot) => slot.id === selectedSlotId) : undefined;
   const selectedDepth = selectedSlot ? (assignmentsBySlot.get(selectedSlot.id) ?? []) : [];
+  const selectedStarter = selectedDepth.find((assignment) => assignment.isPreferredStarter);
   const selectedEligibleCount = selectedSlot
     ? includedPlayers.filter((player) => {
         const fit = evaluatePlayerSlotFit(player, selectedSlot, false);
@@ -986,6 +995,12 @@ function FormationSlotRows({
                 return isFitAllowedByAutoFillEligibility(fit.fitType, "natural_secondary", false);
               }).length}
               mode={mode}
+              draggingPlayerId={draggingPlayerId}
+              hoverSlotId={hoverSlotId}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDragOverSlot={onDragOverSlot}
+              onAssign={onAssign}
               onSelect={() => onSelect(slot.id)}
             />
           ))}
@@ -1000,7 +1015,12 @@ function FormationSlotRows({
           availablePlayers={includedPlayers}
           eligibleCount={selectedEligibleCount}
           onOptimisticUpdate={onOptimisticUpdate}
-        />
+        >
+          {selectedStarter ? <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" className="rounded border border-board-line px-2 py-1 text-xs font-bold" onClick={() => onSelectPlayer(selectedStarter.playerId)}>{copy.assign}</button>
+            <button type="button" className="rounded border border-board-line px-2 py-1 text-xs font-bold" onClick={() => void onAssign(selectedStarter.playerId, null)}>{copy.removeFromXi}</button>
+          </div> : null}
+        </SlotEditorOverlay>
       ) : null}
     </div>
   );
@@ -1038,6 +1058,10 @@ function uniqueDepthAssignments(assignments: TacticalPlannerData["assignments"])
     }
   }
   return Array.from(best.values()).sort((a, b) => a.depthOrder - b.depthOrder);
+}
+
+function draggedPlayerId(dataTransfer: DataTransfer) {
+  return dataTransfer.getData("application/x-coachboard-player") || dataTransfer.getData("text/plain");
 }
 
 function optimisticStartingXi(assignments: TacticalAssignment[], planId: string, player: SquadPlayer, targetSlotId: string | null, slots: TacticalPlanSlot[]): TacticalAssignment[] {
@@ -1154,6 +1178,12 @@ function SlotButton({
   playersById,
   eligibleCount,
   mode,
+  draggingPlayerId,
+  hoverSlotId,
+  onDragStart,
+  onDragEnd,
+  onDragOverSlot,
+  onAssign,
   onSelect
 }: {
   slot: TacticalPlanSlot;
@@ -1162,12 +1192,20 @@ function SlotButton({
   playersById: Map<string, SquadPlayer>;
   eligibleCount: number;
   mode: PlannerMode;
+  draggingPlayerId: string | null;
+  hoverSlotId: string | null;
+  onDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
+  onDragEnd: () => void;
+  onDragOverSlot: (slotId: string | null) => void;
+  onAssign: (playerId: string, slotId: string | null) => Promise<void>;
   onSelect: () => void;
 }) {
   const orderedAssignments = uniqueDepthAssignments(assignments).sort((a, b) => a.depthOrder - b.depthOrder);
-  const starter = orderedAssignments.find((assignment) => assignment.isPreferredStarter) ?? orderedAssignments[0];
+  const preferredStarter = orderedAssignments.find((assignment) => assignment.isPreferredStarter);
+  const starter = mode === "formation" ? preferredStarter : preferredStarter ?? orderedAssignments[0];
   const starterPlayer = starter ? playersById.get(starter.playerId) : undefined;
   const depthCount = orderedAssignments.length;
+  const isDropTarget = hoverSlotId === slot.id && Boolean(draggingPlayerId);
   const displayText = starterPlayer ? playerName(starterPlayer) : "No Player ranked";
   const alternatives = orderedAssignments.filter((assignment) => assignment.id !== starter?.id).slice(0, 2);
   const rankingPreview = orderedAssignments.slice(0, 3);
@@ -1184,13 +1222,36 @@ function SlotButton({
 
   return (
     <div
+      data-planner-slot={slot.id}
+      draggable={Boolean(starterPlayer)}
+      onDragStart={(event) => { if (starterPlayer) onDragStart(event, starterPlayer.id); }}
+      onDragEnd={onDragEnd}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "move";
+        onDragOverSlot(slot.id);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) onDragOverSlot(null);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onDragOverSlot(null);
+        const playerId = draggedPlayerId(event.dataTransfer);
+        if (playerId) void onAssign(playerId, slot.id);
+      }}
       onClick={(event) => {
         event.stopPropagation();
         onSelect();
       }}
       className={cn(
-        "min-h-12 w-full rounded-lg border p-1.5 text-left shadow-lg transition sm:min-h-[5.9rem] sm:p-2",
-        selected ? "border-board-green bg-white text-board-navy ring-4 ring-board-green/25" : "border-white/80 bg-white text-slate-800 hover:bg-white"
+        "min-h-12 w-full rounded-md border p-1.5 text-left shadow-sm transition-[border-color,background-color,box-shadow,opacity,transform] duration-200 sm:min-h-[5.4rem] sm:p-2",
+        selected ? "border-board-green bg-white text-board-navy ring-2 ring-board-green/25" : "border-white/80 bg-white text-slate-800 hover:border-emerald-200",
+        draggingPlayerId && !isDropTarget && "border-emerald-200",
+        isDropTarget && "scale-[1.02] border-board-green bg-emerald-50 ring-4 ring-emerald-200",
+        draggingPlayerId === starterPlayer?.id && "opacity-40"
       )}
       role="button"
       tabIndex={0}
@@ -1206,6 +1267,7 @@ function SlotButton({
       <span className="flex items-center justify-between gap-1 sm:gap-2">
         <span className="text-xs font-black uppercase text-board-green">{slot.code}</span>
         <span
+          data-planner-depth-count={depthCount}
           className={cn(
             "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-black ring-1 sm:h-5 sm:min-w-5 sm:px-1.5 sm:text-[11px]",
             depthCount <= 1 ? "bg-red-100 text-red-800 ring-red-300" : "bg-slate-100 text-slate-700 ring-slate-200"
@@ -1678,6 +1740,8 @@ function PlayerPoolPanel({
   onShowTrialsChange,
   onSearchChange,
   onPlayerDragStart,
+  onPlayerDragEnd,
+  onPlayerDropToPool,
   draggingPlayerId,
   selectedPlayerId,
   onSelectPlayer
@@ -1702,6 +1766,8 @@ function PlayerPoolPanel({
   onShowTrialsChange: (value: boolean) => void;
   onSearchChange: (value: string) => void;
   onPlayerDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
+  onPlayerDragEnd: () => void;
+  onPlayerDropToPool: (playerId: string) => Promise<void>;
   draggingPlayerId: string | null;
   selectedPlayerId: string | null;
   onSelectPlayer: (playerId: string) => void;
@@ -1726,7 +1792,23 @@ function PlayerPoolPanel({
   });
   const list = selectedSlot && poolFilter !== "excluded" ? sortPlayersByFit(filteredList, selectedSlot, new Set()) : filteredList;
   return (
-    <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+    <section
+      data-planner-player-pool
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const playerId = draggedPlayerId(event.dataTransfer);
+        if (playerId) void onPlayerDropToPool(playerId);
+      }}
+      className={cn(
+        "rounded-lg border bg-white p-4 shadow-soft transition-colors",
+        draggingPlayerId ? "border-board-green bg-emerald-50/40" : "border-board-line"
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-bold text-board-navy">{selectedSlot ? `${selectedSlot.code} ${copy.depthOptions}` : copy.playerPool}</h3>
@@ -1791,6 +1873,7 @@ function PlayerPoolPanel({
             assignmentsSummary={formatAssignmentsSummary(assignmentsByPlayer.get(player.id) ?? [], slotById)}
             alreadyInSelectedSlot={Boolean(selectedSlot && (assignmentsByPlayer.get(player.id) ?? []).some((assignment) => assignment.slotId === selectedSlot.id))}
             onPlayerDragStart={onPlayerDragStart}
+            onPlayerDragEnd={onPlayerDragEnd}
             dragging={draggingPlayerId === player.id}
             selectedForAssignment={selectedPlayerId === player.id}
             onSelectPlayer={() => onSelectPlayer(player.id)}
@@ -1810,6 +1893,7 @@ function PlayerStateCard({
   assignmentsSummary,
   alreadyInSelectedSlot,
   onPlayerDragStart,
+  onPlayerDragEnd,
   dragging,
   selectedForAssignment,
   onSelectPlayer
@@ -1822,10 +1906,12 @@ function PlayerStateCard({
   assignmentsSummary?: string;
   alreadyInSelectedSlot?: boolean;
   onPlayerDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
+  onPlayerDragEnd: () => void;
   dragging: boolean;
   selectedForAssignment: boolean;
   onSelectPlayer: () => void;
 }) {
+  const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
   const selectedSlotFit = selectedSlot ? evaluatePlayerSlotFit(player, selectedSlot, true) : undefined;
   if (excluded) {
     return (
@@ -1852,12 +1938,26 @@ function PlayerStateCard({
   }
 
   return (
-    <div className={cn("rounded-lg border border-board-line bg-white p-3 transition-opacity", dragging && "opacity-40", selectedForAssignment && "ring-2 ring-board-green")}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div
+      data-planner-player={player.id}
+      draggable
+      onDragStart={(event) => onPlayerDragStart(event, player.id)}
+      onDragEnd={onPlayerDragEnd}
+      className={cn(
+        "cursor-grab rounded-md border border-board-line bg-white p-2.5 transition-[opacity,border-color,box-shadow] active:cursor-grabbing",
+        dragging && "opacity-40",
+        selectedForAssignment && "border-board-green ring-2 ring-board-green/25"
+      )}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <button type="button" draggable onDragStart={(event) => onPlayerDragStart(event, player.id)} onClick={onSelectPlayer} className="mb-1 inline-flex items-center gap-1 rounded border border-board-line px-2 py-1 text-xs font-bold text-board-green touch-none" aria-pressed={selectedForAssignment} aria-label={`Select ${playerName(player)} for formation assignment`} title="Drag to formation or select, then tap a position"><GripVertical className="h-3 w-3" /> XI</button>
-          <p translate="no" className="font-bold text-board-navy">{playerName(player)}</p>
-          <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}</p>
+          <button type="button" draggable onDragStart={(event) => { event.stopPropagation(); onPlayerDragStart(event, player.id); }} onDragEnd={(event) => { event.stopPropagation(); onPlayerDragEnd(); }} onClick={onSelectPlayer} className="flex max-w-full items-center gap-2 text-left" aria-pressed={selectedForAssignment} aria-label={`Select ${playerName(player)} for formation assignment`} title={copy.selectPlayer}>
+            <GripVertical className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+            <span className="min-w-0">
+              <span translate="no" className="block truncate text-sm font-bold text-board-navy" title={playerName(player)}>{playerName(player)}</span>
+              <span className="block truncate text-xs font-semibold text-slate-500">{playerPositionText(player)}</span>
+            </span>
+          </button>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <StatusChip label={tacticalRoleLabel(state?.tacticalStatus, true)} />
             <StatusChip label="Available" tone="green" />

@@ -362,10 +362,29 @@ try {
   await page.waitForFunction(() => document.querySelector('textarea[name="note"]')?.value === "");
   assert.equal(await developmentDialog.locator('textarea[name="note"]').inputValue(), "", "successful unlinked observation clears the note");
   }
+  if (process.env.COACHBOARD_QA_PLANNER_ONLY === "1") {
+    for (const locale of ["en", "de"]) {
+      for (const width of [375, 390, 430, 1024, 1280, 1440]) {
+        await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
+        await go("planner", locale);
+        await checkOverflow(`planner ${locale} ${width}`);
+        assert.equal(await page.locator("[data-planner-slot]").count(), 11, `planner keeps 11 slots at ${width}px`);
+        assert.equal(await page.locator("[data-planner-player]").count(), 2, `planner pool remains readable at ${width}px`);
+        assert.equal(await page.locator("[data-planner-depth-count]").count(), 11, `depth counts remain visible at ${width}px`);
+        if (width === 390 || width === 1024 || width === 1440) {
+          await page.screenshot({ path: `/private/tmp/coachboard-planner-${locale}-${width}.png`, fullPage: true });
+        }
+      }
+    }
+  }
   await page.setViewportSize({ width: 1440, height: 900 });
   await go("planner", "en");
   await page.locator('button[title="Select a player, then tap a position."]').filter({ hasText: "Max" }).first().dragTo(page.locator('[data-planner-slot="slot-10"]'));
   await page.waitForFunction(() => document.querySelector('[data-planner-slot="slot-10"]')?.textContent?.includes("Max"));
+  await page.getByText("Saved", { exact: true }).waitFor();
+  await page.locator('button[title="Select a player, then tap a position."]').filter({ hasText: "Riley" }).first().dragTo(page.locator('[data-planner-slot="slot-10"]'));
+  await page.waitForFunction(() => document.querySelector('[data-planner-slot="slot-10"]')?.textContent?.includes("Riley"));
+  assert.equal((await page.evaluate(() => window.qa.plannerAssignments.filter(row => row.isPreferredStarter && row.playerId === "winger").length)), 0, "external player replaces occupied starter without duplicating the displaced player");
   await page.getByText("Saved", { exact: true }).waitFor();
   await page.locator('[data-planner-slot="slot-9"]').scrollIntoViewIfNeeded();
   const dragSource = await page.locator('[data-planner-slot="slot-9"]').boundingBox();
@@ -377,23 +396,17 @@ try {
   await page.locator('[data-planner-drag-ghost]').waitFor();
   assert.ok((await page.locator('[data-planner-slot="slot-10"]').getAttribute("class")).includes("ring-4"), "valid drop target highlights during drag");
   await page.mouse.up();
-  await page.waitForFunction(() => document.querySelector('[data-planner-slot="slot-9"]')?.textContent?.includes("Max"));
+  await page.waitForFunction(() => document.querySelector('[data-planner-slot="slot-9"]')?.textContent?.includes("Riley"));
+  assert.ok((await page.locator('[data-planner-slot="slot-10"]').textContent()).includes("Sam"), "pitch drag swaps occupied starters");
   await page.getByText("Saved", { exact: true }).waitFor();
-  await page.locator('[data-planner-slot="slot-0"]').dragTo(page.locator('[data-planner-slot="slot-9"]'));
-  await page.waitForFunction(() => document.querySelector('[data-planner-slot="slot-9"]')?.textContent?.includes("Gina"));
+  await page.locator('[data-planner-slot="slot-9"]').click();
+  await page.getByRole("button", { name: "Remove from XI", exact: true }).last().click();
+  await page.waitForFunction(() => !window.qa.plannerAssignments.some(row => row.isPreferredStarter && row.playerId === "reserve"));
   await page.getByText("Saved", { exact: true }).waitFor();
-  assert.ok((await page.locator('[data-planner-slot="slot-0"]').textContent()).includes("Max"), "desktop drag swaps occupied slots");
-  await page.locator('[data-planner-slot="slot-0"]').dragTo(page.locator('[data-planner-unassigned]'));
-  await page.waitForFunction(() => !document.querySelector('[data-planner-slot="slot-0"]')?.textContent?.includes("Max"));
-  await page.getByText("Saved", { exact: true }).waitFor();
-  await page.evaluate(() => { const slot = document.querySelector('[data-planner-slot="slot-9"]'); window.scrollTo(0, window.scrollY + slot.getBoundingClientRect().top - 400); });
-  assert.ok(await page.locator('[data-planner-slot="slot-9"]').evaluate(el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); }), "source slot is unobstructed before invalid-drop test");
-  await page.locator('[data-planner-slot="slot-9"]').dragTo(page.locator('#fixture h3').first());
-  await page.getByRole("alert").filter({ hasText: "Drop the player on a position" }).waitFor();
   await page.screenshot({ path: "/private/tmp/coachboard-planner-desktop.png", fullPage: true });
   assert.deepEqual(errors, []);
   console.log(process.env.COACHBOARD_QA_PLANNER_ONLY === "1"
-    ? "PASS: planner desktop drag/ghost/target feedback, swap, unassign and invalid-drop feedback; fictional data only."
+    ? "PASS: planner right-panel drag, external replacement, drag ghost, target feedback, pitch swap and XI removal; fictional data only."
     : "PASS: shell, headers, tabs, availability, player/training/plan/drill/scouting forms, material rows, import mapping, participants, planner assignment/swap/rollback/custom layout, library/popover, unsaved modal; EN/DE 320/360/375/390/430/768/1440; no real Supabase saves.");
 } finally {
   await browser?.close();
