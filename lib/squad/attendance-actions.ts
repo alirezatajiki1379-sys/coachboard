@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { asScoutingDb } from "@/lib/scouting/db";
 import { createClient } from "@/lib/supabase/server";
 import { calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
 import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, isTrainingUpcoming, seasonLabelForDate, trainingNowParts, weekdayForDate } from "@/lib/trainings/utils";
@@ -1237,6 +1238,25 @@ export async function convertTrialPlayerToSquadPlayer(formData: FormData) {
     .eq("user_id", user.id)
     .eq("player_type", "trial");
   if (error) throw new Error(error.message);
+  const scoutingDb = asScoutingDb(db);
+  const { data: scoutingPlayer, error: scoutingError } = await scoutingDb
+    .from("scouting_players")
+    .update({ status: "added_to_squad" })
+    .eq("user_id", user.id)
+    .eq("linked_squad_player_id", playerId)
+    .select("id")
+    .maybeSingle();
+  if (scoutingError) throw new Error(scoutingError.message);
+  if (scoutingPlayer) {
+    const { error: historyError } = await scoutingDb.from("scouting_history").insert({
+      user_id: user.id,
+      player_id: scoutingPlayer.id,
+      event_type: "added_to_squad"
+    });
+    if (historyError) throw new Error(historyError.message);
+    revalidatePath(`/scouting/players/${scoutingPlayer.id}`);
+    revalidatePath("/scouting");
+  }
   await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
 
   revalidateEvent(eventId);

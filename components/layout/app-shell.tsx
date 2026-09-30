@@ -4,7 +4,7 @@ import Link, { useLinkStatus } from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { usePathname } from "next/navigation";
-import { BarChart3, Bell, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, LoaderCircle, Menu, PanelLeftClose, PanelLeftOpen, Settings, UserCircle, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, Binoculars, CalendarDays, ClipboardList, Dumbbell, LayoutDashboard, LoaderCircle, Menu, PanelLeftClose, PanelLeftOpen, Settings, UserCircle, UsersRound, X } from "lucide-react";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { TeamSwitcher } from "@/components/layout/team-switcher";
 import { I18nProvider } from "@/components/i18n/i18n-provider";
@@ -296,6 +296,7 @@ function SidebarNav({
     { href: "/sessions", label: messages.navigation.trainingPlans, icon: ClipboardList },
     { href: "/drills", label: messages.navigation.drills, icon: Dumbbell },
     { href: "/squad", label: messages.navigation.squad, icon: UsersRound },
+    { href: "/scouting", label: messages.navigation.scouting, icon: Binoculars },
     { href: "/actions", label: messages.navigation.actionCenter, icon: Bell },
     { href: "/squad/analysis", label: messages.navigation.analytics, icon: BarChart3 },
     { href: "/settings", label: messages.navigation.settings, icon: Settings }

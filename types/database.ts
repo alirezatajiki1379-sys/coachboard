@@ -1,5 +1,86 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
+export type ScoutingPlayerRow = {
+  id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string | null;
+  date_of_birth: string | null;
+  primary_position: string | null;
+  secondary_positions: string[];
+  strong_foot: "left" | "right" | "both" | null;
+  current_club: string | null;
+  current_team: string | null;
+  status: "identified" | "monitoring" | "shortlist" | "trial" | "added_to_squad" | "archived";
+  source: string | null;
+  priority: "high" | "medium" | "low";
+  notes: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  next_action: "observe_again" | "contact_club" | "invite_to_trial" | "discuss" | "none" | "archive" | null;
+  next_action_date: string | null;
+  linked_squad_player_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ScoutingObservationRow = {
+  id: string;
+  user_id: string;
+  player_id: string;
+  observed_on: string;
+  context: "match" | "training" | "tournament" | "trial" | "other";
+  event_label: string | null;
+  observed_position: string | null;
+  minutes_observed: number | null;
+  observer: string | null;
+  strengths: string | null;
+  development_considerations: string | null;
+  summary: string;
+  next_action: string | null;
+  rating_technical: number | null;
+  rating_tactical: number | null;
+  rating_physical: number | null;
+  rating_mental: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ScoutingTargetRow = {
+  id: string;
+  user_id: string;
+  squad_id: string | null;
+  title: string;
+  priority: "high" | "medium" | "low";
+  status: "active" | "paused" | "completed" | "archived";
+  positions: string[];
+  birth_year_from: number | null;
+  birth_year_to: number | null;
+  preferred_foot: "left" | "right" | "both" | null;
+  desired_profile: string | null;
+  target_number: number | null;
+  deadline: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ScoutingTargetPlayerRow = {
+  user_id: string;
+  target_id: string;
+  player_id: string;
+  created_at: string;
+};
+
+export type ScoutingHistoryRow = {
+  id: string;
+  user_id: string;
+  player_id: string;
+  event_type: "created" | "observation_added" | "status_changed" | "target_linked" | "target_removed" | "invited_to_trial" | "added_to_squad" | "archived";
+  detail: string | null;
+  created_at: string;
+};
+
 export type RegionalCalendarEventCategory =
   | "statutory_public_holiday"
   | "official_school_holiday"
@@ -525,6 +606,107 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["squad_players"]["Insert"]>;
         Relationships: [];
       };
+      scouting_players: {
+        Row: ScoutingPlayerRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          first_name: string;
+          last_name?: string | null;
+          date_of_birth?: string | null;
+          primary_position?: string | null;
+          secondary_positions?: string[];
+          strong_foot?: "left" | "right" | "both" | null;
+          current_club?: string | null;
+          current_team?: string | null;
+          status?: ScoutingPlayerRow["status"];
+          source?: string | null;
+          priority?: ScoutingPlayerRow["priority"];
+          notes?: string | null;
+          height_cm?: number | null;
+          weight_kg?: number | null;
+          next_action?: ScoutingPlayerRow["next_action"];
+          next_action_date?: string | null;
+          linked_squad_player_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scouting_players"]["Insert"]>;
+        Relationships: [];
+      };
+      scouting_observations: {
+        Row: ScoutingObservationRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          player_id: string;
+          observed_on: string;
+          context: ScoutingObservationRow["context"];
+          event_label?: string | null;
+          observed_position?: string | null;
+          minutes_observed?: number | null;
+          observer?: string | null;
+          strengths?: string | null;
+          development_considerations?: string | null;
+          summary: string;
+          next_action?: string | null;
+          rating_technical?: number | null;
+          rating_tactical?: number | null;
+          rating_physical?: number | null;
+          rating_mental?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scouting_observations"]["Insert"]>;
+        Relationships: [];
+      };
+      scouting_targets: {
+        Row: ScoutingTargetRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          squad_id?: string | null;
+          title: string;
+          priority?: ScoutingTargetRow["priority"];
+          status?: ScoutingTargetRow["status"];
+          positions?: string[];
+          birth_year_from?: number | null;
+          birth_year_to?: number | null;
+          preferred_foot?: ScoutingTargetRow["preferred_foot"];
+          desired_profile?: string | null;
+          target_number?: number | null;
+          deadline?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scouting_targets"]["Insert"]>;
+        Relationships: [];
+      };
+      scouting_target_players: {
+        Row: ScoutingTargetPlayerRow;
+        Insert: {
+          user_id: string;
+          target_id: string;
+          player_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scouting_target_players"]["Insert"]>;
+        Relationships: [];
+      };
+      scouting_history: {
+        Row: ScoutingHistoryRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          player_id: string;
+          event_type: ScoutingHistoryRow["event_type"];
+          detail?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scouting_history"]["Insert"]>;
+        Relationships: [];
+      };
       player_import_batches: {
         Row: {
           id: string;
@@ -705,6 +887,58 @@ export type Database = {
           deleted_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["squad_training_events"]["Insert"]>;
+        Relationships: [];
+      };
+      squad_staff: {
+        Row: {
+          id: string;
+          user_id: string;
+          squad_id: string;
+          name: string;
+          role: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          squad_id: string;
+          name: string;
+          role?: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["squad_staff"]["Insert"]>;
+        Relationships: [];
+      };
+      training_section_briefs: {
+        Row: {
+          id: string;
+          user_id: string;
+          squad_id: string;
+          event_id: string;
+          section_key: string;
+          staff_id: string | null;
+          planning_status: "ready" | "needs_planning";
+          instruction: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          squad_id: string;
+          event_id: string;
+          section_key: string;
+          staff_id?: string | null;
+          planning_status?: "ready" | "needs_planning";
+          instruction?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["training_section_briefs"]["Insert"]>;
         Relationships: [];
       };
       training_session_plan_instances: {

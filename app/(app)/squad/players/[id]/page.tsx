@@ -24,6 +24,7 @@ import { calculateAge, formatLongDate, formatPlayerBirthDate, playerFullName } f
 import { availabilityReasonLabel, getPlayerHubData, medicalLabel, parsePlayerHubPeriod, parsePlayerHubTab, parsePlayerHubTimelineFilter, type PlayerHubData, type PlayerHubTab, type PlayerTimelineFilter } from "@/lib/squad/player-hub";
 import { formatPositionLabel } from "@/lib/squad/positions";
 import { createClient } from "@/lib/supabase/server";
+import { asScoutingDb } from "@/lib/scouting/db";
 import { getActiveLocale, getUserLocale } from "@/lib/i18n/server";
 import { createSystemTranslator } from "@/lib/i18n/system-text";
 import { formatNumber } from "@/lib/i18n";
@@ -183,7 +184,11 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     getUserLocale(supabase, user.id)
   ]);
   if (!hub) notFound();
-  const attentionItems = await getPlayerAttentionSummary(supabase, user.id, id, period);
+  const [attentionItems, scoutingLinkResult] = await Promise.all([
+    getPlayerAttentionSummary(supabase, user.id, id, period),
+    asScoutingDb(supabase).from("scouting_players").select("id").eq("user_id", user.id).eq("linked_squad_player_id", id).maybeSingle()
+  ]);
+  if (scoutingLinkResult.error) throw new Error(scoutingLinkResult.error.message);
 
   return (
     <div className="space-y-6">
@@ -192,7 +197,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
         Back
       </Link>
 
-      <PlayerHubHeader hub={hub} period={period} tab={tab} />
+      <PlayerHubHeader hub={hub} period={period} tab={tab} locale={locale} scoutingPlayerId={scoutingLinkResult.data?.id} />
       <PlayerHubTabs playerId={hub.player.id} activeTab={tab} period={period} customFrom={customFrom} customTo={customTo} />
       {isPeriodAwareTab(tab) ? <PeriodControls playerId={hub.player.id} tab={tab} period={period} customFrom={customFrom} customTo={customTo} /> : null}
 
@@ -208,7 +213,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
   );
 }
 
-function PlayerHubHeader({ hub, period, tab }: { hub: PlayerHubData; period: AnalyticsPeriod; tab: PlayerHubTab }) {
+function PlayerHubHeader({ hub, period, tab, locale, scoutingPlayerId }: { hub: PlayerHubData; period: AnalyticsPeriod; tab: PlayerHubTab; locale: "en" | "de"; scoutingPlayerId?: string }) {
   const player = hub.player;
   const age = calculateAge(player.dateOfBirth);
   const initials = [player.firstName[0], player.lastName?.[0]].filter(Boolean).join("").toUpperCase();
@@ -254,6 +259,9 @@ function PlayerHubHeader({ hub, period, tab }: { hub: PlayerHubData; period: Ana
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {scoutingPlayerId ? <ButtonLink href={`/scouting/players/${scoutingPlayerId}?tab=history`} variant="secondary">
+            {locale === "de" ? "Scouting-Verlauf" : "Scouting history"}
+          </ButtonLink> : null}
           {!player.archivedAt ? <ButtonLink href={`/squad/players/${player.id}/edit`} variant="secondary">Edit details</ButtonLink> : null}
           <ButtonLink href={`/squad/players/${player.id}/report?period=${period}`} variant="secondary">
             <Printer className="h-4 w-4" />

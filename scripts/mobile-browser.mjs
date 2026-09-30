@@ -24,6 +24,8 @@ const bundle = await build({
     import {AppShell} from "@/components/layout/app-shell";
     import {PageContainer,PageHeader,PageHeaderSkeleton} from "@/components/layout/page";
     import {SquadNav} from "@/components/squad/squad-nav";
+    import {ScoutingNav} from "@/components/scouting/scouting-nav";
+    import {ScoutingPlayerForm} from "@/components/scouting/forms";
     import {Button,ButtonLink} from "@/components/ui/button";
     import {PlayerUnavailabilityForm} from "@/components/squad/player-unavailability-form";
     import {PlayerForm} from "@/components/squad/player-form";
@@ -64,6 +66,7 @@ const bundle = await build({
        view==="plan"?<SessionForm action={action} mode="create" drills={[drill]}/>:
        view==="drill"?<DrillForm action={action} mode="create"/>:
        view==="import"?<PlayerImportWorkflow existingPlayers={{activeTeamPlayers:[],archivedTeamPlayers:[],trashedTeamPlayers:[],legacyPlayers:[],otherTeamPlayers:[]}} history={[]}/>:
+       view==="scouting"?<><ScoutingNav locale={locale} active="players"/><ScoutingPlayerForm action={action} locale={locale}/></>:
        view==="participants"?<TrainingParticipantsTable eventId="event" eventDate="2026-09-20" attendance={attendance} developmentGoals={[["player",[developmentGoal]]]} groupLabelsByPlayerId={[]} summary={{expected:2,notExpected:0,goalkeepers:0,fieldPlayers:2,defensive:0,midfield:1,attacking:1,positionMissing:0}}/>:
        view==="planner"||view==="planner-custom"?<SquadTacticalPlanner data={plannerData}/>:
        view==="staff-brief"?<StaffBriefView data={brief} locale={locale}/>:
@@ -131,7 +134,7 @@ try {
   for (const locale of ["en", "de"]) {
     for (const width of [320, 360, 375, 390, 430, 768, 1440]) {
       await page.setViewportSize({ width, height: 844 });
-      for (const view of ["shell", "availability", "player", "training", "plan", "drill", "import", "participants", "staff-brief", "library", "planner", "planner-custom", "dialog"]) {
+      for (const view of ["shell", "availability", "player", "training", "plan", "drill", "import", "scouting", "participants", "staff-brief", "library", "planner", "planner-custom", "dialog"]) {
         await go(view, locale);
         await checkOverflow(`${view} ${locale} ${width}`);
         if (view === "shell") {
@@ -391,7 +394,7 @@ try {
   assert.deepEqual(errors, []);
   console.log(process.env.COACHBOARD_QA_PLANNER_ONLY === "1"
     ? "PASS: planner desktop drag/ghost/target feedback, swap, unassign and invalid-drop feedback; fictional data only."
-    : "PASS: shell, headers, tabs, availability, player/training/plan/drill forms, material rows, import mapping, participants, planner assignment/swap/rollback/custom layout, library/popover, unsaved modal; EN/DE 320/360/375/390/430/768/1440; no real Supabase saves.");
+    : "PASS: shell, headers, tabs, availability, player/training/plan/drill/scouting forms, material rows, import mapping, participants, planner assignment/swap/rollback/custom layout, library/popover, unsaved modal; EN/DE 320/360/375/390/430/768/1440; no real Supabase saves.");
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));
