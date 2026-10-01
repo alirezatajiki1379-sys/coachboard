@@ -512,7 +512,9 @@ function CompactAvailabilityGroup({ title, periods, playerId, locale, empty }: {
   );
 }
 
-function AnalyticsMetricGrid({ hub, period }: { hub: PlayerHubData; period: AnalyticsPeriod }) {
+async function AnalyticsMetricGrid({ hub, period }: { hub: PlayerHubData; period: AnalyticsPeriod }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const summary = hub.analytics.summary;
   const records = summary.records;
   const latestRatings = records.map((entry) => entry.overallRating).filter((rating): rating is number => typeof rating === "number").slice(0, 5);
@@ -521,43 +523,46 @@ function AnalyticsMetricGrid({ hub, period }: { hub: PlayerHubData; period: Anal
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <AnalyticsMetricCard
           href={tabHref(hub.player.id, "analytics", period)}
-          label="Average rating"
-          value={formatRating(summary.averageRating)}
-          detail={`${summary.rated} rated training${summary.rated === 1 ? "" : "s"}`}
+          label={ui("Average rating")}
+          value={formatRating(summary.averageRating, locale)}
+          detail={locale === "de" ? `${summary.rated} bewertete Trainings` : `${summary.rated} rated training${summary.rated === 1 ? "" : "s"}`}
           tone={ratingTone(summary.averageRating)}
           icon={<Activity className="h-4 w-4" />}
         />
         <AnalyticsMetricCard
           href={tabHref(hub.player.id, "analytics", period)}
-          label="Trend"
+          label={ui("Trend")}
           value={trendValue(summary.trend.value)}
-          detail={summary.trend.label === "No trend" ? "No trend yet" : summary.trend.label}
+          detail={ui(summary.trend.label === "No trend" ? "No trend yet" : summary.trend.label)}
           tone={trendTone(summary.trend.value)}
           icon={trendIcon(summary.trend.value)}
         />
         <AnalyticsMetricCard
           href={tabHref(hub.player.id, "attendance", period)}
-          label="Attendance"
-          value={formatPercent(summary.attendanceRate)}
-          detail={`${summary.attended} of ${summary.trainings} attended`}
-          tone={attendanceTone(summary.attendanceRate)}
+          label={ui("Participation rate")}
+          value={formatPercent(summary.participationRate, locale)}
+          detail={locale === "de" ? `${summary.attended} von ${summary.trainings} teilgenommen` : `${summary.attended} of ${summary.trainings} participated`}
+          tone={attendanceTone(summary.participationRate)}
           icon={<CalendarDays className="h-4 w-4" />}
         >
           <AttendanceSegmentBar present={summary.attendanceDistribution.present} late={summary.attendanceDistribution.late} absent={summary.absent} />
         </AnalyticsMetricCard>
         <AnalyticsMetricCard
           href={tabHref(hub.player.id, "attendance", period)}
-          label="Reliability"
+          label={ui("Reliability")}
           value={summary.reliabilityPenalty.toFixed(1)}
-          detail={`${summary.attendanceDistribution.lateCancellation} late cancellation${summary.attendanceDistribution.lateCancellation === 1 ? "" : "s"}`}
+          detail={locale === "de" ? `${summary.attendanceDistribution.lateCancellation} späte Absagen` : `${summary.attendanceDistribution.lateCancellation} late cancellation${summary.attendanceDistribution.lateCancellation === 1 ? "" : "s"}`}
           tone={reliabilityTone(summary.reliabilityPenalty)}
           icon={<ShieldAlert className="h-4 w-4" />}
         />
       </div>
-      <div className="grid gap-3 rounded-lg border border-board-line bg-white p-4 shadow-soft sm:grid-cols-3">
-        <Mini label="Rated trainings" value={String(summary.rated)} />
-        <Mini label="Evidence base" value={summary.evidenceBase.label} />
-        <Mini label="Last rating" value={summary.latestRating ? String(summary.latestRating) : "No rating"} />
+      <div className="grid gap-3 rounded-lg border border-board-line bg-white p-4 shadow-soft sm:grid-cols-2 xl:grid-cols-6">
+        <Mini label={ui("Attendance when expected")} value={formatPercent(summary.attendanceWhenExpectedRate, locale)} />
+        <Mini label={ui("Not expected")} value={String(summary.notExpectedTrainings)} />
+        <Mini label={ui("Recorded actual attendance")} value={`${summary.recordedTrainings}/${summary.trainings}`} />
+        <Mini label={ui("Rated trainings")} value={String(summary.rated)} />
+        <Mini label={ui("Evidence base")} value={ui(summary.evidenceBase.label)} />
+        <Mini label={ui("Last rating")} value={summary.latestRating ? String(summary.latestRating) : ui("No rating")} />
       </div>
       {latestRatings.length ? (
         <div className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
@@ -571,7 +576,9 @@ function AnalyticsMetricGrid({ hub, period }: { hub: PlayerHubData; period: Anal
   );
 }
 
-function AnalyticsTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPeriod }) {
+async function AnalyticsTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPeriod }) {
+  const locale = await getActiveLocale();
+  const ui = createSystemTranslator(locale);
   const { player, analytics } = hub;
   const { summary, assessmentHistory } = analytics;
   return (
@@ -579,19 +586,23 @@ function AnalyticsTab({ hub, period }: { hub: PlayerHubData; period: AnalyticsPe
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><BarChart3 className="h-5 w-5" />Player analytics</h2>
-            <p className="mt-1 text-sm text-slate-600">Period: {hub.periodRangeLabel}. Unrated trainings are not counted as 3.</p>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><BarChart3 className="h-5 w-5" />{ui("Player analytics")}</h2>
+            <p className="mt-1 text-sm text-slate-600">{locale === "de" ? `Zeitraum: ${hub.periodRangeLabel}. Nicht bewertete Trainings werden nicht als 3 gezählt.` : `Period: ${hub.periodRangeLabel}. Unrated trainings are not counted as 3.`}</p>
           </div>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Trainings" value={String(summary.trainings)} />
-          <Stat label="Attendance" value={formatPercent(summary.attendanceRate)} />
-          <Stat label="Average rating" value={formatRating(summary.averageRating)} />
-          <Stat label="Trend" value={summary.trend.value === null ? summary.trend.label : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)} · ${summary.trend.label}`} />
-          <Stat label="Rated trainings" value={String(summary.rated)} />
-          <Stat label="Evidence" value={summary.evidenceBase.label} />
-          <Stat label="Reliability" value={summary.reliabilityPenalty.toFixed(1)} />
-          <Stat label="Latest rating" value={summary.latestRating ? String(summary.latestRating) : "No rating"} />
+          <Stat label={ui("Relevant trainings")} value={String(summary.trainings)} />
+          <Stat label={ui("Participated")} value={String(summary.attended)} />
+          <Stat label={ui("Not expected")} value={String(summary.notExpectedTrainings)} />
+          <Stat label={ui("Participation rate")} value={formatPercent(summary.participationRate, locale)} />
+          <Stat label={ui("Attendance when expected")} value={formatPercent(summary.attendanceWhenExpectedRate, locale)} />
+          <Stat label={ui("Recorded actual attendance")} value={`${summary.recordedTrainings}/${summary.trainings}`} />
+          <Stat label={ui("Average rating")} value={formatRating(summary.averageRating, locale)} />
+          <Stat label={ui("Trend")} value={summary.trend.value === null ? ui(summary.trend.label) : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)} · ${ui(summary.trend.label)}`} />
+          <Stat label={ui("Rated trainings")} value={String(summary.rated)} />
+          <Stat label={ui("Evidence")} value={ui(summary.evidenceBase.label)} />
+          <Stat label={ui("Reliability")} value={summary.reliabilityPenalty.toFixed(1)} />
+          <Stat label={ui("Latest rating")} value={summary.latestRating ? String(summary.latestRating) : ui("No rating")} />
         </div>
         <p className="mt-3 text-sm text-slate-600">{summary.trend.description}</p>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -652,13 +663,24 @@ async function AttendanceTab({ hub, filter, period, customFrom, customTo }: { hu
   return (
     <div className="space-y-6">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat label={ui("Attendance rate")} value={formatPercent(hub.analytics.summary.attendanceRate, locale)} />
+        <Stat label={ui("Participation rate")} value={formatPercent(hub.analytics.summary.participationRate, locale)} />
+        <Stat label={ui("Attendance when expected")} value={formatPercent(hub.analytics.summary.attendanceWhenExpectedRate, locale)} />
+        <Stat label={ui("Relevant trainings")} value={String(hub.analytics.summary.trainings)} />
+        <Stat label={ui("Not expected")} value={String(hub.analytics.summary.notExpectedTrainings)} />
+        <Stat label={ui("Not recorded")} value={String(hub.analytics.summary.notRecordedTrainings)} />
         <Stat label={ui("Present")} value={String(distribution.present)} />
         <Stat label={ui("Late")} value={String(distribution.late)} />
         <Stat label={ui("Absent")} value={String(hub.analytics.summary.absent)} />
         <Stat label={ui("Reliability")} value={formatNumber(hub.analytics.summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 })} />
       </section>
       <Card title={ui("Attendance record")} icon={<CalendarDays className="h-5 w-5" />}>
+        {Object.values(hub.analytics.summary.plannedAbsenceDistribution).some(Boolean) ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {Object.entries(hub.analytics.summary.plannedAbsenceDistribution).map(([reason, count]) => count ? (
+              <span key={reason} className="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">{ui(plannedAbsenceAnalyticsLabel(reason))}: {count}</span>
+            ) : null)}
+          </div>
+        ) : null}
         <div className="mb-4 flex flex-wrap gap-2">
           {attendanceFilters.map((item) => (
             <Link key={item.id} href={`${tabHref(hub.player.id, "attendance", period, customFrom, customTo)}&attendance=${item.id}`} className={cn("rounded-md px-3 py-2 text-sm font-bold", filter === item.id ? "bg-board-green text-white" : "bg-slate-100 text-slate-700 hover:bg-green-50 hover:text-board-green")}>
@@ -1553,6 +1575,19 @@ function filterAttendanceRecords(records: PlayerAnalyticsRecord[], filter: Atten
   if (filter === "private") return records.filter((entry) => entry.finalStatus === "P" || entry.plannedReason === "P");
   if (filter === "cancelled") return records.filter((entry) => entry.finalStatus === "S" || entry.plannedReason === "S");
   return records.filter((entry) => entry.finalStatus === "U" || entry.plannedReason === "U");
+}
+
+function plannedAbsenceAnalyticsLabel(reason: string) {
+  const labels: Record<string, string> = {
+    injured: "Injured",
+    sick: "Sick",
+    school: "School",
+    work: "Work",
+    holiday: "Holiday",
+    private: "Private",
+    other: "Other"
+  };
+  return labels[reason] ?? reason;
 }
 
 type MetricTone = "positive" | "warning" | "negative" | "neutral";

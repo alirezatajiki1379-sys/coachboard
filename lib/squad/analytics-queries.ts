@@ -453,7 +453,9 @@ export function createTeamAnalytics(
     sessionsWithAttendance: events.filter((event) => event.attendance.recorded > 0).length,
     participantRecordCount: periodRecords.length,
     attendanceRecordCount: attendance.recorded,
-    teamAttendanceRate: attendance.rate,
+    teamParticipationRate: attendance.participationRate,
+    teamAttendanceWhenExpectedRate: attendance.attendanceWhenExpectedRate,
+    teamAttendanceRate: attendance.attendanceWhenExpectedRate,
     present: attendance.present,
     late: attendance.late,
     absent: attendance.absent,
@@ -519,12 +521,11 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
 
   const attended = present + late;
   const recorded = attended + absent;
-  const rateRecords = records.filter((record) => {
-    if (record.finalStatus === "present" || record.finalStatus === "Z") return true;
-    return Boolean(record.finalStatus) && record.plannedStatus !== "unavailable";
-  });
+  const rateRecords = records.filter((record) => (!record.plannedStatus || record.plannedStatus === "expected") && Boolean(record.finalStatus));
   const rateAttended = rateRecords.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
-  return { present, late, absent, notExpected, notRecorded, attended, recorded, rate: rateRecords.length ? rateAttended / rateRecords.length : null };
+  const participationRate = records.length ? attended / records.length : null;
+  const attendanceWhenExpectedRate = rateRecords.length ? rateAttended / rateRecords.length : null;
+  return { present, late, absent, notExpected, notRecorded, attended, recorded, participationRate, attendanceWhenExpectedRate, rate: attendanceWhenExpectedRate };
 }
 
 function createFocusDistribution(events: SquadTrainingEvent[]) {

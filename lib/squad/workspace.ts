@@ -254,7 +254,7 @@ export const quickViews: Array<{ id: WorkspaceView; label: string; description: 
   { id: "needs-attention", label: "Needs Attention", description: "Transparent reasons only, no hidden score.", defaultSort: "reviewDate", defaultDirection: "asc" },
   { id: "development", label: "Development", description: "Goals, reviews and observations.", defaultSort: "reviewDate", defaultDirection: "asc" },
   { id: "performance", label: "Performance", description: "Ratings, trend and evidence.", defaultSort: "average", defaultDirection: "desc" },
-  { id: "attendance", label: "Attendance", description: "Attendance rate and reliability.", defaultSort: "attendance", defaultDirection: "desc" },
+  { id: "attendance", label: "Participation", description: "Participation rate and reliability.", defaultSort: "attendance", defaultDirection: "desc" },
   { id: "unavailable", label: "Unavailable", description: "Injured, sick and review-required players.", defaultSort: "availability", defaultDirection: "asc" },
   { id: "trial-players", label: "Trial Players", description: "Trial status and decision context.", defaultSort: "reviewDate", defaultDirection: "asc" },
   { id: "reviews-due", label: "Reviews Due", description: "Overdue, today and this week.", defaultSort: "reviewDate", defaultDirection: "asc" }
@@ -276,7 +276,7 @@ export const workspaceColumns: WorkspaceColumnDefinition[] = [
   { id: "availability", label: "Availability", description: "Current operational medical availability.", category: "Availability", sortable: "availability" },
   { id: "expectedReturn", label: "Expected return", description: "Expected medical return date only.", category: "Availability" },
   { id: "medicalReview", label: "Medical review", description: "Medical return review status.", category: "Availability" },
-  { id: "attendance", label: "Attendance", description: "Attendance percentage in the selected period.", category: "Attendance", sortable: "attendance" },
+  { id: "attendance", label: "Participation rate", description: "Participated trainings divided by all relevant historical training snapshots.", category: "Attendance", sortable: "attendance" },
   { id: "attendedTrainings", label: "Attended", description: "Attended trainings in period.", category: "Attendance" },
   { id: "relevantTrainings", label: "Relevant trainings", description: "Trainings considered for attendance.", category: "Attendance" },
   { id: "lastTraining", label: "Last training", description: "Most recent training in period.", category: "Attendance", sortable: "lastTraining" },
@@ -304,7 +304,7 @@ export const workspaceColumns: WorkspaceColumnDefinition[] = [
 export const workspaceMobileMetrics: WorkspaceMetricDefinition[] = [
   { id: "average", label: "Average", description: "Average rating." },
   { id: "trend", label: "Trend", description: "Rating trend." },
-  { id: "attendance", label: "Attendance", description: "Attendance percentage." },
+  { id: "attendance", label: "Participation rate", description: "Participation across all relevant trainings." },
   { id: "reliability", label: "Reliability", description: "Reliability penalty." },
   { id: "latestRating", label: "Latest rating", description: "Latest rating." },
   { id: "ratedTrainings", label: "Rated trainings", description: "Rated training count." },
@@ -685,7 +685,7 @@ function sortWorkspacePlayers(players: WorkspacePlayerSummary[], sort: Workspace
     if (sort === "age") return nullableNumberCompare(ageValue(a), ageValue(b), direction, "last") || fallback;
     if (sort === "availability") return dir * (availabilityRank(a) - availabilityRank(b)) || fallback;
     if (sort === "lastTraining") return nullableStringCompare(a.analytics.latestTraining?.event?.date, b.analytics.latestTraining?.event?.date, direction) || fallback;
-    if (sort === "attendance") return nullableNumberCompare(a.analytics.attendanceRate, b.analytics.attendanceRate, direction, "last") || fallback;
+    if (sort === "attendance") return nullableNumberCompare(a.analytics.participationRate, b.analytics.participationRate, direction, "last") || fallback;
     if (sort === "average") return nullableNumberCompare(a.analytics.averageRating, b.analytics.averageRating, direction, "last") || nullableNumberCompare(a.analytics.rated, b.analytics.rated, "desc", "last") || fallback;
     if (sort === "latestRating") return nullableNumberCompare(a.analytics.latestRating ?? null, b.analytics.latestRating ?? null, direction, "last") || fallback;
     if (sort === "trend") return nullableNumberCompare(a.analytics.trend.value, b.analytics.trend.value, direction, "last") || fallback;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPlayerAnalyticsSummary, filterEventsByPeriod } from "../lib/squad/analytics.ts";
+import { createPlayerAnalyticsSummary, filterEventsByPeriod, formatPercent } from "../lib/squad/analytics.ts";
 import { createTeamAnalytics, parseAnalyticsFilters } from "../lib/squad/analytics-queries.ts";
 
 const EVENT_ID = "11111111-1111-4111-8111-111111111111";
@@ -50,6 +50,8 @@ test("one training reconciles all participant attendance rows", () => {
   assert.equal(analytics.late, 2);
   assert.equal(analytics.absent, 1);
   assert.equal(analytics.notRecorded, 1);
+  assert.equal(analytics.teamParticipationRate, 16 / 18);
+  assert.equal(analytics.teamAttendanceWhenExpectedRate, 16 / 17);
   assert.equal(analytics.teamAttendanceRate, 16 / 17);
 });
 
@@ -74,7 +76,7 @@ test("training remains counted without attendance, ratings or a review", () => {
   assert.equal(analytics.teamAttendanceRate, null);
 });
 
-test("not expected absences are excluded from the rate while manual participation counts", () => {
+test("team participation and attendance when expected remain distinct", () => {
   const records = [
     attendanceRow("present", 0),
     { ...attendanceRow("U", 1), plannedStatus: "unavailable" },
@@ -83,7 +85,98 @@ test("not expected absences are excluded from the rate while manual participatio
   const analytics = createTeamAnalytics(squad(), [event], records, [], [], [], [], [], filters(), { seasonStartMonth: 7, seasonStartDay: 1 });
   assert.equal(analytics.attendanceRecordCount, 3);
   assert.equal(analytics.absent, 1);
+  assert.equal(analytics.teamParticipationRate, 2 / 3);
+  assert.equal(analytics.teamAttendanceWhenExpectedRate, 1);
   assert.equal(analytics.teamAttendanceRate, 1);
+});
+
+test("player analytics counts not expected snapshots in trainings and participation", () => {
+  const summary = playerSummary([
+    playerRecord("training-a", "2026-09-01", "expected", "present"),
+    playerRecord("training-b", "2026-09-08", "unavailable", undefined, "holiday"),
+    playerRecord("training-c", "2026-09-15", "unavailable", undefined, "private")
+  ]);
+
+  assert.equal(summary.trainings, 3);
+  assert.equal(summary.attended, 1);
+  assert.equal(summary.notExpectedTrainings, 2);
+  assert.equal(summary.participationRate, 1 / 3);
+  assert.equal(summary.attendanceWhenExpectedRate, 1);
+  assert.equal(summary.attendedWhenExpected, 1);
+  assert.equal(summary.attendanceWhenExpectedRecorded, 1);
+  assert.equal(summary.recordedTrainings, 1);
+  assert.equal(summary.notRecordedTrainings, 2);
+  assert.equal(summary.plannedAbsenceDistribution.holiday, 1);
+  assert.equal(summary.plannedAbsenceDistribution.private, 1);
+  assert.match(formatPercent(summary.participationRate, "en"), /33\.3/);
+});
+
+test("present, absent and late reconcile to both rates", () => {
+  const summary = playerSummary([
+    playerRecord("training-a", "2026-09-01", "expected", "present"),
+    playerRecord("training-b", "2026-09-08", "expected", "absent"),
+    playerRecord("training-c", "2026-09-15", "expected", "Z")
+  ]);
+
+  assert.equal(summary.trainings, 3);
+  assert.equal(summary.attended, 2);
+  assert.equal(summary.absent, 1);
+  assert.equal(summary.participationRate, 2 / 3);
+  assert.equal(summary.attendanceWhenExpectedRate, 2 / 3);
+});
+
+test("not recorded stays relevant without becoming absent", () => {
+  const summary = playerSummary([
+    playerRecord("training-a", "2026-09-01", "expected", "present"),
+    playerRecord("training-b", "2026-09-08", "unavailable", undefined, "sick"),
+    playerRecord("training-c", "2026-09-15", "expected", undefined)
+  ]);
+
+  assert.equal(summary.trainings, 3);
+  assert.equal(summary.participationRate, 1 / 3);
+  assert.equal(summary.attendanceWhenExpectedRate, 1);
+  assert.equal(summary.absent, 0);
+  assert.equal(summary.recordedTrainings, 1);
+  assert.equal(summary.notRecordedTrainings, 2);
+});
+
+test("historical participant snapshots exclude trainings before a player joined", () => {
+  const joinedPlayer = { ...player, joinedDate: "2026-09-10" };
+  const summary = createPlayerAnalyticsSummary(
+    joinedPlayer,
+    [playerRecord("after-join", "2026-09-15", "expected", "present")],
+    "all"
+  );
+  assert.equal(summary.trainings, 1);
+  assert.equal(summary.records[0].event?.date, "2026-09-15");
+});
+
+test("trial analytics use only the trial player's historical snapshots", () => {
+  const trialPlayer = { ...player, playerType: "trial", trialStartDate: "2026-09-08", trialEndDate: "2026-09-16" };
+  const ownRecords = [
+    { ...playerRecord("trial-a", "2026-09-08", "expected", "present"), playerId: trialPlayer.id },
+    { ...playerRecord("trial-b", "2026-09-15", "unavailable", undefined, "school"), playerId: trialPlayer.id }
+  ];
+  const unrelatedOutsideWindow = { ...playerRecord("outside", "2026-09-22", "expected", "present"), playerId: "another-player" };
+  const summary = createPlayerAnalyticsSummary(trialPlayer, [...ownRecords, unrelatedOutsideWindow], "all");
+  assert.equal(summary.trainings, 2);
+  assert.equal(summary.notExpectedTrainings, 1);
+  assert.equal(summary.participationRate, 0.5);
+});
+
+test("a player who later left keeps historical participant analytics", () => {
+  const formerPlayer = { ...player, archivedAt: "2026-09-20T00:00:00Z", exitDate: "2026-09-20" };
+  const summary = createPlayerAnalyticsSummary(
+    formerPlayer,
+    [
+      playerRecord("former-a", "2026-09-01", "expected", "present"),
+      playerRecord("former-b", "2026-09-08", "unavailable", undefined, "work")
+    ],
+    "all"
+  );
+  assert.equal(summary.trainings, 2);
+  assert.equal(summary.attended, 1);
+  assert.equal(summary.notExpectedTrainings, 1);
 });
 
 test("single-training selection uses the canonical event id", () => {
@@ -171,6 +264,28 @@ function attendanceRow(finalStatus, index) {
     createdAt: "2026-09-30T18:00:00Z",
     updatedAt: "2026-09-30T18:00:00Z"
   };
+}
+
+function playerRecord(id, date, plannedStatus, finalStatus, plannedReason) {
+  const recordEvent = trainingEvent(`${id}-1111-4111-8111-111111111111`.slice(0, 36), date, "18:00", id);
+  return {
+    id: `attendance-${id}`,
+    userId: USER_ID,
+    eventId: recordEvent.id,
+    playerId: player.id,
+    plannedStatus,
+    plannedReason,
+    finalStatus,
+    latePenaltyApplied: true,
+    sensitiveNote: false,
+    event: recordEvent,
+    createdAt: `${date}T18:00:00Z`,
+    updatedAt: `${date}T18:00:00Z`
+  };
+}
+
+function playerSummary(records) {
+  return createPlayerAnalyticsSummary(player, records, "all");
 }
 
 function trainingEvent(id, date, startTime, label) {

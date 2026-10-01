@@ -290,7 +290,7 @@
       },
       "attendance": {
         "label": "Attendance",
-        "description": "Attendance rate and reliability."
+        "description": "Participation rate, expected attendance and reliability."
       },
       "unavailable": {
         "label": "Unavailable",
@@ -387,7 +387,9 @@
       "noPosition": "No position",
       "years": "years",
       "average": "Average",
-      "attendance": "Attendance",
+      "attendance": "Participation rate",
+      "attendanceWhenExpected": "Attendance when expected",
+      "notExpected": "Not expected",
       "trend": "Trend",
       "review": "Review",
       "latest": "Latest",

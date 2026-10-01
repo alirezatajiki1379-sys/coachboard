@@ -1313,8 +1313,10 @@ function InspectorPanel({ player, returnTo, onClose, messages }: { player?: Work
         </InspectorSection>
         <InspectorSection title={messages.squad.labels.attendance} icon={<CalendarDays className="h-4 w-4" />}>
           <InspectorGrid items={[
-            [messages.squad.labels.attendance, formatWorkspacePercent(summary.attendanceRate)],
+            [messages.squad.labels.attendance, formatWorkspacePercent(summary.participationRate)],
+            [messages.squad.labels.attendanceWhenExpected, formatWorkspacePercent(summary.attendanceWhenExpectedRate)],
             [messages.squad.columns.attendedTrainings, `${summary.attended}/${summary.trainings}`],
+            [messages.squad.labels.notExpected, String(summary.notExpectedTrainings)],
             [messages.squad.labels.reliability, summary.reliabilityPenalty.toFixed(1)],
             [messages.squad.labels.late, String(summary.late)]
           ]} />
@@ -1624,7 +1626,7 @@ function renderColumnCell(columnId: WorkspaceColumnDefinition["id"], data: Works
   if (columnId === "availability") return <StatusDot player={player} compact messages={messages} />;
   if (columnId === "expectedReturn") return medical?.expectedReturnDate ? formatEventDate(medical.expectedReturnDate) : "-";
   if (columnId === "medicalReview") return medical && availabilityLabel(player) === "Needs review" ? messages.squad.labels.needsReview : "-";
-  if (columnId === "attendance") return formatWorkspacePercent(summary.attendanceRate);
+  if (columnId === "attendance") return formatWorkspacePercent(summary.participationRate);
   if (columnId === "attendedTrainings") return String(summary.attended);
   if (columnId === "relevantTrainings") return String(summary.trainings);
   if (columnId === "lastTraining") return record?.event?.date ? formatEventDate(record.event.date) : "-";
@@ -1661,7 +1663,7 @@ function mobileMetric(metricId: string, player: WorkspacePlayerSummary, messages
   const summary = player.analytics;
   if (metricId === "average") return { label: messages.squad.labels.average, value: formatWorkspaceRating(summary.averageRating), detail: `${summary.rated} ${messages.squad.labels.ratings}` };
   if (metricId === "trend") return { label: messages.squad.labels.trend, value: summary.trend.value === null ? "-" : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`, detail: localizedTrend(summary.trend.label, messages) };
-  if (metricId === "attendance") return { label: messages.squad.labels.attendance, value: formatWorkspacePercent(summary.attendanceRate), detail: `${summary.attended}/${summary.trainings}` };
+  if (metricId === "attendance") return { label: messages.squad.labels.attendance, value: formatWorkspacePercent(summary.participationRate), detail: `${summary.attended}/${summary.trainings} · ${messages.squad.labels.attendanceWhenExpected} ${formatWorkspacePercent(summary.attendanceWhenExpectedRate)}` };
   if (metricId === "reliability") return { label: messages.squad.labels.reliability, value: summary.reliabilityPenalty.toFixed(1), detail: `${summary.late} ${messages.squad.labels.late}` };
   if (metricId === "latestRating") return { label: messages.squad.labels.latest, value: summary.latestRating ? String(summary.latestRating) : "-", detail: summary.evidenceBase.label };
   if (metricId === "ratedTrainings") return { label: messages.squad.labels.rated, value: String(summary.rated), detail: messages.common.entities.trainings };

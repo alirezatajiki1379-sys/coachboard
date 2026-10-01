@@ -40,6 +40,13 @@ export type PlayerAnalyticsSummary = {
   records: PlayerAnalyticsRecord[];
   trainings: number;
   attended: number;
+  expectedTrainings: number;
+  notExpectedTrainings: number;
+  unclearTrainings: number;
+  recordedTrainings: number;
+  notRecordedTrainings: number;
+  attendedWhenExpected: number;
+  attendanceWhenExpectedRecorded: number;
   late: number;
   absent: number;
   unexcused: number;
@@ -47,11 +54,15 @@ export type PlayerAnalyticsSummary = {
   averageRating: number | null;
   latestFiveAverage: number | null;
   trend: PerformanceTrend;
+  participationRate: number | null;
+  attendanceWhenExpectedRate: number | null;
+  /** Compatibility alias for attendanceWhenExpectedRate. */
   attendanceRate: number | null;
   reliabilityPenalty: number;
   averageReliabilityPenalty: number | null;
   ratingDistribution: RatingDistribution;
   attendanceDistribution: AttendanceDistribution;
+  plannedAbsenceDistribution: PlannedAbsenceDistribution;
   categorySummaries: CategorySummary[];
   highestRatedArea?: CategorySummary;
   lowestRatedArea?: CategorySummary;
@@ -73,6 +84,8 @@ export type TeamAnalyticsEvent = {
     notRecorded: number;
     attended: number;
     recorded: number;
+    participationRate: number | null;
+    attendanceWhenExpectedRate: number | null;
     rate: number | null;
   };
   review?: {
@@ -92,6 +105,8 @@ export type TeamAnalyticsOverview = {
   sessionsWithAttendance: number;
   participantRecordCount: number;
   attendanceRecordCount: number;
+  teamParticipationRate: number | null;
+  teamAttendanceWhenExpectedRate: number | null;
   teamAttendanceRate: number | null;
   present: number;
   late: number;
@@ -144,6 +159,8 @@ export type AttendanceDistribution = {
   lateCancellation: number;
   unexcused: number;
 };
+
+export type PlannedAbsenceDistribution = Record<"injured" | "sick" | "school" | "work" | "holiday" | "private" | "other", number>;
 
 export type PerformanceTrend = {
   label: "No trend" | "Early trend" | "Improving" | "Stable" | "Declining";
@@ -247,9 +264,19 @@ export function calculatePerformanceTrend(values: number[]): PerformanceTrend {
 }
 
 export function calculateAttendanceRate(records: PlayerAnalyticsRecord[]) {
+  return calculateAttendanceWhenExpectedRate(records);
+}
+
+export function calculateParticipationRate(records: PlayerAnalyticsRecord[]) {
+  if (!records.length) return null;
+  const participated = records.filter(hasParticipated).length;
+  return participated / records.length;
+}
+
+export function calculateAttendanceWhenExpectedRate(records: PlayerAnalyticsRecord[]) {
   const recorded = records.filter(hasAttendanceRateOutcome);
   if (!recorded.length) return null;
-  const attended = recorded.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
+  const attended = recorded.filter(hasParticipated).length;
   return attended / recorded.length;
 }
 
@@ -264,6 +291,16 @@ export function calculateAttendanceDistribution(records: PlayerAnalyticsRecord[]
     lateCancellation: records.filter((record) => record.finalStatus === "S").length,
     unexcused: records.filter((record) => record.finalStatus === "U").length
   };
+}
+
+export function calculatePlannedAbsenceDistribution(records: PlayerAnalyticsRecord[]): PlannedAbsenceDistribution {
+  const distribution: PlannedAbsenceDistribution = { injured: 0, sick: 0, school: 0, work: 0, holiday: 0, private: 0, other: 0 };
+  for (const record of records) {
+    if (record.plannedStatus !== "unavailable" || !record.plannedReason) continue;
+    const key = plannedAbsenceKey(record.plannedReason);
+    distribution[key] += 1;
+  }
+  return distribution;
 }
 
 export function calculateReliabilitySummary(records: PlayerAnalyticsRecord[]) {
@@ -387,9 +424,11 @@ export function createPlayerAnalyticsSummary(
     ? sortRecordsByEventDate(playerRecords.filter((record) => exactEventIds.has(record.eventId)))
     : filterRecordsByPeriod(playerRecords, period, new Date(), seasonStartMonth, seasonStartDay, customFrom, customTo);
   const ratings = records.map((record) => record.overallRating).filter(isRating);
-  const attendanceRecords = records.filter(hasAttendanceRateOutcome);
-  const attendanceDistribution = calculateAttendanceDistribution(attendanceRecords);
-  const reliability = calculateReliabilitySummary(attendanceRecords);
+  const recordedAttendance = records.filter(hasRecordedAttendance);
+  const expectedRecords = records.filter(isExpectedAnalyticsRecord);
+  const expectedRecordedAttendance = expectedRecords.filter(hasRecordedAttendance);
+  const attendanceDistribution = calculateAttendanceDistribution(recordedAttendance);
+  const reliability = calculateReliabilitySummary(recordedAttendance);
   const categorySummaries = calculateCategorySummary(records);
   const interpretableCategories = categorySummaries.filter((category) => category.count >= 3 && category.average !== null);
   const highestRatedArea = interpretableCategories.length
@@ -401,27 +440,40 @@ export function createPlayerAnalyticsSummary(
 
   const averageRating = calculateAverageRating(ratings);
   const trend = calculatePerformanceTrend(ratings);
-  const attended = attendanceRecords.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
+  const attended = records.filter(hasParticipated).length;
+  const attendedWhenExpected = expectedRecordedAttendance.filter(hasParticipated).length;
+  const participationRate = calculateParticipationRate(records);
+  const attendanceWhenExpectedRate = calculateAttendanceWhenExpectedRate(records);
   const latestRating = ratings[0];
   const evidenceBase = classifyEvidenceBase(ratings.length);
 
   return {
     player,
     records,
-    trainings: attendanceRecords.length,
+    trainings: records.length,
     attended,
+    expectedTrainings: expectedRecords.length,
+    notExpectedTrainings: records.filter((record) => record.plannedStatus === "unavailable").length,
+    unclearTrainings: records.filter((record) => record.plannedStatus === "unclear").length,
+    recordedTrainings: recordedAttendance.length,
+    notRecordedTrainings: records.length - recordedAttendance.length,
+    attendedWhenExpected,
+    attendanceWhenExpectedRecorded: expectedRecordedAttendance.length,
     late: attendanceDistribution.late,
-    absent: attendanceRecords.filter((record) => record.finalStatus && !["present", "Z"].includes(record.finalStatus)).length,
+    absent: recordedAttendance.filter((record) => !hasParticipated(record)).length,
     unexcused: attendanceDistribution.unexcused,
     rated: ratings.length,
     averageRating,
     latestFiveAverage: calculateAverageRating(ratings.slice(0, 5)),
     trend,
-    attendanceRate: calculateAttendanceRate(records),
+    participationRate,
+    attendanceWhenExpectedRate,
+    attendanceRate: attendanceWhenExpectedRate,
     reliabilityPenalty: reliability.total,
     averageReliabilityPenalty: reliability.average,
     ratingDistribution: calculateRatingDistribution(ratings),
     attendanceDistribution,
+    plannedAbsenceDistribution: calculatePlannedAbsenceDistribution(records),
     categorySummaries,
     highestRatedArea,
     lowestRatedArea,
@@ -438,8 +490,15 @@ export function hasRecordedAttendance(record: PlayerAnalyticsRecord) {
 }
 
 export function hasAttendanceRateOutcome(record: PlayerAnalyticsRecord) {
-  if (record.finalStatus === "present" || record.finalStatus === "Z") return true;
-  return Boolean(record.finalStatus) && record.plannedStatus !== "unavailable";
+  return isExpectedAnalyticsRecord(record) && hasRecordedAttendance(record);
+}
+
+export function isExpectedAnalyticsRecord(record: Pick<PlayerAnalyticsRecord, "plannedStatus">) {
+  return !record.plannedStatus || record.plannedStatus === "expected";
+}
+
+export function hasParticipated(record: Pick<PlayerAnalyticsRecord, "finalStatus">) {
+  return record.finalStatus === "present" || record.finalStatus === "Z";
 }
 
 export function isPastAttendanceEvent(event?: SquadTrainingEvent, now = new Date()) {
@@ -467,7 +526,7 @@ export function sortPlayerAnalytics(summaries: PlayerAnalyticsSummary[], sort: A
     if (sort === "average") return nullableCompare(a.averageRating, b.averageRating, direction) || nameFallback;
     if (sort === "latestFive") return nullableCompare(a.latestFiveAverage, b.latestFiveAverage, direction) || nameFallback;
     if (sort === "trend") return nullableCompare(a.trend.value, b.trend.value, direction) || nameFallback;
-    if (sort === "attendance") return nullableCompare(a.attendanceRate, b.attendanceRate, direction) || nameFallback;
+    if (sort === "attendance") return nullableCompare(a.participationRate, b.participationRate, direction) || nameFallback;
     if (sort === "reliability") return directionMultiplier * (a.reliabilityPenalty - b.reliabilityPenalty) || nameFallback;
     if (sort === "lastTraining") {
       return directionMultiplier * (a.latestTraining?.event?.date ?? "").localeCompare(b.latestTraining?.event?.date ?? "") || nameFallback;
@@ -491,7 +550,7 @@ export function formatRating(value: number | null, locale: Locale = "en") {
 }
 
 export function formatPercent(value: number | null, locale: Locale = "en") {
-  return value === null ? systemText(locale, "No data") : formatNumber(value, locale, { style: "percent", maximumFractionDigits: 0 });
+  return value === null ? systemText(locale, "No data") : formatNumber(value, locale, { style: "percent", maximumFractionDigits: 1 });
 }
 
 export function playerName(player: SquadPlayer) {
@@ -526,6 +585,14 @@ function uniqueEventIds(records: PlayerAnalyticsRecord[]) {
 
 function isRating(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 5;
+}
+
+function plannedAbsenceKey(reason: NonNullable<PlayerAnalyticsRecord["plannedReason"]>): keyof PlannedAbsenceDistribution {
+  if (reason === "V" || reason === "injured") return "injured";
+  if (reason === "K" || reason === "sick") return "sick";
+  if (reason === "school" || reason === "work" || reason === "holiday" || reason === "private") return reason;
+  if (reason === "P") return "private";
+  return "other";
 }
 
 function average(values: number[]) {

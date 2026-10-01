@@ -354,17 +354,18 @@ export function getPlayerAttentionItems(player: WorkspacePlayerSummary, preferen
     });
   }
 
-  if (summary.player.playerType === "roster" && summary.attendanceRate !== null && summary.attendanceRate * 100 < preferences.lowAttendancePercent && summary.trainings >= 3) {
+  if (summary.player.playerType === "roster" && summary.participationRate !== null && summary.participationRate * 100 < preferences.lowAttendancePercent && summary.trainings >= 3) {
     push({
       type: "low-attendance",
       category: "attendance",
-      priority: summary.attendanceRate * 100 < 60 ? "high" : "medium",
-      title: "Low attendance",
-      explanation: `Attendance is ${Math.round(summary.attendanceRate * 100)}% in the selected period based on completed trainings with recorded attendance.`,
+      priority: summary.participationRate * 100 < 60 ? "high" : "medium",
+      title: "Low participation",
+      explanation: `Participation is ${Math.round(summary.participationRate * 100)}% in the selected period across all relevant historical training snapshots.`,
       evidence: evidence([
-        ["Attendance", `${Math.round(summary.attendanceRate * 100)}%`],
-        ["Attended", summary.attended],
-        ["Eligible completed trainings", summary.trainings],
+        ["Participation rate", `${Math.round(summary.participationRate * 100)}%`],
+        ["Participated", summary.attended],
+        ["Relevant trainings", summary.trainings],
+        ["Not expected", summary.notExpectedTrainings],
         ["Threshold", `${preferences.lowAttendancePercent}%`]
       ]),
       thresholdLabel: `Below ${preferences.lowAttendancePercent}% in ${context.periodLabel}.`,

@@ -290,7 +290,7 @@
       },
       "attendance": {
         "label": "Anwesenheit",
-        "description": "Anwesenheitsquote und Zuverlässigkeit."
+        "description": "Teilnahmequote, Anwesenheit bei Einplanung und Zuverlässigkeit."
       },
       "unavailable": {
         "label": "Nicht verfügbar",
@@ -387,7 +387,9 @@
       "noPosition": "Keine Position",
       "years": "Jahre",
       "average": "Durchschnitt",
-      "attendance": "Anwesenheit",
+      "attendance": "Teilnahmequote",
+      "attendanceWhenExpected": "Anwesenheit bei Einplanung",
+      "notExpected": "Nicht eingeplant",
       "trend": "Trend",
       "review": "Überprüfung",
       "latest": "Letzte",

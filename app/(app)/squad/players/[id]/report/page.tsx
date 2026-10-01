@@ -77,12 +77,15 @@ export default async function PlayerReportPage({ params, searchParams }: PlayerR
         <section className="print-avoid-break mt-6">
           <h2 className="text-lg font-bold text-board-navy">Summary</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <ReportStat label="Trainings" value={String(summary.trainings)} />
+            <ReportStat label="Relevant trainings" value={String(summary.trainings)} />
             <ReportStat label="Rated trainings" value={String(summary.rated)} />
             <ReportStat label="Average rating" value={formatRating(summary.averageRating)} />
             <ReportStat label="Trend" value={summary.trend.value === null ? summary.trend.label : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)}`} />
-            <ReportStat label="Attendance" value={formatPercent(summary.attendanceRate)} />
-            <ReportStat label="Present incl. late" value={String(summary.attended)} />
+            <ReportStat label="Participation rate" value={formatPercent(summary.participationRate)} />
+            <ReportStat label="Attendance when expected" value={formatPercent(summary.attendanceWhenExpectedRate)} />
+            <ReportStat label="Participated" value={String(summary.attended)} />
+            <ReportStat label="Not expected" value={String(summary.notExpectedTrainings)} />
+            <ReportStat label="Actual attendance recorded" value={`${summary.recordedTrainings}/${summary.trainings}`} />
             <ReportStat label="Late" value={String(summary.late)} />
             <ReportStat label="Reliability malus" value={summary.reliabilityPenalty.toFixed(1)} />
           </div>

@@ -53,7 +53,7 @@ const analyticsSortOptions: Record<"en" | "de", Array<{ id: AnalyticsSortKey; la
     { id: "position", label: "Position" },
     { id: "status", label: "Status" },
     { id: "trainings", label: "Trainings" },
-    { id: "attendance", label: "Attendance" },
+    { id: "attendance", label: "Participation rate" },
     { id: "average", label: "Average rating" },
     { id: "latestFive", label: "Latest 5" },
     { id: "trend", label: "Trend" },
@@ -67,7 +67,7 @@ const analyticsSortOptions: Record<"en" | "de", Array<{ id: AnalyticsSortKey; la
     { id: "position", label: "Position" },
     { id: "status", label: "Status" },
     { id: "trainings", label: "Trainingseinheiten" },
-    { id: "attendance", label: "Anwesenheit" },
+    { id: "attendance", label: "Teilnahmequote" },
     { id: "average", label: "Durchschnittsbewertung" },
     { id: "latestFive", label: "Letzte 5" },
     { id: "trend", label: "Trend" },
@@ -102,7 +102,9 @@ const analyticsCopy = {
     sortedBy: (label: string, direction: AnalyticsSortDirection) => `Sorted by ${label} ${direction === "asc" ? "ascending" : "descending"}`,
     resetFilters: "Reset filters",
     activeTeam: "Active team",
-    attended: (count: number) => `${count} attended`,
+    attended: (count: number) => `${count} participated`,
+    participationDetail: (attended: number, total: number) => `${attended} of ${total} participated`,
+    expectedAttendanceDetail: (attended: number, total: number, notExpected: number) => `${attended}/${total} when expected · ${notExpected} not expected`,
     finalRatingsOnly: "Final overall ratings only",
     manualCoachStatus: "Manual coach status",
     noDataTitle: "No analytics data for this view.",
@@ -130,7 +132,7 @@ const analyticsCopy = {
     metrics: {
       players: "Players",
       trainings: "Trainings",
-      teamAttendance: "Team attendance",
+      teamAttendance: "Team participation",
       ratedPerformances: "Rated performances",
       openAssessments: "Open assessments"
     },
@@ -139,7 +141,7 @@ const analyticsCopy = {
       position: "Position",
       status: "Status",
       trainings: "Trainings",
-      attendance: "Attendance",
+      attendance: "Participation",
       average: "Average",
       latestFive: "Latest 5",
       trend: "Trend",
@@ -150,7 +152,8 @@ const analyticsCopy = {
     helpItems: [
       { title: "Average rating", text: "only final overall ratings intentionally entered by the coach. Unrated trainings are not counted as 3." },
       { title: "Trend", text: "latest five rated trainings compared with the five rated trainings before them, inside the selected period." },
-      { title: "Attendance rate", text: "Present and Late count as attended. Not expected and not recorded are excluded from the denominator." },
+      { title: "Participation rate", text: "Present and Late divided by every relevant historical participant snapshot, including not expected and not recorded trainings." },
+      { title: "Attendance when expected", text: "Present and Late divided only by expected trainings with a recorded actual outcome. Not expected trainings are excluded." },
       { title: "Reliability", text: "existing malus rules; late only counts when the penalty is active." },
       { title: "Evidence", text: "shows how many rated trainings support the performance view." },
       { title: "Coach assessment", text: "manual coach marker, separate from automatic summaries." },
@@ -180,7 +183,9 @@ const analyticsCopy = {
     sortedBy: (label: string, direction: AnalyticsSortDirection) => `Nach ${label} ${direction === "asc" ? "aufsteigend" : "absteigend"} sortiert`,
     resetFilters: "Filter zurücksetzen",
     activeTeam: "Aktive Mannschaft",
-    attended: (count: number) => `${count} anwesend`,
+    attended: (count: number) => `${count} teilgenommen`,
+    participationDetail: (attended: number, total: number) => `${attended} von ${total} teilgenommen`,
+    expectedAttendanceDetail: (attended: number, total: number, notExpected: number) => `${attended}/${total} bei Einplanung · ${notExpected} nicht eingeplant`,
     finalRatingsOnly: "Nur abschließende Gesamtbewertungen",
     manualCoachStatus: "Manuelle Trainerbewertung",
     noDataTitle: "Keine Analysedaten für diese Ansicht.",
@@ -208,7 +213,7 @@ const analyticsCopy = {
     metrics: {
       players: "Spieler",
       trainings: "Trainingseinheiten",
-      teamAttendance: "Mannschaftsanwesenheit",
+      teamAttendance: "Mannschaftsteilnahme",
       ratedPerformances: "Bewertete Leistungen",
       openAssessments: "Offene Bewertungen"
     },
@@ -217,7 +222,7 @@ const analyticsCopy = {
       position: "Position",
       status: "Status",
       trainings: "Trainingseinheiten",
-      attendance: "Anwesenheit",
+      attendance: "Teilnahmequote",
       average: "Durchschnitt",
       latestFive: "Letzte 5",
       trend: "Trend",
@@ -228,7 +233,8 @@ const analyticsCopy = {
     helpItems: [
       { title: "Durchschnittsbewertung", text: "nur abschließende Gesamtbewertungen, die der Trainer bewusst eingetragen hat. Nicht bewertete Trainings zählen nicht als 3." },
       { title: "Trend", text: "die letzten fünf bewerteten Trainings im Vergleich zu den fünf bewerteten Trainings davor, innerhalb des gewählten Zeitraums." },
-      { title: "Anwesenheitsquote", text: "Anwesend und Verspätet zählen als anwesend. Nicht eingeplant und nicht erfasst werden aus der Grundlage ausgeschlossen." },
+      { title: "Teilnahmequote", text: "Anwesend und Verspätet geteilt durch alle relevanten historischen Teilnehmerdatensätze, einschließlich nicht eingeplanter und nicht erfasster Trainings." },
+      { title: "Anwesenheit bei eingeplanten Trainings", text: "Anwesend und Verspätet geteilt nur durch eingeplante Trainings mit erfasstem Ergebnis. Nicht eingeplante Trainings sind ausgeschlossen." },
       { title: "Zuverlässigkeit", text: "bestehende Malus-Regeln; Verspätung zählt nur, wenn der Abzug aktiv ist." },
       { title: "Belege", text: "zeigt, wie viele bewertete Trainings die Leistungsansicht stützen." },
       { title: "Trainereinschätzung", text: "manuelle Einschätzung des Trainers, getrennt von automatischen Zusammenfassungen." },
@@ -399,7 +405,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryMetric icon={<Users className="h-4 w-4" />} label={copy.metrics.players} value={String(summaries.length)} hint={`${copy.activeTeam}: ${teamAnalytics.activeSquad.name}`} />
         <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label={copy.metrics.trainings} value={String(teamAnalytics.trainingSessions)} hint={periodDefinition.shortLabel} />
-        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label={copy.metrics.teamAttendance} value={formatPercent(teamAnalytics.teamAttendanceRate, locale)} hint={copy.attended(teamAnalytics.present + teamAnalytics.late)} />
+        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label={copy.metrics.teamAttendance} value={formatPercent(teamAnalytics.teamParticipationRate, locale)} hint={copy.attended(teamAnalytics.present + teamAnalytics.late)} />
         <SummaryMetric icon={<Star className="h-4 w-4" />} label={copy.metrics.ratedPerformances} value={String(totalRated)} hint={copy.finalRatingsOnly} />
         <SummaryMetric icon={<Info className="h-4 w-4" />} label={copy.metrics.openAssessments} value={String(openAssessments)} hint={copy.manualCoachStatus} />
       </section>
@@ -512,7 +518,9 @@ async function AnalyticsSectionPanel({
   if (section === "attendance") {
     return (
       <Panel title={ui("Team Attendance")} icon={<UserCheck className="h-5 w-5" />}>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+          <MiniStat label={locale === "de" ? "Teilnahmequote" : "Participation rate"} value={formatPercent(teamAnalytics.teamParticipationRate, locale)} />
+          <MiniStat label={locale === "de" ? "Anwesenheit bei Einplanung" : "Attendance when expected"} value={formatPercent(teamAnalytics.teamAttendanceWhenExpectedRate, locale)} />
           <MiniStat label={ui("Recorded attendance")} value={`${teamAnalytics.attendanceRecordCount}/${teamAnalytics.participantRecordCount}`} />
           <MiniStat label={ui("Present")} value={teamAnalytics.present} />
           <MiniStat label={ui("Late")} value={teamAnalytics.late} />
@@ -609,7 +617,7 @@ async function AnalyticsSectionPanel({
       <div className="grid gap-3 sm:grid-cols-4">
         <MiniStat label={ui("Players shown")} value={summaries.length} />
         <MiniStat label={ui("Rated players")} value={summaries.filter((summary) => summary.rated > 0).length} />
-        <MiniStat label={ui("Attendance data")} value={summaries.filter((summary) => summary.attendanceRate !== null).length} />
+        <MiniStat label={ui("Participation data")} value={summaries.filter((summary) => summary.participationRate !== null).length} />
         <MiniStat label={ui("Open assessments")} value={summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length} />
       </div>
     </Panel>
@@ -619,6 +627,7 @@ async function AnalyticsSectionPanel({
 async function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
   const locale = await getActiveLocale();
   const ui = createSystemTranslator(locale);
+  const copy = analyticsCopy[locale];
   return (
     <tr className="align-middle hover:bg-slate-50/70">
       <td className="px-3 py-3">
@@ -633,7 +642,10 @@ async function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnal
       <MetricCell active={activeSort === "status"}>{ui(summary.player.playerType === "trial" ? "Trial" : "Roster")}</MetricCell>
       <MetricCell active={activeSort === "trainings"} align="right">{summary.trainings}</MetricCell>
       <MetricCell active={activeSort === "attendance"} align="right">
-        <MetricStack value={formatPercent(summary.attendanceRate, locale)} detail={ui("{attended} of {total}", { attended: summary.attended, total: summary.trainings })} />
+        <MetricStack
+          value={formatPercent(summary.participationRate, locale)}
+          detail={`${copy.participationDetail(summary.attended, summary.trainings)} · ${copy.expectedAttendanceDetail(summary.attendedWhenExpected, summary.attendanceWhenExpectedRecorded, summary.notExpectedTrainings)}`}
+        />
       </MetricCell>
       <MetricCell active={activeSort === "average"} align="right">
         <MetricStack value={formatRating(summary.averageRating, locale)} detail={ui("{count} ratings", { count: summary.rated })} />
@@ -686,7 +698,9 @@ async function PlayerAnalyticsMobileCard({ summary, activeSort }: { summary: Pla
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
         <CompactMetric label={ui("Average")} value={formatRating(summary.averageRating, locale)} muted={activeSort === "average"} />
-        <CompactMetric label={ui("Attendance")} value={formatPercent(summary.attendanceRate, locale)} muted={activeSort === "attendance"} />
+        <CompactMetric label={analyticsCopy[locale].headers.attendance} value={formatPercent(summary.participationRate, locale)} muted={activeSort === "attendance"} />
+        <CompactMetric label={locale === "de" ? "Anwesenheit bei Einplanung" : "Attendance when expected"} value={formatPercent(summary.attendanceWhenExpectedRate, locale)} />
+        <CompactMetric label={ui("Not expected")} value={String(summary.notExpectedTrainings)} />
         <CompactMetric label={ui("Trend")} value={summary.trend.value === null ? ui(summary.trend.label) : formatNumber(summary.trend.value, locale, { minimumFractionDigits: 1, signDisplay: "exceptZero" })} muted={activeSort === "trend"} />
         <CompactMetric label={ui("Evidence")} value={ui(summary.evidenceBase.label)} />
       </div>
@@ -873,12 +887,13 @@ function CompactMetric({ label, value, muted }: { label: string; value: string; 
 
 function mobilePrimaryMetric(summary: PlayerAnalyticsSummary, sort: AnalyticsSortKey, locale: Locale) {
   const ui = createSystemTranslator(locale);
+  const copy = analyticsCopy[locale];
   const rated = ui("{count} rated trainings", { count: summary.rated });
   if (sort === "position") return { label: ui("Position"), value: summary.player.position || ui("No position"), detail: ui(summary.player.playerType === "trial" ? "Trial player" : "Roster player") };
   if (sort === "status") return { label: ui("Status"), value: ui(summary.player.playerType === "trial" ? "Trial" : "Roster"), detail: summary.player.position || ui("No position") };
   if (sort === "average") return { label: ui("Average rating"), value: formatRating(summary.averageRating, locale), detail: rated };
   if (sort === "latestFive") return { label: ui("Latest 5"), value: formatRating(summary.latestFiveAverage, locale), detail: ui("Average of latest five rated trainings") };
-  if (sort === "attendance") return { label: ui("Attendance"), value: formatPercent(summary.attendanceRate, locale), detail: ui("{attended} of {total}", { attended: summary.attended, total: summary.trainings }) };
+  if (sort === "attendance") return { label: copy.headers.attendance, value: formatPercent(summary.participationRate, locale), detail: `${copy.participationDetail(summary.attended, summary.trainings)} · ${copy.expectedAttendanceDetail(summary.attendedWhenExpected, summary.attendanceWhenExpectedRecorded, summary.notExpectedTrainings)}` };
   if (sort === "trend") return { label: ui("Trend"), value: summary.trend.value === null ? ui("No trend yet") : formatNumber(summary.trend.value, locale, { minimumFractionDigits: 1, signDisplay: "exceptZero" }), detail: ui(summary.trend.label) };
   if (sort === "reliability") return { label: ui("Reliability malus"), value: formatNumber(summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 }), detail: ui("{count} late · {unexcused} unexcused", { count: summary.late, unexcused: summary.unexcused }) };
   if (sort === "lastTraining") return { label: ui("Last training"), value: summary.latestTraining?.event?.date ? formatShortDate(summary.latestTraining.event.date, locale) : ui("No data"), detail: summary.latestTraining?.event?.label || ui("No latest training") };
