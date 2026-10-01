@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { getTacticalFormation, slot, tacticalFormations } from "../lib/squad/tactical-formations.ts";
 import {
   createSlotRowsForPlan,
@@ -7,6 +8,7 @@ import {
   isFitVisibleInMode,
   mapTacticalSlotRow
 } from "../lib/squad/tactical-planner.ts";
+import { calculateAnchoredFloatingPosition } from "../lib/squad/planner-floating-position.ts";
 
 for (const formation of tacticalFormations) {
   assert.equal(formation.slots.length, 11, `${formation.code} must have 11 positions`);
@@ -85,4 +87,34 @@ assert.equal(evaluatePlayerSlotFit(player("LW"), broadAcceptedPositions, true).f
 assert.equal(evaluatePlayerSlotFit(player(undefined), broadAcceptedPositions, true).fitType, "out_of_position");
 assert.equal(evaluatePlayerSlotFit(player(undefined), broadAcceptedPositions, true).eligible, true);
 
-console.log("PASS: formations, canonical position fit precedence, direct/bridge compatibility, no transitive inference, Fit Mode and custom slot semantics.");
+const centeredAnchor = { top: 200, right: 360, bottom: 240, left: 280, width: 80, height: 40 };
+const below = calculateAnchoredFloatingPosition({
+  anchor: centeredAnchor,
+  floatingWidth: 352,
+  floatingHeight: 300,
+  viewportWidth: 900,
+  viewportHeight: 800
+});
+assert.equal(below.placement, "bottom", "Position detail should open below when enough space is available");
+assert.ok(below.left >= 12 && below.left + 352 <= 888, "Position detail must remain inside horizontal viewport bounds");
+
+const bottomEdge = calculateAnchoredFloatingPosition({
+  anchor: { top: 690, right: 360, bottom: 730, left: 280, width: 80, height: 40 },
+  floatingWidth: 352,
+  floatingHeight: 300,
+  viewportWidth: 900,
+  viewportHeight: 760
+});
+assert.equal(bottomEdge.placement, "top", "Position detail should flip above a trigger near the bottom edge");
+assert.ok(bottomEdge.top >= 12, "Flipped position detail must remain inside the top viewport edge");
+
+const plannerSource = readFileSync(new URL("../components/squad/squad-tactical-planner.tsx", import.meta.url), "utf8");
+assert.match(plannerSource, /secondaryPosition: "Secondary position"/);
+assert.match(plannerSource, /secondaryPosition: "Nebenposition"/);
+assert.match(plannerSource, /compatiblePosition: "Compatible position"/);
+assert.match(plannerSource, /compatiblePosition: "Kompatible Position"/);
+assert.match(plannerSource, /data-position-detail-popover/);
+assert.match(plannerSource, /createPortal/);
+assert.doesNotMatch(plannerSource, /!editingFormation && selectedSlot \? <SlotDepthPanel/);
+
+console.log("PASS: formations, canonical position fit precedence, fit tooltips, anchored detail collision, Fit Mode and custom slot semantics.");
