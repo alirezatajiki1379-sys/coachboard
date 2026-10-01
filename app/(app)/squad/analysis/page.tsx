@@ -22,7 +22,6 @@ import {
   type AnalyticsSection,
   type AnalyticsSortDirection,
   type AnalyticsSortKey,
-  type PlayerAnalyticsRecord,
   type PlayerAnalyticsSummary,
   type TeamAnalyticsOverview
 } from "@/lib/squad/analytics";
@@ -90,6 +89,10 @@ const analyticsCopy = {
     position: "Position",
     allPositions: "All positions",
     period: "Period",
+    training: "Training session",
+    allTrainings: "All trainings in period",
+    applyTraining: "Apply training",
+    unnamedTraining: "Training",
     customFrom: "Custom period from date",
     customTo: "Custom period to date",
     datePlaceholder: "dd.mm.yyyy",
@@ -164,6 +167,10 @@ const analyticsCopy = {
     position: "Position",
     allPositions: "Alle Positionen",
     period: "Zeitraum",
+    training: "Trainingseinheit",
+    allTrainings: "Alle Trainings im Zeitraum",
+    applyTraining: "Training anwenden",
+    unnamedTraining: "Training",
     customFrom: "Zeitraum von Datum",
     customTo: "Zeitraum bis Datum",
     datePlaceholder: "TT.MM.JJJJ",
@@ -243,9 +250,8 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
   const copy = analyticsCopy[locale];
   const playerTypeOptions = analyticsPlayerTypeOptions[locale];
   const sortOptions = analyticsSortOptions[locale];
-  const { summaries, positions, seasonSettings, teamAnalytics } = await getSquadAnalyticsOverview(supabase, user.id, filters);
-  const allFilteredRecords = summaries.flatMap((summary) => summary.records);
-  const periodDefinition = getPeriodDefinition(filters, allFilteredRecords, seasonSettings, locale);
+  const { summaries, positions, seasonSettings, teamAnalytics, availableEvents } = await getSquadAnalyticsOverview(supabase, user.id, filters);
+  const periodDefinition = getPeriodDefinition(filters, teamAnalytics.events.map((item) => item.event), seasonSettings, locale);
   const totalRated = summaries.reduce((sum, summary) => sum + summary.rated, 0);
   const openAssessments = summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length;
   const activeFilters = countActiveFilters(filters);
@@ -279,7 +285,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
           <Filter className="h-4 w-4" />
           {copy.filters}{activeFilters ? ` (${activeFilters})` : ""}
         </div>
-        <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_1fr_1.35fr] md:mt-0">
+        <div className="mt-3 grid gap-4 lg:grid-cols-[0.8fr_0.8fr_1.25fr_1.15fr] md:mt-0">
           <ControlField label={copy.players}>
             <div className="flex flex-wrap gap-2">
               {playerTypeOptions.map((option) => (
@@ -302,7 +308,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
           <ControlField label={copy.period}>
             <div className="flex flex-wrap gap-2">
               {(Object.keys(copy.periods) as AnalyticsPeriod[]).map((period) => (
-                <FilterLink key={period} href={hrefFor({ ...filters, period })} active={filters.period === period}>
+                <FilterLink key={period} href={hrefFor({ ...filters, period, trainingId: undefined })} active={filters.period === period}>
                   {copy.periods[period]}
                 </FilterLink>
               ))}
@@ -340,6 +346,35 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
             <p className="mt-2 text-sm font-semibold text-board-navy">{periodDefinition.rangeLabel}</p>
             {periodDefinition.note ? <p className="mt-1 text-xs text-slate-500">{periodDefinition.note}</p> : null}
           </ControlField>
+          <ControlField label={copy.training}>
+            <form action="/squad/analysis" className="grid gap-2">
+              <input type="hidden" name="period" value={filters.period} />
+              {filters.section !== "overview" ? <input type="hidden" name="section" value={filters.section} /> : null}
+              {filters.playerType !== "all" ? <input type="hidden" name="playerType" value={filters.playerType} /> : null}
+              {filters.position ? <input type="hidden" name="position" value={filters.position} /> : null}
+              {filters.ratedOnly ? <input type="hidden" name="ratedOnly" value="true" /> : null}
+              {filters.sort !== "name" ? <input type="hidden" name="sort" value={filters.sort} /> : null}
+              {filters.direction !== defaultSortDirection(filters.sort) ? <input type="hidden" name="direction" value={filters.direction} /> : null}
+              {filters.period === "custom" && filters.customFrom ? <input type="hidden" name="from" value={formatGermanDate(filters.customFrom)} /> : null}
+              {filters.period === "custom" && filters.customTo ? <input type="hidden" name="to" value={formatGermanDate(filters.customTo)} /> : null}
+              <select
+                name="training"
+                defaultValue={filters.trainingId ?? ""}
+                disabled={!availableEvents.length}
+                className="h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 disabled:bg-slate-50 disabled:text-slate-400"
+              >
+                <option value="">{copy.allTrainings}</option>
+                {availableEvents.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {formatDate(event.date, locale)} · {event.startTime} · {event.label || copy.unnamedTraining}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" disabled={!availableEvents.length} className="inline-flex h-10 items-center justify-center rounded-md bg-board-navy px-3 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300">
+                {copy.applyTraining}
+              </button>
+            </form>
+          </ControlField>
         </div>
         <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
           <p>
@@ -349,6 +384,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
             {" · "}
             {copy.periods[filters.period]}
             {filters.period === "custom" && filters.customFrom && filters.customTo ? ` (${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)})` : ""}
+            {filters.trainingId ? ` · ${availableEvents.find((event) => event.id === filters.trainingId)?.label || copy.unnamedTraining}` : ""}
             {" · "}
             {copy.sortedBy(sortOptions.find((option) => option.id === filters.sort)?.label ?? "Name", filters.direction)}
           </p>
@@ -443,12 +479,13 @@ async function AnalyticsSectionPanel({
     return (
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <Panel title={ui("Training Sessions")} icon={<CalendarCheck className="h-5 w-5" />}>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MiniStat label={ui("Sessions")} value={teamAnalytics.trainingSessions} />
             <MiniStat label={ui("Reviewed")} value={`${teamAnalytics.reviewedSessions}/${teamAnalytics.trainingSessions}`} />
             <MiniStat label={ui("Review coverage")} value={formatPercent(teamAnalytics.reviewCoverage, locale)} />
             <MiniStat label={ui("Quality")} value={formatRating(teamAnalytics.averageSessionQuality, locale)} />
             <MiniStat label={ui("Intensity")} value={formatRating(teamAnalytics.averageSessionIntensity, locale)} />
+            <MiniStat label={ui("Player Response")} value={formatRating(teamAnalytics.averagePlayerResponse, locale)} />
             <MiniStat label={ui("Planned sessions")} value={formatPercent(teamAnalytics.planCoverage.rate, locale)} />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -475,7 +512,8 @@ async function AnalyticsSectionPanel({
   if (section === "attendance") {
     return (
       <Panel title={ui("Team Attendance")} icon={<UserCheck className="h-5 w-5" />}>
-        <div className="grid gap-3 sm:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <MiniStat label={ui("Recorded attendance")} value={`${teamAnalytics.attendanceRecordCount}/${teamAnalytics.participantRecordCount}`} />
           <MiniStat label={ui("Present")} value={teamAnalytics.present} />
           <MiniStat label={ui("Late")} value={teamAnalytics.late} />
           <MiniStat label={ui("Absent")} value={teamAnalytics.absent} />
@@ -855,7 +893,7 @@ function getPeriodDefinition(
     customFrom?: string;
     customTo?: string;
   },
-  records: PlayerAnalyticsRecord[],
+  events: Array<{ date: string }>,
   seasonSettings: { seasonStartMonth: number; seasonStartDay: number },
   locale: "en" | "de"
 ) {
@@ -878,7 +916,7 @@ function getPeriodDefinition(
     return { shortLabel: copy.periods[filters.period], rangeLabel: `${formatDate(dateOnly(fromDate), locale)} – ${formatDate(to, locale)}` };
   }
 
-  const dates = Array.from(new Set(records.map((record) => record.event?.date).filter((date): date is string => Boolean(date)))).sort();
+  const dates = Array.from(new Set(events.map((event) => event.date).filter(Boolean))).sort();
   if (!dates.length) return { shortLabel: copy.periods[filters.period], rangeLabel: copy.noTrainingData };
   return {
     shortLabel: copy.periods[filters.period],
@@ -945,12 +983,14 @@ function countActiveFilters(filters: {
   direction: AnalyticsSortDirection;
   customFrom?: string;
   customTo?: string;
+  trainingId?: string;
 }) {
   return (
     Number(filters.period !== "last10") +
     Number(filters.section !== "overview") +
     Number(filters.playerType !== "all") +
     Number(Boolean(filters.position)) +
+    Number(Boolean(filters.trainingId)) +
     Number(filters.ratedOnly) +
     Number(filters.sort !== "name") +
     Number(filters.direction !== defaultSortDirection(filters.sort))
@@ -967,6 +1007,7 @@ function hrefFor(filters: {
   direction: AnalyticsSortDirection;
   customFrom?: string;
   customTo?: string;
+  trainingId?: string;
 }) {
   const params = new URLSearchParams();
   if (filters.period !== "last10") params.set("period", filters.period);
@@ -977,6 +1018,7 @@ function hrefFor(filters: {
   }
   if (filters.playerType !== "all") params.set("playerType", filters.playerType);
   if (filters.position) params.set("position", filters.position);
+  if (filters.trainingId) params.set("training", filters.trainingId);
   if (filters.ratedOnly) params.set("ratedOnly", "true");
   if (filters.sort !== "name") params.set("sort", filters.sort);
   if (filters.direction !== defaultSortDirection(filters.sort)) params.set("direction", filters.direction);

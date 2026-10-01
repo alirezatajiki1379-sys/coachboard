@@ -3,10 +3,10 @@ import type { createClient } from "@/lib/supabase/server";
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
 import {
   calculateAverageRating,
+  berlinDateKey,
   createPlayerAnalyticsSummary,
   defaultSortDirection,
   filterEventsByPeriod,
-  isPastAttendanceEvent,
   sortPlayerAnalytics,
   type AnalyticsPeriod,
   type AnalyticsPlayerTypeFilter,
@@ -49,6 +49,7 @@ export type AnalyticsFilters = {
   direction: AnalyticsSortDirection;
   customFrom?: string;
   customTo?: string;
+  trainingId?: string;
 };
 
 type SeasonSettings = { seasonStartMonth: number; seasonStartDay: number };
@@ -101,6 +102,7 @@ export function parseAnalyticsFilters(searchParams: Record<string, string | stri
     ratedOnly: one(searchParams.ratedOnly) === "true",
     customFrom: normalizeDateParam(one(searchParams.from)),
     customTo: normalizeDateParam(one(searchParams.to)),
+    trainingId: normalizeUuid(one(searchParams.training)),
     sort: parsedSort,
     direction: direction === "asc" || direction === "desc" ? direction : defaultSortDirection(parsedSort)
   };
@@ -110,21 +112,19 @@ export async function getSquadAnalyticsOverview(
   supabase: SupabaseServerClient,
   userId: string,
   filters: AnalyticsFilters
-): Promise<{ summaries: PlayerAnalyticsSummary[]; positions: string[]; seasonSettings: SeasonSettings; teamAnalytics: TeamAnalyticsOverview }> {
+): Promise<{ summaries: PlayerAnalyticsSummary[]; positions: string[]; seasonSettings: SeasonSettings; teamAnalytics: TeamAnalyticsOverview; availableEvents: SquadTrainingEvent[] }> {
   const db = supabase as unknown as SupabaseClient;
   const activeSquad = await ensureActiveSquad(supabase, userId);
-  const [players, records, assessments, seasonSettings, events, sessionReviews, goals, progressUpdates] = await Promise.all([
+  const [activePlayers, assessments, seasonSettings, events, goals, progressUpdates] = await Promise.all([
     listAnalyticsPlayers(db, userId, activeSquad.id),
-    listAnalyticsRecords(db, userId, activeSquad.id),
     listLatestAssessments(db, userId, activeSquad.id),
     getSeasonSettings(db, userId),
     listAnalyticsEvents(db, userId, activeSquad.id),
-    listSessionReviews(db, userId, activeSquad.id),
     listDevelopmentGoals(db, userId, activeSquad.id),
     listDevelopmentProgress(db, userId, activeSquad.id)
   ]);
 
-  const periodEvents = filterEventsByPeriod(
+  const availableEvents = filterEventsByPeriod(
     events,
     filters.period,
     new Date(),
@@ -133,10 +133,17 @@ export async function getSquadAnalyticsOverview(
     filters.customFrom,
     filters.customTo
   );
+  const periodEvents = filters.trainingId
+    ? availableEvents.filter((event) => event.id === filters.trainingId)
+    : availableEvents;
   const periodEventIds = new Set(periodEvents.map((event) => event.id));
-  const periodSessionReviews = sessionReviews.filter((review) => periodEventIds.has(review.event_id));
-  const periodRecords = records.filter((record) => periodEventIds.has(record.eventId));
-  const drillInstances = await listDrillInstances(db, userId, Array.from(periodEventIds));
+  const [periodRecords, periodSessionReviews, drillInstances] = await Promise.all([
+    listAnalyticsRecords(db, userId, periodEvents),
+    listSessionReviews(db, userId, Array.from(periodEventIds)),
+    listDrillInstances(db, userId, Array.from(periodEventIds))
+  ]);
+  const historicalPlayers = await listAnalyticsPlayersByIds(db, userId, periodRecords.map((record) => record.playerId));
+  const players = uniqueById([...activePlayers, ...historicalPlayers]);
   const drillReviews = await listDrillReviews(
     db,
     userId,
@@ -154,19 +161,20 @@ export async function getSquadAnalyticsOverview(
     .map((player) =>
       createPlayerAnalyticsSummary(
         player,
-        records,
+        periodRecords,
         filters.period,
         assessmentByPlayer.get(player.id),
         seasonSettings.seasonStartMonth,
         seasonSettings.seasonStartDay,
         filters.customFrom,
-        filters.customTo
+        filters.customTo,
+        periodEventIds
       )
     )
     .filter((summary) => (filters.ratedOnly ? summary.rated > 0 : true));
 
   const teamAnalytics = createTeamAnalytics(activeSquad, periodEvents, periodRecords, periodSessionReviews, drillInstances, drillReviews, goals, progressUpdates, filters, seasonSettings);
-  return { summaries: sortPlayerAnalytics(summaries, filters.sort, filters.direction), positions, seasonSettings, teamAnalytics };
+  return { summaries: sortPlayerAnalytics(summaries, filters.sort, filters.direction), positions, seasonSettings, teamAnalytics, availableEvents };
 }
 
 export async function getPlayerAnalytics(
@@ -183,11 +191,13 @@ export async function getPlayerAnalytics(
   if (!playerData) return null;
 
   const player = mapSquadPlayerRow(playerData as SquadPlayerRow);
-  const [records, assessments, seasonSettings] = await Promise.all([
-    listAnalyticsRecords(db, userId, player.squadId, playerId),
+  const [events, assessments, seasonSettings] = await Promise.all([
+    player.squadId ? listAnalyticsEvents(db, userId, player.squadId) : Promise.resolve([]),
     listAssessmentsForPlayer(db, userId, playerId),
     getSeasonSettings(db, userId)
   ]);
+  const periodEvents = filterEventsByPeriod(events, period, new Date(), seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, customFrom, customTo);
+  const records = await listAnalyticsRecords(db, userId, periodEvents, playerId);
   return {
     player,
     summary: createPlayerAnalyticsSummary(player, records, period, assessments[0], seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay, customFrom, customTo),
@@ -218,19 +228,35 @@ async function listAnalyticsPlayers(db: SupabaseClient, userId: string, squadId:
   return ((data ?? []) as SquadPlayerRow[]).map(mapSquadPlayerRow);
 }
 
-async function listAnalyticsRecords(db: SupabaseClient, userId: string, squadId?: string, playerId?: string): Promise<PlayerAnalyticsRecord[]> {
-  let query = db.from("squad_attendance_records").select("*, squad_training_events(*)").eq("user_id", userId);
-  if (playerId) query = query.eq("player_id", playerId);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
+async function listAnalyticsRecords(db: SupabaseClient, userId: string, events: SquadTrainingEvent[], playerId?: string): Promise<PlayerAnalyticsRecord[]> {
+  if (!events.length) return [];
+  const eventById = new Map(events.map((event) => [event.id, event]));
+  const rows = new Map<string, SquadAttendanceRow>();
+  for (const eventIds of chunks(Array.from(eventById.keys()), 100)) {
+    let from = 0;
+    while (true) {
+      let query = db.from("squad_attendance_records").select("*").eq("user_id", userId).in("event_id", eventIds).order("id", { ascending: true });
+      if (playerId) query = query.eq("player_id", playerId);
+      const { data, error } = await query.range(from, from + 999);
+      if (error) throw new Error(error.message);
+      const page = (data ?? []) as SquadAttendanceRow[];
+      for (const row of page) rows.set(row.id, row);
+      if (page.length < 1000) break;
+      from += 1000;
+    }
+  }
+  return Array.from(rows.values()).map((row) => ({ ...mapAttendanceRow(row), event: eventById.get(row.event_id) }));
+}
 
-  return ((data ?? []) as Array<SquadAttendanceRow & { squad_training_events?: SquadTrainingEventRow | null }>)
-    .filter((row) => row.squad_training_events && !row.squad_training_events.deleted_at && !row.squad_training_events.archived_at)
-    .map((row) => ({
-      ...mapAttendanceRow(row),
-      event: row.squad_training_events ? mapTrainingEventRow(row.squad_training_events) : undefined
-    }))
-    .filter((record) => (!squadId || record.event?.squadId === squadId) && isPastAttendanceEvent(record.event));
+async function listAnalyticsPlayersByIds(db: SupabaseClient, userId: string, playerIds: string[]): Promise<SquadPlayer[]> {
+  const rows = new Map<string, SquadPlayerRow>();
+  for (const ids of chunks(Array.from(new Set(playerIds)), 100)) {
+    if (!ids.length) continue;
+    const { data, error } = await db.from("squad_players").select("*").eq("user_id", userId).in("id", ids);
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as SquadPlayerRow[]) rows.set(row.id, row);
+  }
+  return Array.from(rows.values()).map(mapSquadPlayerRow);
 }
 
 async function listLatestAssessments(db: SupabaseClient, userId: string, squadId: string): Promise<PlayerCoachAssessment[]> {
@@ -263,44 +289,81 @@ async function listAssessmentsForPlayer(db: SupabaseClient, userId: string, play
 }
 
 async function listAnalyticsEvents(db: SupabaseClient, userId: string, squadId: string): Promise<SquadTrainingEvent[]> {
-  const { data, error } = await db
-    .from("squad_training_events")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("squad_id", squadId)
-    .is("archived_at", null)
-    .is("deleted_at", null)
-    .order("date", { ascending: false })
-    .order("start_time", { ascending: false });
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as SquadTrainingEventRow[]).map((row) => mapTrainingEventRow(row));
+  const rows: SquadTrainingEventRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await db
+      .from("squad_training_events")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("squad_id", squadId)
+      .is("archived_at", null)
+      .is("deleted_at", null)
+      .order("date", { ascending: false })
+      .order("start_time", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as SquadTrainingEventRow[];
+    rows.push(...page);
+    if (page.length < 1000) break;
+    from += 1000;
+  }
+  return rows.map((row) => mapTrainingEventRow(row));
 }
 
-async function listSessionReviews(db: SupabaseClient, userId: string, squadId: string): Promise<SessionReviewRow[]> {
-  const { data, error } = await db.from("training_session_reviews").select("*").eq("user_id", userId).eq("squad_id", squadId);
-  if (error) throw new Error(error.message);
-  return (data ?? []) as SessionReviewRow[];
+async function listSessionReviews(db: SupabaseClient, userId: string, eventIds: string[]): Promise<SessionReviewRow[]> {
+  if (!eventIds.length) return [];
+  const rows = new Map<string, SessionReviewRow>();
+  for (const ids of chunks(eventIds, 100)) {
+    const { data, error } = await db.from("training_session_reviews").select("*").eq("user_id", userId).in("event_id", ids);
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as SessionReviewRow[]) rows.set(row.id, row);
+  }
+  return Array.from(rows.values());
 }
 
 async function listDrillInstances(db: SupabaseClient, userId: string, eventIds: string[]): Promise<DrillInstanceRow[]> {
   if (!eventIds.length) return [];
-  const { data, error } = await db
-    .from("training_session_drill_instances")
-    .select("*")
-    .eq("user_id", userId)
-    .in("event_id", eventIds)
-    .neq("status", "removed")
-    .order("event_id", { ascending: true })
-    .order("order_index", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as DrillInstanceRow[];
+  const rows = new Map<string, DrillInstanceRow>();
+  for (const ids of chunks(eventIds, 100)) {
+    let from = 0;
+    while (true) {
+      const { data, error } = await db
+        .from("training_session_drill_instances")
+        .select("*")
+        .eq("user_id", userId)
+        .in("event_id", ids)
+        .neq("status", "removed")
+        .order("event_id", { ascending: true })
+        .order("order_index", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, from + 999);
+      if (error) throw new Error(error.message);
+      const page = (data ?? []) as DrillInstanceRow[];
+      for (const row of page) rows.set(row.id, row);
+      if (page.length < 1000) break;
+      from += 1000;
+    }
+  }
+  return Array.from(rows.values());
 }
 
 async function listDrillReviews(db: SupabaseClient, userId: string, sessionReviewIds: string[]): Promise<DrillReviewRow[]> {
   if (!sessionReviewIds.length) return [];
-  const { data, error } = await db.from("training_session_drill_reviews").select("*").eq("user_id", userId).in("session_review_id", sessionReviewIds);
-  if (error) throw new Error(error.message);
-  return (data ?? []) as DrillReviewRow[];
+  const rows = new Map<string, DrillReviewRow>();
+  for (const ids of chunks(sessionReviewIds, 100)) {
+    let from = 0;
+    while (true) {
+      const { data, error } = await db.from("training_session_drill_reviews").select("*").eq("user_id", userId).in("session_review_id", ids).order("id", { ascending: true }).range(from, from + 999);
+      if (error) throw new Error(error.message);
+      const page = (data ?? []) as DrillReviewRow[];
+      for (const row of page) rows.set(row.id, row);
+      if (page.length < 1000) break;
+      from += 1000;
+    }
+  }
+  return Array.from(rows.values());
 }
 
 async function listDevelopmentGoals(db: SupabaseClient, userId: string, squadId: string): Promise<DevelopmentGoalAnalytics[]> {
@@ -338,7 +401,7 @@ async function listDevelopmentProgress(db: SupabaseClient, userId: string, squad
   }));
 }
 
-function createTeamAnalytics(
+export function createTeamAnalytics(
   activeSquad: Squad,
   periodEvents: SquadTrainingEvent[],
   periodRecords: PlayerAnalyticsRecord[],
@@ -364,6 +427,7 @@ function createTeamAnalytics(
         ? {
             overallQuality: review.overall_quality,
             intensity: review.intensity,
+            playerResponse: review.player_response,
             objectiveOutcome: review.objective_outcome
           }
         : undefined,
@@ -387,7 +451,8 @@ function createTeamAnalytics(
     periodRangeLabel: describePeriodRange(filters, periodEvents, seasonSettings),
     trainingSessions: periodEvents.length,
     sessionsWithAttendance: events.filter((event) => event.attendance.recorded > 0).length,
-    attendanceRecordCount: periodRecords.length,
+    participantRecordCount: periodRecords.length,
+    attendanceRecordCount: attendance.recorded,
     teamAttendanceRate: attendance.rate,
     present: attendance.present,
     late: attendance.late,
@@ -398,6 +463,7 @@ function createTeamAnalytics(
     reviewCoverage: periodEvents.length ? reviewedSessions / periodEvents.length : null,
     averageSessionQuality: calculateAverageRating(periodSessionReviews.map((review) => review.overall_quality)),
     averageSessionIntensity: calculateAverageRating(periodSessionReviews.map((review) => review.intensity)),
+    averagePlayerResponse: calculateAverageRating(periodSessionReviews.map((review) => review.player_response)),
     objectiveOutcomes: {
       achieved: periodSessionReviews.filter((review) => review.objective_outcome === "achieved").length,
       partly_achieved: periodSessionReviews.filter((review) => review.objective_outcome === "partly_achieved").length,
@@ -453,7 +519,12 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
 
   const attended = present + late;
   const recorded = attended + absent;
-  return { present, late, absent, notExpected, notRecorded, attended, recorded, rate: recorded ? attended / recorded : null };
+  const rateRecords = records.filter((record) => {
+    if (record.finalStatus === "present" || record.finalStatus === "Z") return true;
+    return Boolean(record.finalStatus) && record.plannedStatus !== "unavailable";
+  });
+  const rateAttended = rateRecords.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
+  return { present, late, absent, notExpected, notRecorded, attended, recorded, rate: rateRecords.length ? rateAttended / rateRecords.length : null };
 }
 
 function createFocusDistribution(events: SquadTrainingEvent[]) {
@@ -556,10 +627,8 @@ function dateRangeForPeriod(filters: AnalyticsFilters, events: SquadTrainingEven
     return { from: dates[0], to: dates[dates.length - 1] };
   }
   if (filters.period === "season") return seasonDateRange(new Date(), seasonSettings.seasonStartMonth, seasonSettings.seasonStartDay);
-  const today = new Date();
-  const from = new Date(today);
-  from.setDate(from.getDate() - (filters.period === "30d" ? 29 : 89));
-  return { from: dateOnly(from), to: dateOnly(today) };
+  const today = berlinDateKey(new Date());
+  return { from: shiftIsoDate(today, -(filters.period === "30d" ? 29 : 89)), to: today };
 }
 
 function dateInRange(date: string, range: { from: string; to: string } | null) {
@@ -590,6 +659,12 @@ function dateOnly(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function shiftIsoDate(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function formatGermanDate(date?: string) {
   if (!date) return "";
   const [year, month, day] = date.split("-");
@@ -603,6 +678,16 @@ function groupBy<T>(items: T[], getKey: (item: T) => string) {
     result.set(key, [...(result.get(key) ?? []), item]);
   }
   return result;
+}
+
+function chunks<T>(items: T[], size: number) {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+}
+
+function uniqueById<T extends { id: string }>(items: T[]) {
+  return Array.from(new Map(items.map((item) => [item.id, item])).values());
 }
 
 function mapAssessmentRow(row: AssessmentRow): PlayerCoachAssessment {
@@ -631,4 +716,10 @@ function normalizeDateParam(value?: string) {
   if (!match) return undefined;
   const [, day, month, year] = match;
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function normalizeUuid(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed) ? trimmed : undefined;
 }

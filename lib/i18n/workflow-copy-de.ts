@@ -241,6 +241,8 @@ export const workflowCopyDe: Record<string, string> = {
   "Review Coverage": "Reflexionsabdeckung",
   "Quality": "Qualität",
   "Intensity": "Intensität",
+  "Player Response": "Spielerreaktion",
+  "Recorded attendance": "Erfasste Anwesenheit",
   "Planned sessions": "Geplante Einheiten",
   "Planned Sessions": "Geplante Einheiten",
   "Partly": "Teilweise erreicht",

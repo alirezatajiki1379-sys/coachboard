@@ -78,6 +78,7 @@ export type TeamAnalyticsEvent = {
   review?: {
     overallQuality: number;
     intensity: number;
+    playerResponse: number | null;
     objectiveOutcome: "achieved" | "partly_achieved" | "not_achieved";
   };
   planDrillCount: number;
@@ -89,6 +90,7 @@ export type TeamAnalyticsOverview = {
   periodRangeLabel: string;
   trainingSessions: number;
   sessionsWithAttendance: number;
+  participantRecordCount: number;
   attendanceRecordCount: number;
   teamAttendanceRate: number | null;
   present: number;
@@ -100,6 +102,7 @@ export type TeamAnalyticsOverview = {
   reviewCoverage: number | null;
   averageSessionQuality: number | null;
   averageSessionIntensity: number | null;
+  averagePlayerResponse: number | null;
   objectiveOutcomes: Record<"achieved" | "partly_achieved" | "not_achieved", number>;
   focusDistribution: Array<{ label: string; count: number; percentage: number }>;
   totalTrainingMinutes: number | null;
@@ -244,7 +247,7 @@ export function calculatePerformanceTrend(values: number[]): PerformanceTrend {
 }
 
 export function calculateAttendanceRate(records: PlayerAnalyticsRecord[]) {
-  const recorded = records.filter(hasRecordedAttendance);
+  const recorded = records.filter(hasAttendanceRateOutcome);
   if (!recorded.length) return null;
   const attended = recorded.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
   return attended / recorded.length;
@@ -320,12 +323,12 @@ export function filterRecordsByPeriod(
   }
 
   if (period === "season") {
-    const currentSeason = seasonLabelForDate(dateToDateString(today), seasonStartMonth, seasonStartDay);
+    const currentSeason = seasonLabelForDate(berlinDateKey(today), seasonStartMonth, seasonStartDay);
     return sorted.filter((record) => record.event?.date && seasonLabelForDate(record.event.date, seasonStartMonth, seasonStartDay) === currentSeason);
   }
 
   const days = period === "30d" ? 30 : 90;
-  const minTime = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() - days + 1);
+  const minTime = parseDateToUtc(shiftIsoDate(berlinDateKey(today), -(days - 1)));
   return sorted.filter((record) => {
     const parsed = record.event?.date ? Date.parse(`${record.event.date}T00:00:00Z`) : Number.NaN;
     return Number.isFinite(parsed) && parsed >= minTime;
@@ -356,12 +359,12 @@ export function filterEventsByPeriod<T extends { id: string; date: string; start
   }
   if (period === "last5" || period === "last10") return historical.slice(0, period === "last5" ? 5 : 10);
   if (period === "season") {
-    const currentSeason = seasonLabelForDate(dateToDateString(today), seasonStartMonth, seasonStartDay);
+    const currentSeason = seasonLabelForDate(berlinDateKey(today), seasonStartMonth, seasonStartDay);
     return historical.filter((event) => seasonLabelForDate(event.date, seasonStartMonth, seasonStartDay) === currentSeason);
   }
 
   const days = period === "30d" ? 30 : 90;
-  const minTime = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() - days + 1);
+  const minTime = parseDateToUtc(shiftIsoDate(berlinDateKey(today), -(days - 1)));
   return historical.filter((event) => {
     const parsed = Date.parse(`${event.date}T00:00:00Z`);
     return Number.isFinite(parsed) && parsed >= minTime;
@@ -376,19 +379,15 @@ export function createPlayerAnalyticsSummary(
   seasonStartMonth = 7,
   seasonStartDay = 1,
   customFrom?: string,
-  customTo?: string
+  customTo?: string,
+  exactEventIds?: ReadonlySet<string>
 ): PlayerAnalyticsSummary {
-  const records = filterRecordsByPeriod(
-    allRecords.filter((record) => record.playerId === player.id),
-    period,
-    new Date(),
-    seasonStartMonth,
-    seasonStartDay,
-    customFrom,
-    customTo
-  );
+  const playerRecords = allRecords.filter((record) => record.playerId === player.id);
+  const records = exactEventIds
+    ? sortRecordsByEventDate(playerRecords.filter((record) => exactEventIds.has(record.eventId)))
+    : filterRecordsByPeriod(playerRecords, period, new Date(), seasonStartMonth, seasonStartDay, customFrom, customTo);
   const ratings = records.map((record) => record.overallRating).filter(isRating);
-  const attendanceRecords = records.filter(hasRecordedAttendance);
+  const attendanceRecords = records.filter(hasAttendanceRateOutcome);
   const attendanceDistribution = calculateAttendanceDistribution(attendanceRecords);
   const reliability = calculateReliabilitySummary(attendanceRecords);
   const categorySummaries = calculateCategorySummary(records);
@@ -436,6 +435,11 @@ export function createPlayerAnalyticsSummary(
 
 export function hasRecordedAttendance(record: PlayerAnalyticsRecord) {
   return Boolean(record.finalStatus);
+}
+
+export function hasAttendanceRateOutcome(record: PlayerAnalyticsRecord) {
+  if (record.finalStatus === "present" || record.finalStatus === "Z") return true;
+  return Boolean(record.finalStatus) && record.plannedStatus !== "unavailable";
 }
 
 export function isPastAttendanceEvent(event?: SquadTrainingEvent, now = new Date()) {
@@ -561,13 +565,6 @@ function classifyDataSummary(averageRating: number | null, reliabilityPenalty: n
   return "Performance development to monitor";
 }
 
-function dateToDateString(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function berlinDateTimeKey(date: Date) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Berlin",
@@ -579,6 +576,16 @@ function berlinDateTimeKey(date: Date) {
     hourCycle: "h23"
   }).formatToParts(date).map((part) => [part.type, part.value]));
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+export function berlinDateKey(date: Date) {
+  return berlinDateTimeKey(date).slice(0, 10);
+}
+
+function shiftIsoDate(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function parseDateToUtc(value: string) {
