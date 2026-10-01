@@ -56,6 +56,7 @@ export default async function TrainingDrillCreatePage({ params, searchParams }: 
       <DrillForm
         action={action}
         mode="create"
+        allowImageUpload={mode === "reusable"}
         graphicJson={editorStateToString(defaultEditorState)}
         defaultReturnTo={returnTo}
         cancelHref={returnTo}

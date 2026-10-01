@@ -1,14 +1,12 @@
-import type { Drill } from "@/types/domain";
+import type { Drill, DrillVisual } from "@/types/domain";
 import type { createClient } from "@/lib/supabase/server";
 import { mapDrillRow, type DrillRow } from "@/lib/drills/mappers";
 import { drillMatchesAgeFilter } from "@/lib/drills/age-suitability";
-import { parseEditorState } from "@/lib/drills/editor";
+import { getDrillVisualsByDrillId } from "@/lib/drills/graphics";
 import { getDrillUsageStatsByDrillId, type DrillUsageStats } from "@/lib/drills/usage";
-import type { Json } from "@/types/database";
-import type { DrillEditorState } from "@/types/editor";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
-export type DrillWithLibraryData = Drill & { graphic?: DrillEditorState; usage: DrillUsageStats };
+export type DrillWithLibraryData = Drill & { visual?: DrillVisual; usage: DrillUsageStats };
 
 const drillLibraryColumns = [
   "id",
@@ -126,12 +124,12 @@ export async function listUserDrills(
   const drills = rows.map(mapDrillListRow).filter((drill) => drillMatchesAgeFilter(drill, filters.ageGroup));
   const drillIds = drills.map((drill) => drill.id);
   const [graphics, usageStats] = await Promise.all([
-    getGraphicsByDrillId(supabase, userId, drillIds),
+    getDrillVisualsByDrillId(supabase, userId, drillIds),
     getDrillUsageStatsByDrillId(supabase, userId, drillIds)
   ]);
   let drillsWithData: DrillWithLibraryData[] = drills.map((drill) => ({
     ...drill,
-    graphic: graphics.get(drill.id),
+    visual: graphics.get(drill.id),
     usage: usageStats.get(drill.id) ?? {
       drillId: drill.id,
       historicalUseCount: 0,
@@ -194,21 +192,6 @@ function mapDrillListRow(row: Partial<DrillRow>): Drill {
     created_at: row.created_at ?? "",
     updated_at: row.updated_at ?? ""
   });
-}
-
-async function getGraphicsByDrillId(supabase: SupabaseServerClient, userId: string, drillIds: string[]) {
-  const graphics = new Map<string, DrillEditorState>();
-  if (!drillIds.length) return graphics;
-  const { data, error } = await supabase
-    .from("drill_graphics")
-    .select("drill_id, canvas_json")
-    .eq("user_id", userId)
-    .in("drill_id", drillIds);
-  if (error) throw new Error(error.message);
-  for (const row of (data ?? []) as Array<{ drill_id: string; canvas_json: Json }>) {
-    graphics.set(row.drill_id, parseEditorState(row.canvas_json));
-  }
-  return graphics;
 }
 
 export async function getUserDrill(

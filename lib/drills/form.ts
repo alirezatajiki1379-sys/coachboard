@@ -65,6 +65,11 @@ export type DrillFormValues = {
   tags: string;
   isFavorite: boolean;
   graphicJson: string;
+  visualSource: "editor" | "upload";
+  removeUploadedImage: boolean;
+  pendingUploadedImageName: string;
+  pendingUploadedImageType: string;
+  pendingUploadedImageSize: string;
 };
 
 export type DrillFormResult =
@@ -127,7 +132,12 @@ export function snapshotDrillFormValues(formData: FormData): DrillFormValues {
     intensityLevel: text(formData, "intensityLevel"),
     tags: text(formData, "tags"),
     isFavorite: formData.get("isFavorite") === "on",
-    graphicJson: text(formData, "graphicJson")
+    graphicJson: text(formData, "graphicJson"),
+    visualSource: text(formData, "visualSource") === "upload" ? "upload" : "editor",
+    removeUploadedImage: text(formData, "removeUploadedImage") === "true",
+    pendingUploadedImageName: text(formData, "pendingUploadedImageName"),
+    pendingUploadedImageType: text(formData, "pendingUploadedImageType"),
+    pendingUploadedImageSize: text(formData, "pendingUploadedImageSize")
   };
 }
 

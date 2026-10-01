@@ -6,12 +6,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { parseDrillDraftForm, parseDrillForm, toDrillUpdate } from "@/lib/drills/form";
 import type { DrillFormField, DrillFormValues } from "@/lib/drills/form";
-import { getDrillGraphic, upsertDrillGraphic } from "@/lib/drills/graphics";
+import {
+  deleteDrillImageAsset,
+  duplicateDrillVisual,
+  getDrillVisual,
+  saveDrillVisual,
+  type DrillVisualFormInput
+} from "@/lib/drills/graphics";
+import { DrillImageError, type DrillImageErrorCode } from "@/lib/drills/image-upload";
 import { getUserDrill } from "@/lib/drills/queries";
 import { mapDrillToDuplicateInsert } from "@/lib/drills/mappers";
 
 export type DrillActionState = {
   error?: string;
+  imageError?: DrillImageErrorCode;
   fieldErrors?: Partial<Record<DrillFormField, string>>;
   values?: DrillFormValues;
   submissionId?: number;
@@ -45,6 +53,22 @@ function safeReturnTo(formData: FormData) {
   return returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "";
 }
 
+function visualInput(formData: FormData): DrillVisualFormInput {
+  const upload = formData.get("uploadedImage");
+  return {
+    source: formString(formData, "visualSource") === "upload" ? "upload" : "editor",
+    image: upload instanceof File && upload.size ? upload : undefined,
+    removeUploadedImage: formString(formData, "removeUploadedImage") === "true"
+  };
+}
+
+function visualSaveError(error: unknown, fallback: string): DrillActionState {
+  if (error instanceof DrillImageError) {
+    return { error: error.message, imageError: error.code, submissionId: Date.now() };
+  }
+  return { error: error instanceof Error ? error.message : fallback, submissionId: Date.now() };
+}
+
 export async function createDrill(_: DrillActionState, formData: FormData): Promise<DrillActionState> {
   const returnTo = safeReturnTo(formData);
   const intent = formString(formData, "intent");
@@ -75,12 +99,11 @@ export async function createDrill(_: DrillActionState, formData: FormData): Prom
   }
 
   try {
-    await upsertDrillGraphic(supabase, user.id, data.id, parsed.graphic);
+    await saveDrillVisual(supabase, user.id, data.id, parsed.graphic, visualInput(formData));
   } catch (graphicError) {
-    return {
-      error: graphicError instanceof Error ? graphicError.message : "The drill was created, but the graphic could not be saved.",
-      submissionId: Date.now()
-    };
+    await db.from("drill_graphics").delete().eq("drill_id", data.id).eq("user_id", user.id);
+    await db.from("drills").delete().eq("id", data.id).eq("user_id", user.id);
+    return visualSaveError(graphicError, "The Drill could not be created because its visual could not be saved.");
   }
 
   revalidatePath("/drills");
@@ -121,12 +144,9 @@ export async function updateDrill(_: DrillActionState, formData: FormData): Prom
   }
 
   try {
-    await upsertDrillGraphic(supabase, user.id, drillId, parsed.graphic);
+    await saveDrillVisual(supabase, user.id, drillId, parsed.graphic, visualInput(formData));
   } catch (graphicError) {
-    return {
-      error: graphicError instanceof Error ? graphicError.message : "The drill details were saved, but the graphic could not be saved.",
-      submissionId: Date.now()
-    };
+    return visualSaveError(graphicError, "The Drill details were saved, but the visual could not be saved.");
   }
 
   revalidatePath("/drills");
@@ -151,13 +171,11 @@ async function createDrillDraft(formData: FormData, returnTo: string): Promise<D
   if (error) return { error: error.message, values: parsed.values, submissionId: Date.now() };
 
   try {
-    await upsertDrillGraphic(supabase, user.id, data.id, parsed.graphic);
+    await saveDrillVisual(supabase, user.id, data.id, parsed.graphic, visualInput(formData));
   } catch (graphicError) {
-    return {
-      error: graphicError instanceof Error ? graphicError.message : "The drill draft was created, but the graphic could not be saved.",
-      values: parsed.values,
-      submissionId: Date.now()
-    };
+    await db.from("drill_graphics").delete().eq("drill_id", data.id).eq("user_id", user.id);
+    await db.from("drills").delete().eq("id", data.id).eq("user_id", user.id);
+    return { ...visualSaveError(graphicError, "The Drill draft could not be created because its visual could not be saved."), values: parsed.values };
   }
 
   revalidatePath("/drills");
@@ -180,13 +198,9 @@ async function updateDrillDraft(formData: FormData, drillId: string, returnTo: s
   if (error) return { error: error.message, values: parsed.values, submissionId: Date.now() };
 
   try {
-    await upsertDrillGraphic(supabase, user.id, drillId, parsed.graphic);
+    await saveDrillVisual(supabase, user.id, drillId, parsed.graphic, visualInput(formData));
   } catch (graphicError) {
-    return {
-      error: graphicError instanceof Error ? graphicError.message : "The drill draft was saved, but the graphic could not be saved.",
-      values: parsed.values,
-      submissionId: Date.now()
-    };
+    return { ...visualSaveError(graphicError, "The Drill draft details were saved, but the visual could not be saved."), values: parsed.values };
   }
 
   revalidatePath("/drills");
@@ -268,6 +282,7 @@ export async function permanentlyDeleteDrill(_: DrillDeleteState, formData: Form
     };
   }
 
+  const visual = await getDrillVisual(supabase, user.id, drillId);
   await db.from("drill_graphics").delete().eq("drill_id", drillId).eq("user_id", user.id);
   const { error } = await db.from("drills").delete().eq("id", drillId).eq("user_id", user.id).not("deleted_at", "is", null);
 
@@ -280,6 +295,8 @@ export async function permanentlyDeleteDrill(_: DrillDeleteState, formData: Form
     }
     return { error: error.message, submissionId: Date.now() };
   }
+
+  await deleteDrillImageAsset(supabase, visual.uploadedImagePath);
 
   revalidatePath("/drills");
   revalidatePath("/dashboard");
@@ -303,8 +320,13 @@ export async function duplicateDrill(formData: FormData) {
     .single();
 
   if (data?.id) {
-    const graphic = await getDrillGraphic(supabase, user.id, drillId);
-    await upsertDrillGraphic(supabase, user.id, data.id, graphic);
+    try {
+      await duplicateDrillVisual(supabase, user.id, drillId, data.id);
+    } catch {
+      await db.from("drill_graphics").delete().eq("drill_id", data.id).eq("user_id", user.id);
+      await db.from("drills").delete().eq("id", data.id).eq("user_id", user.id);
+      redirect(`/drills/${drillId}`);
+    }
   }
 
   revalidatePath("/drills");

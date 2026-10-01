@@ -467,6 +467,30 @@
       "newSquad": "No players in the squad yet. Add one player manually or import an entire squad from Excel, CSV or a copied table."
     }
   },
+  "drillVisual": {
+    "title": "Drill visual",
+    "description": "Create a CoachBoard graphic or use an existing exercise image.",
+    "editor": "Create graphic",
+    "upload": "Upload image",
+    "current": "Current visual",
+    "select": "Select image",
+    "replace": "Replace image",
+    "remove": "Remove image",
+    "helper": "Upload a photo or existing exercise graphic.",
+    "drop": "Drop a JPEG, PNG, or WebP image here",
+    "limit": "Maximum file size: 10 MB",
+    "uploading": "Uploading…",
+    "ready": "Image ready to upload",
+    "restored": "Recovered from your local draft",
+    "noGraphic": "No graphic",
+    "unavailable": "Image unavailable",
+    "alt": "Visual for {title}",
+    "failed": "Upload failed",
+    "tooLarge": "File is too large. Choose an image up to 10 MB.",
+    "unsupported": "Unsupported image format. Use JPEG, PNG, or WebP.",
+    "missing": "Select an image before using the uploaded image visual.",
+    "localFailed": "The image could not be stored in the local draft. Keep this tab open until you save."
+  },
   "export": {
     "actions": {
       "export": "Export",

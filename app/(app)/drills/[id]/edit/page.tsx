@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { DrillForm } from "@/components/drills/drill-form";
 import { updateDrill } from "@/lib/drills/actions";
 import { editorStateToString } from "@/lib/drills/editor";
-import { getDrillGraphic } from "@/lib/drills/graphics";
+import { getDrillVisual } from "@/lib/drills/graphics";
 import { getUserDrill } from "@/lib/drills/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,7 +25,7 @@ export default async function EditDrillPage({ params, searchParams }: EditDrillP
     redirect("/login");
   }
 
-  const [drill, graphic] = await Promise.all([getUserDrill(supabase, user.id, id), getDrillGraphic(supabase, user.id, id)]);
+  const [drill, visual] = await Promise.all([getUserDrill(supabase, user.id, id), getDrillVisual(supabase, user.id, id)]);
   if (!drill) {
     notFound();
   }
@@ -40,7 +40,7 @@ export default async function EditDrillPage({ params, searchParams }: EditDrillP
         </div>
         <p className="mt-2 text-slate-600">{drill.status === "draft" ? "Continue this reusable draft. Use Publish Drill when it is ready for normal library use." : "Update metadata, coaching notes, materials, and categorization."}</p>
       </div>
-      <DrillForm action={updateDrill} drill={drill} mode="edit" graphicJson={editorStateToString(graphic)} defaultReturnTo={returnTo} cancelHref={returnTo || undefined} />
+      <DrillForm action={updateDrill} drill={drill} mode="edit" graphicJson={editorStateToString(visual.graphic)} visual={visual} defaultReturnTo={returnTo} cancelHref={returnTo || undefined} />
     </div>
   );
 }

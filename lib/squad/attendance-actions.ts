@@ -10,6 +10,7 @@ import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, isTrai
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
 import { getAvailabilityByPlayerOnDate } from "@/lib/squad/availability";
+import { copyDrillImageForSnapshot, deleteDrillImageAssets } from "@/lib/drills/graphics";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -1544,13 +1545,16 @@ async function createSessionPlanSnapshot(db: SupabaseClient, userId: string, eve
 
   const { data: sourceDrills, error: sourceDrillsError } = await db
     .from("training_session_drills")
-    .select("*, drills(*, drill_graphics(canvas_json))")
+    .select("*, drills(*, drill_graphics(canvas_json,visual_source,uploaded_image_path,uploaded_image_mime_type,uploaded_image_size_bytes))")
     .eq("session_id", sourceTrainingSessionId)
     .eq("user_id", userId)
     .order("order_index", { ascending: true });
   if (sourceDrillsError) throw new Error(sourceDrillsError.message);
 
-  const rows = ((sourceDrills ?? []) as Array<{
+  const copiedImagePaths: string[] = [];
+  let resolvedRows;
+  try {
+    resolvedRows = await Promise.all(((sourceDrills ?? []) as Array<{
     id: string;
     drill_id: string;
     block: string;
@@ -1575,12 +1579,14 @@ async function createSessionPlanSnapshot(db: SupabaseClient, userId: string, eve
       max_players: number;
       materials: unknown;
       updated_at: string;
-      drill_graphics?: Array<{ canvas_json: unknown }> | { canvas_json: unknown } | null;
+      drill_graphics?: AttendanceNestedDrillGraphic[] | AttendanceNestedDrillGraphic | null;
     } | null;
-  }>).map((row) => {
-    const drill = row.drills;
-    const graphics = Array.isArray(drill?.drill_graphics) ? drill?.drill_graphics[0]?.canvas_json : drill?.drill_graphics?.canvas_json;
-    return {
+    }>).map(async (row) => {
+      const drill = row.drills;
+      const graphic = Array.isArray(drill?.drill_graphics) ? drill.drill_graphics[0] : drill?.drill_graphics ?? undefined;
+      const imagePath = await copyDrillImageForSnapshot(db, userId, row.drill_id, graphic?.uploaded_image_path);
+      if (imagePath) copiedImagePaths.push(imagePath);
+      return {
       user_id: userId,
       event_id: eventId,
       plan_instance_id: planInstance.id,
@@ -1615,18 +1621,39 @@ async function createSessionPlanSnapshot(db: SupabaseClient, userId: string, eve
               minPlayers: drill.min_players,
               maxPlayers: drill.max_players,
               materials: drill.materials,
-              graphic: graphics
+              graphic: graphic?.canvas_json,
+              visual: {
+                source: graphic?.visual_source === "upload" && imagePath ? "upload" : "editor",
+                uploadedImagePath: imagePath,
+                uploadedImageMimeType: imagePath ? graphic?.uploaded_image_mime_type ?? undefined : undefined,
+                uploadedImageSizeBytes: imagePath ? graphic?.uploaded_image_size_bytes ?? undefined : undefined
+              }
             }
           : null
       }
-    };
-  });
+      };
+    }));
+  } catch (error) {
+    await deleteDrillImageAssets(db, copiedImagePaths);
+    throw error;
+  }
 
-  if (rows.length) {
-    const { error } = await db.from("training_session_drill_instances").insert(rows);
-    if (error) throw new Error(error.message);
+  if (resolvedRows.length) {
+    const { error } = await db.from("training_session_drill_instances").insert(resolvedRows);
+    if (error) {
+      await deleteDrillImageAssets(db, copiedImagePaths);
+      throw new Error(error.message);
+    }
   }
 }
+
+type AttendanceNestedDrillGraphic = {
+  canvas_json: unknown;
+  visual_source?: string | null;
+  uploaded_image_path?: string | null;
+  uploaded_image_mime_type?: string | null;
+  uploaded_image_size_bytes?: number | null;
+};
 
 async function markEventPrepared(db: SupabaseClient, userId: string, eventId: string) {
   const { error } = await db.from("squad_training_events").update({ status: "prepared" }).eq("id", eventId).eq("user_id", userId).eq("status", "draft");

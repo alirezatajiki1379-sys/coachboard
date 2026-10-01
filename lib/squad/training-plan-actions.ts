@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { copyDrillImageForSnapshot, deleteDrillImageAssets } from "@/lib/drills/graphics";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -60,7 +61,7 @@ export async function addExistingDrillsToSessionPlan(formData: FormData) {
   const planId = await ensurePlanInstance(db, user.id, eventId, event.label || `Training plan ${event.date}`);
   const { data, error } = await db
     .from("drills")
-    .select("*, drill_graphics(canvas_json)")
+    .select("*, drill_graphics(canvas_json,visual_source,uploaded_image_path,uploaded_image_mime_type,uploaded_image_size_bytes)")
     .eq("user_id", user.id)
     .is("archived_at", null)
     .is("deleted_at", null)
@@ -70,9 +71,14 @@ export async function addExistingDrillsToSessionPlan(formData: FormData) {
   const orderedDrills = drillIds.map((id) => byId.get(id)).filter(Boolean);
   if (!orderedDrills.length) redirect(`/trainings/${eventId}/plan`);
   const startOrder = await nextDrillOrder(db, user.id, eventId);
-  const rows = orderedDrills.map((drill, index) => {
-    const graphics = Array.isArray(drill.drill_graphics) ? drill.drill_graphics[0]?.canvas_json : drill.drill_graphics?.canvas_json;
-    return {
+  const copiedImagePaths: string[] = [];
+  let rows;
+  try {
+    rows = await Promise.all(orderedDrills.map(async (drill, index) => {
+      const graphic = firstDrillGraphic(drill.drill_graphics);
+      const imagePath = await copyDrillImageForSnapshot(db, user.id, drill.id, graphic?.uploaded_image_path);
+      if (imagePath) copiedImagePaths.push(imagePath);
+      return {
       user_id: user.id,
       event_id: eventId,
       plan_instance_id: planId,
@@ -99,13 +105,21 @@ export async function addExistingDrillsToSessionPlan(formData: FormData) {
           minPlayers: drill.min_players,
           maxPlayers: drill.max_players,
           materials: drill.materials,
-          graphic: graphics
+          graphic: graphic?.canvas_json,
+          visual: snapshotVisual(graphic, imagePath)
         }
       }
-    };
-  });
+      };
+    }));
+  } catch (error) {
+    await deleteDrillImageAssets(db, copiedImagePaths);
+    throw error;
+  }
   const { error: insertError } = await db.from("training_session_drill_instances").insert(rows);
-  if (insertError) throw new Error(insertError.message);
+  if (insertError) {
+    await deleteDrillImageAssets(db, copiedImagePaths);
+    throw new Error(insertError.message);
+  }
   revalidateTraining(eventId);
   redirect(`/trainings/${eventId}/plan`);
 }
@@ -250,23 +264,28 @@ async function copyTrainingSessionTemplate(db: SupabaseClient, userId: string, e
 
   const { data: sourceDrills, error: sourceDrillsError } = await db
     .from("training_session_drills")
-    .select("*, drills(*, drill_graphics(canvas_json))")
+    .select("*, drills(*, drill_graphics(canvas_json,visual_source,uploaded_image_path,uploaded_image_mime_type,uploaded_image_size_bytes))")
     .eq("session_id", sourceTrainingSessionId)
     .eq("user_id", userId)
     .order("order_index", { ascending: true });
   if (sourceDrillsError) throw new Error(sourceDrillsError.message);
 
-  const rows = ((sourceDrills ?? []) as Array<{
+  const copiedImagePaths: string[] = [];
+  let rows;
+  try {
+    rows = await Promise.all(((sourceDrills ?? []) as Array<{
     id: string;
     drill_id: string;
     block: string;
     order_index: number;
     planned_duration_minutes: number;
-    drills?: Record<string, unknown> & { drill_graphics?: Array<{ canvas_json: unknown }> | { canvas_json: unknown } | null };
-  }>).map((row) => {
-    const drill = row.drills;
-    const graphics = Array.isArray(drill?.drill_graphics) ? drill?.drill_graphics[0]?.canvas_json : drill?.drill_graphics?.canvas_json;
-    return {
+    drills?: Record<string, unknown> & { drill_graphics?: NestedDrillGraphic[] | NestedDrillGraphic | null };
+    }>).map(async (row) => {
+      const drill = row.drills;
+      const graphic = firstDrillGraphic(drill?.drill_graphics);
+      const imagePath = await copyDrillImageForSnapshot(db, userId, row.drill_id, graphic?.uploaded_image_path);
+      if (imagePath) copiedImagePaths.push(imagePath);
+      return {
       user_id: userId,
       event_id: eventId,
       plan_instance_id: planInstance.id,
@@ -280,14 +299,42 @@ async function copyTrainingSessionTemplate(db: SupabaseClient, userId: string, e
       status: "ready",
       snapshot_json: {
         source: "training_plan_template",
-        sourceDrill: drill ? { ...drill, drill_graphics: undefined, graphic: graphics } : null
+        sourceDrill: drill ? { ...drill, drill_graphics: undefined, graphic: graphic?.canvas_json, visual: snapshotVisual(graphic, imagePath) } : null
       }
-    };
-  });
+      };
+    }));
+  } catch (error) {
+    await deleteDrillImageAssets(db, copiedImagePaths);
+    throw error;
+  }
   if (rows.length) {
     const { error } = await db.from("training_session_drill_instances").insert(rows);
-    if (error) throw new Error(error.message);
+    if (error) {
+      await deleteDrillImageAssets(db, copiedImagePaths);
+      throw new Error(error.message);
+    }
   }
+}
+
+type NestedDrillGraphic = {
+  canvas_json: unknown;
+  visual_source?: string | null;
+  uploaded_image_path?: string | null;
+  uploaded_image_mime_type?: string | null;
+  uploaded_image_size_bytes?: number | null;
+};
+
+function firstDrillGraphic(value: NestedDrillGraphic[] | NestedDrillGraphic | null | undefined) {
+  return Array.isArray(value) ? value[0] : value ?? undefined;
+}
+
+function snapshotVisual(graphic: NestedDrillGraphic | undefined, uploadedImagePath?: string) {
+  return {
+    source: graphic?.visual_source === "upload" && uploadedImagePath ? "upload" : "editor",
+    uploadedImagePath,
+    uploadedImageMimeType: uploadedImagePath ? graphic?.uploaded_image_mime_type ?? undefined : undefined,
+    uploadedImageSizeBytes: uploadedImagePath ? graphic?.uploaded_image_size_bytes ?? undefined : undefined
+  };
 }
 
 async function assertOwnedPlanDrill(db: SupabaseClient, userId: string, eventId: string, drillInstanceId: string) {

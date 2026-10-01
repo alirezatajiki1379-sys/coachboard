@@ -245,6 +245,10 @@ export type Database = {
           user_id: string;
           canvas_json: Json;
           preview_image_url: string | null;
+          visual_source: "editor" | "upload";
+          uploaded_image_path: string | null;
+          uploaded_image_mime_type: string | null;
+          uploaded_image_size_bytes: number | null;
           created_at: string;
           updated_at: string;
         };

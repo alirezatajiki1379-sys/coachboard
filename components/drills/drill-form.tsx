@@ -6,6 +6,7 @@ import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { DrillEditor } from "@/components/drills/drill-editor";
+import { DrillVisualSelector } from "@/components/drills/drill-visual-selector";
 import { useUnsavedChangesProtection } from "@/components/shared/use-unsaved-changes-protection";
 import { useLocalDraft } from "@/components/shared/local-draft";
 import { parseEditorJsonString } from "@/lib/drills/editor";
@@ -14,13 +15,16 @@ import { parseSetupNumberInput } from "@/lib/drills/setup";
 import type { DrillActionState } from "@/lib/drills/actions";
 import { snapshotDrillFormValues, validateDrillFormFields, type DrillFormField, type DrillFormValues, type DrillValidationErrors } from "@/lib/drills/form";
 import { formatCustomAgeRange } from "@/lib/drills/age-suitability";
-import type { Drill, MaterialColor, MaterialItem, MaterialType } from "@/types/domain";
+import { clearPendingDrillImage } from "@/lib/drills/pending-image-draft";
+import type { Drill, DrillVisual, DrillVisualSource, MaterialColor, MaterialItem, MaterialType } from "@/types/domain";
 
 type DrillFormProps = {
   action: (state: DrillActionState, formData: FormData) => Promise<DrillActionState>;
   drill?: Drill;
   mode: "create" | "edit";
   graphicJson?: string;
+  visual?: DrillVisual;
+  allowImageUpload?: boolean;
   defaultReturnTo?: string;
   cancelHref?: string;
   hiddenFields?: Record<string, string>;
@@ -86,9 +90,9 @@ type SetupParameterRow = {
   value: string;
 };
 
-export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = "", cancelHref, hiddenFields, contextBanner }: DrillFormProps) {
+export function DrillForm({ action, drill, mode, graphicJson, visual, allowImageUpload = true, defaultReturnTo = "", cancelHref, hiddenFields, contextBanner }: DrillFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialActionState);
-  const initialValues = useMemo(() => getInitialValues(drill, graphicJson), [drill, graphicJson]);
+  const initialValues = useMemo(() => getInitialValues(drill, graphicJson, visual), [drill, graphicJson, visual]);
   const [values, setValues] = useState<DrillFormValues>(() => state.values ?? initialValues);
   const [formRevision, setFormRevision] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
@@ -96,6 +100,8 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
   const [returnTo, setReturnTo] = useState(defaultReturnTo);
   const [clientErrors, setClientErrors] = useState<DrillValidationErrors | null>(null);
   const [validationMessage, setValidationMessage] = useState("");
+  const [visualSource, setVisualSource] = useState<DrillVisualSource>(initialValues.visualSource);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File>();
   const formRef = useRef<HTMLFormElement>(null);
   const returnToInputRef = useRef<HTMLInputElement>(null);
   const fieldErrors = clientErrors ?? state.fieldErrors ?? {};
@@ -127,6 +133,7 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
     discardLabel: "Discard draft",
     onRecover: (draftValues) => {
       setValues(draftValues);
+      setVisualSource(draftValues.visualSource);
       setFormRevision((current) => current + 1);
       setIsDirty(true);
     }
@@ -145,6 +152,7 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
       const formData = new FormData(form);
       formData.set("intent", "saveDraft");
       formData.set("returnTo", href);
+      if (pendingUploadFile) formData.set("uploadedImage", pendingUploadFile);
       setIsSubmitting(true);
       startTransition(() => {
         void action(initialActionState, formData);
@@ -154,6 +162,7 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
 
   useEffect(() => {
     setValues(state.values ?? initialValues);
+    setVisualSource((state.values ?? initialValues).visualSource);
     setFormRevision((current) => current + 1);
   }, [initialValues, state.values]);
 
@@ -179,11 +188,12 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
 
     const handlePageHide = () => {
       clearDraft();
+      void clearPendingDrillImage(draftKey);
     };
 
     window.addEventListener("pagehide", handlePageHide);
     return () => window.removeEventListener("pagehide", handlePageHide);
-  }, [clearDraft, isSubmitting]);
+  }, [clearDraft, draftKey, isSubmitting]);
 
   function markDirty() {
     setIsDirty(true);
@@ -200,28 +210,30 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const intent = submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement ? submitter.value : "";
-    if (intent === "saveDraft") {
-      setIsSubmitting(true);
-      return;
-    }
 
     const form = event.currentTarget;
-    const nextErrors = validateDrillFormFields(new FormData(form));
-    if (Object.keys(nextErrors).length) {
-      event.preventDefault();
+    const formData = new FormData(form);
+    if (intent) formData.set("intent", intent);
+    if (pendingUploadFile) formData.set("uploadedImage", pendingUploadFile);
+    if (intent !== "saveDraft") {
+      const nextErrors = validateDrillFormFields(formData);
+      if (Object.keys(nextErrors).length) {
       event.stopPropagation();
       setIsSubmitting(false);
       setClientErrors(nextErrors);
       setValidationMessage(validationSummaryMessage(nextErrors, mode));
       window.setTimeout(() => navigateToFirstValidationError(form, nextErrors), 0);
       return;
+      }
     }
 
     setClientErrors({});
     setValidationMessage("");
     setIsSubmitting(true);
+    startTransition(() => formAction(formData));
   }
 
   return (
@@ -348,7 +360,27 @@ export function DrillForm({ action, drill, mode, graphicJson, defaultReturnTo = 
         </div>
       </section>
 
-      <DrillEditor initialValue={values.graphicJson} onDirty={markDirty} />
+      {allowImageUpload ? <DrillVisualSelector
+        visual={visual}
+        source={visualSource}
+        draftKey={draftKey}
+        pendingImageName={values.pendingUploadedImageName}
+        initialRemoveUploadedImage={values.removeUploadedImage}
+        serverError={state.imageError}
+        isSubmitting={isSubmitting || isPending}
+        onSourceChange={setVisualSource}
+        onPendingFileChange={setPendingUploadFile}
+        onDirty={markDirty}
+      /> : (
+        <>
+          <input type="hidden" name="visualSource" value="editor" />
+          <input type="hidden" name="removeUploadedImage" value="false" />
+        </>
+      )}
+
+      <div className={!allowImageUpload || visualSource === "editor" ? "" : "hidden"} aria-hidden={allowImageUpload && visualSource !== "editor"}>
+        <DrillEditor initialValue={values.graphicJson} onDirty={markDirty} />
+      </div>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-bold text-board-navy">Setup</h2>
@@ -478,6 +510,11 @@ function normalizeDrillDraftValues(values: DrillFormValues, fallback: DrillFormV
     intensityLevel: normalizedNumber(values.intensityLevel, normalizedNumber(fallback.intensityLevel, 3)),
     tags: parseTagInput(values.tags).map((tag) => tag.toLowerCase()).sort(),
     isFavorite: Boolean(values.isFavorite),
+    visualSource: values.visualSource,
+    removeUploadedImage: Boolean(values.removeUploadedImage),
+    pendingUploadedImageName: normalizedText(values.pendingUploadedImageName),
+    pendingUploadedImageType: normalizedText(values.pendingUploadedImageType),
+    pendingUploadedImageSize: normalizedText(values.pendingUploadedImageSize),
     graphic: {
       pitch: graphic.pitch,
       pitchStyle: graphic.pitchStyle,
@@ -1006,7 +1043,7 @@ function stripMaterialRowId(row: MaterialRow): MaterialItem {
   };
 }
 
-function getInitialValues(drill?: Drill, graphicJson = ""): DrillFormValues {
+function getInitialValues(drill?: Drill, graphicJson = "", visual?: DrillVisual): DrillFormValues {
   return {
     title: drill?.title ?? "",
     shortDescription: drill?.shortDescription ?? "",
@@ -1036,7 +1073,12 @@ function getInitialValues(drill?: Drill, graphicJson = ""): DrillFormValues {
     intensityLevel: String(drill?.intensityLevel ?? 3),
     tags: drill?.tags.join(", ") ?? "",
     isFavorite: drill?.isFavorite ?? false,
-    graphicJson
+    graphicJson,
+    visualSource: visual?.source ?? "editor",
+    removeUploadedImage: false,
+    pendingUploadedImageName: "",
+    pendingUploadedImageType: "",
+    pendingUploadedImageSize: ""
   };
 }
 

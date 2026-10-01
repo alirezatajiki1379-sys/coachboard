@@ -3,9 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
 import { DrillActions } from "@/components/drills/drill-actions";
-import { DrillGraphicPreview } from "@/components/drills/drill-graphic-preview";
-import { editorStateToString } from "@/lib/drills/editor";
-import { getDrillGraphic } from "@/lib/drills/graphics";
+import { DrillVisualPreview } from "@/components/drills/drill-visual-preview";
+import { getDrillVisual } from "@/lib/drills/graphics";
 import { createClient } from "@/lib/supabase/server";
 import { getUserDrill } from "@/lib/drills/queries";
 import { drillFeedbackStatusLabels } from "@/lib/squad/session-review";
@@ -28,9 +27,9 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
     redirect("/login");
   }
 
-  const [drill, graphic, usageMap] = await Promise.all([
+  const [drill, visual, usageMap] = await Promise.all([
     getUserDrill(supabase, user.id, id),
-    getDrillGraphic(supabase, user.id, id),
+    getDrillVisual(supabase, user.id, id),
     getDrillUsageStatsByDrillId(supabase, user.id, [id])
   ]);
   if (!drill) {
@@ -84,23 +83,10 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
         <div className="space-y-6">
           <UsageSection usage={usage} />
           <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">Drill graphic</h2>
-            {graphic.objects.length ? (
-              <div className="mt-4">
-                <DrillGraphicPreview graphicJson={editorStateToString(graphic)} autoFitContent />
-              </div>
-            ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-board-line bg-board-paper p-6">
-                <div className="pitch-grid flex aspect-[16/9] min-h-52 items-center justify-center rounded-md border border-white/50 p-4 text-center">
-                  <div className="rounded-md bg-white/90 p-4 shadow-soft">
-                    <p className="font-semibold text-board-navy">No drill graphic created yet.</p>
-                    <p className="mt-2 max-w-md text-sm leading-6 text-slate-600">
-                      Open the edit page to create the pitch setup with players, cones, balls, arrows and goals.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+            <h2 className="text-lg font-bold text-board-navy">Drill visual</h2>
+            <div className="mt-4 overflow-hidden rounded-lg border border-board-line">
+              <DrillVisualPreview visual={visual} title={drill.title} />
+            </div>
           </section>
           <ContentBlock title="Organization" value={drill.organization} />
           <ContentBlock title="Coaching points" value={drill.coachingPoints} />

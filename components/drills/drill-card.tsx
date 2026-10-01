@@ -4,15 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { BarChart3, Clock, Edit, Eye, Users } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { DrillActions } from "@/components/drills/drill-actions";
-import { SessionDrillPreview } from "@/components/sessions/session-drill-preview";
+import { DrillVisualPreview } from "@/components/drills/drill-visual-preview";
 import { materialLineLabel } from "@/lib/drills/materials";
 import { formatDrillAgeSuitability } from "@/lib/drills/age-suitability";
-import type { Drill } from "@/types/domain";
-import type { DrillEditorState } from "@/types/editor";
+import type { Drill, DrillVisual } from "@/types/domain";
 import type { DrillUsageStats } from "@/lib/drills/usage";
 
 type DrillCardProps = {
-  drill: Drill & { graphic?: DrillEditorState; usage?: DrillUsageStats };
+  drill: Drill & { visual?: DrillVisual; usage?: DrillUsageStats };
   view?: "active" | "published" | "drafts" | "archived" | "trash";
 };
 
@@ -44,7 +43,7 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
   return (
     <article className="min-w-0 break-words rounded-lg border border-board-line bg-white shadow-soft">
       <div className="overflow-hidden rounded-t-lg bg-board-grass">
-        <SessionDrillPreview graphic={drill.graphic} previewMode="thumbnail" />
+        <DrillVisualPreview visual={drill.visual} title={drill.title} previewMode="thumbnail" />
       </div>
       <div className="p-5">
         <div className="min-w-0">

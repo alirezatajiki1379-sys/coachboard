@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { parseDrillDraftForm, parseDrillForm } from "@/lib/drills/form";
-import { upsertDrillGraphic } from "@/lib/drills/graphics";
+import { getDrillVisual, saveDrillVisual, type DrillVisualFormInput } from "@/lib/drills/graphics";
+import { DrillImageError } from "@/lib/drills/image-upload";
 import type { DrillActionState } from "@/lib/drills/actions";
 
 async function requireUser() {
@@ -20,6 +21,24 @@ async function requireUser() {
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function visualInput(formData: FormData): DrillVisualFormInput {
+  const upload = formData.get("uploadedImage");
+  return {
+    source: formString(formData, "visualSource") === "upload" ? "upload" : "editor",
+    image: upload instanceof File && upload.size ? upload : undefined,
+    removeUploadedImage: formString(formData, "removeUploadedImage") === "true"
+  };
+}
+
+function visualErrorState(error: unknown, values?: DrillActionState["values"]): DrillActionState {
+  return {
+    error: error instanceof Error ? error.message : "The Drill visual could not be saved.",
+    imageError: error instanceof DrillImageError ? error.code : "upload_failed",
+    values,
+    submissionId: Date.now()
+  };
 }
 
 function safeReturnTo(formData: FormData, eventId: string) {
@@ -88,13 +107,13 @@ export async function createReusableTrainingDrill(_: DrillActionState, formData:
     .single();
   if (drillError) return { error: drillError.message, submissionId: Date.now() };
   try {
-    await upsertDrillGraphic(supabase, user.id, drill.id, parsed.graphic);
+    await saveDrillVisual(supabase, user.id, drill.id, parsed.graphic, visualInput(formData));
   } catch (graphicError) {
-    return {
-      error: graphicError instanceof Error ? graphicError.message : "The drill was created, but its graphic could not be saved.",
-      submissionId: Date.now()
-    };
+    await db.from("drill_graphics").delete().eq("drill_id", drill.id).eq("user_id", user.id);
+    await db.from("drills").delete().eq("id", drill.id).eq("user_id", user.id);
+    return visualErrorState(graphicError);
   }
+  const visual = await getDrillVisual(supabase, user.id, drill.id);
 
   const planInstanceId = await ensurePlanInstance(db, user.id, eventId, event.label || `Training plan ${event.date}`);
   const orderIndex = await nextDrillOrder(db, user.id, eventId);
@@ -114,7 +133,8 @@ export async function createReusableTrainingDrill(_: DrillActionState, formData:
       source: "reusable_drill",
       sourceDrillId: drill.id,
       drill: parsed.data,
-      graphic: parsed.graphic
+      graphic: parsed.graphic,
+      visual: snapshotVisual(visual)
     }
   });
   if (instanceError) return { error: instanceError.message, submissionId: Date.now() };
@@ -170,14 +190,13 @@ async function createReusableTrainingDrillDraft(formData: FormData, eventId: str
   if (drillError) return { error: drillError.message, values: parsed.values, submissionId: Date.now() };
 
   try {
-    await upsertDrillGraphic(supabase, user.id, drill.id, parsed.graphic);
+    await saveDrillVisual(supabase, user.id, drill.id, parsed.graphic, visualInput(formData));
   } catch (graphicError) {
-    return {
-      error: graphicError instanceof Error ? graphicError.message : "The reusable draft was created, but its graphic could not be saved.",
-      values: parsed.values,
-      submissionId: Date.now()
-    };
+    await db.from("drill_graphics").delete().eq("drill_id", drill.id).eq("user_id", user.id);
+    await db.from("drills").delete().eq("id", drill.id).eq("user_id", user.id);
+    return visualErrorState(graphicError, parsed.values);
   }
+  const visual = await getDrillVisual(supabase, user.id, drill.id);
 
   const planInstanceId = await ensurePlanInstance(db, user.id, eventId, event.label || `Training plan ${event.date}`);
   const orderIndex = await nextDrillOrder(db, user.id, eventId);
@@ -198,13 +217,23 @@ async function createReusableTrainingDrillDraft(formData: FormData, eventId: str
       status: "draft",
       sourceDrillId: drill.id,
       drill: parsed.data,
-      graphic: parsed.graphic
+      graphic: parsed.graphic,
+      visual: snapshotVisual(visual)
     }
   });
   if (instanceError) return { error: instanceError.message, values: parsed.values, submissionId: Date.now() };
   revalidatePath("/drills");
   revalidateTraining(eventId);
   redirect(safeReturnTo(formData, eventId));
+}
+
+function snapshotVisual(visual: Awaited<ReturnType<typeof getDrillVisual>>) {
+  return {
+    source: visual.source,
+    uploadedImagePath: visual.uploadedImagePath,
+    uploadedImageMimeType: visual.uploadedImageMimeType,
+    uploadedImageSizeBytes: visual.uploadedImageSizeBytes
+  };
 }
 
 async function getOwnedEvent(db: SupabaseClient, userId: string, eventId: string) {

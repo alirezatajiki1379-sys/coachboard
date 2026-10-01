@@ -210,7 +210,7 @@ function PrintableDrill({ item, playerGroups, locale }: { item: SessionDrillDeta
     <article className="print-avoid rounded-lg border border-board-line bg-white p-4">
       <div className="grid gap-4 md:grid-cols-[280px_1fr] print:grid-cols-[230px_1fr]">
         <div className="overflow-hidden rounded border border-board-line bg-board-grass">
-          <SessionDrillPreview graphic={item.graphic} previewMode="print" />
+          <SessionDrillPreview visual={item.visual} title={item.drill.title} previewMode="print" />
         </div>
         <div>
           <div className="flex flex-wrap items-start justify-between gap-2">

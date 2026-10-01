@@ -1,3 +1,5 @@
+import type { DrillEditorState } from "@/types/editor";
+
 export type AgeGroup =
   | "all_ages"
   | "Bambini / U6"
@@ -158,6 +160,17 @@ export type Drill = {
   deletedAt?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type DrillVisualSource = "editor" | "upload";
+
+export type DrillVisual = {
+  graphic: DrillEditorState;
+  source: DrillVisualSource;
+  uploadedImagePath?: string;
+  uploadedImageUrl?: string;
+  uploadedImageMimeType?: string;
+  uploadedImageSizeBytes?: number;
 };
 
 export type TrainingSessionDrill = {

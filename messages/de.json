@@ -467,6 +467,30 @@
       "newSquad": "Noch keine Spieler im Kader. Füge einen Spieler manuell hinzu oder importiere den Kader aus Excel, CSV oder einer kopierten Tabelle."
     }
   },
+  "drillVisual": {
+    "title": "Übungsgrafik",
+    "description": "Erstelle eine CoachBoard-Grafik oder nutze ein vorhandenes Übungsbild.",
+    "editor": "Grafik erstellen",
+    "upload": "Bild hochladen",
+    "current": "Aktuelle Darstellung",
+    "select": "Bild auswählen",
+    "replace": "Bild ersetzen",
+    "remove": "Bild entfernen",
+    "helper": "Lade ein Foto oder eine vorhandene Übungsgrafik hoch.",
+    "drop": "JPEG-, PNG- oder WebP-Bild hier ablegen",
+    "limit": "Maximale Dateigröße: 10 MB",
+    "uploading": "Wird hochgeladen …",
+    "ready": "Bild ist zum Hochladen bereit",
+    "restored": "Aus deinem lokalen Entwurf wiederhergestellt",
+    "noGraphic": "Keine Grafik",
+    "unavailable": "Bild nicht verfügbar",
+    "alt": "Darstellung für {title}",
+    "failed": "Upload fehlgeschlagen",
+    "tooLarge": "Datei ist zu groß. Wähle ein Bild bis 10 MB.",
+    "unsupported": "Nicht unterstütztes Bildformat. Nutze JPEG, PNG oder WebP.",
+    "missing": "Wähle zuerst ein Bild aus, bevor du das hochgeladene Bild verwendest.",
+    "localFailed": "Das Bild konnte nicht im lokalen Entwurf gespeichert werden. Lass diesen Tab bis zum Speichern geöffnet."
+  },
   "export": {
     "actions": {
       "export": "Export",

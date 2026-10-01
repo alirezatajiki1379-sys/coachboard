@@ -211,7 +211,7 @@ async function SessionDrillDetailCard({ item, index, playerGroups }: { item: Ses
     <article className="rounded-lg border border-board-line bg-white p-4">
       <div className="grid gap-4 lg:grid-cols-[320px_1fr] xl:grid-cols-[360px_1fr]">
         <div className="overflow-hidden rounded-md border border-board-line bg-board-grass">
-          <SessionDrillPreview graphic={item.graphic} />
+          <SessionDrillPreview visual={item.visual} title={item.drill.title} />
         </div>
         <div>
           <p className="text-xs font-bold uppercase text-board-green">

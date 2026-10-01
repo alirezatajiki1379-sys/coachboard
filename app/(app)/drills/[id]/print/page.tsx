@@ -1,12 +1,11 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { DrillGraphicPreview } from "@/components/drills/drill-graphic-preview";
+import { DrillVisualPreview } from "@/components/drills/drill-visual-preview";
 import { PrintButton } from "@/components/sessions/print-button";
 import { ButtonLink } from "@/components/ui/button";
 import { formatDrillAgeSuitability } from "@/lib/drills/age-suitability";
-import { editorStateToString } from "@/lib/drills/editor";
-import { getDrillGraphic } from "@/lib/drills/graphics";
+import { getDrillVisual } from "@/lib/drills/graphics";
 import { materialSummary } from "@/lib/drills/materials";
 import { getUserDrill } from "@/lib/drills/queries";
 import { formatArea, formatMeters } from "@/lib/drills/setup";
@@ -27,9 +26,9 @@ export default async function DrillPrintPage({ params }: DrillPrintPageProps) {
 
   if (!user) redirect("/login");
 
-  const [drill, graphic, locale] = await Promise.all([
+  const [drill, visual, locale] = await Promise.all([
     getUserDrill(supabase, user.id, id),
-    getDrillGraphic(supabase, user.id, id),
+    getDrillVisual(supabase, user.id, id),
     getUserLocale(supabase, user.id)
   ]);
   if (!drill) notFound();
@@ -73,9 +72,9 @@ export default async function DrillPrintPage({ params }: DrillPrintPageProps) {
           </div>
         </header>
 
-        {graphic.objects.length ? (
+        {visual.source === "upload" || visual.graphic.objects.length ? (
           <section className="print-avoid overflow-hidden rounded-xl border border-board-line bg-board-grass">
-            <DrillGraphicPreview graphicJson={editorStateToString(graphic)} autoFitContent previewMode="print" className="border-0" />
+            <DrillVisualPreview visual={visual} title={drill.title} previewMode="print" className="border-0" />
           </section>
         ) : null}
 

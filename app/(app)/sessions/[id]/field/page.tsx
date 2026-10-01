@@ -127,7 +127,7 @@ function FieldDrill({ item, index, playerGroups, locale }: { item: SessionDrillD
     <article className="print-avoid rounded-lg border border-board-line bg-white p-3">
       <div className="grid gap-3 md:grid-cols-[300px_1fr] print:grid-cols-[260px_1fr]">
         <div className="overflow-hidden rounded-md border border-board-line bg-board-grass">
-          <SessionDrillPreview graphic={item.graphic} previewMode="print" />
+          <SessionDrillPreview visual={item.visual} title={item.drill.title} previewMode="print" />
         </div>
         <div>
           <div className="flex flex-wrap items-start justify-between gap-2">

@@ -35,10 +35,9 @@ import {
 import type { createSession, updateSession, SessionActionState } from "@/lib/sessions/actions";
 import type { TrainingSessionDetail } from "@/lib/sessions/queries";
 import { materialSummary } from "@/lib/drills/materials";
-import type { Drill, SessionPlayerGroup } from "@/types/domain";
-import type { DrillEditorState } from "@/types/editor";
+import type { Drill, DrillVisual, SessionPlayerGroup } from "@/types/domain";
 
-type BuilderDrill = Drill & { graphic?: DrillEditorState };
+type BuilderDrill = Drill & { visual?: DrillVisual };
 
 type SessionFormProps = {
   action: typeof createSession | typeof updateSession;
@@ -558,7 +557,7 @@ export function SessionForm({ action, mode, drills, session }: SessionFormProps)
                                     >
                                       <div className="flex flex-col gap-4 lg:flex-row">
                                       <div className="w-full overflow-hidden rounded-md border border-board-line bg-white lg:w-[320px] xl:w-[360px]">
-                                        <SessionDrillPreview graphic={drill.graphic} />
+                                        <SessionDrillPreview visual={drill.visual} title={drill.title} />
                                       </div>
                                       <div className="min-w-0 flex-1 space-y-3">
                                         <div className="flex flex-wrap items-start justify-between gap-3">

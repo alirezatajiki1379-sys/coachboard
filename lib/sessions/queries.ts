@@ -1,12 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
 import { mapDrillRow, type DrillRow } from "@/lib/drills/mappers";
-import { parseEditorState } from "@/lib/drills/editor";
+import { getDrillVisualsByDrillId } from "@/lib/drills/graphics";
 import { jsonToMaterials, materialCategoryLabel, materialCategoryKey } from "@/lib/drills/materials";
 import { calculateSessionDuration, normalizePlayerGroups, normalizeSimultaneousGroup } from "@/lib/sessions/utils";
 import type { Database, Json } from "@/types/database";
-import type { Drill, TrainingSession, TrainingSessionDrill } from "@/types/domain";
-import type { DrillEditorState } from "@/types/editor";
+import type { Drill, DrillVisual, TrainingSession, TrainingSessionDrill } from "@/types/domain";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type SessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
@@ -14,7 +13,7 @@ type SessionDrillRow = Database["public"]["Tables"]["training_session_drills"]["
 
 export type SessionDrillDetail = TrainingSessionDrill & {
   drill: Drill;
-  graphic?: DrillEditorState;
+  visual?: DrillVisual;
 };
 
 export type TrainingSessionDetail = Omit<TrainingSession, "drills"> & {
@@ -111,7 +110,7 @@ export async function getUserSession(
 
   const [drillsById, graphicsByDrillId] = await Promise.all([
     getDrillsById(supabase, userId, drillIds),
-    getGraphicsByDrillId(supabase, userId, drillIds)
+    getDrillVisualsByDrillId(supabase, userId, drillIds)
   ]);
 
   const sessionDrills: SessionDrillDetail[] = [];
@@ -121,7 +120,7 @@ export async function getUserSession(
     sessionDrills.push({
       ...mapSessionDrillRow(item),
       drill,
-      graphic: graphicsByDrillId.get(item.drill_id)
+      visual: graphicsByDrillId.get(item.drill_id)
     });
   }
 
@@ -142,8 +141,8 @@ export async function getDrillsForSessionBuilder(supabase: SupabaseServerClient,
     .order("title", { ascending: true });
   if (error) throw new Error(error.message);
   const drills = ((data ?? []) as DrillRow[]).map(mapDrillRow);
-  const graphics = await getGraphicsByDrillId(supabase, userId, drills.map((drill) => drill.id));
-  return drills.map((drill) => ({ ...drill, graphic: graphics.get(drill.id) }));
+  const graphics = await getDrillVisualsByDrillId(supabase, userId, drills.map((drill) => drill.id));
+  return drills.map((drill) => ({ ...drill, visual: graphics.get(drill.id) }));
 }
 
 async function getDrillsById(supabase: SupabaseServerClient, userId: string, drillIds: string[]) {
@@ -180,22 +179,6 @@ async function getMaterialLabelsByDrillId(supabase: SupabaseServerClient, userId
 
 function compactMaterialLabels(labels: string[]) {
   return Array.from(new Set(labels)).sort((a, b) => a.localeCompare(b));
-}
-
-async function getGraphicsByDrillId(supabase: SupabaseServerClient, userId: string, drillIds: string[]) {
-  const graphics = new Map<string, DrillEditorState>();
-  if (!drillIds.length) return graphics;
-  const db = supabase as unknown as SupabaseClient;
-  const { data, error } = await db
-    .from("drill_graphics")
-    .select("drill_id, canvas_json")
-    .eq("user_id", userId)
-    .in("drill_id", drillIds);
-  if (error) throw new Error(error.message);
-  for (const row of (data ?? []) as Array<{ drill_id: string; canvas_json: Json }>) {
-    graphics.set(row.drill_id, parseEditorState(row.canvas_json));
-  }
-  return graphics;
 }
 
 function mapSessionRow(row: SessionRow, drills: TrainingSessionDrill[]): TrainingSession {
