@@ -378,17 +378,22 @@ try {
         assert.equal(await page.locator("[data-position-depth-card]").count(), 11, `position depth keeps 11 overview cards at ${width}px`);
         if (locale === "en" && width === 1440) {
           const depthCard = page.locator('[data-position-depth-card="LB"]');
-          assert.ok((await depthCard.textContent()).includes("Noah Depth"), "position depth shows first-ranked player");
-          assert.ok((await depthCard.textContent()).includes("Mika Depth"), "position depth shows second-ranked player");
-          assert.ok((await depthCard.textContent()).includes("Levi Depth"), "position depth shows third-ranked player");
+          const pitchCard = page.locator('[data-planner-slot="slot-1"]');
+          assert.ok(!(await depthCard.textContent()).includes("Noah Depth"), "right-side position depth remains compact");
+          assert.ok((await pitchCard.textContent()).includes("Noah Depth"), "pitch position card shows first-ranked player");
+          assert.ok((await pitchCard.textContent()).includes("Mika Depth"), "pitch position card shows second-ranked player");
+          assert.ok((await pitchCard.textContent()).includes("Levi Depth"), "pitch position card shows third-ranked player");
           assert.equal(await depthCard.locator("[data-position-depth-count]").textContent(), "3", "position depth total agrees with visible canonical ranking");
+          assert.equal(await pitchCard.locator("[data-planner-depth-count]").textContent(), "3", "pitch and right-side depth counts agree");
           assert.ok((await depthCard.locator("[data-position-depth-count]").getAttribute("class")).includes("emerald"), "healthy depth uses the positive badge treatment");
+          assert.ok((await pitchCard.locator("[data-planner-depth-count]").getAttribute("class")).includes("emerald"), "pitch uses the shared positive depth treatment");
           assert.ok((await page.locator('[data-position-depth-card="LCB"] [data-position-depth-count]').getAttribute("class")).includes("amber"), "limited depth uses the warning badge treatment");
           assert.ok((await page.locator('[data-position-depth-card="RCB"] [data-position-depth-count]').getAttribute("class")).includes("red"), "insufficient depth uses the danger badge treatment");
-          assert.ok((await depthCard.getByText("Noah Depth", { exact: true }).locator("..").getAttribute("class")).includes("font-black"), "first-ranked player is visually prioritized");
+          assert.ok((await pitchCard.getByText("Noah Depth", { exact: true }).locator("..").getAttribute("class")).includes("font-black"), "first-ranked player is visually prioritized on the pitch");
           await page.getByLabel("Fit mode").selectOption("natural");
           assert.equal(await depthCard.locator("[data-position-depth-count]").textContent(), "1", "fit mode updates position depth count");
-          assert.ok(!(await depthCard.textContent()).includes("Mika Depth"), "fit mode updates position depth preview");
+          assert.equal(await pitchCard.locator("[data-planner-depth-count]").textContent(), "1", "fit mode updates pitch depth count from the same state");
+          assert.ok(!(await pitchCard.textContent()).includes("Mika Depth"), "fit mode updates pitch position preview");
           await page.getByLabel("Fit mode").selectOption("natural_secondary");
         }
         if (width === 390 || width === 1024 || width === 1280 || width === 1440) {
