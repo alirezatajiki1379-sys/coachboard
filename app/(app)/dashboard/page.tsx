@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, CalendarPlus, ClipboardList, Dumbbell, LibraryBig, Target, UsersRound } from "lucide-react";
+import { Bell, CalendarDays, CalendarPlus, ClipboardCheck, ClipboardList, Dumbbell, LibraryBig, Star, Target, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageContainer, PageHeader } from "@/components/layout/page";
@@ -11,8 +11,18 @@ import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import { attentionPriorityLabels, attentionTone } from "@/lib/squad/attention";
 import { getDashboardAttentionData } from "@/lib/squad/attention-queries";
 import { getDevelopmentDashboardSummary } from "@/lib/squad/development";
+import { listTrainingSessionReviewSummaries } from "@/lib/squad/session-review";
 import { ensureActiveSquad, getActiveSquadPlayerCounts } from "@/lib/squad/squads";
-import { isTrainingUpcoming, sortTrainings, trainingDisplayTitle, trainingNowParts, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
+import {
+  dashboardTrainingsForToday,
+  dashboardTrainingState,
+  isTrainingUpcoming,
+  sortTrainings,
+  trainingDisplayTitle,
+  trainingNowParts,
+  trainingSummaryCounts,
+  trainingTimeRange
+} from "@/lib/trainings/utils";
 
 type RecentDrill = {
   id: string;
@@ -76,6 +86,8 @@ export default async function DashboardPage() {
   ]);
   const now = trainingNowParts();
   const trainingEvents = sortTrainings(trainingEventsRaw, now);
+  const todayTrainings = dashboardTrainingsForToday(trainingEvents, now);
+  const todayReviewSummaries = await listTrainingSessionReviewSummaries(supabase, user.id, todayTrainings.map((event) => event.id));
   const nextTraining = trainingEvents.find((event) => isTrainingUpcoming(event, now));
   const completedTrainings = trainingEvents.filter((event) => event.status === "completed").length;
   const upcomingTrainings = trainingEvents.filter((event) => isTrainingUpcoming(event, now)).length;
@@ -125,33 +137,91 @@ export default async function DashboardPage() {
         )}
       />
 
-      {nextTraining ? (
-        <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-sm font-semibold uppercase text-board-green">{messages.dashboard.nextTraining}</p>
-                <Link href="/trainings" className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-board-green hover:underline">
-                  {messages.dashboard.actions.viewAllTrainings}
-                </Link>
-              </div>
-              <h2 className="mt-1 text-2xl font-bold text-board-navy">{trainingDisplayTitle(nextTraining)}</h2>
-              <p className="mt-2 text-sm text-slate-600">{formatDate(nextTraining.date, locale)} · {trainingTimeRange(nextTraining)}{nextTraining.location ? ` · ${nextTraining.location}` : ""}</p>
-              <p className="mt-2 text-sm font-semibold text-slate-700">
-                {trainingSummaryCounts(nextTraining).attendance.confirmedTotal} {messages.dashboard.expected} · {trainingSummaryCounts(nextTraining).attendance.goalkeepers} {messages.dashboard.goalkeepers} · {trainingSummaryCounts(nextTraining).attendance.fieldPlayers} {messages.dashboard.fieldPlayers}
-              </p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
-                {trainingSummaryCounts(nextTraining).attendance.defensive} {messages.dashboard.defensive} · {trainingSummaryCounts(nextTraining).attendance.midfield} {messages.dashboard.midfield} · {trainingSummaryCounts(nextTraining).attendance.attacking} {messages.dashboard.attacking} · {trainingSummaryCounts(nextTraining).attendance.unassigned} {messages.dashboard.positionMissing} · {nextTraining.linkedTrainingSessionId ? messages.dashboard.planAvailable : messages.dashboard.noPlan}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <ButtonLink href={`/trainings/${nextTraining.id}`} variant="secondary" className="justify-center">{messages.common.actions.open}</ButtonLink>
-              <ButtonLink href={`/trainings/${nextTraining.id}/check-in`} className="justify-center">{messages.dashboard.actions.checkIn}</ButtonLink>
-              <ButtonLink href={planNextHref} variant="secondary" className="justify-center">{nextTraining.linkedTrainingSessionId ? messages.dashboard.actions.reviewPlan : messages.dashboard.actions.planTraining}</ButtonLink>
-            </div>
+      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy">
+            <CalendarDays className="h-5 w-5" />
+            {messages.dashboard.todaysTrainings}
+          </h2>
+          <Link href="/trainings" className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-board-green hover:underline">
+            {messages.dashboard.actions.viewAllTrainings}
+          </Link>
+        </div>
+
+        {todayTrainings.length ? (
+          <div className="space-y-3">
+            {todayTrainings.map((event) => {
+              const summary = trainingSummaryCounts(event);
+              const state = dashboardTrainingState(event, now);
+              const postTraining = state === "finished_today" || state === "completed";
+              const reviewSaved = todayReviewSummaries.has(event.id);
+              const stateLabel = {
+                upcoming_today: messages.dashboard.trainingStates.upcomingToday,
+                happening_now: messages.dashboard.trainingStates.happeningNow,
+                finished_today: messages.dashboard.trainingStates.finishedToday,
+                completed: messages.dashboard.trainingStates.completed
+              }[state];
+              const stateTone = state === "happening_now"
+                ? "bg-green-50 text-board-green"
+                : state === "upcoming_today"
+                  ? "bg-blue-50 text-blue-700"
+                  : "bg-slate-100 text-slate-700";
+              const planHref = event.linkedTrainingSessionId ? `/sessions/${event.linkedTrainingSessionId}` : `/trainings/${event.id}/plan`;
+
+              return (
+                <article key={event.id} className="rounded-md border border-board-line p-4">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-bold text-board-navy">{trainingDisplayTitle(event)}</h3>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${stateTone}`}>{stateLabel}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {formatDate(event.date, locale)} · {trainingTimeRange(event)}{event.location ? ` · ${event.location}` : ""}
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-700">
+                        {summary.attendance.confirmedTotal} {messages.dashboard.expected} · {summary.attendance.present} {messages.dashboard.present} · {summary.attendance.absent} {messages.dashboard.absent}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        {summary.attendance.goalkeepers} {messages.dashboard.goalkeepers} · {summary.attendance.fieldPlayers} {messages.dashboard.fieldPlayers} · {formatMessage(messages.dashboard.ratedCount, { rated: summary.ratings.rated, rateable: summary.ratings.rateable })} · {event.linkedTrainingSessionId ? messages.dashboard.planAvailable : messages.dashboard.noPlan}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <ButtonLink href={`/trainings/${event.id}`} variant="secondary" className="justify-center">{messages.common.actions.open}</ButtonLink>
+                      {postTraining ? (
+                        <ButtonLink href={`/trainings/${event.id}/ratings`} className="justify-center">
+                          <Star className="h-4 w-4" />
+                          {messages.dashboard.actions.ratings}
+                        </ButtonLink>
+                      ) : (
+                        <ButtonLink href={`/trainings/${event.id}/check-in`} className="justify-center">{messages.dashboard.actions.checkIn}</ButtonLink>
+                      )}
+                      <ButtonLink href={`/trainings/${event.id}/review`} variant="secondary" className="justify-center">
+                        <ClipboardCheck className="h-4 w-4" />
+                        {reviewSaved ? messages.dashboard.actions.reviewSaved : messages.dashboard.actions.sessionReview}
+                      </ButtonLink>
+                      {postTraining ? (
+                        <ButtonLink href={`/trainings/${event.id}/check-in`} variant="ghost" className="justify-center">{messages.dashboard.actions.checkIn}</ButtonLink>
+                      ) : (
+                        <ButtonLink href={`/trainings/${event.id}/ratings`} variant="ghost" className="justify-center">{messages.dashboard.actions.ratings}</ButtonLink>
+                      )}
+                      <ButtonLink href={planHref} variant="ghost" className="justify-center">{event.linkedTrainingSessionId ? messages.dashboard.actions.reviewPlan : messages.dashboard.actions.planTraining}</ButtonLink>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <div className="rounded-md border border-dashed border-board-line p-5">
+            <p className="text-sm text-slate-500">{messages.dashboard.noTrainingToday}</p>
+            <ButtonLink href="/trainings/new" className="mt-4 h-9 justify-center px-3">
+              <CalendarPlus className="h-4 w-4" />
+              {messages.dashboard.actions.createTraining}
+            </ButtonLink>
+          </div>
+        )}
+      </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
