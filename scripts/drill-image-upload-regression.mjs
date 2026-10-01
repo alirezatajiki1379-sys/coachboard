@@ -29,4 +29,14 @@ assert.match(migration, /users can read own drill images/);
 assert.match(migration, /users can upload own drill images/);
 assert.match(migration, /users can delete own drill images/);
 
-console.log("PASS: JPEG, PNG, WebP, invalid content, 10 MB limit, private bucket schema and Storage RLS.");
+const form = await readFile(new URL("../components/drills/drill-form.tsx", import.meta.url), "utf8");
+const actions = await readFile(new URL("../lib/drills/actions.ts", import.meta.url), "utf8");
+const nextConfig = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");
+assert.match(form, /createBrowserClient/);
+assert.match(form, /storage\.from\(drillImageBucket\)\.upload/);
+assert.doesNotMatch(form, /formData\.set\("uploadedImage"/);
+assert.match(actions, /finalizePendingDrillImageUpload/);
+assert.match(actions, /finalizeDrillVisualUpload/);
+assert.doesNotMatch(nextConfig, /bodySizeLimit/);
+
+console.log("PASS: JPEG, PNG, WebP, invalid content, 10 MB limit, direct-to-Supabase upload, private bucket schema and Storage RLS.");

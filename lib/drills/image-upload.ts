@@ -14,7 +14,7 @@ export class DrillImageError extends Error {
   }
 }
 
-export async function validateDrillImageFile(file: File): Promise<DrillImageMimeType> {
+export async function validateDrillImageFile(file: Blob): Promise<DrillImageMimeType> {
   if (!file.size || file.size > maxDrillImageBytes) {
     throw new DrillImageError("file_too_large", "The image must be 10 MB or smaller.");
   }

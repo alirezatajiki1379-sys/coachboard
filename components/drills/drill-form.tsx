@@ -16,6 +16,9 @@ import type { DrillActionState } from "@/lib/drills/actions";
 import { snapshotDrillFormValues, validateDrillFormFields, type DrillFormField, type DrillFormValues, type DrillValidationErrors } from "@/lib/drills/form";
 import { formatCustomAgeRange } from "@/lib/drills/age-suitability";
 import { clearPendingDrillImage } from "@/lib/drills/pending-image-draft";
+import { drillImageBucket, validateDrillImageFile, type DrillImageErrorCode } from "@/lib/drills/image-upload";
+import { finalizePendingDrillImageUpload } from "@/lib/drills/actions";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import type { Drill, DrillVisual, DrillVisualSource, MaterialColor, MaterialItem, MaterialType } from "@/types/domain";
 
 type DrillFormProps = {
@@ -32,6 +35,7 @@ type DrillFormProps = {
 };
 
 const initialActionState: DrillActionState = {};
+const drillImageErrorCodes: DrillImageErrorCode[] = ["file_too_large", "unsupported_format", "upload_failed", "missing_upload"];
 const materialTypes: MaterialType[] = ["balls", "cones", "flat_markers", "bibs", "rings", "goals", "mini_goals", "poles", "mannequins", "other"];
 const materialColors: Array<MaterialColor | ""> = ["", "Red", "Blue", "Yellow", "Green", "White", "Black", "Orange", "Purple"];
 const materialVariantOptions: Partial<Record<MaterialType, string[]>> = {
@@ -102,7 +106,11 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
   const [validationMessage, setValidationMessage] = useState("");
   const [visualSource, setVisualSource] = useState<DrillVisualSource>(initialValues.visualSource);
   const [pendingUploadFile, setPendingUploadFile] = useState<File>();
+  const [directUploadError, setDirectUploadError] = useState<DrillImageErrorCode>();
+  const [directUploadMessage, setDirectUploadMessage] = useState("");
+  const [retryDrillId, setRetryDrillId] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+  const handledUploadPathRef = useRef("");
   const returnToInputRef = useRef<HTMLInputElement>(null);
   const fieldErrors = clientErrors ?? state.fieldErrors ?? {};
   const orderedErrorEntries = orderedDrillErrorEntries(fieldErrors);
@@ -152,10 +160,9 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
       const formData = new FormData(form);
       formData.set("intent", "saveDraft");
       formData.set("returnTo", href);
-      if (pendingUploadFile) formData.set("uploadedImage", pendingUploadFile);
       setIsSubmitting(true);
       startTransition(() => {
-        void action(initialActionState, formData);
+        formAction(formData);
       });
     }
   });
@@ -182,6 +189,44 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
       dismissUnsavedChangesDialog();
     }
   }, [state.error, state.submissionId, dismissUnsavedChangesDialog]);
+
+  useEffect(() => {
+    const target = state.pendingImageUpload;
+    if (!target || !pendingUploadFile || handledUploadPathRef.current === target.path) return;
+    handledUploadPathRef.current = target.path;
+    let cancelled = false;
+
+    const supabase = createBrowserClient();
+    void (async () => {
+      try {
+        const mimeType = await validateDrillImageFile(pendingUploadFile);
+        const { error } = await supabase.storage.from(drillImageBucket).upload(target.path, pendingUploadFile, {
+          contentType: mimeType,
+          cacheControl: "3600",
+          upsert: false
+        });
+        if (error) throw error;
+
+        const finalData = new FormData();
+        finalData.set("drillId", target.drillId);
+        finalData.set("path", target.path);
+        finalData.set("destination", target.destination);
+        const result = await finalizePendingDrillImageUpload(finalData);
+        if (result?.error) throw Object.assign(new Error(result.error), { code: result.imageError });
+      } catch (error) {
+        await supabase.storage.from(drillImageBucket).remove([target.path]);
+        if (cancelled) return;
+        if (target.createdDrill) setRetryDrillId(target.drillId);
+        const code = isDrillImageErrorCode(error) ? error.code : "upload_failed";
+        setDirectUploadError(code);
+        setDirectUploadMessage(error instanceof Error ? error.message : "The image upload failed.");
+        setIsSubmitting(false);
+        setIsDirty(true);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [pendingUploadFile, state.pendingImageUpload]);
 
   useEffect(() => {
     if (!isSubmitting) return;
@@ -217,7 +262,8 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
     const form = event.currentTarget;
     const formData = new FormData(form);
     if (intent) formData.set("intent", intent);
-    if (pendingUploadFile) formData.set("uploadedImage", pendingUploadFile);
+    setDirectUploadError(undefined);
+    setDirectUploadMessage("");
     if (intent !== "saveDraft") {
       const nextErrors = validateDrillFormFields(formData);
       if (Object.keys(nextErrors).length) {
@@ -254,6 +300,7 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
       onSubmit={handleSubmit}
     >
       {drill ? <input type="hidden" name="drillId" value={drill.id} /> : null}
+      {retryDrillId ? <input type="hidden" name="retryDrillId" value={retryDrillId} /> : null}
       <input ref={returnToInputRef} type="hidden" name="returnTo" value={returnTo} readOnly />
       {hiddenFields ? Object.entries(hiddenFields).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} readOnly />) : null}
       {unsavedChangesDialog}
@@ -264,9 +311,9 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
         <p className="text-sm text-slate-600">
           Fields marked with <span className="font-bold text-red-600">*</span> are required.
         </p>
-        {state?.error ? (
+        {state?.error || directUploadMessage ? (
           <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {state.error}
+            {directUploadMessage || state.error}
           </p>
         ) : null}
       </div>
@@ -366,7 +413,7 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
         draftKey={draftKey}
         pendingImageName={values.pendingUploadedImageName}
         initialRemoveUploadedImage={values.removeUploadedImage}
-        serverError={state.imageError}
+        serverError={directUploadError ?? state.imageError}
         isSubmitting={isSubmitting || isPending}
         onSourceChange={setVisualSource}
         onPendingFileChange={setPendingUploadFile}
@@ -1041,6 +1088,10 @@ function stripMaterialRowId(row: MaterialRow): MaterialItem {
     source: row.source,
     quantity: row.quantity
   };
+}
+
+function isDrillImageErrorCode(error: unknown): error is { code: DrillImageErrorCode } {
+  return Boolean(error && typeof error === "object" && "code" in error && drillImageErrorCodes.includes((error as { code: DrillImageErrorCode }).code));
 }
 
 function getInitialValues(drill?: Drill, graphicJson = "", visual?: DrillVisual): DrillFormValues {

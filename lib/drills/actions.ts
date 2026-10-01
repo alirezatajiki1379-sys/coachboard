@@ -9,11 +9,13 @@ import type { DrillFormField, DrillFormValues } from "@/lib/drills/form";
 import {
   deleteDrillImageAsset,
   duplicateDrillVisual,
+  finalizeDrillVisualUpload,
   getDrillVisual,
   saveDrillVisual,
+  saveDrillVisualCanvas,
   type DrillVisualFormInput
 } from "@/lib/drills/graphics";
-import { DrillImageError, type DrillImageErrorCode } from "@/lib/drills/image-upload";
+import { drillImageExtension, DrillImageError, type DrillImageErrorCode, type DrillImageMimeType } from "@/lib/drills/image-upload";
 import { getUserDrill } from "@/lib/drills/queries";
 import { mapDrillToDuplicateInsert } from "@/lib/drills/mappers";
 
@@ -22,6 +24,12 @@ export type DrillActionState = {
   imageError?: DrillImageErrorCode;
   fieldErrors?: Partial<Record<DrillFormField, string>>;
   values?: DrillFormValues;
+  pendingImageUpload?: {
+    drillId: string;
+    path: string;
+    destination: string;
+    createdDrill: boolean;
+  };
   submissionId?: number;
 };
 
@@ -53,12 +61,28 @@ function safeReturnTo(formData: FormData) {
   return returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "";
 }
 
+function hasPendingImageUpload(formData: FormData) {
+  return formString(formData, "visualSource") === "upload"
+    && Boolean(formString(formData, "pendingUploadedImageName"))
+    && Number(formString(formData, "pendingUploadedImageSize")) > 0;
+}
+
 function visualInput(formData: FormData): DrillVisualFormInput {
-  const upload = formData.get("uploadedImage");
   return {
     source: formString(formData, "visualSource") === "upload" ? "upload" : "editor",
-    image: upload instanceof File && upload.size ? upload : undefined,
     removeUploadedImage: formString(formData, "removeUploadedImage") === "true"
+  };
+}
+
+function pendingImageUpload(formData: FormData, userId: string, drillId: string, destination: string, createdDrill: boolean) {
+  if (!hasPendingImageUpload(formData)) return undefined;
+  const declaredType = formString(formData, "pendingUploadedImageType") as DrillImageMimeType;
+  const mimeType: DrillImageMimeType = declaredType === "image/png" || declaredType === "image/webp" ? declaredType : "image/jpeg";
+  return {
+    drillId,
+    path: `${userId}/${drillId}/${crypto.randomUUID()}.${drillImageExtension(mimeType)}`,
+    destination,
+    createdDrill
   };
 }
 
@@ -69,7 +93,27 @@ function visualSaveError(error: unknown, fallback: string): DrillActionState {
   return { error: error instanceof Error ? error.message : fallback, submissionId: Date.now() };
 }
 
+async function saveSubmittedVisual(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  drillId: string,
+  graphic: Parameters<typeof saveDrillVisualCanvas>[3],
+  formData: FormData,
+  hasPendingUpload: boolean
+) {
+  if (hasPendingUpload) {
+    await saveDrillVisualCanvas(supabase, userId, drillId, graphic);
+    return;
+  }
+  await saveDrillVisual(supabase, userId, drillId, graphic, visualInput(formData));
+}
+
 export async function createDrill(_: DrillActionState, formData: FormData): Promise<DrillActionState> {
+  const retryDrillId = formString(formData, "retryDrillId");
+  if (retryDrillId) {
+    formData.set("drillId", retryDrillId);
+    return updateDrill(_, formData);
+  }
   const returnTo = safeReturnTo(formData);
   const intent = formString(formData, "intent");
   if (intent === "saveDraft") return createDrillDraft(formData, returnTo);
@@ -98,8 +142,9 @@ export async function createDrill(_: DrillActionState, formData: FormData): Prom
     return { error: error.message, submissionId: Date.now() };
   }
 
+  const upload = pendingImageUpload(formData, user.id, data.id, returnTo || `/drills/${data.id}`, true);
   try {
-    await saveDrillVisual(supabase, user.id, data.id, parsed.graphic, visualInput(formData));
+    await saveSubmittedVisual(supabase, user.id, data.id, parsed.graphic, formData, Boolean(upload));
   } catch (graphicError) {
     await db.from("drill_graphics").delete().eq("drill_id", data.id).eq("user_id", user.id);
     await db.from("drills").delete().eq("id", data.id).eq("user_id", user.id);
@@ -107,6 +152,7 @@ export async function createDrill(_: DrillActionState, formData: FormData): Prom
   }
 
   revalidatePath("/drills");
+  if (upload) return { pendingImageUpload: upload, submissionId: Date.now() };
   redirect(returnTo || `/drills/${data.id}`);
 }
 
@@ -143,14 +189,16 @@ export async function updateDrill(_: DrillActionState, formData: FormData): Prom
     return { error: error.message, submissionId: Date.now() };
   }
 
+  const upload = pendingImageUpload(formData, user.id, drillId, returnTo || `/drills/${drillId}`, false);
   try {
-    await saveDrillVisual(supabase, user.id, drillId, parsed.graphic, visualInput(formData));
+    await saveSubmittedVisual(supabase, user.id, drillId, parsed.graphic, formData, Boolean(upload));
   } catch (graphicError) {
     return visualSaveError(graphicError, "The Drill details were saved, but the visual could not be saved.");
   }
 
   revalidatePath("/drills");
   revalidatePath(`/drills/${drillId}`);
+  if (upload) return { pendingImageUpload: upload, submissionId: Date.now() };
   redirect(returnTo || (intent === "publish" ? `/drills/${drillId}` : `/drills/${drillId}`));
 }
 
@@ -170,8 +218,9 @@ async function createDrillDraft(formData: FormData, returnTo: string): Promise<D
 
   if (error) return { error: error.message, values: parsed.values, submissionId: Date.now() };
 
+  const upload = pendingImageUpload(formData, user.id, data.id, returnTo || "/drills?view=drafts", true);
   try {
-    await saveDrillVisual(supabase, user.id, data.id, parsed.graphic, visualInput(formData));
+    await saveSubmittedVisual(supabase, user.id, data.id, parsed.graphic, formData, Boolean(upload));
   } catch (graphicError) {
     await db.from("drill_graphics").delete().eq("drill_id", data.id).eq("user_id", user.id);
     await db.from("drills").delete().eq("id", data.id).eq("user_id", user.id);
@@ -179,6 +228,7 @@ async function createDrillDraft(formData: FormData, returnTo: string): Promise<D
   }
 
   revalidatePath("/drills");
+  if (upload) return { pendingImageUpload: upload, submissionId: Date.now() };
   redirect(returnTo || "/drills?view=drafts");
 }
 
@@ -197,15 +247,36 @@ async function updateDrillDraft(formData: FormData, drillId: string, returnTo: s
 
   if (error) return { error: error.message, values: parsed.values, submissionId: Date.now() };
 
+  const upload = pendingImageUpload(formData, user.id, drillId, returnTo || "/drills?view=drafts", false);
   try {
-    await saveDrillVisual(supabase, user.id, drillId, parsed.graphic, visualInput(formData));
+    await saveSubmittedVisual(supabase, user.id, drillId, parsed.graphic, formData, Boolean(upload));
   } catch (graphicError) {
     return { ...visualSaveError(graphicError, "The Drill draft details were saved, but the visual could not be saved."), values: parsed.values };
   }
 
   revalidatePath("/drills");
   revalidatePath(`/drills/${drillId}`);
+  if (upload) return { pendingImageUpload: upload, submissionId: Date.now() };
   redirect(returnTo || "/drills?view=drafts");
+}
+
+export async function finalizePendingDrillImageUpload(formData: FormData): Promise<DrillActionState> {
+  const drillId = formString(formData, "drillId");
+  const path = formString(formData, "path");
+  const requestedDestination = formString(formData, "destination");
+  const destination = requestedDestination.startsWith("/") && !requestedDestination.startsWith("//") ? requestedDestination : "";
+  if (!drillId || !path) return { error: "Missing image upload details.", imageError: "upload_failed", submissionId: Date.now() };
+  const { supabase, user } = await requireUser();
+  const drill = await getUserDrill(supabase, user.id, drillId);
+  if (!drill) return { error: "Drill not found.", imageError: "upload_failed", submissionId: Date.now() };
+  try {
+    await finalizeDrillVisualUpload(supabase, user.id, drillId, path);
+  } catch (error) {
+    return visualSaveError(error, "The uploaded image could not be verified or saved.");
+  }
+  revalidatePath("/drills");
+  revalidatePath(`/drills/${drillId}`);
+  redirect(destination || `/drills/${drillId}`);
 }
 
 export async function deleteDrill(_: DrillDeleteState, formData: FormData): Promise<DrillDeleteState> {

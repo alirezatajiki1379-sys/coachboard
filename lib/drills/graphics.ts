@@ -139,6 +139,77 @@ export async function saveDrillVisual(
   }
 }
 
+export async function saveDrillVisualCanvas(
+  supabase: SupabaseServerClient,
+  userId: string,
+  drillId: string,
+  state: DrillEditorState
+) {
+  const db = supabase as unknown as SupabaseClient;
+  const existing = await getDrillGraphicRow(supabase, userId, drillId);
+  if (existing) {
+    const { error } = await db
+      .from("drill_graphics")
+      .update({ canvas_json: editorStateToJson(state) })
+      .eq("drill_id", drillId)
+      .eq("user_id", userId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  await upsertDrillGraphic(supabase, userId, drillId, state);
+}
+
+export async function finalizeDrillVisualUpload(
+  supabase: SupabaseServerClient,
+  userId: string,
+  drillId: string,
+  path: string
+) {
+  const expectedPrefix = `${userId}/${drillId}/`;
+  if (!path.startsWith(expectedPrefix) || path.includes("..")) {
+    throw new DrillImageError("upload_failed", "The uploaded image path is invalid.");
+  }
+
+  const { data: image, error: downloadError } = await supabase.storage.from(drillImageBucket).download(path);
+  if (downloadError || !image) {
+    throw new DrillImageError("upload_failed", downloadError?.message ?? "The uploaded image could not be verified.");
+  }
+
+  let mimeType;
+  try {
+    mimeType = await validateDrillImageFile(image);
+  } catch (error) {
+    await supabase.storage.from(drillImageBucket).remove([path]);
+    throw error;
+  }
+
+  const existing = await getDrillGraphicRow(supabase, userId, drillId);
+  if (!existing) {
+    await supabase.storage.from(drillImageBucket).remove([path]);
+    throw new DrillImageError("upload_failed", "The Drill graphic record no longer exists.");
+  }
+
+  const db = supabase as unknown as SupabaseClient;
+  const { error } = await db
+    .from("drill_graphics")
+    .update({
+      visual_source: "upload",
+      uploaded_image_path: path,
+      uploaded_image_mime_type: mimeType,
+      uploaded_image_size_bytes: image.size
+    })
+    .eq("drill_id", drillId)
+    .eq("user_id", userId);
+  if (error) {
+    await supabase.storage.from(drillImageBucket).remove([path]);
+    throw new DrillImageError("upload_failed", error.message);
+  }
+
+  if (existing.uploaded_image_path && existing.uploaded_image_path !== path) {
+    await supabase.storage.from(drillImageBucket).remove([existing.uploaded_image_path]);
+  }
+}
+
 export async function duplicateDrillVisual(
   supabase: SupabaseServerClient,
   userId: string,
