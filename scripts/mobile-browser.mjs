@@ -45,13 +45,13 @@ const bundle = await build({
     const team={id:"team",name:"U15 Fictional Training Team",isActive:true};
     const player={id:"player",firstName:"Alexandermilian",lastName:"Fictional-Testname",playerType:"roster",position:"CM",secondaryPositions:[],positionFamilies:[]};
     const trial={...player,id:"trial",firstName:"Taylor",lastName:"Test",playerType:"trial",position:"RW"};
-    const plannerPlayers=[{...player,id:"gk",firstName:"Gina",position:"GK"},{...player,id:"striker",firstName:"Sam",position:"ST"},{...player,id:"winger",firstName:"Max",position:"RW"},{...player,id:"reserve",firstName:"Riley",position:"CM"}];
+    const plannerPlayers=[{...player,id:"gk",firstName:"Gina",position:"GK"},{...player,id:"striker",firstName:"Sam",position:"ST"},{...player,id:"winger",firstName:"Max",position:"RW"},{...player,id:"reserve",firstName:"Riley",position:"CM"},{...player,id:"depth-one",firstName:"Noah",lastName:"Depth",playerType:"trial",position:"LB"},{...player,id:"depth-two",firstName:"Mika",lastName:"Depth",playerType:"trial",position:"LB"},{...player,id:"depth-three",firstName:"Levi",lastName:"Depth",playerType:"trial",position:"LB"}];
     const plannerFormationCode=params.get("formation")||"4-3-3";
     const plannerCustomView=params.get("view")==="planner-custom";
     const plannerFormation=tacticalFormations.find(item=>item.code===plannerFormationCode)||tacticalFormations[0];
     const plannerCustomOffsets=[0,-3,2,-2,3,-4,0,4,-2,0,3];
     const plannerSlots=plannerFormation.slots.map((slot,index)=>({...slot,x:plannerCustomView?Math.max(10,Math.min(90,slot.x+(plannerCustomOffsets[index]||0))):slot.x,id:"slot-"+index,userId:"user",planId:"plan"}));
-    const plannerAssignments=[{id:"assignment-gk",userId:"user",planId:"plan",slotId:plannerSlots[0].id,playerId:"gk",depthOrder:1,isPreferredStarter:true,fitType:"natural",createdAt:"2026-01-01",updatedAt:"2026-01-01"},{id:"assignment-st",userId:"user",planId:"plan",slotId:plannerSlots[9].id,playerId:"striker",depthOrder:1,isPreferredStarter:true,fitType:"natural",createdAt:"2026-01-01",updatedAt:"2026-01-01"}];
+    const plannerAssignments=[{id:"assignment-gk",userId:"user",planId:"plan",slotId:plannerSlots[0].id,playerId:"gk",depthOrder:1,isPreferredStarter:true,fitType:"natural",createdAt:"2026-01-01",updatedAt:"2026-01-01"},{id:"assignment-st",userId:"user",planId:"plan",slotId:plannerSlots[9].id,playerId:"striker",depthOrder:1,isPreferredStarter:true,fitType:"natural",createdAt:"2026-01-01",updatedAt:"2026-01-01"},{id:"depth-lb-1",userId:"user",planId:"plan",slotId:plannerSlots[1].id,playerId:"depth-one",depthOrder:1,isPreferredStarter:false,fitType:"natural",createdAt:"2026-01-01",updatedAt:"2026-01-01"},{id:"depth-lb-2",userId:"user",planId:"plan",slotId:plannerSlots[1].id,playerId:"depth-two",depthOrder:2,isPreferredStarter:false,fitType:"secondary",createdAt:"2026-01-01",updatedAt:"2026-01-01"},{id:"depth-lb-3",userId:"user",planId:"plan",slotId:plannerSlots[1].id,playerId:"depth-three",depthOrder:3,isPreferredStarter:false,fitType:"secondary",createdAt:"2026-01-01",updatedAt:"2026-01-01"},{id:"depth-lcb-1",userId:"user",planId:"plan",slotId:plannerSlots[2].id,playerId:"depth-one",depthOrder:1,isPreferredStarter:false,fitType:"natural",createdAt:"2026-01-01",updatedAt:"2026-01-01"},{id:"depth-lcb-2",userId:"user",planId:"plan",slotId:plannerSlots[2].id,playerId:"depth-two",depthOrder:2,isPreferredStarter:false,fitType:"secondary",createdAt:"2026-01-01",updatedAt:"2026-01-01"}];
     window.qa.plannerAssignments=plannerAssignments;
     const plannerData={squad:team,plans:[{id:"plan",userId:"user",squadId:"team",name:"Fictional "+plannerFormationCode,formationCode:plannerFormationCode,isDefault:true,includeNewPlayersAutomatically:true,status:"active"}],selectedPlan:{id:"plan",userId:"user",squadId:"team",name:"Fictional "+plannerFormationCode,formationCode:params.get("view")==="planner-custom"?"Custom":plannerFormationCode,isDefault:true,includeNewPlayersAutomatically:true,status:"active"},slots:plannerSlots,assignments:plannerAssignments,playerStates:[],players:plannerPlayers,warnings:[]};
     const attendance=[{id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player},{id:"trial-entry",eventId:"event",playerId:"trial",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player:trial}];
@@ -375,6 +375,22 @@ try {
         assert.equal(await page.locator("[data-planner-slot]").count(), 11, `planner keeps 11 slots at ${width}px`);
         assert.equal(await page.locator("[data-planner-player]").count(), 2, `planner pool remains readable at ${width}px`);
         assert.equal(await page.locator("[data-planner-depth-count]").count(), 11, `depth counts remain visible at ${width}px`);
+        assert.equal(await page.locator("[data-position-depth-card]").count(), 11, `position depth keeps 11 overview cards at ${width}px`);
+        if (locale === "en" && width === 1440) {
+          const depthCard = page.locator('[data-position-depth-card="LB"]');
+          assert.ok((await depthCard.textContent()).includes("Noah Depth"), "position depth shows first-ranked player");
+          assert.ok((await depthCard.textContent()).includes("Mika Depth"), "position depth shows second-ranked player");
+          assert.ok((await depthCard.textContent()).includes("Levi Depth"), "position depth shows third-ranked player");
+          assert.equal(await depthCard.locator("[data-position-depth-count]").textContent(), "3", "position depth total agrees with visible canonical ranking");
+          assert.ok((await depthCard.locator("[data-position-depth-count]").getAttribute("class")).includes("emerald"), "healthy depth uses the positive badge treatment");
+          assert.ok((await page.locator('[data-position-depth-card="LCB"] [data-position-depth-count]').getAttribute("class")).includes("amber"), "limited depth uses the warning badge treatment");
+          assert.ok((await page.locator('[data-position-depth-card="RCB"] [data-position-depth-count]').getAttribute("class")).includes("red"), "insufficient depth uses the danger badge treatment");
+          assert.ok((await depthCard.getByText("Noah Depth", { exact: true }).locator("..").getAttribute("class")).includes("font-black"), "first-ranked player is visually prioritized");
+          await page.getByLabel("Fit mode").selectOption("natural");
+          assert.equal(await depthCard.locator("[data-position-depth-count]").textContent(), "1", "fit mode updates position depth count");
+          assert.ok(!(await depthCard.textContent()).includes("Mika Depth"), "fit mode updates position depth preview");
+          await page.getByLabel("Fit mode").selectOption("natural_secondary");
+        }
         if (width === 390 || width === 1024 || width === 1280 || width === 1440) {
           await page.screenshot({ path: `/private/tmp/coachboard-planner-${locale}-${width}.png`, fullPage: true });
         }

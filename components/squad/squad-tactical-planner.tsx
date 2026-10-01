@@ -48,6 +48,7 @@ import type { SquadPlayer } from "@/types/domain";
 
 type PlannerMode = "formation" | "depth";
 type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_xi" | "rebuild_all";
+type DepthOverviewFitMode = AutoFillEligibility | "all";
 type TacticalAssignment = TacticalPlannerData["assignments"][number];
 type OptimisticSlotUpdate =
   | { type: "remove"; assignmentId: string }
@@ -77,7 +78,7 @@ const plannerCopy = {
     assign: "Assign", selectPlayer: "Select a player, then tap a position.", selectPosition: "Select a position to inspect its depth.", depthOptions: "options", removeFromXi: "Remove from XI", changeFailed: "Could not update formation.",
     name: "Formation name", label: "Display label", position: "Position", eleven: "A formation needs 11 positions before it can be saved.",
     starters: "starters", depthAssignments: "depth assignments", included: "included", excluded: "excluded", plan: "Plan", board: "Formation board", depthBoard: "Depth board", playerPool: "Player pool",
-    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options"
+    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Fit mode", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Include Compatible", fitAll: "Include Out-of-position", noSuitablePlayer: "No suitable Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth"
   },
   de: {
     heading: "Kaderplaner", nameRequired: "Bitte einen Namen für die Formation eingeben.",
@@ -86,7 +87,7 @@ const plannerCopy = {
     assign: "Zuweisen", selectPlayer: "Spieler auswählen und dann eine Position antippen.", selectPosition: "Position auswählen, um die Besetzung zu sehen.", depthOptions: "Optionen", removeFromXi: "Aus Startelf entfernen", changeFailed: "Formation konnte nicht aktualisiert werden.",
     name: "Name der Formation", label: "Anzeigename", position: "Position", eleven: "Eine Formation braucht 11 Positionen, bevor sie gespeichert werden kann.",
     starters: "Startspieler", depthAssignments: "Positionszuordnungen", included: "einbezogen", excluded: "ausgeschlossen", plan: "Plan", board: "Formationstafel", depthBoard: "Positionsbesetzung", playerPool: "Spielerpool",
-    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen"
+    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Passungsmodus", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Kompatible einbeziehen", fitAll: "Positionsfremde einbeziehen", noSuitablePlayer: "Kein passender Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung"
   }
 } as const;
 
@@ -369,6 +370,14 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
         </div>
       </section>
 
+      {!editingFormation ? <PositionDepthOverview
+        slots={visibleSlots}
+        assignmentsBySlot={assignmentsBySlot}
+        playersById={playersById}
+        selectedSlotId={selectedSlot?.id}
+        onSelect={setSelectedSlotId}
+      /> : null}
+
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="min-w-0 rounded-md border border-board-line bg-white p-3 shadow-soft" onDragOver={(event) => { if (dragPlayerId) event.preventDefault(); }} onDrop={(event) => { if (!dragPlayerId || acceptedDrop.current) return; event.preventDefault(); finishPlayerDrag(); }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -496,12 +505,6 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
         </section>
 
         <aside className="min-w-0 space-y-3">
-          {!editingFormation ? <PositionDepthOverview
-            slots={visibleSlots}
-            assignmentsBySlot={assignmentsBySlot}
-            selectedSlotId={selectedSlot?.id}
-            onSelect={setSelectedSlotId}
-          /> : null}
           {!editingFormation && selectedSlot ? <SlotDepthPanel
             planId={data.selectedPlan.id}
             slot={selectedSlot}
@@ -1538,44 +1541,89 @@ function DepthIconActionLabel({ label }: { label: string }) {
 function PositionDepthOverview({
   slots,
   assignmentsBySlot,
+  playersById,
   selectedSlotId,
   onSelect
 }: {
   slots: TacticalPlanSlot[];
   assignmentsBySlot: Map<string, TacticalPlannerData["assignments"]>;
+  playersById: Map<string, SquadPlayer>;
   selectedSlotId?: string;
   onSelect: (slotId: string) => void;
 }) {
   const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
+  const [fitMode, setFitMode] = useState<DepthOverviewFitMode>("natural_secondary");
   return (
     <section className="rounded-md border border-board-line bg-white p-3 shadow-soft">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-board-navy">{copy.depthOverview}</h3>
         <span className="text-[11px] font-semibold text-slate-500">{slots.length} {copy.positions}</span>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+      <label className="mt-2 flex items-center justify-between gap-2 text-[11px] font-bold text-slate-600">
+        <span>{copy.fitMode}</span>
+        <select value={fitMode} onChange={(event) => setFitMode(event.target.value as DepthOverviewFitMode)} className="h-8 min-w-0 max-w-[13rem] rounded border border-board-line bg-white px-2 text-[11px] font-semibold text-slate-700">
+          <option value="natural">{copy.fitNatural}</option>
+          <option value="natural_secondary">{copy.fitSecondary}</option>
+          <option value="natural_secondary_compatible">{copy.fitCompatible}</option>
+          <option value="all">{copy.fitAll}</option>
+        </select>
+      </label>
+      <div className="mt-2 grid grid-cols-1 gap-1.5 min-[360px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {[...slots].sort((a, b) => a.sortOrder - b.sortOrder).map((slot) => {
-          const count = uniqueDepthAssignments(assignmentsBySlot.get(slot.id) ?? []).length;
+          const rankedAssignments = uniqueDepthAssignments(assignmentsBySlot.get(slot.id) ?? [])
+            .filter((assignment) => depthAssignmentMatchesFitMode(assignment.fitType, fitMode))
+            .sort((a, b) => a.depthOrder - b.depthOrder);
+          const count = rankedAssignments.length;
+          const previewAssignments = rankedAssignments.slice(0, 3);
+          const depthState = count <= 1 ? copy.insufficientDepth : count === 2 ? copy.limitedDepth : copy.healthyDepth;
           return (
             <button
               key={slot.id}
+              data-position-depth-card={slot.code}
               type="button"
               onClick={() => onSelect(slot.id)}
               className={cn(
-                "flex min-w-0 items-center justify-between gap-2 rounded border px-2 py-1.5 text-left transition",
-                selectedSlotId === slot.id ? "border-board-green bg-emerald-50 ring-1 ring-board-green/20" : "border-board-line bg-slate-50 hover:border-emerald-300"
+                "min-h-[7.25rem] min-w-0 rounded border px-2 py-2 text-left transition",
+                selectedSlotId === slot.id ? "border-board-green bg-emerald-50 ring-1 ring-board-green/20" : "border-board-line bg-white hover:border-emerald-300 hover:bg-slate-50"
               )}
               aria-pressed={selectedSlotId === slot.id}
-              title={`${slot.label}: ${count} ${copy.playersShort}`}
+              aria-label={`${slot.label}: ${count} ${copy.playersShort} - ${depthState}`}
+              title={`${slot.label}: ${count} ${copy.playersShort} - ${depthState}`}
             >
-              <span className="truncate text-xs font-black text-board-navy">{slot.code}</span>
-              <span className={cn("inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-black", count <= 1 ? "bg-red-100 text-red-800" : "bg-white text-slate-700 ring-1 ring-slate-200")}>{count}</span>
+              <span className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-black uppercase text-board-green">{slot.code}</span>
+                <span data-position-depth-count={count} className={cn(
+                  "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[11px] font-black ring-1",
+                  count <= 1 ? "bg-red-100 text-red-800 ring-red-200" : count === 2 ? "bg-amber-100 text-amber-800 ring-amber-200" : "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                )}>{count}</span>
+              </span>
+              <span className="mt-2 block space-y-0.5">
+                {previewAssignments.length === 0 ? (
+                  <span className="block text-xs font-semibold text-red-700">{copy.noSuitablePlayer}</span>
+                ) : previewAssignments.map((assignment, index) => {
+                  const player = playersById.get(assignment.playerId);
+                  if (!player) return null;
+                  return (
+                    <span key={assignment.id} className={cn("flex min-w-0 items-baseline gap-1.5 text-xs leading-tight", index === 0 ? "font-black text-board-navy" : "font-semibold text-slate-600")}>
+                      <span className="w-3 shrink-0 text-right tabular-nums">{index + 1}</span>
+                      <span translate="no" className="truncate" title={playerName(player)}>{playerName(player)}</span>
+                    </span>
+                  );
+                })}
+              </span>
             </button>
           );
         })}
       </div>
     </section>
   );
+}
+
+function depthAssignmentMatchesFitMode(fitType: TacticalFitType, mode: DepthOverviewFitMode) {
+  if (mode === "all") return true;
+  if (mode === "natural") return fitType === "natural";
+  if (mode === "natural_secondary") return fitType === "natural" || fitType === "secondary";
+  return fitType === "natural" || fitType === "secondary" || fitType === "compatible";
 }
 
 function SlotDepthPanel({
