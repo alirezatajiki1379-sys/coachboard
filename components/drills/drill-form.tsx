@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { DrillEditor } from "@/components/drills/drill-editor";
@@ -95,6 +96,7 @@ type SetupParameterRow = {
 };
 
 export function DrillForm({ action, drill, mode, graphicJson, visual, allowImageUpload = true, defaultReturnTo = "", cancelHref, hiddenFields, contextBanner }: DrillFormProps) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(action, initialActionState);
   const initialValues = useMemo(() => getInitialValues(drill, graphicJson, visual), [drill, graphicJson, visual]);
   const [values, setValues] = useState<DrillFormValues>(() => state.values ?? initialValues);
@@ -198,6 +200,7 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
 
     const supabase = createBrowserClient();
     void (async () => {
+      let finalizationStarted = false;
       try {
         const mimeType = await validateDrillImageFile(pendingUploadFile);
         const { error } = await supabase.storage.from(drillImageBucket).upload(target.path, pendingUploadFile, {
@@ -211,10 +214,25 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
         finalData.set("drillId", target.drillId);
         finalData.set("path", target.path);
         finalData.set("destination", target.destination);
+        finalizationStarted = true;
         const result = await finalizePendingDrillImageUpload(finalData);
         if (result?.error) throw Object.assign(new Error(result.error), { code: result.imageError });
+        if (!result.completedImageUpload) throw new Error("The image upload could not be finalized.");
+        if (cancelled) return;
+
+        clearDraft();
+        await clearPendingDrillImage(draftKey).catch(() => undefined);
+        setPendingUploadFile(undefined);
+        setIsDirty(false);
+        setIsSubmitting(false);
+        router.push(result.completedImageUpload.destination);
+        router.refresh();
       } catch (error) {
-        await supabase.storage.from(drillImageBucket).remove([target.path]);
+        // Once finalization starts, the server owns cleanup. The database update may
+        // already have succeeded even if the response is interrupted.
+        if (!finalizationStarted) {
+          await supabase.storage.from(drillImageBucket).remove([target.path]);
+        }
         if (cancelled) return;
         if (target.createdDrill) setRetryDrillId(target.drillId);
         const code = isDrillImageErrorCode(error) ? error.code : "upload_failed";
@@ -226,7 +244,7 @@ export function DrillForm({ action, drill, mode, graphicJson, visual, allowImage
     })();
 
     return () => { cancelled = true; };
-  }, [pendingUploadFile, state.pendingImageUpload]);
+  }, [clearDraft, draftKey, pendingUploadFile, router, state.pendingImageUpload]);
 
   useEffect(() => {
     if (!isSubmitting) return;

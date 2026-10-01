@@ -67,7 +67,7 @@ export async function getDrillVisualsByDrillId(
   const paths = rows.flatMap((row) => row.uploaded_image_path ? [row.uploaded_image_path] : []);
   const signedUrls = await createSignedImageUrlMap(supabase, paths);
   for (const row of rows) {
-    visuals.set(row.drill_id, rowToVisual(row, signedUrls.get(row.uploaded_image_path ?? "")));
+    visuals.set(row.drill_id, resolveStoredDrillVisual(row, signedUrls.get(row.uploaded_image_path ?? "")));
   }
   return visuals;
 }
@@ -293,7 +293,7 @@ async function createSignedImageUrlMap(supabase: SupabaseServerClient, paths: st
   return urls;
 }
 
-function rowToVisual(row: DrillGraphicRow, uploadedImageUrl?: string): DrillVisual {
+export function resolveStoredDrillVisual(row: DrillGraphicRow, uploadedImageUrl?: string): DrillVisual {
   const hasUpload = Boolean(row.uploaded_image_path);
   return {
     graphic: parseEditorState(row.canvas_json),

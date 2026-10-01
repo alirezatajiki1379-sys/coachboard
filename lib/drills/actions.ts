@@ -30,6 +30,10 @@ export type DrillActionState = {
     destination: string;
     createdDrill: boolean;
   };
+  completedImageUpload?: {
+    drillId: string;
+    destination: string;
+  };
   submissionId?: number;
 };
 
@@ -276,7 +280,13 @@ export async function finalizePendingDrillImageUpload(formData: FormData): Promi
   }
   revalidatePath("/drills");
   revalidatePath(`/drills/${drillId}`);
-  redirect(destination || `/drills/${drillId}`);
+  return {
+    completedImageUpload: {
+      drillId,
+      destination: destination || `/drills/${drillId}`
+    },
+    submissionId: Date.now()
+  };
 }
 
 export async function deleteDrill(_: DrillDeleteState, formData: FormData): Promise<DrillDeleteState> {
