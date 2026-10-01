@@ -11,6 +11,20 @@ export type TacticalPlayerInclusionStatus = "included" | "excluded";
 export type TacticalPlayerStatus = "first_choice" | "regular_option" | "rotation_option" | "development_option" | "emergency_cover";
 export type TacticalFitType = "natural" | "secondary" | "compatible" | "out_of_position" | "no_data";
 export type AutoFillEligibility = "natural" | "natural_secondary" | "natural_secondary_compatible";
+export type PositionFitMode = AutoFillEligibility | "all";
+export type PlayerPositionFit = "primary" | "secondary" | "compatible" | "out_of_position";
+export type PlayerPositionFitReason = {
+  type: "direct" | "bridge";
+  sourcePositions: string[];
+};
+
+export type PlayerPositionFitResult = {
+  fit: PlayerPositionFit;
+  targetPosition?: string;
+  matchedPosition?: string;
+  secondaryIndex?: number;
+  reason?: PlayerPositionFitReason;
+};
 
 export type TacticalPlan = {
   id: string;
@@ -94,6 +108,7 @@ export type TacticalSlotFitResult = {
   fitType: TacticalFitType;
   matchedPosition?: string;
   secondaryIndex?: number;
+  reason?: PlayerPositionFitReason;
   baseScore: number;
   eligible: boolean;
 };
@@ -316,44 +331,131 @@ export function resolvePlayerPositions(player: Pick<SquadPlayer, "position" | "s
   };
 }
 
+const directCompatibilityPairs: ReadonlyArray<readonly [string, string]> = [
+  ["CB", "CDM"],
+  ["CDM", "CM"],
+  ["CM", "CAM"],
+  ["LW", "LM"],
+  ["RW", "RM"],
+  ["LW", "RW"],
+  ["LB", "LWB"],
+  ["RB", "RWB"],
+  ["LWB", "LM"],
+  ["RWB", "RM"]
+];
+
+const bridgeCompatibilityRules: ReadonlyArray<{
+  sources: readonly [string, string];
+  target: string;
+}> = [
+  { sources: ["LB", "LW"], target: "LM" },
+  { sources: ["RB", "RW"], target: "RM" },
+  { sources: ["LB", "LM"], target: "LWB" },
+  { sources: ["RB", "RM"], target: "RWB" },
+  { sources: ["CM", "LW"], target: "LM" },
+  { sources: ["CM", "RW"], target: "RM" },
+  { sources: ["CB", "CM"], target: "CDM" },
+  { sources: ["CB", "CDM"], target: "CM" },
+  { sources: ["CDM", "CAM"], target: "CM" }
+];
+
+export function getPlayerPositionFit(
+  player: Pick<SquadPlayer, "position" | "secondaryPositions">,
+  targetCanonicalPosition: string
+): PlayerPositionFitResult {
+  const targetPosition = normalizeCanonicalPosition(targetCanonicalPosition);
+  const positions = resolvePlayerPositions(player);
+
+  if (!targetPosition) return { fit: "out_of_position" };
+  if (positions.primary === targetPosition) {
+    return { fit: "primary", targetPosition, matchedPosition: targetPosition };
+  }
+
+  const secondaryIndex = positions.secondary.indexOf(targetPosition);
+  if (secondaryIndex >= 0) {
+    return { fit: "secondary", targetPosition, matchedPosition: targetPosition, secondaryIndex };
+  }
+
+  const explicitPositions = new Set(positions.all);
+  const bridge = bridgeCompatibilityRules.find((rule) =>
+    rule.target === targetPosition
+    && explicitPositions.has(rule.sources[0])
+    && explicitPositions.has(rule.sources[1])
+  );
+  if (bridge) {
+    return {
+      fit: "compatible",
+      targetPosition,
+      matchedPosition: targetPosition,
+      reason: { type: "bridge", sourcePositions: [...bridge.sources] }
+    };
+  }
+
+  for (const explicitPosition of positions.all) {
+    if (!directCompatibilityPairs.some(([left, right]) =>
+      (left === explicitPosition && right === targetPosition)
+      || (right === explicitPosition && left === targetPosition)
+    )) continue;
+
+    return {
+      fit: "compatible",
+      targetPosition,
+      matchedPosition: explicitPosition,
+      reason: { type: "direct", sourcePositions: [explicitPosition] }
+    };
+  }
+
+  return {
+    fit: "out_of_position",
+    targetPosition,
+    matchedPosition: positions.primary ?? positions.secondary[0]
+  };
+}
+
 export function evaluatePlayerSlotFit(
   player: Pick<SquadPlayer, "position" | "secondaryPositions">,
   slot: Pick<TacticalPlanSlot, "acceptedPositions"> & Partial<Pick<TacticalPlanSlot, "naturalPositions">>,
   allowOutOfPosition = false
 ): TacticalSlotFitResult {
   const positions = resolvePlayerPositions(player);
-  const accepted = new Set(slot.acceptedPositions.map((position) => normalizeCanonicalPosition(position) ?? position));
-  const natural = new Set((slot.naturalPositions ?? Array.from(accepted).slice(0, 1)).map((position) => normalizeCanonicalPosition(position) ?? position));
-  if (positions.all.length === 0) return { fitType: "no_data", baseScore: 0, eligible: false };
-  if (positions.primary && natural.has(positions.primary)) {
-    return { fitType: "natural", matchedPosition: positions.primary, baseScore: 1000, eligible: true };
+  const targetPosition = (slot.naturalPositions ?? slot.acceptedPositions)
+    .map((position) => normalizeCanonicalPosition(position))
+    .find(Boolean);
+  if (!targetPosition) return { fitType: "no_data", baseScore: 0, eligible: false };
+
+  if (positions.all.length === 0) {
+    return {
+      fitType: "out_of_position",
+      baseScore: allowOutOfPosition ? 25 : 0,
+      eligible: allowOutOfPosition
+    };
   }
-  const secondaryNaturalIndex = positions.secondary.findIndex((position) => natural.has(position));
-  if (secondaryNaturalIndex >= 0) {
+
+  const result = getPlayerPositionFit(player, targetPosition);
+  if (result.fit === "primary") {
+    return { fitType: "natural", matchedPosition: result.matchedPosition, baseScore: 1000, eligible: true };
+  }
+  if (result.fit === "secondary") {
     return {
       fitType: "secondary",
-      matchedPosition: positions.secondary[secondaryNaturalIndex],
-      secondaryIndex: secondaryNaturalIndex,
-      baseScore: Math.max(775, 850 - secondaryNaturalIndex * 25),
+      matchedPosition: result.matchedPosition,
+      secondaryIndex: result.secondaryIndex,
+      baseScore: Math.max(775, 850 - (result.secondaryIndex ?? 0) * 25),
       eligible: true
     };
   }
-  if (positions.primary && accepted.has(positions.primary)) {
-    return { fitType: "compatible", matchedPosition: positions.primary, baseScore: 500, eligible: true };
-  }
-  const secondaryCompatibleIndex = positions.secondary.findIndex((position) => accepted.has(position));
-  if (secondaryCompatibleIndex >= 0) {
+  if (result.fit === "compatible") {
     return {
       fitType: "compatible",
-      matchedPosition: positions.secondary[secondaryCompatibleIndex],
-      secondaryIndex: secondaryCompatibleIndex,
-      baseScore: Math.max(350, 425 - secondaryCompatibleIndex * 15),
+      matchedPosition: result.matchedPosition,
+      reason: result.reason,
+      baseScore: result.reason?.type === "bridge" ? 475 : 500,
       eligible: true
     };
   }
   return {
     fitType: "out_of_position",
-    matchedPosition: positions.primary ?? positions.secondary[0],
+    matchedPosition: result.matchedPosition,
     baseScore: allowOutOfPosition ? 25 : 0,
     eligible: allowOutOfPosition
   };
@@ -374,6 +476,13 @@ export function isFitAllowedByAutoFillEligibility(fitType: TacticalFitType, elig
   return allowOutOfPosition && fitType === "out_of_position";
 }
 
+export function isFitVisibleInMode(fitType: TacticalFitType, mode: PositionFitMode) {
+  if (mode === "all") return fitType !== "no_data";
+  if (mode === "natural") return fitType === "natural";
+  if (mode === "natural_secondary") return fitType === "natural" || fitType === "secondary";
+  return fitType === "natural" || fitType === "secondary" || fitType === "compatible";
+}
+
 export function autoFillEligibilityLabel(eligibility: AutoFillEligibility) {
   if (eligibility === "natural") return "Natural positions only";
   if (eligibility === "natural_secondary_compatible") return "Natural, secondary and compatible positions";
@@ -391,11 +500,11 @@ export function resolveCandidatesForPosition({
 }): PositionCandidate[] {
   const target = normalizeCanonicalPosition(canonicalPosition);
   if (!target) return [];
-  const compatible = includeCompatible ? new Set(compatiblePositionsFor(target)) : new Set<string>();
   return players
     .flatMap((player): PositionCandidate[] => {
       const positions = resolvePlayerPositions(player);
-      if (positions.primary === target) {
+      const result = getPlayerPositionFit(player, target);
+      if (result.fit === "primary") {
         return [{
           player,
           primaryPosition: positions.primary,
@@ -405,31 +514,25 @@ export function resolveCandidatesForPosition({
           secondaryPositionIndex: null
         }];
       }
-      const secondaryIndex = positions.secondary.findIndex((position) => position === target);
-      if (secondaryIndex >= 0) {
+      if (result.fit === "secondary") {
         return [{
           player,
           primaryPosition: positions.primary,
           secondaryPositions: positions.secondary,
           matchedPosition: target,
           fit: "secondary",
-          secondaryPositionIndex: secondaryIndex
+          secondaryPositionIndex: result.secondaryIndex ?? null
         }];
       }
-      if (includeCompatible) {
-        const compatiblePrimary = positions.primary && compatible.has(positions.primary) ? positions.primary : undefined;
-        const compatibleSecondaryIndex = positions.secondary.findIndex((position) => compatible.has(position));
-        const matchedPosition = compatiblePrimary ?? (compatibleSecondaryIndex >= 0 ? positions.secondary[compatibleSecondaryIndex] : undefined);
-        if (matchedPosition) {
-          return [{
-            player,
-            primaryPosition: positions.primary,
-            secondaryPositions: positions.secondary,
-            matchedPosition,
-            fit: "compatible",
-            secondaryPositionIndex: compatiblePrimary ? null : compatibleSecondaryIndex
-          }];
-        }
+      if (includeCompatible && result.fit === "compatible") {
+        return [{
+          player,
+          primaryPosition: positions.primary,
+          secondaryPositions: positions.secondary,
+          matchedPosition: result.matchedPosition ?? target,
+          fit: "compatible",
+          secondaryPositionIndex: null
+        }];
       }
       return [];
     })
@@ -446,26 +549,6 @@ function candidateFitRank(candidate: PositionCandidate) {
   if (candidate.fit === "primary") return 0;
   if (candidate.fit === "secondary") return 1;
   return 2;
-}
-
-function compatiblePositionsFor(position: string) {
-  const map: Record<string, string[]> = {
-    RB: ["RWB", "CB"],
-    LB: ["LWB", "CB"],
-    CB: ["RB", "LB", "CDM"],
-    RWB: ["RB", "RM", "RW"],
-    LWB: ["LB", "LM", "LW"],
-    CDM: ["CM", "CB"],
-    CM: ["CDM", "CAM"],
-    CAM: ["CM", "RW", "LW", "SS"],
-    RM: ["RW", "RB", "RWB"],
-    LM: ["LW", "LB", "LWB"],
-    RW: ["RM", "RWB", "ST"],
-    LW: ["LM", "LWB", "ST"],
-    SS: ["CAM", "ST"],
-    ST: ["SS"]
-  };
-  return map[position] ?? [];
 }
 
 function getNaturalPositionsForSlot(code: string, acceptedPositions: string[]) {

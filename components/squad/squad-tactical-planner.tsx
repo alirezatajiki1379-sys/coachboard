@@ -28,6 +28,7 @@ import {
   evaluatePlayerSlotFit,
   autoFillEligibilityLabel,
   isFitAllowedByAutoFillEligibility,
+  isFitVisibleInMode,
   playerName,
   playerPositionText,
   tacticalPlayerRoleOptions,
@@ -36,7 +37,9 @@ import {
   type AutoFillEligibility,
   type TacticalPlannerData,
   type TacticalPlanSlot,
-  type TacticalFitType
+  type TacticalFitType,
+  type PlayerPositionFitReason,
+  type PositionFitMode
 } from "@/lib/squad/tactical-planner";
 import { tacticalFormations, slot as makeSlotDefinition } from "@/lib/squad/tactical-formations";
 import { canonicalPositionLabels } from "@/lib/squad/positions";
@@ -48,7 +51,7 @@ import type { SquadPlayer } from "@/types/domain";
 
 type PlannerMode = "formation" | "depth";
 type AutoFillMode = "empty_xi" | "xi_depth" | "xi_all_depth" | "rebuild_xi" | "rebuild_all";
-type DepthOverviewFitMode = AutoFillEligibility | "all";
+type DepthOverviewFitMode = PositionFitMode;
 type TacticalAssignment = TacticalPlannerData["assignments"][number];
 type OptimisticSlotUpdate =
   | { type: "remove"; assignmentId: string }
@@ -56,14 +59,6 @@ type OptimisticSlotUpdate =
   | { type: "moveToRank"; assignmentId: string; targetRank: number }
   | { type: "starter"; assignmentId: string }
   | { type: "add"; slot: TacticalPlanSlot; player: SquadPlayer };
-
-const fitMeta: Record<TacticalFitType, { label: string; className: string }> = {
-  natural: { label: "Natural", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
-  secondary: { label: "Secondary", className: "border-amber-200 bg-amber-50 text-amber-800" },
-  compatible: { label: "Compatible", className: "border-sky-200 bg-sky-50 text-sky-800" },
-  out_of_position: { label: "Out of position", className: "border-red-200 bg-red-50 text-red-700" },
-  no_data: { label: "No data", className: "border-slate-200 bg-slate-50 text-slate-600" }
-};
 
 const tacticalStatusOptions = [
   { value: "", label: "No tactical role" },
@@ -78,7 +73,7 @@ const plannerCopy = {
     assign: "Assign", selectPlayer: "Select a player, then tap a position.", selectPosition: "Select a position to inspect its depth.", depthOptions: "options", removeFromXi: "Remove from XI", changeFailed: "Could not update formation.",
     name: "Formation name", label: "Display label", position: "Position", eleven: "A formation needs 11 positions before it can be saved.",
     starters: "starters", depthAssignments: "depth assignments", included: "included", excluded: "excluded", plan: "Plan", board: "Formation board", depthBoard: "Depth board", playerPool: "Player pool",
-    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Fit mode", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Include Compatible", fitAll: "Include Out-of-position", noSuitablePlayer: "No suitable Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth"
+    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Fit mode", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Compatible", fitAll: "Out of position", noSuitablePlayer: "No suitable Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth", primary: "Primary", secondary: "Secondary", compatible: "Compatible", noPositionData: "No position data", starter: "Starter", xi: "XI"
   },
   de: {
     heading: "Kaderplaner", nameRequired: "Bitte einen Namen für die Formation eingeben.",
@@ -87,9 +82,89 @@ const plannerCopy = {
     assign: "Zuweisen", selectPlayer: "Spieler auswählen und dann eine Position antippen.", selectPosition: "Position auswählen, um die Besetzung zu sehen.", depthOptions: "Optionen", removeFromXi: "Aus Startelf entfernen", changeFailed: "Formation konnte nicht aktualisiert werden.",
     name: "Name der Formation", label: "Anzeigename", position: "Position", eleven: "Eine Formation braucht 11 Positionen, bevor sie gespeichert werden kann.",
     starters: "Startspieler", depthAssignments: "Positionszuordnungen", included: "einbezogen", excluded: "ausgeschlossen", plan: "Plan", board: "Formationstafel", depthBoard: "Positionsbesetzung", playerPool: "Spielerpool",
-    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Passungsmodus", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Kompatible einbeziehen", fitAll: "Positionsfremde einbeziehen", noSuitablePlayer: "Kein passender Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung"
+    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Passungsmodus", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Kompatibel", fitAll: "Positionsfremd", noSuitablePlayer: "Kein passender Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung", primary: "Hauptposition", secondary: "Nebenposition", compatible: "Kompatibel", noPositionData: "Keine Positionsdaten", starter: "Startspieler", xi: "Startelf"
   }
 } as const;
+
+type PlannerLocale = keyof typeof plannerCopy;
+
+function positionFitLabel(fitType: TacticalFitType, locale: PlannerLocale) {
+  const copy = plannerCopy[locale];
+  if (fitType === "natural") return copy.primary;
+  if (fitType === "secondary") return copy.secondary;
+  if (fitType === "compatible") return copy.compatible;
+  if (fitType === "out_of_position") return copy.outOfPosition;
+  return copy.noPositionData;
+}
+
+function positionFitExplanation(
+  fitType: TacticalFitType,
+  targetPosition: string,
+  reason: PlayerPositionFitReason | undefined,
+  locale: PlannerLocale
+) {
+  const label = positionFitLabel(fitType, locale);
+  if (fitType !== "compatible" || !reason) return `${targetPosition}: ${label}`;
+  const sources = reason.sourcePositions.join(locale === "de" ? " und " : " and ");
+  if (reason.type === "bridge") {
+    return locale === "de"
+      ? `Kompatibel auf ${targetPosition}, da der Spieler ausdrücklich als ${sources} geführt wird.`
+      : `Compatible with ${targetPosition} because the Player is explicitly listed as ${sources}.`;
+  }
+  return locale === "de"
+    ? `Kompatibel auf ${targetPosition} durch die ausdrücklich hinterlegte Position ${sources}.`
+    : `Compatible with ${targetPosition} through the explicit ${sources} position.`;
+}
+
+function fitRankClass(fitType: TacticalFitType) {
+  if (fitType === "secondary") return "text-amber-700";
+  if (fitType === "compatible") return "text-orange-700";
+  if (fitType === "out_of_position") return "text-red-700";
+  return "text-slate-500";
+}
+
+function PositionFitIndicator({
+  fitType,
+  targetPosition,
+  reason,
+  compact = false
+}: {
+  fitType: TacticalFitType;
+  targetPosition: string;
+  reason?: PlayerPositionFitReason;
+  compact?: boolean;
+}) {
+  const locale = useOptionalI18n()?.locale ?? "en";
+  if (fitType === "natural") return null;
+  const label = positionFitLabel(fitType, locale);
+  const explanation = positionFitExplanation(fitType, targetPosition, reason, locale);
+  const dotClass = fitType === "secondary"
+    ? "bg-amber-500"
+    : fitType === "compatible"
+      ? "bg-orange-500"
+      : fitType === "out_of_position"
+        ? "bg-red-500"
+        : "bg-slate-400";
+
+  if (compact) {
+    return (
+      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center" title={explanation} aria-label={explanation}>
+        <span className={cn("h-1.5 w-1.5 rounded-full", dotClass)} aria-hidden="true" />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1 text-[10px] font-bold", fitRankClass(fitType))}
+      title={explanation}
+      aria-label={explanation}
+    >
+      <span className={cn("h-1.5 w-1.5 rounded-full", dotClass)} aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
 
 export function SquadTacticalPlanner({ data, startEditing = false }: { data: TacticalPlannerData; startEditing?: boolean }) {
   const router = useRouter();
@@ -153,6 +228,12 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
   const unassignedPlayers = includedPlayers.filter((player) => !startingPlayerIds.has(player.id));
   const selectedSlotDepth = selectedSlot ? (assignmentsBySlot.get(selectedSlot.id) ?? []) : [];
   const starters = activeAssignments.filter((assignment) => assignment.isPreferredStarter);
+  const starterSlotByPlayerId = new Map(
+    starters.flatMap((assignment) => {
+      const slot = visibleSlots.find((item) => item.id === assignment.slotId);
+      return slot ? [[assignment.playerId, slot.code] as const] : [];
+    })
+  );
   const activePlans = data.plans.filter((plan) => plan.status === "active");
   const archivedPlans = data.plans.filter((plan) => plan.status === "archived");
   const applyOptimisticUpdate = (update: OptimisticSlotUpdate) => {
@@ -501,6 +582,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
           {!editingFormation ? <PositionDepthOverview
             slots={visibleSlots}
             assignmentsBySlot={assignmentsBySlot}
+            playersById={playersById}
             fitMode={depthFitMode}
             onFitModeChange={setDepthFitMode}
             selectedSlotId={selectedSlot?.id}
@@ -513,6 +595,8 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
             playersById={playersById}
             availablePlayers={includedPlayers}
             assignedPlayerIds={assignedPlayerIds}
+            fitMode={depthFitMode}
+            starterSlotByPlayerId={starterSlotByPlayerId}
           /> : null}
 
           <PlayerPoolPanel
@@ -684,13 +768,14 @@ function AutoFillMenu({
   assignments: TacticalPlannerData["assignments"];
   playerStates: TacticalPlannerData["playerStates"];
 }) {
+  const locale = useOptionalI18n()?.locale ?? "en";
   const [mode, setMode] = useState<AutoFillMode>("empty_xi");
   const [eligibility, setEligibility] = useState<AutoFillEligibility>("natural_secondary");
   const [includeTrials, setIncludeTrials] = useState(false);
   const [allowOutOfPosition, setAllowOutOfPosition] = useState(false);
   const preview = useMemo(
-    () => buildAutoFillPreview({ mode, eligibility, includeTrials, allowOutOfPosition, slots, players, assignments, playerStates }),
-    [allowOutOfPosition, assignments, eligibility, includeTrials, mode, playerStates, players, slots]
+    () => buildAutoFillPreview({ mode, eligibility, includeTrials, allowOutOfPosition, slots, players, assignments, playerStates, locale }),
+    [allowOutOfPosition, assignments, eligibility, includeTrials, locale, mode, playerStates, players, slots]
   );
   const starterCount = assignments.filter((assignment) => assignment.isPreferredStarter).length;
   return (
@@ -913,6 +998,11 @@ function FormationSlotRows({
 }) {
   const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
   const movingSlot = useRef<string | null>(null);
+  const starterSlotByPlayerId = new Map<string, string>();
+  for (const slot of slots) {
+    const starter = (assignmentsBySlot.get(slot.id) ?? []).find((assignment) => assignment.isPreferredStarter);
+    if (starter) starterSlotByPlayerId.set(starter.playerId, slot.code);
+  }
   if (editingFormation) {
     return (
       <div className="relative h-full w-full">
@@ -920,6 +1010,7 @@ function FormationSlotRows({
           const assignments = assignmentsBySlot.get(slot.id) ?? [];
           const starter = assignments.find((assignment) => assignment.isPreferredStarter);
           const player = starter ? playersById.get(starter.playerId) : undefined;
+          const starterFit = player ? evaluatePlayerSlotFit(player, slot, true) : undefined;
           const isDropTarget = hoverSlotId === slot.id && Boolean(draggingPlayerId);
           return (
             <div key={slot.id} data-planner-slot={slot.id} role="button" tabIndex={0}
@@ -952,7 +1043,7 @@ function FormationSlotRows({
               {canonicalPositionLabels[slot.code] && slot.label !== canonicalPositionLabels[slot.code] && slot.label !== slot.code ? <span className="truncate text-[9px] font-semibold text-slate-500" title={slot.label}>{slot.label}</span> : null}
               <span translate="no" className="line-clamp-2 break-words text-[10px] font-bold leading-tight sm:text-xs" title={player ? playerName(player) : copy.drop}>{player ? playerName(player) : "+"}</span>
               <span data-planner-depth-count={assignments.length} className="mx-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-100 px-1 text-[9px] font-black text-slate-700 ring-1 ring-slate-200" title={`${assignments.length} ${copy.depthOptions}`}>{assignments.length}</span>
-              {starter?.fitType === "out_of_position" ? <span className="text-[9px] font-bold text-red-700" title={copy.outOfPosition}>!</span> : null}
+              {starterFit?.fitType === "out_of_position" ? <span className="text-[9px] font-bold text-red-700" title={copy.outOfPosition}>!</span> : null}
               {editingFormation ? <GripVertical className="mx-auto h-3 w-3 text-board-green" aria-hidden="true" /> : null}
             </div>
           );
@@ -974,6 +1065,7 @@ function FormationSlotRows({
             selected={selectedSlotId === slot.id}
             assignments={assignmentsBySlot.get(slot.id) ?? []}
             playersById={playersById}
+            starterSlotByPlayerId={starterSlotByPlayerId}
             eligibleCount={countEligiblePlayers(includedPlayers, slot, fitMode)}
             fitMode={fitMode}
             draggingPlayerId={draggingPlayerId}
@@ -996,6 +1088,8 @@ function FormationSlotRows({
             playersById={playersById}
             availablePlayers={includedPlayers}
             eligibleCount={selectedEligibleCount}
+            fitMode={fitMode}
+            starterSlotByPlayerId={starterSlotByPlayerId}
             onOptimisticUpdate={onOptimisticUpdate}
           >
             {selectedStarter ? <div className="mt-2 flex flex-wrap gap-2">
@@ -1030,6 +1124,7 @@ function FormationSlotRows({
               selected={selectedSlotId === slot.id}
               assignments={assignmentsBySlot.get(slot.id) ?? []}
               playersById={playersById}
+              starterSlotByPlayerId={starterSlotByPlayerId}
               eligibleCount={countEligiblePlayers(includedPlayers, slot, fitMode)}
               fitMode={fitMode}
               draggingPlayerId={draggingPlayerId}
@@ -1051,6 +1146,8 @@ function FormationSlotRows({
           playersById={playersById}
           availablePlayers={includedPlayers}
           eligibleCount={selectedEligibleCount}
+          fitMode={fitMode}
+          starterSlotByPlayerId={starterSlotByPlayerId}
           onOptimisticUpdate={onOptimisticUpdate}
         >
           {selectedStarter ? <div className="mt-2 flex flex-wrap gap-2">
@@ -1213,6 +1310,7 @@ function SlotButton({
   selected,
   assignments,
   playersById,
+  starterSlotByPlayerId,
   eligibleCount,
   fitMode,
   draggingPlayerId,
@@ -1230,6 +1328,7 @@ function SlotButton({
   selected: boolean;
   assignments: TacticalPlannerData["assignments"];
   playersById: Map<string, SquadPlayer>;
+  starterSlotByPlayerId: Map<string, string>;
   eligibleCount: number;
   fitMode: DepthOverviewFitMode;
   draggingPlayerId: string | null;
@@ -1243,8 +1342,9 @@ function SlotButton({
   style?: CSSProperties;
   showCustomLabel?: boolean;
 }) {
-  const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
-  const orderedAssignments = rankedDepthAssignments(assignments, fitMode);
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const copy = plannerCopy[locale];
+  const orderedAssignments = rankedDepthAssignments(assignments, fitMode, slot, playersById);
   const starter = orderedAssignments.find((assignment) => assignment.isPreferredStarter) ?? orderedAssignments[0];
   const starterPlayer = starter ? playersById.get(starter.playerId) : undefined;
   const depthCount = orderedAssignments.length;
@@ -1329,6 +1429,10 @@ function SlotButton({
         ) : rankingPreview.map((assignment, index) => {
           const player = playersById.get(assignment.playerId);
           if (!player) return null;
+          const fit = evaluatePlayerSlotFit(player, slot, true);
+          const startingSlot = starterSlotByPlayerId.get(player.id);
+          const xiElsewhere = startingSlot && startingSlot !== slot.code ? `${copy.xi} · ${startingSlot}` : "";
+          const explanation = positionFitExplanation(fit.fitType, slot.code, fit.reason, locale);
           return (
             <span
               key={assignment.id}
@@ -1337,8 +1441,9 @@ function SlotButton({
                 index === 0 ? "flex text-[10px] font-black text-board-navy sm:text-xs" : "hidden text-[10px] font-semibold text-slate-600 sm:flex"
               )}
             >
-              <span className="w-2.5 shrink-0 text-right tabular-nums">{index + 1}</span>
-              <span translate="no" className="truncate" title={playerName(player)}>{playerName(player)}</span>
+              <span className={cn("w-2.5 shrink-0 text-right tabular-nums", fitRankClass(fit.fitType))} title={explanation}>{index + 1}</span>
+              <span translate="no" className="min-w-0 flex-1 truncate" title={`${playerName(player)} · ${explanation}`}>{playerName(player)}</span>
+              {xiElsewhere ? <span className="hidden shrink-0 text-[8px] font-bold text-slate-500 xl:inline" title={xiElsewhere}>{xiElsewhere}</span> : null}
             </span>
           );
         })}
@@ -1354,6 +1459,8 @@ function SlotEditorOverlay({
   playersById,
   availablePlayers,
   eligibleCount,
+  fitMode,
+  starterSlotByPlayerId,
   onOptimisticUpdate,
   children
 }: {
@@ -1363,6 +1470,8 @@ function SlotEditorOverlay({
   playersById: Map<string, SquadPlayer>;
   availablePlayers: SquadPlayer[];
   eligibleCount: number;
+  fitMode: DepthOverviewFitMode;
+  starterSlotByPlayerId: Map<string, string>;
   onOptimisticUpdate: (update: OptimisticSlotUpdate) => void;
   children?: ReactNode;
 }) {
@@ -1397,6 +1506,8 @@ function SlotEditorOverlay({
         depth={depth}
         playersById={playersById}
         availablePlayers={availablePlayers}
+        fitMode={fitMode}
+        starterSlotByPlayerId={starterSlotByPlayerId}
         onOptimisticUpdate={onOptimisticUpdate}
         compact
       />
@@ -1423,6 +1534,8 @@ function InlineDepthControls({
   depth,
   playersById,
   availablePlayers,
+  fitMode,
+  starterSlotByPlayerId,
   onOptimisticUpdate,
   compact = false
 }: {
@@ -1431,18 +1544,28 @@ function InlineDepthControls({
   depth: TacticalPlannerData["assignments"];
   playersById: Map<string, SquadPlayer>;
   availablePlayers?: SquadPlayer[];
+  fitMode: DepthOverviewFitMode;
+  starterSlotByPlayerId: Map<string, string>;
   onOptimisticUpdate: (update: OptimisticSlotUpdate) => void;
   compact?: boolean;
 }) {
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const copy = plannerCopy[locale];
   const reorderFormRef = useRef<HTMLFormElement>(null);
   const [draggedAssignmentId, setDraggedAssignmentId] = useState("");
   const [dropRank, setDropRank] = useState(1);
-  const sortedDepth = uniqueDepthAssignments(depth).sort((a, b) => a.depthOrder - b.depthOrder);
-  const assignedPlayerIds = new Set(sortedDepth.map((assignment) => assignment.playerId));
+  const allDepth = uniqueDepthAssignments(depth);
+  const sortedDepth = allDepth
+    .filter((assignment) => {
+      const player = playersById.get(assignment.playerId);
+      return player ? isFitVisibleInMode(evaluatePlayerSlotFit(player, slot, true).fitType, fitMode) : false;
+    })
+    .sort((a, b) => a.depthOrder - b.depthOrder);
+  const assignedPlayerIds = new Set(allDepth.map((assignment) => assignment.playerId));
   const addablePlayers = (availablePlayers ?? [])
     .filter((player) => !assignedPlayerIds.has(player.id))
-    .map((player) => ({ player, fit: evaluatePlayerSlotFit(player, slot) }))
-    .filter((item) => item.fit.eligible && isFitAllowedByAutoFillEligibility(item.fit.fitType, "natural_secondary", false))
+    .map((player) => ({ player, fit: evaluatePlayerSlotFit(player, slot, fitMode === "all") }))
+    .filter((item) => item.fit.eligible && isFitVisibleInMode(item.fit.fitType, fitMode))
     .sort((a, b) => b.fit.baseScore - a.fit.baseScore || playerName(a.player).localeCompare(playerName(b.player)));
 
   return (
@@ -1457,6 +1580,9 @@ function InlineDepthControls({
       ) : sortedDepth.map((assignment, index) => {
         const player = playersById.get(assignment.playerId);
         if (!player) return null;
+        const fit = evaluatePlayerSlotFit(player, slot, true);
+        const startingSlot = starterSlotByPlayerId.get(player.id);
+        const xiElsewhere = startingSlot && startingSlot !== slot.code ? `${copy.xi} · ${startingSlot}` : "";
         return (
           <div
             key={assignment.id}
@@ -1479,11 +1605,15 @@ function InlineDepthControls({
               onOptimisticUpdate({ type: "moveToRank", assignmentId: sourceId, targetRank: index + 1 });
               window.setTimeout(() => reorderFormRef.current?.requestSubmit(), 0);
             }}
-            className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto_auto_auto] items-center gap-1 rounded bg-slate-50 px-1.5 py-1"
+            className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto_auto_auto_auto] items-center gap-1 rounded bg-slate-50 px-1.5 py-1"
           >
             <span className="font-black text-board-green">{index + 1}</span>
             <span className="cursor-grab text-slate-400" aria-hidden="true">⋮⋮</span>
-            <span className="truncate font-bold text-board-navy" title={playerName(player)}>{playerName(player)}{index === 0 ? " · Starter" : ""}</span>
+            <span className="min-w-0 truncate font-bold text-board-navy" title={playerName(player)}>
+              {playerName(player)}
+              {assignment.isPreferredStarter ? ` · ${copy.starter}` : xiElsewhere ? ` · ${xiElsewhere}` : ""}
+            </span>
+            <PositionFitIndicator fitType={fit.fitType} targetPosition={slot.code} reason={fit.reason} compact />
             <DepthIconAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="↑" title="Move up" extra={{ direction: "up" }} disabled={index === 0} onOptimisticSubmit={() => onOptimisticUpdate({ type: "move", assignmentId: assignment.id, direction: "up" })} />
             <DepthIconAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="↓" title="Move down" extra={{ direction: "down" }} disabled={index === sortedDepth.length - 1} onOptimisticSubmit={() => onOptimisticUpdate({ type: "move", assignmentId: assignment.id, direction: "down" })} />
             <DepthIconAction action={removeDepthAssignment} planId={planId} assignmentId={assignment.id} label="×" title="Remove from depth" variant="danger" onOptimisticSubmit={() => onOptimisticUpdate({ type: "remove", assignmentId: assignment.id })} />
@@ -1507,7 +1637,7 @@ function InlineDepthControls({
             <form action={addAllEligibleDepthAssignments} className="mb-2">
               <input type="hidden" name="planId" value={planId} />
               <input type="hidden" name="slotId" value={slot.id} />
-              <input type="hidden" name="eligibility" value="natural_secondary" />
+              <input type="hidden" name="eligibility" value={fitMode === "natural" ? "natural" : fitMode === "natural_secondary" ? "natural_secondary" : "natural_secondary_compatible"} />
               <CompactSubmitButton label="Add all exact Players" pendingLabel="Adding..." className="h-8 w-full px-2 text-xs" />
             </form>
             {addablePlayers.length === 0 ? (
@@ -1522,7 +1652,7 @@ function InlineDepthControls({
                 <input type="hidden" name="planId" value={planId} />
                 <input type="hidden" name="slotId" value={slot.id} />
                 <input type="hidden" name="playerId" value={player.id} />
-                <span className="min-w-0 truncate font-semibold text-slate-700" title={playerName(player)}>{playerName(player)} · {fitMeta[fit.fitType].label}</span>
+                <span className="min-w-0 truncate font-semibold text-slate-700" title={playerName(player)}>{playerName(player)} · {positionFitLabel(fit.fitType, locale)}</span>
                 <CompactSubmitButton label="Add" pendingLabel="Adding..." className="h-7 px-2 text-[11px]" />
               </form>
             ))}
@@ -1599,6 +1729,7 @@ function DepthIconActionLabel({ label }: { label: string }) {
 function PositionDepthOverview({
   slots,
   assignmentsBySlot,
+  playersById,
   fitMode,
   onFitModeChange,
   selectedSlotId,
@@ -1606,6 +1737,7 @@ function PositionDepthOverview({
 }: {
   slots: TacticalPlanSlot[];
   assignmentsBySlot: Map<string, TacticalPlannerData["assignments"]>;
+  playersById: Map<string, SquadPlayer>;
   fitMode: DepthOverviewFitMode;
   onFitModeChange: (mode: DepthOverviewFitMode) => void;
   selectedSlotId?: string;
@@ -1629,7 +1761,7 @@ function PositionDepthOverview({
       </label>
       <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
         {[...slots].sort((a, b) => a.sortOrder - b.sortOrder).map((slot) => {
-          const rankedAssignments = rankedDepthAssignments(assignmentsBySlot.get(slot.id) ?? [], fitMode);
+          const rankedAssignments = rankedDepthAssignments(assignmentsBySlot.get(slot.id) ?? [], fitMode, slot, playersById);
           const count = rankedAssignments.length;
           const depthState = count <= 1 ? copy.insufficientDepth : count === 2 ? copy.limitedDepth : copy.healthyDepth;
           return (
@@ -1659,9 +1791,17 @@ function PositionDepthOverview({
   );
 }
 
-function rankedDepthAssignments(assignments: TacticalPlannerData["assignments"], fitMode: DepthOverviewFitMode) {
+function rankedDepthAssignments(
+  assignments: TacticalPlannerData["assignments"],
+  fitMode: DepthOverviewFitMode,
+  slot: TacticalPlanSlot,
+  playersById: Map<string, SquadPlayer>
+) {
   return uniqueDepthAssignments(assignments)
-    .filter((assignment) => depthAssignmentMatchesFitMode(assignment.fitType, fitMode))
+    .filter((assignment) => {
+      const player = playersById.get(assignment.playerId);
+      return player ? isFitVisibleInMode(evaluatePlayerSlotFit(player, slot, true).fitType, fitMode) : false;
+    })
     .sort((a, b) => Number(b.isPreferredStarter) - Number(a.isPreferredStarter) || a.depthOrder - b.depthOrder);
 }
 
@@ -1679,10 +1819,7 @@ function countEligiblePlayers(players: SquadPlayer[], slot: TacticalPlanSlot, fi
 }
 
 function depthAssignmentMatchesFitMode(fitType: TacticalFitType, mode: DepthOverviewFitMode) {
-  if (mode === "all") return true;
-  if (mode === "natural") return fitType === "natural";
-  if (mode === "natural_secondary") return fitType === "natural" || fitType === "secondary";
-  return fitType === "natural" || fitType === "secondary" || fitType === "compatible";
+  return isFitVisibleInMode(fitType, mode);
 }
 
 function SlotDepthPanel({
@@ -1691,7 +1828,9 @@ function SlotDepthPanel({
   depth,
   playersById,
   availablePlayers,
-  assignedPlayerIds
+  assignedPlayerIds,
+  fitMode,
+  starterSlotByPlayerId
 }: {
   planId: string;
   slot?: TacticalPlanSlot;
@@ -1699,8 +1838,11 @@ function SlotDepthPanel({
   playersById: Map<string, SquadPlayer>;
   availablePlayers: SquadPlayer[];
   assignedPlayerIds: Set<string>;
+  fitMode: DepthOverviewFitMode;
+  starterSlotByPlayerId: Map<string, string>;
 }) {
-  const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const copy = plannerCopy[locale];
   const [managerEligibility, setManagerEligibility] = useState<AutoFillEligibility>("natural_secondary");
   if (!slot) {
     return (
@@ -1715,6 +1857,10 @@ function SlotDepthPanel({
     .map((player) => ({ player, fit: evaluatePlayerSlotFit(player, slot) }))
     .filter((item) => item.fit.eligible && isFitAllowedByAutoFillEligibility(item.fit.fitType, managerEligibility, false))
     .sort((a, b) => b.fit.baseScore - a.fit.baseScore || playerName(a.player).localeCompare(playerName(b.player)));
+  const visibleDepth = depth.filter((assignment) => {
+    const player = playersById.get(assignment.playerId);
+    return player ? isFitVisibleInMode(evaluatePlayerSlotFit(player, slot, true).fitType, fitMode) : false;
+  });
 
   return (
     <section className="rounded-md border border-board-line bg-white p-3 shadow-soft">
@@ -1761,11 +1907,15 @@ function SlotDepthPanel({
 
       <div className="mt-3 space-y-1.5">
         <h4 className="text-xs font-black uppercase tracking-wide text-slate-500">Assigned depth</h4>
-        {depth.length === 0 ? (
+        {visibleDepth.length === 0 ? (
           <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">No depth option yet. Add a player from the squad pool.</p>
-        ) : depth.map((assignment, index) => {
+        ) : visibleDepth.map((assignment, index) => {
           const player = playersById.get(assignment.playerId);
           if (!player) return null;
+          const fit = evaluatePlayerSlotFit(player, slot, true);
+          const startingSlot = starterSlotByPlayerId.get(player.id);
+          const startsHere = assignment.isPreferredStarter && startingSlot === slot.code;
+          const xiElsewhere = startingSlot && startingSlot !== slot.code ? `${copy.xi} · ${startingSlot}` : "";
           return (
             <div key={assignment.id} className="rounded border border-board-line p-2">
               <div className="flex items-start justify-between gap-2">
@@ -1773,15 +1923,13 @@ function SlotDepthPanel({
                   <p className="truncate text-sm font-bold text-board-navy" title={playerName(player)}>{index + 1}. {playerName(player)}</p>
                   <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}{player.playerType === "trial" ? " · Trial" : ""}</p>
                 </div>
-                {assignment.isPreferredStarter ? <span className="rounded bg-board-green px-1.5 py-0.5 text-[10px] font-bold text-white">Starter</span> : null}
+                {startsHere ? <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-white">{copy.starter}</span> : xiElsewhere ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{xiElsewhere}</span> : null}
               </div>
-              <span className={cn("mt-1 inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold", fitMeta[assignment.fitType].className)}>
-                {fitMeta[assignment.fitType].label}
-              </span>
+              <PositionFitIndicator fitType={fit.fitType} targetPosition={slot.code} reason={fit.reason} />
               <div className="mt-2 flex flex-wrap gap-1">
                 <DepthAction action={setPreferredStarter} planId={planId} assignmentId={assignment.id} label="Set starter" disabled={assignment.isPreferredStarter} />
                 <DepthAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="Up" extra={{ direction: "up" }} disabled={index === 0} />
-                <DepthAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="Down" extra={{ direction: "down" }} disabled={index === depth.length - 1} />
+                <DepthAction action={moveDepthAssignment} planId={planId} assignmentId={assignment.id} label="Down" extra={{ direction: "down" }} disabled={index === visibleDepth.length - 1} />
                 <ButtonLink href={`/squad/players/${player.id}`} variant="secondary" className="h-8 px-2 text-xs">Profile</ButtonLink>
                 <DepthAction action={removeDepthAssignment} planId={planId} assignmentId={assignment.id} label="Remove" variant="danger" />
               </div>
@@ -1796,12 +1944,12 @@ function SlotDepthPanel({
         {availableCandidates.length === 0 ? (
           <p className="rounded bg-white p-2 text-xs text-slate-600">No unassigned eligible options for this slot.</p>
         ) : availableCandidates.map(({ player, fit }) => (
-          <div key={player.id} className={cn("rounded border p-2", fit.fitType === "natural" ? "border-emerald-200 bg-emerald-50" : "border-board-line bg-white")}>
+          <div key={player.id} className="rounded border border-board-line bg-white p-2">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p translate="no" className="font-bold text-board-navy">{playerName(player)}</p>
                 <p className="text-xs font-semibold text-slate-500">{playerPositionText(player)}</p>
-                <p className="mt-1 text-xs text-slate-500">Matched {fit.matchedPosition ?? "position"} · {fitMeta[fit.fitType].label}</p>
+                <div className="mt-1"><PositionFitIndicator fitType={fit.fitType} targetPosition={slot.code} reason={fit.reason} /></div>
               </div>
               <form action={addDepthAssignment}>
                 <input type="hidden" name="planId" value={planId} />
@@ -2051,7 +2199,8 @@ function PlayerStateCard({
   selectedForAssignment: boolean;
   onSelectPlayer: () => void;
 }) {
-  const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const copy = plannerCopy[locale];
   const selectedSlotFit = selectedSlot ? evaluatePlayerSlotFit(player, selectedSlot, true) : undefined;
   if (excluded) {
     return (
@@ -2111,12 +2260,12 @@ function PlayerStateCard({
       </div>
       <details className="group mt-1 border-t border-slate-100 pt-1">
         <summary className="cursor-pointer truncate text-[11px] font-semibold text-slate-500">
-          {assignmentsSummary || "No depth assignment yet"}{selectedSlotFit ? ` · ${selectedSlot?.code}: ${fitMeta[selectedSlotFit.fitType].label}` : ""}
+          {assignmentsSummary || "No depth assignment yet"}{selectedSlotFit ? ` · ${selectedSlot?.code}: ${positionFitLabel(selectedSlotFit.fitType, locale)}` : ""}
         </summary>
         <div className="mt-2 space-y-2">
           {selectedSlotFit ? (
-            <p className={cn("text-xs font-semibold", selectedSlotFit.fitType === "out_of_position" ? "text-red-700" : "text-board-green")}>
-              Fit for {selectedSlot?.code}: {fitMeta[selectedSlotFit.fitType].label}{selectedSlotFit.matchedPosition ? ` · matched ${selectedSlotFit.matchedPosition}` : ""}
+            <p className="text-xs font-semibold text-slate-600">
+              {selectedSlot?.code}: {positionFitLabel(selectedSlotFit.fitType, locale)}{selectedSlotFit.matchedPosition ? ` · ${selectedSlotFit.matchedPosition}` : ""}
             </p>
           ) : null}
           <form action={updatePlayerPlanState} className="grid gap-1.5 sm:grid-cols-[1fr_1fr_auto] lg:grid-cols-1 xl:grid-cols-[1fr_1fr_auto]">
@@ -2224,7 +2373,8 @@ function buildAutoFillPreview({
   slots,
   players,
   assignments,
-  playerStates
+  playerStates,
+  locale
 }: {
   mode: AutoFillMode;
   eligibility: AutoFillEligibility;
@@ -2234,6 +2384,7 @@ function buildAutoFillPreview({
   players: SquadPlayer[];
   assignments: TacticalPlannerData["assignments"];
   playerStates: TacticalPlannerData["playerStates"];
+  locale: PlannerLocale;
 }) {
   const stateByPlayer = new Map(playerStates.map((state) => [state.playerId, state]));
   const excludedPlayerIds = new Set(playerStates.filter((state) => state.inclusionStatus === "excluded").map((state) => state.playerId));
@@ -2260,7 +2411,8 @@ function buildAutoFillPreview({
     const existingStarter = mode === "rebuild_all" || mode === "rebuild_xi" ? undefined : assignments.find((assignment) => assignment.slotId === slot.id && assignment.isPreferredStarter);
     const existingPlayer = existingStarter ? players.find((player) => player.id === existingStarter.playerId) : undefined;
     if (existingPlayer) {
-      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: `${playerName(existingPlayer)} · kept`, detail: `${playerPositionText(existingPlayer)} · ${fitMeta[existingStarter?.fitType ?? "no_data"].label}`, fitType: existingStarter?.fitType, isExisting: true });
+      const currentFit = evaluatePlayerSlotFit(existingPlayer, slot, true).fitType;
+      rows.push({ slotId: slot.id, slotCode: slot.code, playerName: `${playerName(existingPlayer)} · kept`, detail: `${playerPositionText(existingPlayer)} · ${positionFitLabel(currentFit, locale)}`, fitType: currentFit, isExisting: true });
       continue;
     }
     if (filledSlotIds.has(slot.id)) continue;
@@ -2270,7 +2422,7 @@ function buildAutoFillPreview({
       messages.push(`No suitable ${slot.label} available`);
       continue;
     }
-    rows.push({ slotId: slot.id, slotCode: slot.code, playerName: playerName(pick.player), detail: `${playerPositionText(pick.player)} · matched ${pick.matchedPosition ?? "position"} · ${fitMeta[pick.fitType].label} · ${tacticalRoleLabel(stateByPlayer.get(pick.player.id)?.tacticalStatus, true)}`, fitType: pick.fitType, isExisting: false });
+    rows.push({ slotId: slot.id, slotCode: slot.code, playerName: playerName(pick.player), detail: `${playerPositionText(pick.player)} · matched ${pick.matchedPosition ?? "position"} · ${positionFitLabel(pick.fitType, locale)} · ${tacticalRoleLabel(stateByPlayer.get(pick.player.id)?.tacticalStatus, true)}`, fitType: pick.fitType, isExisting: false });
     usedStarterPlayerIds.add(pick.player.id);
   }
 
