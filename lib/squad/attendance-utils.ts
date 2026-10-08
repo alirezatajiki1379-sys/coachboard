@@ -1,4 +1,4 @@
-import type { SquadAttendanceEntry, SquadAttendanceReason, SquadFinalAttendanceStatus } from "@/types/domain";
+import type { SquadActualAbsenceReason, SquadAttendanceEntry, SquadAttendanceReason, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus } from "@/types/domain";
 import { formatPositionLabel, getPositionFamily, normalizeCanonicalPosition, type PositionFamily } from "@/lib/squad/positions";
 
 export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
@@ -44,6 +44,71 @@ export function overallRatingInitialValue(entry: Pick<SquadAttendanceEntry, "pla
 
 export function toggleRatingValue(currentValue: number | null | undefined, clickedValue: number) {
   return currentValue === clickedValue ? null : clickedValue;
+}
+
+type ApplyAsExpectedEntry = {
+  plannedStatus?: SquadPlannedAttendanceStatus | null;
+  plannedReason?: SquadAttendanceReason | null;
+  finalStatus?: SquadFinalAttendanceStatus | null;
+};
+
+export type ApplyAsExpectedDecision = {
+  action: "present" | "absent" | "review" | "unchanged";
+  finalStatus: SquadFinalAttendanceStatus | null;
+  actualAbsenceReason: SquadActualAbsenceReason | null;
+  needsReview: boolean;
+};
+
+export function plannedReasonToActualAbsenceReason(reason?: SquadAttendanceReason | null): SquadActualAbsenceReason | null {
+  if (reason === "V" || reason === "injured") return "injured";
+  if (reason === "K" || reason === "sick") return "sick";
+  if (reason === "E") return "excused";
+  if (reason === "P" || reason === "private") return "private";
+  if (reason === "U") return "unexcused";
+  if (reason === "school" || reason === "work" || reason === "holiday" || reason === "other") return reason;
+  return null;
+}
+
+export function finalStatusForActualAbsenceReason(reason: SquadActualAbsenceReason | null): SquadFinalAttendanceStatus {
+  if (reason === "injured") return "V";
+  if (reason === "sick") return "K";
+  if (reason === "excused") return "E";
+  if (reason === "private") return "P";
+  if (reason === "unexcused") return "U";
+  return "absent";
+}
+
+export function applyAsExpectedDecision(entry: ApplyAsExpectedEntry): ApplyAsExpectedDecision {
+  if (entry.finalStatus) {
+    return { action: "unchanged", finalStatus: entry.finalStatus, actualAbsenceReason: null, needsReview: false };
+  }
+  if (entry.plannedStatus === "unclear") {
+    return { action: "review", finalStatus: null, actualAbsenceReason: null, needsReview: true };
+  }
+  if (!entry.plannedStatus || entry.plannedStatus === "expected") {
+    return { action: "present", finalStatus: "present", actualAbsenceReason: null, needsReview: false };
+  }
+
+  const actualAbsenceReason = plannedReasonToActualAbsenceReason(entry.plannedReason);
+  const finalStatus = entry.plannedReason === "S"
+    ? "S"
+    : finalStatusForActualAbsenceReason(actualAbsenceReason);
+  return {
+    action: "absent",
+    finalStatus,
+    actualAbsenceReason,
+    needsReview: actualAbsenceReason === null
+  };
+}
+
+export function getApplyAsExpectedSummary(entries: ApplyAsExpectedEntry[]) {
+  const decisions = entries.map(applyAsExpectedDecision);
+  return {
+    applicable: decisions.filter((decision) => decision.action === "present" || decision.action === "absent").length,
+    present: decisions.filter((decision) => decision.action === "present").length,
+    absent: decisions.filter((decision) => decision.action === "absent").length,
+    needsReview: decisions.filter((decision) => decision.needsReview).length
+  };
 }
 
 export function getPlannedAttendanceSummary(entries: SquadAttendanceEntry[]) {

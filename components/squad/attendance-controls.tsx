@@ -3,7 +3,8 @@
 import { useSystemText } from "@/components/i18n/use-system-text";
 
 
-import { Check, Clock3, HelpCircle, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
+import { Check, ClipboardCheck, Clock3, HelpCircle, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useActionState, useContext, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { developmentCategoryLabel, developmentGoalCategories } from "@/config/de
 import { createPlayerObservation } from "@/lib/squad/development-actions";
 import {
   completeTrainingEvent,
+  applyAttendanceAsExpected,
   markAllExpectedPresent,
   markAllPresent,
   markAllExpected,
@@ -21,11 +23,11 @@ import {
   updatePlannedAttendanceInline,
   updatePlannedAttendance
 } from "@/lib/squad/attendance-actions";
-import type { AttendanceMutationResult, PlannedAttendanceMutationResult, RatingMutationResult } from "@/lib/squad/attendance-actions";
+import type { ApplyAsExpectedAttendanceResult, AttendanceMutationResult, PlannedAttendanceMutationResult, RatingMutationResult } from "@/lib/squad/attendance-actions";
 import { updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { actualAbsenceReasonLabel, attendanceDisplayName, effectiveActualAbsenceReason, finalStatusLabel, plannedReasonLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
-import { attendanceReasonLabels, overallRatingInitialValue, toggleRatingValue } from "@/lib/squad/attendance-utils";
+import { attendanceReasonLabels, getApplyAsExpectedSummary, overallRatingInitialValue, toggleRatingValue } from "@/lib/squad/attendance-utils";
 import { cn } from "@/lib/utils";
 import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 import type { PlayerDevelopmentGoal, SquadActualAbsenceReason, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus, SquadTrainingEventDetail } from "@/types/domain";
@@ -87,6 +89,30 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
     setEntries((current) => current.map((entry) => entry.id === nextEntry.id ? nextEntry : entry));
   }
 
+  function applyBulkUpdates(updates: Extract<ApplyAsExpectedAttendanceResult, { ok: true }>["updates"]) {
+    const updatesById = new Map(updates.map((update) => [update.attendanceId, update]));
+    setEntries((current) => current.map((entry) => {
+      const update = updatesById.get(entry.id);
+      if (!update) return entry;
+      const isAbsent = update.finalStatus !== "present" && update.finalStatus !== "Z";
+      return {
+        ...entry,
+        finalStatus: update.finalStatus,
+        actualAbsenceReason: update.actualAbsenceReason ?? undefined,
+        lateMinutes: undefined,
+        latePenaltyApplied: true,
+        ...(isAbsent ? {
+          overallRating: undefined,
+          ratingTechnique: undefined,
+          ratingGameUnderstanding: undefined,
+          ratingIntensity: undefined,
+          ratingBehavior: undefined,
+          ratingAutoSuggestion: undefined
+        } : {})
+      };
+    }));
+  }
+
   return (
     <>
       <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -99,7 +125,12 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
         <p className="mt-3 text-xs font-semibold text-slate-500">
           {ui("{count} goalkeepers present · {trials} trial players present", { count: counts.goalkeepersPresent, trials: counts.trialPlayersPresent })}</p>
       ) : null}
-      {entries.length ? <div className="mt-4"><CheckInActions eventId={event.id} /></div> : null}
+      {entries.length ? (
+        <div className="mt-4 space-y-3">
+          <ApplyAsExpectedAttendance eventId={event.id} entries={entries} onApplied={applyBulkUpdates} />
+          <CheckInActions eventId={event.id} />
+        </div>
+      ) : null}
 
       {entries.length ? (
         <nav className="mt-5 flex gap-2 overflow-x-auto rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label={ui("Check-in filters")}>
@@ -135,6 +166,67 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
         )}
       </section>
     </>
+  );
+}
+
+export function ApplyAsExpectedAttendance({
+  eventId,
+  entries,
+  onApplied
+}: {
+  eventId: string;
+  entries: SquadAttendanceEntry[];
+  onApplied?: (updates: Extract<ApplyAsExpectedAttendanceResult, { ok: true }>["updates"]) => void;
+}) {
+  const ui = useSystemText();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState<ApplyAsExpectedAttendanceResult | null>(null);
+  const summary = getApplyAsExpectedSummary(entries);
+
+  function applyPlannedAttendance() {
+    setResult(null);
+    startTransition(async () => {
+      const nextResult = await applyAttendanceAsExpected(eventId);
+      setResult(nextResult);
+      if (nextResult.ok) onApplied?.(nextResult.updates);
+      router.refresh();
+    });
+  }
+
+  return (
+    <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 sm:p-4" aria-labelledby={`apply-as-expected-${eventId}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h3 id={`apply-as-expected-${eventId}`} className="flex items-center gap-2 text-sm font-bold text-board-navy">
+            <ClipboardCheck className="h-4 w-4 shrink-0 text-board-green" />
+            {ui("Apply as expected")}
+          </h3>
+          <p className="mt-1 text-sm text-slate-600">{ui("Set missing attendance based on planned participation.")}</p>
+          <p className="mt-2 text-xs font-semibold text-slate-700">
+            {ui("Apply planned participation to {count} players", { count: summary.applicable })}
+            {" · "}{ui("{count} present", { count: summary.present })}
+            {" · "}{ui("{count} absent", { count: summary.absent })}
+            {summary.needsReview ? ` · ${ui("{count} need review", { count: summary.needsReview })}` : ""}
+          </p>
+        </div>
+        <Button
+          type="button"
+          onClick={applyPlannedAttendance}
+          disabled={isPending || summary.applicable === 0}
+          className="h-11 w-full shrink-0 justify-center px-4 sm:w-auto"
+        >
+          {isPending ? ui("Applying...") : ui("Apply as expected")}
+        </Button>
+      </div>
+      {result ? (
+        <p className={`mt-3 text-sm font-semibold ${result.ok ? "text-emerald-800" : "text-red-700"}`} role="status">
+          {result.ok
+            ? `${ui("{count} attendance records updated", { count: result.updatedCount })}${result.reviewCount ? ` · ${ui("{count} require review", { count: result.reviewCount })}` : ""}${result.warning ? ` · ${ui(result.warning)}` : ""}`
+            : ui(result.message)}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

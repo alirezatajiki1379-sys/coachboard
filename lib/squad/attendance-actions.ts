@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { asScoutingDb } from "@/lib/scouting/db";
 import { createClient } from "@/lib/supabase/server";
-import { calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
+import { applyAsExpectedDecision, calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
 import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, isTrainingUpcoming, seasonLabelForDate, trainingNowParts, weekdayForDate } from "@/lib/trainings/utils";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
@@ -95,6 +95,25 @@ export type PlannedAttendanceMutationResult =
       ok: false;
       code: string;
       message: string;
+    };
+
+export type ApplyAsExpectedAttendanceResult =
+  | {
+      ok: true;
+      warning?: string;
+      updatedCount: number;
+      reviewCount: number;
+      updates: Array<{
+        attendanceId: string;
+        finalStatus: (typeof finalStatuses)[number];
+        actualAbsenceReason: (typeof actualAbsenceReasons)[number] | null;
+      }>;
+    }
+  | {
+      ok: false;
+      message: string;
+      updatedCount: number;
+      reviewCount: number;
     };
 
 async function requireUser() {
@@ -1103,6 +1122,105 @@ export async function markAllExpectedPresent(formData: FormData) {
   await markEventInProgress(db, user.id, eventId);
   revalidateEvent(eventId);
   redirect(eventPath(eventId, "/check-in"));
+}
+
+export async function applyAttendanceAsExpected(eventId: string): Promise<ApplyAsExpectedAttendanceResult> {
+  if (!eventId) return { ok: false, message: "Training could not be identified.", updatedCount: 0, reviewCount: 0 };
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const { data: event, error: eventError } = await db
+    .from("squad_training_events")
+    .select("id, deleted_at")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (eventError || !event || event.deleted_at) {
+    return { ok: false, message: "Training is no longer available.", updatedCount: 0, reviewCount: 0 };
+  }
+
+  const { data: records, error: recordsError } = await db
+    .from("squad_attendance_records")
+    .select("id, planned_status, planned_reason")
+    .eq("event_id", eventId)
+    .eq("user_id", user.id)
+    .is("final_status", null);
+  if (recordsError) {
+    return { ok: false, message: "Attendance could not be loaded.", updatedCount: 0, reviewCount: 0 };
+  }
+
+  const pending = (records ?? []).map((record) => ({
+    id: String(record.id),
+    decision: applyAsExpectedDecision({
+      plannedStatus: record.planned_status,
+      plannedReason: record.planned_reason,
+      finalStatus: null
+    })
+  }));
+  const reviewCount = pending.filter(({ decision }) => decision.needsReview).length;
+  const applicable = pending.filter(({ decision }) => decision.action === "present" || decision.action === "absent");
+  const groups = new Map<string, typeof applicable>();
+  for (const item of applicable) {
+    const key = `${item.decision.finalStatus}:${item.decision.actualAbsenceReason ?? ""}`;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+
+  const appliedUpdates: Array<{
+    attendanceId: string;
+    finalStatus: (typeof finalStatuses)[number];
+    actualAbsenceReason: (typeof actualAbsenceReasons)[number] | null;
+  }> = [];
+  for (const group of groups.values()) {
+    const decision = group[0]?.decision;
+    if (!decision?.finalStatus) continue;
+    const isAbsent = decision.action === "absent";
+    const ratingCleanup = isAbsent ? {
+      overall_rating: null,
+      rating_technique: null,
+      rating_game_understanding: null,
+      rating_intensity: null,
+      rating_behavior: null,
+      rating_auto_suggestion: null
+    } : {};
+    const { data: updated, error: updateError } = await db
+      .from("squad_attendance_records")
+      .update({
+        final_status: decision.finalStatus,
+        actual_absence_reason: decision.actualAbsenceReason,
+        late_minutes: null,
+        late_penalty_applied: true,
+        ...ratingCleanup
+      })
+      .eq("event_id", eventId)
+      .eq("user_id", user.id)
+      .in("id", group.map(({ id }) => id))
+      .is("final_status", null)
+      .select("id");
+    if (updateError) {
+      revalidateEvent(eventId);
+      return {
+        ok: false,
+        message: appliedUpdates.length
+          ? "Some attendance records were updated. Reload and try the remaining records again."
+          : "Attendance could not be updated.",
+        updatedCount: appliedUpdates.length,
+        reviewCount
+      };
+    }
+    for (const row of updated ?? []) {
+      appliedUpdates.push({
+        attendanceId: String(row.id),
+        finalStatus: decision.finalStatus as (typeof finalStatuses)[number],
+        actualAbsenceReason: decision.actualAbsenceReason
+      });
+    }
+  }
+
+  const warning = appliedUpdates.length
+    ? await eventStatusWarning(() => markEventInProgress(db, user.id, eventId))
+    : undefined;
+  revalidateEvent(eventId);
+  return { ok: true, warning, updatedCount: appliedUpdates.length, reviewCount, updates: appliedUpdates };
 }
 
 export async function markAllPresent(formData: FormData) {

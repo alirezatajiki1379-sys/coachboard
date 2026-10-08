@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarDays, ClipboardList, MapPin, Plus, Star, Trash2, UsersRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { CompleteEventButton, MissingStatusesNotice } from "@/components/squad/attendance-controls";
+import { ApplyAsExpectedAttendance, CompleteEventButton, MissingStatusesNotice } from "@/components/squad/attendance-controls";
 import { TrainingEventActions } from "@/components/squad/training-event-actions";
 import { TrainingParticipantsTable } from "@/components/squad/training-participants-table";
 import { addCustomNameToTrainingGroup, addPlayersToTrainingGroup, createTrainingGroup, deleteTrainingGroup, removeTrainingGroupMember } from "@/lib/squad/training-group-actions";
@@ -254,6 +254,9 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
       </div>
 
       <Panel title="Training participants">
+        <div className="mb-4">
+          <ApplyAsExpectedAttendance eventId={event.id} entries={event.attendance} />
+        </div>
         <TrainingParticipantsTable
           eventId={event.id}
           attendance={event.attendance}
