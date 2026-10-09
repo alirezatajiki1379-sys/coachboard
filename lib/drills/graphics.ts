@@ -282,7 +282,7 @@ async function getDrillGraphicRow(supabase: SupabaseServerClient, userId: string
   return data as DrillGraphicRow | null;
 }
 
-async function createSignedImageUrlMap(supabase: SupabaseServerClient, paths: string[]) {
+export async function createSignedImageUrlMap(supabase: SupabaseServerClient, paths: string[]) {
   const urls = new Map<string, string>();
   if (!paths.length) return urls;
   const { data, error } = await supabase.storage.from(drillImageBucket).createSignedUrls(paths, 60 * 60);

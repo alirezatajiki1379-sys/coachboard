@@ -902,6 +902,7 @@ export type Database = {
           source_updated_at: string | null;
           title: string;
           snapshot_json: Json;
+          plan_json: Json;
           created_at: string;
           updated_at: string;
         };
@@ -979,6 +980,7 @@ export type Database = {
           user_id: string;
           event_id: string;
           plan_instance_id: string | null;
+          section_id: string | null;
           source_training_session_drill_id: string | null;
           source_drill_id: string | null;
           source_drill_updated_at: string | null;
@@ -988,6 +990,11 @@ export type Database = {
           planned_duration_minutes: number | null;
           status: "draft" | "ready" | "removed";
           snapshot_json: Json;
+          override_json: Json;
+          responsibility_mode: "unassigned" | "me" | "staff" | "together" | null;
+          responsible_staff_id: string | null;
+          planning_status: "ready" | "needs_planning" | null;
+          planning_instruction: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -997,6 +1004,60 @@ export type Database = {
           title: string;
         };
         Update: Partial<Database["public"]["Tables"]["training_session_drill_instances"]["Row"]>;
+        Relationships: [];
+      };
+      squad_staff: {
+        Row: {
+          id: string;
+          user_id: string;
+          squad_id: string;
+          name: string;
+          role: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          squad_id: string;
+          name: string;
+          role?: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["squad_staff"]["Insert"]>;
+        Relationships: [];
+      };
+      training_section_briefs: {
+        Row: {
+          id: string;
+          user_id: string;
+          squad_id: string;
+          event_id: string;
+          plan_instance_id: string | null;
+          section_key: string;
+          title: string;
+          order_index: number;
+          duration_minutes: number;
+          section_notes: string | null;
+          responsibility_mode: "unassigned" | "me" | "staff" | "together";
+          staff_id: string | null;
+          planning_status: "ready" | "needs_planning";
+          instruction: string | null;
+          briefing_text: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["training_section_briefs"]["Row"]> & {
+          user_id: string;
+          squad_id: string;
+          event_id: string;
+          section_key: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["training_section_briefs"]["Row"]>;
         Relationships: [];
       };
       training_event_groups: {

@@ -27,6 +27,37 @@ export type SessionFormDrill = {
   simultaneousGroup: string;
   participatingGroups: string[];
   startingGroup: string;
+  titleOverride?: string;
+  descriptionOverride?: string;
+  organizationOverride?: string;
+  selectedCoachingPoints?: string[];
+  sessionNote?: string;
+  responsibilityMode?: PlanResponsibilityMode;
+  responsibleStaffId?: string;
+  planningStatus?: PlanPlanningStatus;
+  planningInstruction?: string;
+};
+
+export type PlanResponsibilityMode = "unassigned" | "me" | "staff" | "together";
+export type PlanPlanningStatus = "ready" | "needs_planning";
+
+export type SessionPlanSection = {
+  id: string;
+  key: string;
+  title: string;
+  orderIndex: number;
+  durationMinutes: number;
+  notes: string;
+  responsibilityMode: PlanResponsibilityMode;
+  staffId: string;
+  planningStatus: PlanPlanningStatus;
+  instruction: string;
+};
+
+export type SessionPlanStaff = {
+  id: string;
+  name: string;
+  role?: string;
 };
 
 export type SessionFormValues = {
@@ -41,6 +72,7 @@ export type SessionFormValues = {
   location: string;
   notes: string;
   playerGroups: SessionPlayerGroup[];
+  sections?: SessionPlanSection[];
   drills: SessionFormDrill[];
 };
 

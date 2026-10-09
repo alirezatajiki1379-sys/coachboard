@@ -1,765 +1,150 @@
-import { getActiveLocale } from "@/lib/i18n/server";
-import { createSystemTranslator } from "@/lib/i18n/system-text";
-import { trainingSectionLabel, trainingFocusLabel } from "@/lib/i18n/training-labels";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import type { ReactNode } from "react";
-import { ArrowLeft, CalendarDays, Dumbbell, Lightbulb, Plus, Star, Target, TrendingUp, UsersRound } from "lucide-react";
-import { Button, ButtonLink } from "@/components/ui/button";
-import { SessionPlayerBoard, type SessionBoardGroup, type SessionBoardPlayer } from "@/components/squad/session-player-board";
-import {
-  addExistingDrillsToSessionPlan,
-  createBlankSessionPlan,
-  moveSessionPlanDrill,
-  removeSessionPlanDrill,
-  updateSessionPlanDrill
-} from "@/lib/squad/training-plan-actions";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { ArrowLeft, ClipboardList, Plus } from "lucide-react";
+import { SessionForm } from "@/components/sessions/session-form";
+import { Button } from "@/components/ui/button";
+import { createSignedImageUrlMap } from "@/lib/drills/graphics";
+import { parseEditorState } from "@/lib/drills/editor";
+import { jsonToMaterials } from "@/lib/drills/materials";
+import { getActiveLocale } from "@/lib/i18n/server";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
+import { defaultSessionGroups, type SessionFormValues, type SessionPlanSection, type SessionPlanStaff } from "@/lib/sessions/utils";
+import { getDrillsForSessionBuilder } from "@/lib/sessions/queries";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
+import { addSessionPlanStaff, applyTrainingPlanTemplate, createBlankSessionPlan, updateConcreteSessionPlan } from "@/lib/squad/training-plan-actions";
 import { createClient } from "@/lib/supabase/server";
-import { emptyDrillUsageStats, getDrillUsageStatsByDrillId, type DrillUsageStats } from "@/lib/drills/usage";
-import { getPlanningContext, type PlanningContext, type PlanningSuggestedDrill } from "@/lib/squad/planning-intelligence";
-import { getPositionFamily } from "@/lib/squad/positions";
-import { formatDateLabel, trainingTimeRange } from "@/lib/trainings/utils";
-import { cn } from "@/lib/utils";
+import type { Json } from "@/types/database";
+import type { Drill, DrillVisual, SquadTrainingEventDetail } from "@/types/domain";
+import { defaultEditorState } from "@/types/editor";
 
-const phaseOptions = ["Arrival / Activation", "Warm-up", "Main Part", "Game Form", "Cool-down"];
-
-type TrainingPlanPageProps = {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+type PageProps = { params: Promise<{ id: string }> };
+type PlanRow = { id: string; title: string; source_training_session_id: string | null; plan_json: Json; snapshot_json: Json; updated_at: string };
+type SectionRow = {
+  id: string; section_key: string; title: string; order_index: number; duration_minutes: number; section_notes: string | null;
+  responsibility_mode: SessionPlanSection["responsibilityMode"]; staff_id: string | null;
+  planning_status: SessionPlanSection["planningStatus"]; instruction: string | null;
+};
+type DrillInstanceRow = {
+  id: string; source_drill_id: string | null; title: string; block: string | null; order_index: number;
+  planned_duration_minutes: number | null; snapshot_json: Json; override_json: Json; section_id: string | null;
+  responsibility_mode: "unassigned" | "me" | "staff" | "together" | null; responsible_staff_id: string | null;
+  planning_status: "ready" | "needs_planning" | null; planning_instruction: string | null;
 };
 
-export default async function TrainingPlanPage({ params, searchParams }: TrainingPlanPageProps) {
-  const locale = await getActiveLocale();
-  const ui = createSystemTranslator(locale);
+export default async function TrainingPlanPage({ params }: PageProps) {
   const { id } = await params;
-  const query = await searchParams;
-  const drillSearch = typeof query.drillSearch === "string" ? query.drillSearch.trim() : "";
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const [locale, supabase] = await Promise.all([getActiveLocale(), createClient()]);
+  const ui = createSystemTranslator(locale);
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const event = await getTrainingEventDetail(supabase, user.id, id);
-  if (!event) notFound();
-  const [plan, planDrills, libraryDrills, trainingGroups] = await Promise.all([
-    loadPlanInstance(supabase, user.id, event.id),
-    loadPlanDrills(supabase, user.id, event.id),
-    loadLibraryDrills(supabase, user.id, drillSearch),
-    loadTrainingGroups(supabase, user.id, event.id)
+  if (!event || event.deletedAt) notFound();
+  const db = supabase as unknown as SupabaseClient;
+  const { data: planData, error: planError } = await db.from("training_session_plan_instances")
+    .select("id,title,source_training_session_id,plan_json,snapshot_json,updated_at")
+    .eq("user_id", user.id).eq("event_id", id).maybeSingle();
+  if (planError) throw new Error(planError.message);
+
+  if (!planData) {
+    const { data: templates, error } = await db.from("training_sessions")
+      .select("id,title,duration_target_minutes,main_focus")
+      .eq("user_id", user.id).is("archived_at", null).is("deleted_at", null).order("updated_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return <div className="mx-auto max-w-5xl space-y-6">
+      <BackLink eventId={id} label={ui("Back to training")} />
+      <header><p className="text-sm font-semibold uppercase text-board-green">{ui("Session Plan Builder")}</p><h1 className="mt-2 text-3xl font-bold text-board-navy">{ui("Plan Training")}</h1><p className="mt-2 text-slate-600">{ui("Use a reusable Training Plan or start with an empty plan. The Session copy can be edited independently.")}</p></header>
+      <section className="grid gap-4 md:grid-cols-2">
+        <article className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+          <ClipboardList className="h-6 w-6 text-board-green" /><h2 className="mt-3 text-lg font-bold text-board-navy">{ui("Use Training Plan")}</h2><p className="mt-1 text-sm text-slate-600">{ui("Copy an existing plan into this Training. The original remains unchanged.")}</p>
+          <div className="mt-4 space-y-2">{(templates ?? []).length ? (templates ?? []).map((template) => <form key={template.id} action={applyTrainingPlanTemplate} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-board-line bg-board-paper p-3">
+            <input type="hidden" name="eventId" value={id} /><input type="hidden" name="templateId" value={template.id} />
+            <div className="min-w-0"><p translate="no" className="truncate font-bold text-board-navy">{template.title}</p><p className="text-xs text-slate-500">{template.duration_target_minutes ? `${template.duration_target_minutes} ${ui("min")}` : ui("Flexible duration")}</p></div>
+            <Button type="submit" className="h-9">{ui("Use Plan")}</Button>
+          </form>) : <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-500">{ui("No reusable Training Plans available yet.")}</p>}</div>
+        </article>
+        <article className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+          <Plus className="h-6 w-6 text-board-green" /><h2 className="mt-3 text-lg font-bold text-board-navy">{ui("Create from scratch")}</h2><p className="mt-1 text-sm text-slate-600">{ui("Open the full builder with an empty Training section and add Drills from your Library.")}</p>
+          <form action={createBlankSessionPlan} className="mt-4"><input type="hidden" name="eventId" value={id} /><Button type="submit">{ui("Create from scratch")}</Button></form>
+        </article>
+      </section>
+    </div>;
+  }
+
+  const plan = planData as PlanRow;
+  const [sectionsResult, instancesResult, staffResult, libraryDrills] = await Promise.all([
+    db.from("training_section_briefs").select("id,section_key,title,order_index,duration_minutes,section_notes,responsibility_mode,staff_id,planning_status,instruction").eq("user_id", user.id).eq("event_id", id).order("order_index"),
+    db.from("training_session_drill_instances").select("id,source_drill_id,title,block,order_index,planned_duration_minutes,snapshot_json,override_json,section_id,responsibility_mode,responsible_staff_id,planning_status,planning_instruction").eq("user_id", user.id).eq("event_id", id).neq("status", "removed").order("order_index"),
+    event.squadId ? db.from("squad_staff").select("id,name,role,is_active").eq("user_id", user.id).eq("squad_id", event.squadId).order("name") : Promise.resolve({ data: [], error: null }),
+    getDrillsForSessionBuilder(supabase, user.id)
   ]);
-  const planningContext = await getPlanningContext(supabase, user.id, event, planDrills);
-  const boardPlayers = toBoardPlayers(event.attendance);
-  const expectedEntries = event.attendance.filter((entry) => !entry.plannedStatus || entry.plannedStatus === "expected");
-  const expected = expectedEntries.length;
-  const composition = expectedEntries.reduce(
-    (totals, entry) => {
-      const family = getPositionFamily(entry.player?.position);
-      if (family === "goalkeeper") totals.goalkeepers += 1;
-      else if (family === "unassigned") totals.positionMissing += 1;
-      else totals.fieldPlayers += 1;
-      return totals;
-    },
-    { goalkeepers: 0, fieldPlayers: 0, positionMissing: 0 }
-  );
-  const plannedDuration = planDrills.reduce((sum, drill) => sum + (drill.plannedDurationMinutes ?? 0), 0);
-  const scheduledDuration = scheduledDurationMinutes(event.startTime, event.endTime);
-  const drillsByPhase = groupDrillsByPhase(planDrills);
-
-  return (
-    <div className="space-y-6">
-      <Link href={`/trainings/${event.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
-        <ArrowLeft className="h-4 w-4" />
-        {ui("Back to training")}</Link>
-
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase text-board-green">{ui("Session Plan Builder")}</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{ui("Build Training Plan")}</h1>
-            <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-slate-600">
-              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1">
-                <CalendarDays className="h-4 w-4" />
-                {formatDateLabel(event.date)} · {trainingTimeRange(event)}
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1">
-                <UsersRound className="h-4 w-4" />
-                {event.squadName ?? "Active Team"}
-              </span>
-              <span className="rounded-md bg-green-50 px-2 py-1 text-green-800">
-                {expected} {ui(" expected")}</span>
-              <span className={composition.goalkeepers === 0 ? "rounded-md bg-red-50 px-2 py-1 text-red-700" : "rounded-md bg-slate-100 px-2 py-1"}>
-                {composition.goalkeepers} {ui(" GK")}</span>
-              <span className="rounded-md bg-slate-100 px-2 py-1">
-                {composition.fieldPlayers} {ui(" field")}</span>
-              {composition.positionMissing ? (
-                <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">
-                  {composition.positionMissing} {ui(" position missing")}</span>
-              ) : null}
-              {plan?.sourceTrainingSessionId ? <span className="rounded-md bg-green-50 px-2 py-1 text-green-800">{ui("Template copy")}</span> : <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-800">{ui("Session-only plan")}</span>}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <ButtonLink href={`/trainings/${event.id}`} variant="secondary" className="justify-center">{ui("Training Hub")}</ButtonLink>
-            <ButtonLink href={`/trainings/${event.id}/check-in`} variant="secondary" className="justify-center">{ui("Quick Check-in")}</ButtonLink>
-            {!plan ? (
-              <form action={createBlankSessionPlan}>
-                <input type="hidden" name="eventId" value={event.id} />
-                <Button type="submit" className="justify-center">{ui("Create Plan")}</Button>
-              </form>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-4">
-          <PlanningInsightsPanel eventId={event.id} context={planningContext} />
-
-          <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-board-navy">{ui("Training phases")}</h2>
-                <p className="mt-1 text-sm text-slate-600">{ui("Add existing Drills, create a session-only Drill, then arrange the plan into phases.")}</p>
-              </div>
-              <ButtonLink href={`/trainings/${event.id}/drills/new?mode=session`} className="justify-center">
-                <Plus className="h-4 w-4" />
-                {ui("Create Drill inside Plan")}</ButtonLink>
-            </div>
-
-            <div className="mt-5 space-y-4">
-              {phaseOptions.map((phase) => {
-                const drills = drillsByPhase.get(phase) ?? [];
-                if (!drills.length) return null;
-                const phaseDuration = drills.reduce((sum, drill) => sum + (drill.plannedDurationMinutes ?? 0), 0);
-                return (
-                  <section key={phase} className="rounded-lg border border-board-line bg-board-paper p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="font-bold text-board-navy" translate="no">{trainingSectionLabel(phase, locale)}</h3>
-                      <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-600">{phaseDuration} {ui(" min")}</span>
-                    </div>
-                    <div className="mt-3 space-y-3">
-                      {drills.map((drill, index) => (
-                        <PlanDrillCard key={drill.id} eventId={event.id} drill={drill} index={index} isFirst={index === 0} isLast={index === drills.length - 1} players={boardPlayers} />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
-              {planDrills.filter((drill) => !phaseOptions.includes(drill.phase)).length ? (
-                <section className="rounded-lg border border-board-line bg-board-paper p-4">
-                  <h3 className="font-bold text-board-navy">{ui("Other phases")}</h3>
-                  <div className="mt-3 space-y-3">
-                    {planDrills.filter((drill) => !phaseOptions.includes(drill.phase)).map((drill, index) => (
-                      <PlanDrillCard key={drill.id} eventId={event.id} drill={drill} index={index} isFirst={index === 0} isLast={index === planDrills.length - 1} players={boardPlayers} />
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-              {!planDrills.length ? (
-                <div className="rounded-lg border border-dashed border-board-line bg-board-paper p-6 text-center">
-                  <h3 className="text-lg font-bold text-board-navy">{ui("No Drills in this Session Plan yet")}</h3>
-                  <p className="mx-auto mt-2 max-w-xl text-sm text-slate-600">{ui("Select Drills from the Library below or create a session-only Drill for this plan.")}</p>
-                </div>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">{ui("Add existing Drills")}</h2>
-            <p className="mt-1 text-sm text-slate-600">{ui("Choose several reusable Drills and add them as isolated Session Drill Instances.")}</p>
-            <form className="mt-4 flex flex-col gap-2 sm:flex-row" action={`/trainings/${event.id}/plan`}>
-              <input name="drillSearch" defaultValue={drillSearch} placeholder={ui("Search Drill Library")} className="h-10 min-w-0 flex-1 rounded-md border border-board-line px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-              <Button type="submit" variant="secondary" className="h-10 px-4">{ui("Search")}</Button>
-            </form>
-            <form action={addExistingDrillsToSessionPlan} className="mt-4 space-y-3">
-              <input type="hidden" name="eventId" value={event.id} />
-              <label className="block text-sm font-bold text-board-navy">
-                {ui("Add to phase")}<select name="phase" defaultValue="Main Part" className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                  {phaseOptions.map((phase) => <option key={phase} value={phase}>{trainingSectionLabel(phase, locale)}</option>)}
-                </select>
-              </label>
-              <div className="grid max-h-[32rem] gap-2 overflow-y-auto pr-1 md:grid-cols-2">
-                {libraryDrills.map((drill) => (
-                  <label key={drill.id} className="flex items-start gap-3 rounded-md border border-board-line bg-board-paper p-3 text-sm">
-                    <input name="drillIds" value={drill.id} type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-board-green focus:ring-board-green" />
-                    <span className="min-w-0">
-                      <span className="flex flex-wrap items-center gap-1.5 font-bold text-board-navy">
-                        {drill.isFavorite ? <Star className="h-3.5 w-3.5 fill-board-green text-board-green" aria-label={ui("Favorite")} /> : null}
-                        {drill.title}
-                      </span>
-                      <span className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500">
-                        <span>{drill.durationMinutes} {ui(" min · ")}{drill.minPlayers}-{drill.maxPlayers} {ui(" Players")}</span>
-                        {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">{ui("Draft")}</span> : null}
-                      </span>
-                      <span className="mt-1 block text-xs font-semibold text-slate-500">
-                        {drill.usage.usageUnavailable
-                          ? "Usage unavailable"
-                          : drill.usage.historicalUseCount
-                            ? `Used ${drill.usage.historicalUseCount} time${drill.usage.historicalUseCount === 1 ? "" : "s"} · Last ${formatPlanDrillUsageDate(drill.usage.lastUsedAt)}`
-                            : "Never used"}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {!libraryDrills.length ? <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">{ui("No matching active Drills found.")}</p> : null}
-              <Button type="submit" className="justify-center">{ui("Add selected Drills to Plan")}</Button>
-            </form>
-          </section>
-        </div>
-
-        <aside className="space-y-4">
-          <PlanningContextSummary context={planningContext} event={event} scheduledDuration={scheduledDuration} />
-
-          <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">{ui("Duration summary")}</h2>
-            <div className="mt-3 space-y-2 text-sm font-semibold text-slate-700">
-              <p className="flex justify-between gap-3"><span>{ui("Planned content")}</span><span>{plannedDuration} {ui(" min")}</span></p>
-              {scheduledDuration !== null ? (
-                <>
-                  <p className="flex justify-between gap-3"><span>{ui("Scheduled Training")}</span><span>{scheduledDuration} {ui(" min")}</span></p>
-                  <p className={`rounded-md px-3 py-2 ${plannedDuration > scheduledDuration ? "bg-red-50 text-red-700" : "bg-green-50 text-green-800"}`}>
-                    {plannedDuration === scheduledDuration ? "Exact match" : plannedDuration > scheduledDuration ? `${plannedDuration - scheduledDuration} min over scheduled duration` : `${scheduledDuration - plannedDuration} min unplanned`}
-                  </p>
-                </>
-              ) : null}
-            </div>
-          </section>
-
-          <SessionPlayerBoard eventId={event.id} players={boardPlayers} groups={trainingGroups} />
-          {!expected ? (
-            <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-              <p className="text-sm font-semibold text-slate-600">{ui("0 expected Players.")}</p>
-              <ButtonLink href={`/trainings/${event.id}/edit`} variant="secondary" className="mt-3 h-9 px-3">{ui("Edit Training participants")}</ButtonLink>
-            </section>
-          ) : null}
-        </aside>
-      </section>
-    </div>
-  );
-}
-
-type PlanInstance = {
-  id: string;
-  title: string;
-  sourceTrainingSessionId?: string;
-};
-
-type PlanDrill = {
-  id: string;
-  title: string;
-  phase: string;
-  orderIndex: number;
-  plannedDurationMinutes?: number;
-  sourceDrillId?: string;
-  status: "draft" | "ready" | "removed";
-};
-
-type LibraryDrill = {
-  id: string;
-  title: string;
-  durationMinutes: number;
-  minPlayers: number;
-  maxPlayers: number;
-  status: "draft" | "published";
-  isFavorite: boolean;
-  usage: DrillUsageStats;
-};
-
-type TrainingGroupMemberRow = {
-  id: string;
-  group_id: string;
-  player_id: string | null;
-  custom_name: string | null;
-};
-
-async function loadPlanInstance(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string): Promise<PlanInstance | null> {
-  const { data, error } = await supabase
-    .from("training_session_plan_instances")
-    .select("id,title,source_training_session_id")
-    .eq("event_id", eventId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  const row = data as { id: string; title: string; source_training_session_id: string | null } | null;
-  if (!row) return null;
-  return {
-    id: row.id,
-    title: row.title,
-    sourceTrainingSessionId: row.source_training_session_id ?? undefined
-  };
-}
-
-async function loadPlanDrills(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string): Promise<PlanDrill[]> {
-  const { data, error } = await supabase
-    .from("training_session_drill_instances")
-    .select("id,title,block,order_index,planned_duration_minutes,source_drill_id,status")
-    .eq("event_id", eventId)
-    .eq("user_id", userId)
-    .neq("status", "removed")
-    .order("order_index", { ascending: true });
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as Array<{ id: string; title: string; block: string | null; order_index: number; planned_duration_minutes: number | null; source_drill_id: string | null; status: "draft" | "ready" | "removed" | null }>).map((row) => ({
-    id: row.id,
-    title: row.title,
-    phase: row.block ?? "Main Part",
-    orderIndex: row.order_index,
-    plannedDurationMinutes: row.planned_duration_minutes ?? undefined,
-    sourceDrillId: row.source_drill_id ?? undefined,
-    status: row.status ?? "ready"
-  }));
-}
-
-async function loadLibraryDrills(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, search: string): Promise<LibraryDrill[]> {
-  let query = supabase
-    .from("drills")
-    .select("id,title,duration_minutes,min_players,max_players,status,is_favorite,updated_at")
-    .eq("user_id", userId)
-    .is("archived_at", null)
-    .is("deleted_at", null)
-    .order("updated_at", { ascending: false })
-    .limit(30);
-  if (search) {
-    const safeSearch = search.replaceAll("%", "").replaceAll("_", "");
-    query = query.or(`title.ilike.%${safeSearch}%,short_description.ilike.%${safeSearch}%,sub_focus.ilike.%${safeSearch}%`);
-  }
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as Array<{ id: string; title: string; duration_minutes: number; min_players: number; max_players: number; status: "draft" | "published" | null; is_favorite: boolean | null }>;
-  const usage = await getDrillUsageStatsByDrillId(supabase, userId, rows.map((row) => row.id));
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    durationMinutes: row.duration_minutes,
-    minPlayers: row.min_players,
-    maxPlayers: row.max_players,
-    status: row.status ?? "published",
-    isFavorite: row.is_favorite ?? false,
-    usage: usage.get(row.id) ?? emptyDrillUsageStats(row.id)
-  }));
-}
-
-async function loadTrainingGroups(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string): Promise<SessionBoardGroup[]> {
-  const { data: groups, error: groupError } = await supabase
-    .from("training_event_groups")
-    .select("id,name,group_type,sort_order")
-    .eq("user_id", userId)
-    .eq("event_id", eventId)
-    .order("sort_order", { ascending: true });
-  if (groupError) throw new Error(groupError.message);
-  const groupRows = (groups ?? []) as Array<{ id: string; name: string; group_type: "exclusive" | "label"; sort_order: number }>;
-  if (!groupRows.length) return [];
-  const { data: members, error: memberError } = await supabase
-    .from("training_event_group_members")
-    .select("id,group_id,player_id,custom_name,sort_order")
-    .eq("user_id", userId)
-    .in("group_id", groupRows.map((group) => group.id))
-    .order("sort_order", { ascending: true });
-  if (memberError) throw new Error(memberError.message);
-  const membersByGroup = new Map<string, SessionBoardGroup["members"]>();
-  for (const member of (members ?? []) as TrainingGroupMemberRow[]) {
-    membersByGroup.set(member.group_id, [
-      ...(membersByGroup.get(member.group_id) ?? []),
-      { id: member.id, playerId: member.player_id ?? undefined, customName: member.custom_name ?? undefined }
-    ]);
-  }
-  return groupRows.map((group) => ({
-    id: group.id,
-    name: group.name,
-    groupType: group.group_type,
-    members: membersByGroup.get(group.id) ?? []
-  }));
-}
-
-function groupDrillsByPhase(drills: PlanDrill[]) {
-  const map = new Map<string, PlanDrill[]>();
-  for (const phase of phaseOptions) map.set(phase, []);
-  for (const drill of drills) {
-    map.set(drill.phase, [...(map.get(drill.phase) ?? []), drill]);
-  }
-  return map;
-}
-
-async function PlanningInsightsPanel({ eventId, context }: { eventId: string; context: PlanningContext }) {
-  const locale = await getActiveLocale();
-  const ui = createSystemTranslator(locale);
-  const previous = context.previousSession;
-  const development = context.development;
-  const balance = context.trainingBalance;
-  return (
-    <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-board-green">{ui("Planning Insights")}</p>
-          <h2 className="mt-1 text-lg font-bold text-board-navy">{ui("Evidence for this Session Plan")}</h2>
-          <p className="mt-1 text-sm text-slate-600">{ui("Deterministic context from your team data. Nothing is added to the plan automatically.")}</p>
-        </div>
-        {context.errors.length ? <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">{ui("Some insights unavailable")}</span> : null}
-      </div>
-
-      <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <InsightCard title={ui("Last Session")} icon={<Lightbulb className="h-4 w-4" />}>
-          {previous ? (
-            <div className="space-y-3 text-sm">
-              <div>
-                <Link href={`/trainings/${previous.event.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
-                  {previous.event.label}
-                </Link>
-                <p className="mt-1 text-xs font-semibold text-slate-500">{formatPlanDrillUsageDate(previous.event.date)}{previous.event.focus ? ` · ${previous.event.focus}` : ""}</p>
-              </div>
-              {previous.review?.nextTrainingNote ? (
-                <div className="rounded-md bg-green-50 p-3 text-green-900">
-                  <p className="text-xs font-bold uppercase tracking-wide text-green-700">{ui("From your last Session Review")}</p>
-                  <p className="mt-1 font-semibold">{previous.review.nextTrainingNote}</p>
-                </div>
-              ) : (
-                <p className="text-sm font-semibold text-slate-500">{ui("No “take into next Training” note recorded.")}</p>
-              )}
-              {previous.review ? (
-                <p className="text-xs font-semibold text-slate-600">
-                  {ui("Previous objective: ")}<span className="font-bold text-board-navy">{objectiveLabel(previous.review.objectiveOutcome)}</span>
-                </p>
-              ) : (
-                <p className="text-xs font-semibold text-slate-500">{ui("No Session Review recorded for the previous Training.")}</p>
-              )}
-              {previous.drillFeedback.length ? (
-                <details>
-                  <summary className="cursor-pointer text-xs font-bold text-board-green">{ui("View drill feedback")}</summary>
-                  <div className="mt-2 space-y-2">
-                    {previous.drillFeedback.slice(0, 3).map((feedback) => (
-                      <div key={`${feedback.title}-${feedback.feedbackStatus}`} className="rounded-md border border-slate-100 p-2">
-                        <p className="font-bold text-board-navy">{feedback.title}</p>
-                        <p className="text-xs font-semibold text-slate-600">{ui("Last review: ")}{feedbackLabel(feedback.feedbackStatus)}{feedback.effectivenessRating ? ` · ${feedback.effectivenessRating}/5` : ""}</p>
-                        {feedback.note ? <p className="mt-1 text-xs text-slate-600">{feedback.note}</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              ) : null}
-            </div>
-          ) : (
-            <EmptyInsight>{ui("No previous same-team Training context yet.")}</EmptyInsight>
-          )}
-        </InsightCard>
-
-        <InsightCard title={ui("Player Development")} icon={<Target className="h-4 w-4" />}>
-          {development.unavailable ? (
-            <EmptyInsight>{ui("Development insights unavailable.")}</EmptyInsight>
-          ) : development.activeGoals ? (
-            <div className="space-y-3 text-sm">
-              <p className="font-semibold text-board-navy">
-                {ui("Expected players: {players} · Active development goals: {goals}", { players: development.expectedPlayersWithActiveGoals, goals: development.activeGoals })}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {development.categories.map((item) => (
-                  <span key={item.category} className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{developmentCategoryLabel(item.category)} {item.count}</span>
-                ))}
-                {development.highPriorityGoals ? <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">{development.highPriorityGoals} {ui(" high priority")}</span> : null}
-                {development.goalsDueForReview ? <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{development.goalsDueForReview} {ui(" due for review")}</span> : null}
-              </div>
-              <details>
-                <summary className="cursor-pointer text-xs font-bold text-board-green">{ui("View Goals")}</summary>
-                <div className="mt-2 space-y-2">
-                  {development.examples.map((goal) => (
-                    <div key={`${goal.playerName}-${goal.title}`} className="rounded-md border border-slate-100 p-2">
-                      <p className="font-bold text-board-navy">{goal.playerName}</p>
-                      <p translate="no" className="text-xs font-semibold text-slate-600">{goal.title}</p>
-                      <p className="mt-1 text-xs text-slate-500">{developmentCategoryLabel(goal.category)} · {goal.priority} {ui(" priority")}{goal.reviewDue ? " · review due" : ""}{goal.latestProgress ? ` · ${progressLabel(goal.latestProgress)}` : ""}</p>
-                    </div>
-                  ))}
-                </div>
-              </details>
-              <ButtonLink href="/squad/development" variant="ghost" className="h-8 px-2 text-xs">{ui("Open Development")}</ButtonLink>
-            </div>
-          ) : (
-            <EmptyInsight>{ui("No active Development Goals for expected Players.")}</EmptyInsight>
-          )}
-        </InsightCard>
-
-        <InsightCard title={ui("Training Balance")} icon={<TrendingUp className="h-4 w-4" />}>
-          {balance.unavailable ? (
-            <EmptyInsight>{ui("Training balance unavailable.")}</EmptyInsight>
-          ) : balance.lookbackCount ? (
-            <div className="space-y-3 text-sm">
-              <p className="font-semibold text-board-navy">{ui("Recent focus distribution · Same-team trainings: {count}", { count: balance.lookbackCount })}</p>
-              {balance.focusDistribution.length ? (
-                <div className="space-y-2">
-                  {balance.focusDistribution.map((item) => (
-                    <div key={item.focus} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2">
-                      <span className="font-semibold text-slate-700" translate="no">{trainingFocusLabel(item.focus, locale)}</span>
-                      <span className="font-bold text-board-navy">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm font-semibold text-slate-500">{ui("Focus recorded for 0 of {count} trainings.", { count: balance.lookbackCount })}</p>
-              )}
-              {balance.currentFocusCount !== undefined ? <p className="text-xs font-semibold text-slate-500">{ui("Trainings with the current focus: {count}", { count: balance.currentFocusCount })}</p> : null}
-              <ButtonLink href="/squad/analysis?section=training&period=last5" variant="ghost" className="h-8 px-2 text-xs">{ui("View Analytics")}</ButtonLink>
-            </div>
-          ) : (
-            <EmptyInsight>{ui("Planning insights will become richer as you complete more Trainings.")}</EmptyInsight>
-          )}
-        </InsightCard>
-
-        <InsightCard title={ui("Suggested Drills")} icon={<Dumbbell className="h-4 w-4" />}>
-          {context.suggestedDrills.length ? (
-            <div className="space-y-3">
-              {context.suggestedDrills.map((suggestion) => <SuggestedDrillCard key={suggestion.drill.id} eventId={eventId} suggestion={suggestion} />)}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <EmptyInsight>{ui("No strong Drill matches found for the current Session context.")}</EmptyInsight>
-              <ButtonLink href="/drills" variant="secondary" className="h-9 px-3">{ui("Browse Drill Library")}</ButtonLink>
-            </div>
-          )}
-        </InsightCard>
-      </div>
-    </section>
-  );
-}
-
-async function PlanningContextSummary({ context, event, scheduledDuration }: { context: PlanningContext; event: { focus?: string }; scheduledDuration: number | null }) {
-  const locale = await getActiveLocale();
-  const ui = createSystemTranslator(locale);
-  const composition = context.participantComposition;
-  return (
-    <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-      <p className="text-xs font-bold uppercase tracking-wide text-board-green">{ui("Session Context")}</p>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        <ContextMetric label={ui("Expected")} value={`${composition.expectedPlayers} Players`} />
-        <ContextMetric label={ui("Positions")} value={`${composition.goalkeepers} GK · ${composition.fieldPlayers} field`} />
-        <ContextMetric label={ui("Duration")} value={scheduledDuration !== null ? `${scheduledDuration} min` : "Not set"} />
-        <ContextMetric label={ui("Age")} value={composition.ageContext ? `U${composition.ageContext}` : "Unknown"} />
-      </div>
-      {event.focus ? <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">{ui("Focus: ")}{event.focus}</p> : null}
-    </section>
-  );
-}
-
-function InsightCard({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
-  return (
-    <article className="rounded-lg border border-board-line bg-board-paper p-4">
-      <h3 className="flex items-center gap-2 font-bold text-board-navy">
-        <span className="text-board-green">{icon}</span>
-        {title}
-      </h3>
-      <div className="mt-3">{children}</div>
-    </article>
-  );
-}
-
-async function SuggestedDrillCard({ eventId, suggestion }: { eventId: string; suggestion: PlanningSuggestedDrill }) {
-  const locale = await getActiveLocale();
-  const ui = createSystemTranslator(locale);
-  const negativeFeedback = suggestion.latestFeedback?.feedbackStatus === "needs_adjustment" || suggestion.latestFeedback?.feedbackStatus === "not_effective";
-  return (
-    <div className="rounded-md border border-board-line bg-white p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <Link href={`/drills/${suggestion.drill.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
-            {suggestion.drill.title}
-          </Link>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{suggestion.phase} · {suggestion.drill.durationMinutes} {ui(" min")}</p>
-        </div>
-        <form action={addExistingDrillsToSessionPlan}>
-          <input type="hidden" name="eventId" value={eventId} />
-          <input type="hidden" name="phase" value={suggestion.phase} />
-          <input type="hidden" name="drillIds" value={suggestion.drill.id} />
-          <Button type="submit" className="h-9 w-full justify-center px-3 sm:w-auto">{ui("Add to Plan")}</Button>
-        </form>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {suggestion.reasons.slice(0, 4).map((reason) => (
-          <span key={reason} className="rounded-full bg-green-50 px-2 py-1 text-[11px] font-bold text-green-700">{reason}</span>
-        ))}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {suggestion.context.slice(0, 3).map((item) => (
-          <span key={item} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{item}</span>
-        ))}
-      </div>
-      {suggestion.latestFeedback ? (
-        <div className={cn("mt-3 rounded-md px-3 py-2 text-xs font-semibold", negativeFeedback ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600")}>
-          {ui("Last review: ")}{feedbackLabel(suggestion.latestFeedback.feedbackStatus)}{suggestion.latestFeedback.effectivenessRating ? ` · ${suggestion.latestFeedback.effectivenessRating}/5` : ""}
-          {suggestion.latestFeedback.note ? <span className="mt-1 block">{suggestion.latestFeedback.note}</span> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ContextMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-slate-50 p-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 font-bold text-board-navy">{value}</p>
-    </div>
-  );
-}
-
-function EmptyInsight({ children }: { children: ReactNode }) {
-  return <p className="rounded-md border border-dashed border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">{children}</p>;
-}
-
-async function PlanDrillCard({ eventId, drill, index, isFirst, isLast, players }: { eventId: string; drill: PlanDrill; index: number; isFirst: boolean; isLast: boolean; players: SessionBoardPlayer[] }) {
-  const locale = await getActiveLocale();
-  const ui = createSystemTranslator(locale);
-  const composition = getPlayerComposition(players);
-  return (
-    <article className="rounded-md border border-board-line bg-white p-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase text-slate-500">#{index + 1}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h4 className="font-bold text-board-navy">{drill.title || "Untitled Drill"}</h4>
-            {drill.status === "draft" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">{ui("Draft")}</span> : null}
-            {drill.status === "draft" && drill.sourceDrillId ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">{ui("Reusable Draft")}</span> : null}
-            {drill.status === "draft" && !drill.sourceDrillId ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">{ui("Session Draft")}</span> : null}
-          </div>
-          <p className="mt-1 text-xs font-semibold text-slate-500">
-            {drill.plannedDurationMinutes ?? "Duration missing"}{drill.plannedDurationMinutes ? " min" : ""} {ui(" · All expected Players · ")}{players.length} {ui(" assigned")}</p>
-          {drill.status === "draft" ? (
-            <p className="mt-1 text-xs font-semibold text-amber-700">
-              {ui("Draft can stay in the plan. Missing information is non-blocking.")}</p>
-          ) : null}
-          {players.length ? (
-            <p className="mt-1 text-xs font-semibold text-slate-500">
-              {composition.goalkeeper} {ui(" GK · ")}{composition.defensive} {ui(" DEF · ")}{composition.midfield} {ui(" MID · ")}{composition.attacking} {ui(" ATT")}</p>
-          ) : null}
-          {drill.sourceDrillId ? (
-            <p className="mt-1 text-xs font-semibold text-slate-500">{ui("Recommended: source Drill range stays separate from assigned Session Players.")}</p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <form action={moveSessionPlanDrill}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="drillInstanceId" value={drill.id} />
-            <input type="hidden" name="direction" value="up" />
-            <Button type="submit" variant="ghost" disabled={isFirst} className="h-8 px-2 text-xs">{ui("Up")}</Button>
-          </form>
-          <form action={moveSessionPlanDrill}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="drillInstanceId" value={drill.id} />
-            <input type="hidden" name="direction" value="down" />
-            <Button type="submit" variant="ghost" disabled={isLast} className="h-8 px-2 text-xs">{ui("Down")}</Button>
-          </form>
-          {drill.sourceDrillId ? <ButtonLink href={`/drills/${drill.sourceDrillId}`} variant="ghost" className="h-8 px-2 text-xs">{ui("Preview")}</ButtonLink> : null}
-          {drill.sourceDrillId ? <ButtonLink href={`/drills/${drill.sourceDrillId}/edit?returnTo=/trainings/${eventId}/plan`} variant="ghost" className="h-8 px-2 text-xs">{drill.status === "draft" ? "Continue editing" : "Edit source"}</ButtonLink> : null}
-        </div>
-      </div>
-      <form action={updateSessionPlanDrill} className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
-        <input type="hidden" name="eventId" value={eventId} />
-        <input type="hidden" name="drillInstanceId" value={drill.id} />
-        <label className="text-xs font-bold uppercase text-slate-500">
-          {ui("Phase")}<select name="phase" defaultValue={drill.phase} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-            {phaseOptions.map((phase) => <option key={phase} value={phase}>{trainingSectionLabel(phase, locale)}</option>)}
-          </select>
-        </label>
-        <label className="text-xs font-bold uppercase text-slate-500">
-          {ui("Duration")}<input name="plannedDurationMinutes" type="number" min="0" defaultValue={drill.plannedDurationMinutes ?? 0} className="mt-1 h-9 w-full rounded-md border border-board-line px-2 text-sm normal-case text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-        </label>
-        <Button type="submit" variant="secondary" className="h-9 self-end px-3">{ui("Update")}</Button>
+  if (sectionsResult.error) throw new Error(sectionsResult.error.message);
+  if (instancesResult.error) throw new Error(instancesResult.error.message);
+  if (staffResult.error) throw new Error(staffResult.error.message);
+  const sectionRows = (sectionsResult.data ?? []) as SectionRow[];
+  const instanceRows = (instancesResult.data ?? []) as DrillInstanceRow[];
+  const snapshotPaths = instanceRows.flatMap((row) => {
+    const visual = record(record(row.snapshot_json)?.sourceDrill)?.visual;
+    const path = record(visual)?.uploadedImagePath;
+    return typeof path === "string" ? [path] : [];
+  });
+  const signedUrls = await createSignedImageUrlMap(supabase, snapshotPaths);
+  const snapshotDrills = instanceRows.map((row) => snapshotDrill(row, user.id, signedUrls));
+  const staff = (staffResult.data ?? []).filter((member) => member.is_active).map((member) => ({ id: member.id, name: member.name, role: member.role })) as SessionPlanStaff[];
+  const initialValues = buildInitialValues(plan, event, sectionRows, instanceRows);
+  return <div className="space-y-6">
+    <div className="flex flex-wrap items-center justify-between gap-3"><BackLink eventId={id} label={ui("Back to training")} /><Link href={`/trainings/${id}/brief`} className="text-sm font-bold text-board-green hover:underline">{ui("Open Staff Brief")}</Link></div>
+    <header><p className="text-sm font-semibold uppercase text-board-green">{ui("Session Plan Builder")}</p><h1 className="mt-2 text-3xl font-bold text-board-navy">{ui("Plan Training")}</h1><p className="mt-2 text-slate-600">{ui("The same full builder as reusable Training Plans, with Session-only sections, Drill changes and staff responsibilities.")}</p></header>
+    <details className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+      <summary className="cursor-pointer text-sm font-bold text-board-navy">{ui("Team staff")} ({staff.length})</summary>
+      <form action={addSessionPlanStaff} className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+        <input type="hidden" name="eventId" value={id} />
+        <label className="text-xs font-semibold text-slate-600">{ui("Coach name")}<input name="name" required maxLength={120} className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm" /></label>
+        <label className="text-xs font-semibold text-slate-600">{ui("Role")}<input name="role" maxLength={80} placeholder={ui("Assistant coach")} className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm" /></label>
+        <Button type="submit" variant="secondary">{ui("Add coach")}</Button>
       </form>
-      <form action={removeSessionPlanDrill} className="mt-2">
-        <input type="hidden" name="eventId" value={eventId} />
-        <input type="hidden" name="drillInstanceId" value={drill.id} />
-        <Button type="submit" variant="ghost" className="h-8 px-2 text-xs text-red-700 hover:bg-red-50">{ui("Remove from Plan")}</Button>
-      </form>
-    </article>
-  );
+      {staff.length ? <div className="mt-3 flex flex-wrap gap-2">{staff.map((member) => <span key={member.id} translate="no" className="rounded-full bg-board-paper px-3 py-1 text-xs font-semibold text-slate-700">{member.name}{member.role ? ` · ${member.role}` : ""}</span>)}</div> : <p className="mt-3 text-sm text-slate-500">{ui("Add a coach to assign Training sections.")}</p>}
+    </details>
+    <SessionForm action={updateConcreteSessionPlan} mode="edit" builderMode="session" eventId={id} drills={[...libraryDrills, ...snapshotDrills]} initialValues={initialValues} staff={staff} cancelHref={`/trainings/${id}`} />
+  </div>;
 }
 
-function toBoardPlayers(entries: Array<{ player?: SessionBoardPlayerSource; plannedStatus?: SessionBoardPlayer["plannedStatus"]; finalStatus?: SessionBoardPlayer["finalStatus"] }>): SessionBoardPlayer[] {
-  return entries.filter((entry) => entry.player).map((entry) => ({
-    id: entry.player?.id ?? "",
-    name: [entry.player?.firstName, entry.player?.lastName].filter(Boolean).join(" "),
-    position: entry.player?.position,
-    secondaryPositions: entry.player?.secondaryPositions ?? [],
-    playerType: entry.player?.playerType ?? "roster",
-    plannedStatus: entry.plannedStatus,
-    finalStatus: entry.finalStatus
-  }));
+function BackLink({ eventId, label }: { eventId: string; label: string }) {
+  return <Link href={`/trainings/${eventId}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy"><ArrowLeft className="h-4 w-4" />{label}</Link>;
 }
 
-type SessionBoardPlayerSource = {
-  id: string;
-  firstName: string;
-  lastName?: string;
-  position?: string;
-  secondaryPositions: string[];
-  playerType: "roster" | "trial";
-};
-
-function getPlayerComposition(players: SessionBoardPlayer[]) {
+function buildInitialValues(plan: PlanRow, event: SquadTrainingEventDetail, sections: SectionRow[], drills: DrillInstanceRow[]): SessionFormValues {
+  const value = record(plan.plan_json);
+  const sectionById = new Map(sections.map((section) => [section.id, section]));
+  const normalizedSections: SessionPlanSection[] = sections.map((section, orderIndex) => ({ id: section.id, key: section.section_key, title: section.title, orderIndex, durationMinutes: section.duration_minutes, notes: section.section_notes ?? "", responsibilityMode: section.responsibility_mode, staffId: section.staff_id ?? "", planningStatus: section.planning_status, instruction: section.instruction ?? "" }));
   return {
-    goalkeeper: players.filter((player) => boardPositionFamily(player) === "goalkeeper").length,
-    defensive: players.filter((player) => boardPositionFamily(player) === "defensive").length,
-    midfield: players.filter((player) => boardPositionFamily(player) === "midfield").length,
-    attacking: players.filter((player) => boardPositionFamily(player) === "attacking").length,
-    unassigned: players.filter((player) => boardPositionFamily(player) === "unassigned").length
+    title: stringValue(value?.title) || plan.title,
+    sessionDate: stringValue(value?.sessionDate) || event.date,
+    startTime: stringValue(value?.startTime) || event.startTime,
+    teamAgeGroup: stringValue(value?.teamAgeGroup), mainFocus: stringValue(value?.mainFocus) || event.focus || "", secondaryFocus: stringValue(value?.secondaryFocus),
+    expectedPlayers: String(numberValue(value?.expectedPlayers) ?? (event.attendance.filter((entry) => !entry.plannedStatus || entry.plannedStatus === "expected").length || "")),
+    durationTargetMinutes: String(numberValue(value?.durationTargetMinutes) ?? ""), location: stringValue(value?.location) || event.location || "", notes: stringValue(value?.notes),
+    playerGroups: Array.isArray(value?.playerGroups) ? value.playerGroups as SessionFormValues["playerGroups"] : defaultSessionGroups(), sections: normalizedSections,
+    drills: drills.map((row, orderIndex) => {
+      const override = record(row.override_json); const source = record(record(row.snapshot_json)?.sourceDrill); const sourceTitle = stringValue(source?.title);
+      const section = row.section_id ? sectionById.get(row.section_id) : sections.find((item) => item.title === row.block);
+      return { id: row.id, drillId: `session:${row.id}`, block: section?.section_key ?? normalizedSections[0]?.key ?? "main-part", plannedDurationMinutes: row.planned_duration_minutes ?? 1, coachNotes: stringValue(override?.coachNotes), orderIndex,
+        timingMode: override?.timingMode === "simultaneous" ? "simultaneous" : "sequential", simultaneousGroup: stringValue(override?.simultaneousGroup) || "set-1", participatingGroups: stringArray(override?.participatingGroups), startingGroup: stringValue(override?.startingGroup),
+        titleOverride: stringValue(override?.title) || (row.title !== sourceTitle ? row.title : undefined), descriptionOverride: optionalString(override?.description), organizationOverride: optionalString(override?.organization), selectedCoachingPoints: Array.isArray(override?.coachingPoints) ? stringArray(override?.coachingPoints) : undefined, sessionNote: optionalString(override?.sessionNote),
+        responsibilityMode: row.responsibility_mode ?? undefined, responsibleStaffId: row.responsible_staff_id ?? undefined, planningStatus: row.planning_status ?? undefined, planningInstruction: row.planning_instruction ?? undefined };
+    })
   };
 }
 
-function boardPositionFamily(player: SessionBoardPlayer) {
-  if (player.position && getPositionFamily(player.position) !== "unassigned") return getPositionFamily(player.position);
-  const secondary = player.secondaryPositions.find((position) => getPositionFamily(position) !== "unassigned");
-  return getPositionFamily(secondary);
+function snapshotDrill(row: DrillInstanceRow, userId: string, signedUrls: Map<string, string>): Drill & { visual?: DrillVisual; isSessionSnapshot: true } {
+  const source = record(record(row.snapshot_json)?.sourceDrill); const visualData = record(source?.visual); const uploadedImagePath = stringValue(visualData?.uploadedImagePath) || undefined;
+  const visual: DrillVisual = { graphic: source?.graphic ? parseEditorState(source.graphic as Json) : defaultEditorState, source: visualData?.source === "upload" && uploadedImagePath ? "upload" : "editor", uploadedImagePath, uploadedImageUrl: uploadedImagePath ? signedUrls.get(uploadedImagePath) : undefined, uploadedImageMimeType: optionalString(visualData?.uploadedImageMimeType), uploadedImageSizeBytes: numberValue(visualData?.uploadedImageSizeBytes) };
+  const now = new Date(0).toISOString();
+  return { id: `session:${row.id}`, userId, title: stringValue(source?.title) || row.title, shortDescription: optionalString(source?.shortDescription ?? source?.short_description), organization: optionalString(source?.organization), coachingPoints: optionalString(source?.coachingPoints ?? source?.coaching_points), variations: optionalString(source?.variations), easierVersion: optionalString(source?.easierVersion ?? source?.easier_version), harderVersion: optionalString(source?.harderVersion ?? source?.harder_version), ageMode: "all_ages", ageGroups: ["all_ages"], mainFocus: "Passing", trainingBlocks: ["Main part 1"], drillType: "Group exercise", durationMinutes: numberValue(source?.durationMinutes ?? source?.duration_minutes) ?? row.planned_duration_minutes ?? 1, minPlayers: numberValue(source?.minPlayers ?? source?.min_players) ?? 1, maxPlayers: numberValue(source?.maxPlayers ?? source?.max_players) ?? 30, materials: jsonToMaterials((source?.materials ?? []) as Json), setupParameters: [], difficultyLevel: 3, intensityLevel: 3, isFavorite: false, tags: [], status: "published", createdAt: now, updatedAt: now, visual, isSessionSnapshot: true };
 }
 
-function scheduledDurationMinutes(startTime: string, endTime?: string) {
-  if (!endTime) return null;
-  const [startHour, startMinute] = startTime.split(":").map(Number);
-  const [endHour, endMinute] = endTime.split(":").map(Number);
-  if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return null;
-  const start = startHour * 60 + startMinute;
-  const end = endHour * 60 + endMinute;
-  return end > start ? end - start : null;
-}
-
-function objectiveLabel(value: "achieved" | "partly_achieved" | "not_achieved") {
-  const labels = {
-    achieved: "Achieved",
-    partly_achieved: "Partly achieved",
-    not_achieved: "Not achieved"
-  };
-  return labels[value];
-}
-
-function feedbackLabel(value: "worked_well" | "needs_adjustment" | "not_effective") {
-  const labels = {
-    worked_well: "Worked well",
-    needs_adjustment: "Needs adjustment",
-    not_effective: "Not effective"
-  };
-  return labels[value];
-}
-
-function developmentCategoryLabel(category: string) {
-  const labels: Record<string, string> = {
-    technical: "Technical",
-    tactical: "Tactical",
-    physical: "Physical",
-    mental: "Mental",
-    other: "Other"
-  };
-  return labels[category] ?? category;
-}
-
-function progressLabel(progress: string) {
-  const labels: Record<string, string> = {
-    needs_attention: "Needs attention",
-    developing: "Developing",
-    consistent: "Consistent",
-    achieved: "Achieved"
-  };
-  return labels[progress] ?? progress;
-}
-
-function formatPlanDrillUsageDate(date?: string) {
-  if (!date) return "historical training";
-  const parsed = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(parsed);
-}
+function record(value: unknown): Record<string, unknown> | undefined { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
+function stringValue(value: unknown) { return typeof value === "string" ? value : ""; }
+function optionalString(value: unknown) { return typeof value === "string" ? value : undefined; }
+function numberValue(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? value : undefined; }
+function stringArray(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }

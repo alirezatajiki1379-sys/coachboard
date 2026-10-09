@@ -1323,11 +1323,48 @@ create table if not exists public.training_session_plan_instances (
 
   title text not null,
   snapshot_json jsonb not null default '{}'::jsonb,
+  plan_json jsonb not null default '{}'::jsonb check (jsonb_typeof(plan_json) = 'object'),
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
   unique(event_id)
+);
+
+create table if not exists public.squad_staff (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  squad_id uuid not null references public.squads(id) on delete cascade,
+  name text not null check (length(trim(name)) between 1 and 120),
+  role text not null default 'Assistant coach' check (length(trim(role)) between 1 and 80),
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.training_section_briefs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  squad_id uuid not null references public.squads(id) on delete cascade,
+  event_id uuid not null references public.squad_training_events(id) on delete cascade,
+  plan_instance_id uuid references public.training_session_plan_instances(id) on delete cascade,
+  section_key text not null check (length(trim(section_key)) between 1 and 120),
+  title text not null check (length(trim(title)) between 1 and 120),
+  order_index integer not null default 0 check (order_index between 0 and 1000),
+  duration_minutes integer not null default 0 check (duration_minutes between 0 and 600),
+  section_notes text check (section_notes is null or length(section_notes) <= 5000),
+  responsibility_mode text not null default 'unassigned',
+  staff_id uuid references public.squad_staff(id) on delete set null,
+  planning_status text not null default 'needs_planning' check (planning_status in ('ready', 'needs_planning')),
+  instruction text check (instruction is null or length(instruction) <= 500),
+  briefing_text text check (briefing_text is null or length(briefing_text) <= 2000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(event_id, section_key),
+  check (
+    (responsibility_mode in ('unassigned', 'me') and staff_id is null)
+    or (responsibility_mode in ('staff', 'together') and staff_id is not null)
+  )
 );
 
 create table if not exists public.training_session_drill_instances (
@@ -1336,6 +1373,7 @@ create table if not exists public.training_session_drill_instances (
   user_id uuid not null references auth.users(id) on delete cascade,
   event_id uuid not null references public.squad_training_events(id) on delete cascade,
   plan_instance_id uuid references public.training_session_plan_instances(id) on delete cascade,
+  section_id uuid references public.training_section_briefs(id) on delete set null,
   source_training_session_drill_id uuid references public.training_session_drills(id) on delete set null,
   source_drill_id uuid references public.drills(id) on delete set null,
   source_drill_updated_at timestamptz,
@@ -1347,9 +1385,19 @@ create table if not exists public.training_session_drill_instances (
   status text not null default 'ready'
     check (status in ('draft', 'ready', 'removed')),
   snapshot_json jsonb not null default '{}'::jsonb,
+  override_json jsonb not null default '{}'::jsonb check (jsonb_typeof(override_json) = 'object'),
+  responsibility_mode text,
+  responsible_staff_id uuid references public.squad_staff(id) on delete set null,
+  planning_status text check (planning_status is null or planning_status in ('ready', 'needs_planning')),
+  planning_instruction text check (planning_instruction is null or length(planning_instruction) <= 500),
 
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  check (
+    (responsibility_mode is null and responsible_staff_id is null)
+    or (responsibility_mode in ('unassigned', 'me') and responsible_staff_id is null)
+    or (responsibility_mode in ('staff', 'together') and responsible_staff_id is not null)
+  )
 );
 
 alter table public.training_session_drill_instances
@@ -2068,12 +2116,27 @@ on public.training_session_plan_instances (
   event_id
 );
 
+create index if not exists squad_staff_user_squad_active_idx
+on public.squad_staff (user_id, squad_id, is_active);
+
+create index if not exists training_section_briefs_user_event_idx
+on public.training_section_briefs (user_id, event_id);
+
+create index if not exists training_section_briefs_event_order_idx
+on public.training_section_briefs (event_id, order_index, section_key);
+
+create index if not exists training_section_briefs_plan_order_idx
+on public.training_section_briefs (plan_instance_id, order_index);
+
 create index if not exists training_session_drill_instances_event_order_idx
 on public.training_session_drill_instances (
   user_id,
   event_id,
   order_index
 );
+
+create index if not exists training_session_drill_instances_section_order_idx
+on public.training_session_drill_instances (section_id, order_index);
 
 create index if not exists training_session_drill_instances_event_status_idx
 on public.training_session_drill_instances (
@@ -2316,6 +2379,16 @@ create trigger set_training_session_plan_instances_updated_at
 before update on public.training_session_plan_instances
 for each row
 execute function public.set_updated_at();
+
+drop trigger if exists set_squad_staff_updated_at on public.squad_staff;
+create trigger set_squad_staff_updated_at
+before update on public.squad_staff
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_training_section_briefs_updated_at on public.training_section_briefs;
+create trigger set_training_section_briefs_updated_at
+before update on public.training_section_briefs
+for each row execute function public.set_updated_at();
 
 drop trigger if exists set_training_session_drill_instances_updated_at
 on public.training_session_drill_instances;
@@ -2858,6 +2931,12 @@ enable row level security;
 alter table public.training_session_plan_instances
 enable row level security;
 
+alter table public.squad_staff
+enable row level security;
+
+alter table public.training_section_briefs
+enable row level security;
+
 alter table public.training_session_drill_instances
 enable row level security;
 
@@ -3300,6 +3379,52 @@ with check (
 
 -- SESSION DRILL INSTANCES
 
+drop policy if exists "squad staff belong to the team owner" on public.squad_staff;
+create policy "squad staff belong to the team owner"
+on public.squad_staff for all
+using (
+  auth.uid() = user_id
+  and exists (select 1 from public.squads where squads.id = squad_staff.squad_id and squads.user_id = auth.uid())
+)
+with check (
+  auth.uid() = user_id
+  and exists (select 1 from public.squads where squads.id = squad_staff.squad_id and squads.user_id = auth.uid())
+);
+
+drop policy if exists "training section briefs belong to the event owner" on public.training_section_briefs;
+create policy "training section briefs belong to the event owner"
+on public.training_section_briefs for all
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.squad_training_events event
+    where event.id = training_section_briefs.event_id
+      and event.user_id = auth.uid()
+      and event.squad_id = training_section_briefs.squad_id
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.squad_training_events event
+    where event.id = training_section_briefs.event_id
+      and event.user_id = auth.uid()
+      and event.squad_id = training_section_briefs.squad_id
+  )
+  and (plan_instance_id is null or exists (
+    select 1 from public.training_session_plan_instances plan
+    where plan.id = training_section_briefs.plan_instance_id
+      and plan.event_id = training_section_briefs.event_id
+      and plan.user_id = auth.uid()
+  ))
+  and (staff_id is null or exists (
+    select 1 from public.squad_staff staff
+    where staff.id = training_section_briefs.staff_id
+      and staff.user_id = auth.uid()
+      and staff.squad_id = training_section_briefs.squad_id
+  ))
+);
+
 drop policy if exists "training session drill instances are owned by the user"
 on public.training_session_drill_instances;
 
@@ -3333,6 +3458,26 @@ with check (
       from public.drills
       where drills.id = training_session_drill_instances.source_drill_id
       and drills.user_id = auth.uid()
+    )
+  )
+  and (
+    section_id is null
+    or exists (
+      select 1 from public.training_section_briefs section
+      where section.id = training_session_drill_instances.section_id
+      and section.event_id = training_session_drill_instances.event_id
+      and section.user_id = auth.uid()
+    )
+  )
+  and (
+    responsible_staff_id is null
+    or exists (
+      select 1 from public.squad_staff staff
+      join public.squad_training_events event on event.id = training_session_drill_instances.event_id
+      where staff.id = training_session_drill_instances.responsible_staff_id
+      and staff.user_id = auth.uid()
+      and staff.squad_id = event.squad_id
+      and event.user_id = auth.uid()
     )
   )
 );

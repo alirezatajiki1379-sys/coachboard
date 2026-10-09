@@ -8,7 +8,7 @@ import { TrainingEventActions } from "@/components/squad/training-event-actions"
 import { TrainingParticipantsTable } from "@/components/squad/training-participants-table";
 import { addCustomNameToTrainingGroup, addPlayersToTrainingGroup, createTrainingGroup, deleteTrainingGroup, removeTrainingGroupMember } from "@/lib/squad/training-group-actions";
 import { syncTrainingWithCurrentSquad } from "@/lib/squad/attendance-actions";
-import { applyTrainingPlanTemplate, createBlankSessionPlan } from "@/lib/squad/training-plan-actions";
+import { applyTrainingPlanTemplate } from "@/lib/squad/training-plan-actions";
 import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
 import { countTrainingObservations, getTrainingSessionReview, objectiveOutcomeLabels } from "@/lib/squad/session-review";
@@ -192,34 +192,14 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
         ) : (
           <div className="mt-4 rounded-lg border border-dashed border-board-line bg-board-paper p-5">
             <h3 className="text-lg font-bold text-board-navy">No Training Plan added yet</h3>
-            <p className="mt-1 text-sm text-slate-600">Choose an existing Template or build a Plan for this Session.</p>
-            <form action={createBlankSessionPlan} className="mt-4 inline-flex">
-              <input type="hidden" name="eventId" value={event.id} />
-              <Button type="submit" className="h-9 px-3">Create Plan for this Session</Button>
-            </form>
-            <details className="mt-3 rounded-md border border-board-line bg-white p-3">
-              <summary className="cursor-pointer list-none text-sm font-bold text-board-navy">Choose Training Plan Template</summary>
-              {planTemplates.length ? (
-                <form action={applyTrainingPlanTemplate} className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <input type="hidden" name="eventId" value={event.id} />
-                  <select name="templateId" required className="h-10 min-w-0 flex-1 rounded-md border border-board-line px-3 text-sm text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
-                    {planTemplates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.title} · {template.durationTargetMinutes ?? template.drillDurationMinutes} min · {template.drillCount} Drills
-                      </option>
-                    ))}
-                  </select>
-                  <Button type="submit" variant="secondary" className="h-10 px-3">Use Template</Button>
-                </form>
-              ) : (
-                <p className="mt-3 text-sm text-slate-600">No reusable Training Plan Templates yet. Create one in Training Plans first.</p>
-              )}
-            </details>
+            <p className="mt-1 text-sm text-slate-600">Choose a reusable Training Plan or create this Session Plan from scratch in the full builder.</p>
+            <ButtonLink href={`/trainings/${event.id}/plan`} className="mt-4 h-9 px-3">Plan Training</ButtonLink>
           </div>
         )}
         {planDrills.length ? (
           <div className="mt-4 flex flex-wrap gap-2">
             <ButtonLink href={`/trainings/${event.id}/plan`} className="h-9 px-3">Edit Session Plan</ButtonLink>
+            <ButtonLink href={`/trainings/${event.id}/brief`} variant="secondary" className="h-9 px-3">Staff Brief</ButtonLink>
             <details className="rounded-md border border-board-line bg-white px-3 py-2 text-sm font-bold text-board-navy">
               <summary className="cursor-pointer list-none">Change Training Plan Template</summary>
               {planTemplates.length ? (
