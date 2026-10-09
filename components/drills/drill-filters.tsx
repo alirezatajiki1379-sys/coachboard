@@ -16,7 +16,7 @@ type DrillFiltersProps = {
 export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
   const copy = drillFilterCopy[locale];
   const [desktop, setDesktop] = useState(false);
-  const [expanded, setExpanded] = useState(() => Boolean(filters.ageGroup || filters.mainFocus || filters.trainingBlock || filters.drillType || filters.subFocus || filters.minPlayers || filters.maxPlayers || filters.minDuration || filters.maxDuration || filters.material || (filters.usage && filters.usage !== "all") || (filters.sort && filters.sort !== "updated")));
+  const [expanded, setExpanded] = useState(() => Boolean(filters.ageGroup || filters.mainFocus || filters.trainingBlock || filters.drillType || filters.subFocus || filters.minPlayers || filters.maxPlayers || filters.minDuration || filters.maxDuration || filters.material || filters.source || (filters.usage && filters.usage !== "all") || (filters.sort && filters.sort !== "updated")));
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
     const update = () => setDesktop(media.matches);
@@ -34,6 +34,7 @@ export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
   return (
     <form className="min-w-0 rounded-lg border border-board-line bg-white p-3 shadow-soft sm:p-5">
       <input type="hidden" name="view" value={filters.view} />
+      {filters.importBatch ? <input type="hidden" name="importBatch" value={filters.importBatch} /> : null}
       <div className="flex min-w-0 gap-2">
         <label className="relative block min-w-0 flex-1">
           <span className="sr-only">{copy.searchPlaceholder}</span>
@@ -75,13 +76,14 @@ export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
 
       </div>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
         <Input name="subFocus" label={copy.subFocus} value={filters.subFocus} />
         <Input name="minPlayers" label={copy.minPlayers} value={filters.minPlayers?.toString()} type="number" />
         <Input name="maxPlayers" label={copy.maxPlayers} value={filters.maxPlayers?.toString()} type="number" />
         <Input name="minDuration" label={copy.minDuration} value={filters.minDuration?.toString()} type="number" />
         <Input name="maxDuration" label={copy.maxDuration} value={filters.maxDuration?.toString()} type="number" />
         <Input name="material" label={copy.material} value={filters.material} />
+        <Input name="source" label={copy.source} value={filters.source} />
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
@@ -114,6 +116,7 @@ const drillFilterCopy = {
     minDuration: "Min duration",
     maxDuration: "Max duration",
     material: "Material",
+    source: "Source",
     clearFilters: "Clear filters",
     sortOptions: {
       updated: "Recently updated",
@@ -140,6 +143,7 @@ const drillFilterCopy = {
     minDuration: "Min. Dauer",
     maxDuration: "Max. Dauer",
     material: "Material",
+    source: "Quelle",
     clearFilters: "Filter zurücksetzen",
     sortOptions: {
       updated: "Zuletzt aktualisiert",

@@ -103,6 +103,13 @@ export default async function DrillDetailPage({ params }: DrillDetailPageProps) 
           <InfoCard title="Favorite" items={[drill.isFavorite ? "Favorite drill" : "Not favorite"]} />
           <InfoCard title="Materials" items={[materialSummary(drill.materials)]} />
           <InfoCard title="Tags" items={drill.tags.length ? drill.tags : ["No tags"]} />
+          {drill.sourceTitle || drill.sourcePublisher || drill.sourcePage || drill.sourceReference ? (
+            <InfoCard title="Source" items={[
+              [drill.sourcePublisher, drill.sourceTitle].filter(Boolean).join(" · ") || undefined,
+              drill.sourcePage ? `Page ${drill.sourcePage}` : undefined,
+              drill.sourceReference
+            ]} />
+          ) : null}
         </aside>
       </section>
     </div>

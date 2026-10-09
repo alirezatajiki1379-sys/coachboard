@@ -54,6 +54,12 @@ export function mapDrillRow(row: DrillRow): Drill {
     isFavorite: row.is_favorite,
     tags: row.tags,
     status: row.status === "draft" ? "draft" : "published",
+    importBatchId: row.import_batch_id ?? undefined,
+    importExternalId: row.import_external_id ?? undefined,
+    sourceTitle: row.source_title ?? undefined,
+    sourcePublisher: row.source_publisher ?? undefined,
+    sourcePage: row.source_page ?? undefined,
+    sourceReference: row.source_reference ?? undefined,
     archivedAt: row.archived_at ?? undefined,
     deletedAt: row.deleted_at ?? undefined,
     createdAt: row.created_at,
@@ -91,6 +97,11 @@ export function mapDrillToDuplicateInsert(drill: Drill, userId: string): DrillIn
     intensity_level: drill.intensityLevel,
     is_favorite: false,
     tags: drill.tags,
-    status: drill.status
+    status: drill.status,
+    import_external_id: drill.importExternalId ?? null,
+    source_title: drill.sourceTitle ?? null,
+    source_publisher: drill.sourcePublisher ?? null,
+    source_page: drill.sourcePage ?? null,
+    source_reference: drill.sourceReference ?? null
   };
 }

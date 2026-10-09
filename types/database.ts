@@ -159,6 +159,12 @@ export type Database = {
           is_favorite: boolean;
           tags: string[];
           status: "draft" | "published";
+          import_batch_id: string | null;
+          import_external_id: string | null;
+          source_title: string | null;
+          source_publisher: string | null;
+          source_page: string | null;
+          source_reference: string | null;
           archived_at: string | null;
           deleted_at: string | null;
           created_at: string;
@@ -195,6 +201,12 @@ export type Database = {
           is_favorite?: boolean;
           tags?: string[];
           status?: "draft" | "published";
+          import_batch_id?: string | null;
+          import_external_id?: string | null;
+          source_title?: string | null;
+          source_publisher?: string | null;
+          source_page?: string | null;
+          source_reference?: string | null;
           archived_at?: string | null;
           deleted_at?: string | null;
           created_at?: string;
@@ -231,6 +243,12 @@ export type Database = {
           is_favorite?: boolean;
           tags?: string[];
           status?: "draft" | "published";
+          import_batch_id?: string | null;
+          import_external_id?: string | null;
+          source_title?: string | null;
+          source_publisher?: string | null;
+          source_page?: string | null;
+          source_reference?: string | null;
           archived_at?: string | null;
           deleted_at?: string | null;
           created_at?: string;
@@ -258,6 +276,78 @@ export type Database = {
           canvas_json: Json;
         };
         Update: Partial<Database["public"]["Tables"]["drill_graphics"]["Row"]>;
+        Relationships: [];
+      };
+      drill_import_batches: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          schema_version: number;
+          source_filename: string | null;
+          status: "draft" | "importing" | "completed" | "completed_with_errors" | "cancelled";
+          total_items: number;
+          imported_count: number;
+          skipped_count: number;
+          failed_count: number;
+          metadata: Json;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          schema_version?: number;
+          source_filename?: string | null;
+          status?: "draft" | "importing" | "completed" | "completed_with_errors" | "cancelled";
+          total_items?: number;
+          imported_count?: number;
+          skipped_count?: number;
+          failed_count?: number;
+          metadata?: Json;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["drill_import_batches"]["Insert"]>;
+        Relationships: [];
+      };
+      drill_import_items: {
+        Row: {
+          id: string;
+          user_id: string;
+          batch_id: string;
+          item_index: number;
+          external_id: string | null;
+          title: string;
+          requested_action: "import" | "import_anyway" | "update" | "skip";
+          status: "pending" | "imported" | "skipped" | "failed";
+          matched_drill_id: string | null;
+          drill_id: string | null;
+          source_json: Json;
+          error_message: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          batch_id: string;
+          item_index: number;
+          external_id?: string | null;
+          title: string;
+          requested_action?: "import" | "import_anyway" | "update" | "skip";
+          status?: "pending" | "imported" | "skipped" | "failed";
+          matched_drill_id?: string | null;
+          drill_id?: string | null;
+          source_json?: Json;
+          error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["drill_import_items"]["Insert"]>;
         Relationships: [];
       };
       drill_graphic_templates: {

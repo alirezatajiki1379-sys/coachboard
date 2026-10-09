@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,8 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
     filters.minDuration ||
     filters.maxDuration ||
     filters.material ||
+    filters.source ||
+    filters.importBatch ||
     filters.sort !== "updated"
   );
 
@@ -62,10 +64,10 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
             {copy.description}
           </p>
         </div>
-        <ButtonLink href="/drills/new">
-          <Plus className="h-4 w-4" />
-          {copy.create}
-        </ButtonLink>
+        <div className="flex flex-wrap gap-2">
+          <ButtonLink href="/drills/import" variant="secondary"><FileUp className="h-4 w-4" />{copy.importDrills}</ButtonLink>
+          <ButtonLink href="/drills/new"><Plus className="h-4 w-4" />{copy.create}</ButtonLink>
+        </div>
       </section>
 
       <nav className="flex flex-wrap gap-2 rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label={copy.viewsLabel}>
@@ -141,6 +143,7 @@ const drillLibraryCopy = {
     title: "Your reusable drill base",
     description: "Search, filter, favorite, duplicate, and manage the drills only you can access.",
     create: "Create drill",
+    importDrills: "Import Drills",
     clearFilters: "Clear filters",
     viewsLabel: "Drill library views",
     views: { active: "All Drills", published: "Published", drafts: "Drafts", archived: "Archived", trash: "Trash" }
@@ -150,6 +153,7 @@ const drillLibraryCopy = {
     title: "Deine wiederverwendbare Übungssammlung",
     description: "Suche, filtere, favorisiere, dupliziere und verwalte nur die Übungen, auf die du Zugriff hast.",
     create: "Übung erstellen",
+    importDrills: "Übungen importieren",
     clearFilters: "Filter zurücksetzen",
     viewsLabel: "Ansichten der Übungsbibliothek",
     views: { active: "Alle Übungen", published: "Veröffentlicht", drafts: "Entwürfe", archived: "Archiviert", trash: "Papierkorb" }

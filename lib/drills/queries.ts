@@ -34,6 +34,12 @@ const drillLibraryColumns = [
   "is_favorite",
   "tags",
   "status",
+  "import_batch_id",
+  "import_external_id",
+  "source_title",
+  "source_publisher",
+  "source_page",
+  "source_reference",
   "archived_at",
   "deleted_at",
   "created_at",
@@ -56,6 +62,8 @@ export type DrillFilters = {
   maxDuration?: number;
   material?: string;
   favorites?: boolean;
+  importBatch?: string;
+  source?: string;
 };
 
 export function parseDrillFilters(searchParams: Record<string, string | string[] | undefined>): DrillFilters {
@@ -83,7 +91,9 @@ export function parseDrillFilters(searchParams: Record<string, string | string[]
     minDuration: numberFilter("minDuration"),
     maxDuration: numberFilter("maxDuration"),
     material: get("material")?.trim() || undefined,
-    favorites: get("favorites") === "true"
+    favorites: get("favorites") === "true",
+    importBatch: get("importBatch") || undefined,
+    source: get("source")?.trim() || undefined
   };
 }
 
@@ -116,6 +126,11 @@ export async function listUserDrills(
   if (filters.minDuration) query = query.gte("duration_minutes", filters.minDuration);
   if (filters.maxDuration) query = query.lte("duration_minutes", filters.maxDuration);
   if (filters.favorites || filters.usage === "favorites") query = query.eq("is_favorite", true);
+  if (filters.importBatch) query = query.eq("import_batch_id", filters.importBatch);
+  if (filters.source) {
+    const source = filters.source.replaceAll("%", "").replaceAll("_", "");
+    query = query.or(`source_title.ilike.%${source}%,source_publisher.ilike.%${source}%`);
+  }
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -187,6 +202,12 @@ function mapDrillListRow(row: Partial<DrillRow>): Drill {
     is_favorite: row.is_favorite ?? false,
     tags: row.tags ?? [],
     status: row.status === "draft" ? "draft" : "published",
+    import_batch_id: row.import_batch_id ?? null,
+    import_external_id: row.import_external_id ?? null,
+    source_title: row.source_title ?? null,
+    source_publisher: row.source_publisher ?? null,
+    source_page: row.source_page ?? null,
+    source_reference: row.source_reference ?? null,
     archived_at: row.archived_at ?? null,
     deleted_at: row.deleted_at ?? null,
     created_at: row.created_at ?? "",

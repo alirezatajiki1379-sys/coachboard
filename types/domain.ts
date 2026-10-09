@@ -155,6 +155,12 @@ export type Drill = {
   isFavorite: boolean;
   tags: string[];
   status: "draft" | "published";
+  importBatchId?: string;
+  importExternalId?: string;
+  sourceTitle?: string;
+  sourcePublisher?: string;
+  sourcePage?: string;
+  sourceReference?: string;
   previewImageUrl?: string;
   archivedAt?: string;
   deletedAt?: string;
