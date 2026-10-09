@@ -18,6 +18,7 @@ export function SquadNav({ locale }: SquadNavProps) {
   const items = [
     { href: "/squad", label: messages.squad.nav.players },
     { href: "/squad/planner", label: messages.squad.nav.planner },
+    { href: "/squad/staff", label: messages.squad.nav.staff },
     { href: "/squad/attendance", label: messages.squad.nav.attendance },
     { href: "/squad/ratings", label: messages.squad.nav.ratings },
     { href: "/squad/development", label: messages.squad.nav.development },

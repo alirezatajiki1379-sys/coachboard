@@ -244,7 +244,8 @@ export function SessionForm({
             responsibilityMode: "unassigned",
             staffId: "",
             planningStatus: "needs_planning",
-            instruction: ""
+            instruction: "",
+            briefingText: ""
           }
         ]
       };
@@ -292,7 +293,7 @@ export function SessionForm({
   }
 
   function responsibilityStaffOptions(currentId?: string) {
-    return staff.filter((member) => member.id === currentId || Boolean(member.name));
+    return staff.filter((member) => member.id === currentId || member.isActive !== false);
   }
 
   function updateSessionDrill(id: string, patch: Partial<SessionFormDrill>) {
@@ -651,6 +652,7 @@ export function SessionForm({
                           <SelectInput label={ui("Planning status")} value={planSection.planningStatus} options={["ready", "needs_planning"]} onChange={(planningStatus) => updateSection(planSection.id, { planningStatus: planningStatus === "ready" ? "ready" : "needs_planning" })} emptyLabel={null} optionLabel={(value) => ui(value === "ready" ? "Ready" : "Needs planning")} />
                           <div className="sm:col-span-2"><TextArea label={ui("Section notes")} value={planSection.notes} onChange={(notes) => updateSection(planSection.id, { notes })} compact /></div>
                           <div className="sm:col-span-2"><TextArea label={ui("Planning instruction")} value={planSection.instruction} onChange={(instruction) => updateSection(planSection.id, { instruction })} compact /></div>
+                          <div className="sm:col-span-2 lg:col-span-4"><TextArea label={ui("Briefing text")} value={planSection.briefingText} onChange={(briefingText) => updateSection(planSection.id, { briefingText })} compact /></div>
                           <div className="sm:col-span-2 lg:col-span-4">
                             <Button type="button" variant="danger" className="h-9" onClick={() => deleteSection(planSection)}><Trash2 className="h-4 w-4" />{ui("Delete section")}</Button>
                           </div>
@@ -727,6 +729,7 @@ export function SessionForm({
                                             <p className="mt-1 text-xs font-semibold text-slate-500">
                                               {item.timingMode === "simultaneous" ? `${item.plannedDurationMinutes} min × ${Math.max(1, item.participatingGroups.length)} groups = ${effectiveStationDuration(item)} min` : "Runs sequentially"}
                                             </p>
+                                            {builderMode === "session" && planSection ? <p className="mt-1 text-xs font-semibold text-slate-500">{ui("Responsible coach")}: {item.responsibilityMode ? responsibilityLabel(item.responsibilityMode, staff, item.responsibleStaffId ?? "", ui) : `${responsibilityLabel(planSection.responsibilityMode, staff, planSection.staffId, ui)} · ${ui("Inherited")}`}</p> : null}
                                           </div>
                                           <div className="flex flex-wrap gap-2">
                                             <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => moveDrill(index, -1)} disabled={sectionItemIndex === 0}><ArrowUp className="h-4 w-4" /></Button>
@@ -973,6 +976,7 @@ function SessionOnlyDrillEditor({
         <TextArea label={ui("Session description")} value={item.descriptionOverride ?? drill.shortDescription ?? ""} onChange={(descriptionOverride) => onChange({ descriptionOverride })} compact />
         <TextArea label={ui("Organization")} value={item.organizationOverride ?? drill.organization ?? ""} onChange={(organizationOverride) => onChange({ organizationOverride })} compact />
         <TextArea label={ui("Session note")} value={item.sessionNote ?? ""} onChange={(sessionNote) => onChange({ sessionNote })} compact />
+        <div className="sm:col-span-2"><TextArea label={ui("Briefing text")} value={item.briefingText ?? ""} onChange={(briefingText) => onChange({ briefingText })} compact /></div>
 
         <fieldset className="sm:col-span-2">
           <legend className="text-xs font-semibold text-slate-600">{ui("Coaching Points for this Training")}</legend>
@@ -1009,7 +1013,7 @@ function SessionOnlyDrillEditor({
           </select>
         </label>
         {responsibilityMode === "staff" || responsibilityMode === "together" ? (
-          <SelectInput label={ui("Staff member")} value={item.responsibleStaffId ?? ""} options={staff.map((member) => member.id)} onChange={(responsibleStaffId) => onChange({ responsibleStaffId })} emptyLabel="Choose staff" optionLabel={(id) => staff.find((member) => member.id === id)?.name ?? id} />
+          <SelectInput label={ui("Staff member")} value={item.responsibleStaffId ?? ""} options={staff.filter((member) => member.isActive !== false || member.id === item.responsibleStaffId).map((member) => member.id)} onChange={(responsibleStaffId) => onChange({ responsibleStaffId })} emptyLabel="Choose staff" optionLabel={(id) => staffOptionLabel(staff.find((member) => member.id === id), ui) ?? id} />
         ) : <div />}
         <SelectInput label={ui("Planning status")} value={item.planningStatus ?? "ready"} options={["ready", "needs_planning"]} onChange={(planningStatus) => onChange({ planningStatus: planningStatus === "needs_planning" ? "needs_planning" : "ready" })} emptyLabel={null} optionLabel={(value) => ui(value === "ready" ? "Ready" : "Needs planning")} />
         <TextArea label={ui("Planning instruction")} value={item.planningInstruction ?? ""} onChange={(planningInstruction) => onChange({ planningInstruction })} compact />
@@ -1030,7 +1034,7 @@ function ResponsibilityInput({ mode, staffId, staff, onModeChange, onStaffChange
     <div className="space-y-2">
       <SelectInput label={ui("Responsibility")} value={mode} options={["unassigned", "me", "staff", "together"]} onChange={(value) => onModeChange(value as SessionPlanSection["responsibilityMode"])} emptyLabel={null} optionLabel={(value) => ui(value === "unassigned" ? "Unassigned" : value === "me" ? "Me" : value === "staff" ? "Staff member" : "Together")} />
       {mode === "staff" || mode === "together" ? (
-        <SelectInput label={ui("Staff member")} value={staffId} options={staff.map((member) => member.id)} onChange={onStaffChange} emptyLabel="Choose staff" optionLabel={(id) => staff.find((member) => member.id === id)?.name ?? id} />
+        <SelectInput label={ui("Staff member")} value={staffId} options={staff.map((member) => member.id)} onChange={onStaffChange} emptyLabel="Choose staff" optionLabel={(id) => staffOptionLabel(staff.find((member) => member.id === id), ui) ?? id} />
       ) : null}
     </div>
   );
@@ -1044,6 +1048,11 @@ function responsibilityLabel(mode: SessionPlanSection["responsibilityMode"], sta
     return name ? `${ui("Together")} · ${name}` : ui("Together");
   }
   return ui("Unassigned");
+}
+
+function staffOptionLabel(member: SessionPlanStaff | undefined, ui: (value: string) => string) {
+  if (!member) return undefined;
+  return member.isActive === false ? `${member.name} · ${ui("Inactive")}` : member.name;
 }
 
 function coachingPointLines(value?: string) {
@@ -1126,7 +1135,8 @@ function normalizeBuilderValues(values: SessionFormValues, builderMode: "templat
         responsibilityMode: "unassigned" as const,
         staffId: "",
         planningStatus: "ready" as const,
-        instruction: ""
+        instruction: "",
+        briefingText: ""
       }));
   const normalizedSections = sections.length ? sections : [{
     id: "initial-main-part",
@@ -1138,7 +1148,8 @@ function normalizeBuilderValues(values: SessionFormValues, builderMode: "templat
     responsibilityMode: "unassigned" as const,
     staffId: "",
     planningStatus: "needs_planning" as const,
-    instruction: ""
+    instruction: "",
+    briefingText: ""
   }];
   const keyByTitle = new Map(normalizedSections.map((section) => [section.title, section.key]));
   return {

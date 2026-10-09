@@ -23,7 +23,7 @@ type PlanRow = { id: string; title: string; source_training_session_id: string |
 type SectionRow = {
   id: string; section_key: string; title: string; order_index: number; duration_minutes: number; section_notes: string | null;
   responsibility_mode: SessionPlanSection["responsibilityMode"]; staff_id: string | null;
-  planning_status: SessionPlanSection["planningStatus"]; instruction: string | null;
+  planning_status: SessionPlanSection["planningStatus"]; instruction: string | null; briefing_text: string | null;
 };
 type DrillInstanceRow = {
   id: string; source_drill_id: string | null; title: string; block: string | null; order_index: number;
@@ -73,7 +73,7 @@ export default async function TrainingPlanPage({ params }: PageProps) {
 
   const plan = planData as PlanRow;
   const [sectionsResult, instancesResult, staffResult, libraryDrills] = await Promise.all([
-    db.from("training_section_briefs").select("id,section_key,title,order_index,duration_minutes,section_notes,responsibility_mode,staff_id,planning_status,instruction").eq("user_id", user.id).eq("event_id", id).order("order_index"),
+    db.from("training_section_briefs").select("id,section_key,title,order_index,duration_minutes,section_notes,responsibility_mode,staff_id,planning_status,instruction,briefing_text").eq("user_id", user.id).eq("event_id", id).order("order_index"),
     db.from("training_session_drill_instances").select("id,source_drill_id,title,block,order_index,planned_duration_minutes,snapshot_json,override_json,section_id,responsibility_mode,responsible_staff_id,planning_status,planning_instruction").eq("user_id", user.id).eq("event_id", id).neq("status", "removed").order("order_index"),
     event.squadId ? db.from("squad_staff").select("id,name,role,is_active").eq("user_id", user.id).eq("squad_id", event.squadId).order("name") : Promise.resolve({ data: [], error: null }),
     getDrillsForSessionBuilder(supabase, user.id)
@@ -90,7 +90,13 @@ export default async function TrainingPlanPage({ params }: PageProps) {
   });
   const signedUrls = await createSignedImageUrlMap(supabase, snapshotPaths);
   const snapshotDrills = instanceRows.map((row) => snapshotDrill(row, user.id, signedUrls));
-  const staff = (staffResult.data ?? []).filter((member) => member.is_active).map((member) => ({ id: member.id, name: member.name, role: member.role })) as SessionPlanStaff[];
+  const referencedStaffIds = new Set([
+    ...sectionRows.flatMap((section) => section.staff_id ? [section.staff_id] : []),
+    ...instanceRows.flatMap((drill) => drill.responsible_staff_id ? [drill.responsible_staff_id] : [])
+  ]);
+  const staff = (staffResult.data ?? [])
+    .filter((member) => member.is_active || referencedStaffIds.has(member.id))
+    .map((member) => ({ id: member.id, name: member.name, role: member.role, isActive: member.is_active })) as SessionPlanStaff[];
   const initialValues = buildInitialValues(plan, event, sectionRows, instanceRows);
   return <div className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><BackLink eventId={id} label={ui("Back to training")} /><Link href={`/trainings/${id}/brief`} className="text-sm font-bold text-board-green hover:underline">{ui("Open Staff Brief")}</Link></div>
@@ -100,10 +106,10 @@ export default async function TrainingPlanPage({ params }: PageProps) {
       <form action={addSessionPlanStaff} className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
         <input type="hidden" name="eventId" value={id} />
         <label className="text-xs font-semibold text-slate-600">{ui("Coach name")}<input name="name" required maxLength={120} className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm" /></label>
-        <label className="text-xs font-semibold text-slate-600">{ui("Role")}<input name="role" maxLength={80} placeholder={ui("Assistant coach")} className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm" /></label>
+        <label className="text-xs font-semibold text-slate-600">{ui("Role")}<input name="role" maxLength={80} placeholder={ui("Assistant Coach")} className="mt-1 h-10 w-full rounded-md border border-board-line px-3 text-sm" /></label>
         <Button type="submit" variant="secondary">{ui("Add coach")}</Button>
       </form>
-      {staff.length ? <div className="mt-3 flex flex-wrap gap-2">{staff.map((member) => <span key={member.id} translate="no" className="rounded-full bg-board-paper px-3 py-1 text-xs font-semibold text-slate-700">{member.name}{member.role ? ` · ${member.role}` : ""}</span>)}</div> : <p className="mt-3 text-sm text-slate-500">{ui("Add a coach to assign Training sections.")}</p>}
+      {staff.length ? <div className="mt-3 flex flex-wrap gap-2">{staff.map((member) => <span key={member.id} className="rounded-full bg-board-paper px-3 py-1 text-xs font-semibold text-slate-700"><span translate="no">{member.name}</span>{member.role ? ` · ${staffRoleLabel(member.role, ui)}` : ""}{member.isActive === false ? ` · ${ui("Inactive")}` : ""}</span>)}</div> : <p className="mt-3 text-sm text-slate-500">{ui("Add a coach to assign Training sections.")}</p>}
     </details>
     <SessionForm action={updateConcreteSessionPlan} mode="edit" builderMode="session" eventId={id} drills={[...libraryDrills, ...snapshotDrills]} initialValues={initialValues} staff={staff} cancelHref={`/trainings/${id}`} />
   </div>;
@@ -113,10 +119,14 @@ function BackLink({ eventId, label }: { eventId: string; label: string }) {
   return <Link href={`/trainings/${eventId}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy"><ArrowLeft className="h-4 w-4" />{label}</Link>;
 }
 
+function staffRoleLabel(role: string, ui: (value: string) => string) {
+  return ["Head Coach", "Assistant Coach", "Goalkeeper Coach", "Athletic Coach", "Analyst"].includes(role) ? ui(role) : role;
+}
+
 function buildInitialValues(plan: PlanRow, event: SquadTrainingEventDetail, sections: SectionRow[], drills: DrillInstanceRow[]): SessionFormValues {
   const value = record(plan.plan_json);
   const sectionById = new Map(sections.map((section) => [section.id, section]));
-  const normalizedSections: SessionPlanSection[] = sections.map((section, orderIndex) => ({ id: section.id, key: section.section_key, title: section.title, orderIndex, durationMinutes: section.duration_minutes, notes: section.section_notes ?? "", responsibilityMode: section.responsibility_mode, staffId: section.staff_id ?? "", planningStatus: section.planning_status, instruction: section.instruction ?? "" }));
+  const normalizedSections: SessionPlanSection[] = sections.map((section, orderIndex) => ({ id: section.id, key: section.section_key, title: section.title, orderIndex, durationMinutes: section.duration_minutes, notes: section.section_notes ?? "", responsibilityMode: section.responsibility_mode, staffId: section.staff_id ?? "", planningStatus: section.planning_status, instruction: section.instruction ?? "", briefingText: section.briefing_text ?? "" }));
   return {
     title: stringValue(value?.title) || plan.title,
     sessionDate: stringValue(value?.sessionDate) || event.date,
@@ -130,7 +140,7 @@ function buildInitialValues(plan: PlanRow, event: SquadTrainingEventDetail, sect
       const section = row.section_id ? sectionById.get(row.section_id) : sections.find((item) => item.title === row.block);
       return { id: row.id, drillId: `session:${row.id}`, block: section?.section_key ?? normalizedSections[0]?.key ?? "main-part", plannedDurationMinutes: row.planned_duration_minutes ?? 1, coachNotes: stringValue(override?.coachNotes), orderIndex,
         timingMode: override?.timingMode === "simultaneous" ? "simultaneous" : "sequential", simultaneousGroup: stringValue(override?.simultaneousGroup) || "set-1", participatingGroups: stringArray(override?.participatingGroups), startingGroup: stringValue(override?.startingGroup),
-        titleOverride: stringValue(override?.title) || (row.title !== sourceTitle ? row.title : undefined), descriptionOverride: optionalString(override?.description), organizationOverride: optionalString(override?.organization), selectedCoachingPoints: Array.isArray(override?.coachingPoints) ? stringArray(override?.coachingPoints) : undefined, sessionNote: optionalString(override?.sessionNote),
+        titleOverride: stringValue(override?.title) || (row.title !== sourceTitle ? row.title : undefined), descriptionOverride: optionalString(override?.description), organizationOverride: optionalString(override?.organization), selectedCoachingPoints: Array.isArray(override?.coachingPoints) ? stringArray(override?.coachingPoints) : undefined, sessionNote: optionalString(override?.sessionNote), briefingText: optionalString(override?.briefingText),
         responsibilityMode: row.responsibility_mode ?? undefined, responsibleStaffId: row.responsible_staff_id ?? undefined, planningStatus: row.planning_status ?? undefined, planningInstruction: row.planning_instruction ?? undefined };
     })
   };

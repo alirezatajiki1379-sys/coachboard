@@ -80,7 +80,8 @@ export async function updateConcreteSessionPlan(_: SessionActionState, formData:
       section_notes: nullable(section.notes),
       ...responsibilityColumns(section.responsibilityMode, section.staffId),
       planning_status: section.planningStatus === "ready" ? "ready" : "needs_planning",
-      instruction: nullable(section.instruction)
+      instruction: nullable(section.instruction),
+      briefing_text: nullable(section.briefingText)
     }));
 
     if (sectionRows.length) {
@@ -194,13 +195,13 @@ export async function applyTrainingPlanTemplate(formData: FormData) {
 export async function addSessionPlanStaff(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const name = formString(formData, "name");
-  const role = formString(formData, "role") || "Assistant coach";
+  const role = formString(formData, "role") || "Assistant Coach";
   if (!eventId || !name) redirect(eventId ? `/trainings/${eventId}/plan` : "/trainings");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
   const event = await getOwnedEvent(db, user.id, eventId);
   if (!event?.squad_id) throw new Error("This Training is not assigned to a Team.");
-  const { error } = await db.from("squad_staff").insert({ user_id: user.id, squad_id: event.squad_id, name, role });
+  const { error } = await db.from("squad_staff").insert({ user_id: user.id, squad_id: event.squad_id, name, role, is_active: true });
   if (error) throw new Error(error.message);
   revalidateTraining(eventId);
   redirect(`/trainings/${eventId}/plan`);
@@ -591,7 +592,8 @@ function normalizeSections(sections: SessionPlanSection[], drills: SessionFormDr
     responsibilityMode: "unassigned" as const,
     staffId: "",
     planningStatus: "needs_planning" as const,
-    instruction: ""
+    instruction: "",
+    briefingText: ""
   }));
 }
 
@@ -618,6 +620,7 @@ function drillOverride(item: SessionFormDrill, sourceTitle: string, existing?: J
     organization: nullable(item.organizationOverride),
     coachingPoints: item.selectedCoachingPoints ?? null,
     sessionNote: nullable(item.sessionNote),
+    briefingText: nullable(item.briefingText),
     timingMode: item.timingMode,
     simultaneousGroup: item.simultaneousGroup,
     participatingGroups: item.participatingGroups,

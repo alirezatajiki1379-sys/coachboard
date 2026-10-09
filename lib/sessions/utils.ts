@@ -32,6 +32,7 @@ export type SessionFormDrill = {
   organizationOverride?: string;
   selectedCoachingPoints?: string[];
   sessionNote?: string;
+  briefingText?: string;
   responsibilityMode?: PlanResponsibilityMode;
   responsibleStaffId?: string;
   planningStatus?: PlanPlanningStatus;
@@ -52,12 +53,14 @@ export type SessionPlanSection = {
   staffId: string;
   planningStatus: PlanPlanningStatus;
   instruction: string;
+  briefingText: string;
 };
 
 export type SessionPlanStaff = {
   id: string;
   name: string;
   role?: string;
+  isActive?: boolean;
 };
 
 export type SessionFormValues = {

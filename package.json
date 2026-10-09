@@ -27,6 +27,8 @@
     "test:drill-image-upload": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/drill-image-upload-regression.mjs",
     "test:apply-as-expected": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/apply-as-expected-attendance-regression.mjs",
     "test:session-plan": "node scripts/session-plan-builder-regression.mjs",
+    "test:staff-brief": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/staff-brief-regression.mjs",
+    "test:staff-brief-browser": "node scripts/staff-brief-browser.mjs",
     "test:core-stability": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/core-stability-regression.mjs",
     "test:localization": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/localization-regression.mjs",
     "i18n:inventory": "node scripts/localization-inventory.mjs"

@@ -13,6 +13,7 @@ const { chromium, webkit } = qaRequire("playwright");
 const stubs = {
   "next/link": `import React from "react"; export const useLinkStatus=()=>({pending:false}); export default function Link({href,children,onClick,...props}) {return <a href={href} onClick={e=>{onClick?.(e);if(!e.defaultPrevented){e.preventDefault();window.qa.destination=href;}}} {...props}>{children}</a>}`,
   "next/image": 'import React from "react"; export default function Image({src,alt,...props}) {return <img src={src} alt={alt} {...props}/>}',
+  "next/cache": 'export const revalidatePath=()=>{};',
   "next/navigation": 'export const usePathname=()=>"/squad"; export const useSearchParams=()=>new URLSearchParams(); export const useRouter=()=>({push(){},replace(){},refresh(){}});',
   "@/lib/supabase/client": 'export const createClient=()=>({from:()=>({select:()=>({order:async()=>({data:[],error:null})})})});',
   "@/lib/supabase/server": 'export const createClient=()=>{throw new Error("No real Supabase access in mobile fixtures")};'
@@ -32,7 +33,7 @@ const bundle = await build({
     import {TrainingEventForm} from "@/components/squad/training-event-form";
     import {SessionForm} from "@/components/sessions/session-form";
     import {TrainingParticipantsTable} from "@/components/squad/training-participants-table";
-    import {StaffBriefView} from "@/components/squad/staff-brief-view";
+    import {StaffBriefComposer} from "@/components/squad/staff-brief-composer";
     import {SquadTacticalPlanner} from "@/components/squad/squad-tactical-planner";
     import {tacticalFormations} from "@/lib/squad/tactical-formations";
     import {DrillFilters} from "@/components/drills/drill-filters";
@@ -56,7 +57,8 @@ const bundle = await build({
     const plannerData={squad:team,plans:[{id:"plan",userId:"user",squadId:"team",name:"Fictional "+plannerFormationCode,formationCode:plannerFormationCode,isDefault:true,includeNewPlayersAutomatically:true,status:"active"}],selectedPlan:{id:"plan",userId:"user",squadId:"team",name:"Fictional "+plannerFormationCode,formationCode:params.get("view")==="planner-custom"?"Custom":plannerFormationCode,isDefault:true,includeNewPlayersAutomatically:true,status:"active"},slots:plannerSlots,assignments:plannerAssignments,playerStates:[],players:plannerPlayers,warnings:[]};
     const attendance=[{id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player},{id:"trial-entry",eventId:"event",playerId:"trial",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player:trial}];
     const developmentGoal={id:"goal",title:"Receiving under pressure",category:"technical",priority:"medium",successCriteria:"Receive on the back foot",reviewDate:"2026-10-01",latestProgress:{level:"developing",note:"Improving",recordedAt:"2026-09-18"}};
-    const brief={eventId:"event",title:"Fictional Training",date:"2026-09-21",startTime:"18:00",endTime:"19:30",location:"Example pitch",objective:"Create overloads",focus:"Wide play",counts:{expected:18,goalkeepers:2,fieldPlayers:16,positionOpen:0,trialPlayers:1,notExpected:4,unclear:0},expectedNames:["Fictional Player One","Fictional Player Two"],sections:[{key:"Warm-up",durationMinutes:10,startMinute:0,drills:["Ball activation"],responsibleCoach:"Tobi Example",planningStatus:"needs_planning",instruction:"Plan a short activation."},{key:"Main Part",durationMinutes:25,startMinute:10,drills:["Passing sequence"],responsibleCoach:"Alex Example",planningStatus:"ready"}]};
+    const emptyVisual={graphic:{version:1,pitch:"Full football pitch",pitchStyle:"Plain green",objects:[]},source:"editor"};
+    const brief={eventId:"event",title:"Fictional Training",team:"U15 Fictional Training Team",date:"2026-09-21",startTime:"18:00",endTime:"19:30",location:"Example pitch",objective:"Create overloads",staff:[{id:"tobi",name:"Tobi Example",role:"Assistant Coach",isActive:true},{id:"alex",name:"Alex Example",role:"Head Coach",isActive:true}],counts:{expected:18,goalkeepers:2,fieldPlayers:16,unavailable:4,unclear:0,trials:1},expectedNames:["Fictional Player One","Fictional Player Two"],sections:[{id:"warm-up",key:"Warm-up",title:"Warm-up",orderIndex:0,durationMinutes:10,notes:"",briefingText:"Ball activation",responsibilityMode:"staff",staffId:"tobi",planningStatus:"needs_planning",instruction:"Plan a short activation.",drills:[]},{id:"main",key:"Main Part",title:"Main Part",orderIndex:1,durationMinutes:25,notes:"",briefingText:"",responsibilityMode:"staff",staffId:"alex",planningStatus:"ready",instruction:"",drills:[{id:"drill",title:"Passing sequence",durationMinutes:25,fallbackText:"Pass through pressure.",briefingText:"",organization:"",sessionNote:"",coachingPoints:["Open body shape","Play forward"],equipment:["8 balls"],visual:emptyVisual,planningInstruction:""}]}]};
     const drill={id:"drill",title:"Fictional passing drill",mainFocus:"Passing",trainingBlocks:["Main part 1"],drillType:"Technical",durationMinutes:15,minPlayers:6,maxPlayers:12,tags:[],materials:Array.from({length:25},(_,i)=>({type:"other",quantity:i+1,label:"Fictional equipment "+i})),isFavorite:false,ageGroups:[],status:"published"};
     const action=async()=>{window.qa.saves++;return {};};
     function Dirty(){const {dialog}=useUnsavedChangesProtection({isDirty:true});return <><ButtonLink href="/dashboard">Leave form</ButtonLink>{dialog}</>;}
@@ -73,7 +75,7 @@ const bundle = await build({
        view==="scouting"?<><ScoutingNav locale={locale} active="players"/><ScoutingPlayerForm action={action} locale={locale}/></>:
        view==="participants"?<TrainingParticipantsTable eventId="event" eventDate="2026-09-20" attendance={attendance} developmentGoals={[["player",[developmentGoal]]]} groupLabelsByPlayerId={[]} summary={{expected:2,notExpected:0,goalkeepers:0,fieldPlayers:2,defensive:0,midfield:1,attacking:1,positionMissing:0}}/>:
        view==="planner"||view==="planner-custom"?<SquadTacticalPlanner data={plannerData}/>:
-       view==="staff-brief"?<StaffBriefView data={brief} locale={locale}/>:
+       view==="staff-brief"?<StaffBriefComposer data={brief} locale={locale}/>:
        view==="library"?<><DrillFilters locale={locale} filters={{view:"active",usage:"all",sort:"updated"}}/><DrillCard drill={drill}/></>:
        view==="dialog"?<Dirty/>:<PageHeaderSkeleton/>}
       </section></PageContainer></AppShell>;}

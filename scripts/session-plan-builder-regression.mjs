@@ -35,7 +35,8 @@ assert.match(brief, /training_section_briefs/);
 assert.match(brief, /training_session_drill_instances/);
 assert.match(brief, /override_json/);
 assert.match(brief, /coachingPoints/);
-assert.match(brief, /responsibilityText/);
+assert.match(brief, /StaffBriefComposer/);
+assert.match(brief, /briefing_text/);
 
 for (const column of ["plan_json", "override_json", "section_id", "responsibility_mode", "planning_instruction"]) {
   assert.ok(migration.includes(column), `Production migration must contain ${column}`);

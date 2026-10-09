@@ -66,6 +66,133 @@ textarea {
   background-size: 28px 28px;
 }
 
+.print-only {
+  display: none;
+}
+
+.staff-brief-sheet {
+  page: staff-brief;
+}
+
+.staff-brief-header {
+  border-bottom: 2px solid #13202f;
+  padding-bottom: 0.75rem;
+}
+
+.staff-brief-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #d9e2dc;
+  background: #f7faf8;
+}
+
+.staff-brief-band {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid #18864b;
+  background: #f2f8f4;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.staff-brief-band h2,
+.staff-brief-heading {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #526273;
+}
+
+.staff-brief-timeline {
+  margin-top: 0.85rem;
+}
+
+.staff-brief-section {
+  border: 1px solid #d9e2dc;
+  padding: 0.65rem;
+}
+
+.staff-brief-highlight {
+  border-color: #18864b;
+  background: #f7fbf8;
+}
+
+.staff-brief-drill {
+  border-top: 1px solid #e5ebe7;
+  background: #f9fbfa;
+  padding: 0.55rem;
+}
+
+.staff-brief-instruction {
+  margin-top: 0.35rem;
+  border-left: 2px solid #d49b16;
+  padding: 0.3rem 0.45rem;
+  background: #fff9e9;
+  color: #6d5314;
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.staff-brief-visual {
+  min-height: 76px;
+  aspect-ratio: 4 / 3;
+}
+
+.staff-brief-compact {
+  padding: 1rem;
+}
+
+.staff-brief-compact .staff-brief-section {
+  padding: 0.45rem;
+}
+
+.staff-brief-compact .staff-brief-drill {
+  padding: 0.4rem;
+}
+
+.staff-brief-measure {
+  position: fixed !important;
+  top: 0 !important;
+  left: -10000px !important;
+  width: 718px !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.staff-brief-measure .no-print {
+  display: none !important;
+}
+
+.staff-brief-measure .print-only {
+  display: block !important;
+}
+
+.staff-brief-measure .staff-brief-drill > .grid {
+  grid-template-columns: minmax(0, 1fr) 118px !important;
+}
+
+.staff-brief-measure .staff-brief-visual {
+  min-height: 64px !important;
+  height: 88px !important;
+}
+
+@media screen and (max-width: 480px) {
+  .staff-brief-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@page staff-brief {
+  size: A4 portrait;
+  margin: 10mm;
+}
+
 /* Screen-only adaptations leave the A4/export rules and canvas geometry intact. */
 @media screen and (max-width: 1023px) {
   .app-main {
@@ -175,6 +302,10 @@ textarea {
     display: none !important;
   }
 
+  .print-only {
+    display: block !important;
+  }
+
   .lg\:pl-72 {
     padding-left: 0 !important;
   }
@@ -187,6 +318,20 @@ textarea {
     width: 100% !important;
     margin: 0 !important;
     box-shadow: none !important;
+  }
+
+  .staff-brief-composer {
+    display: block !important;
+  }
+
+  .staff-brief-sheet {
+    border: 0 !important;
+    padding: 0 !important;
+    color: #13202f !important;
+  }
+
+  .staff-brief-visual {
+    min-height: 64px;
   }
 
   .print-avoid {
