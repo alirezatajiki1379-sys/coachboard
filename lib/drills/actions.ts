@@ -18,6 +18,13 @@ import {
 import { drillImageExtension, DrillImageError, type DrillImageErrorCode, type DrillImageMimeType } from "@/lib/drills/image-upload";
 import { getUserDrill } from "@/lib/drills/queries";
 import { mapDrillToDuplicateInsert } from "@/lib/drills/mappers";
+import {
+  chunkDrillBulkItems,
+  groupDrillsByResultingTags,
+  normalizeBulkDrillIds,
+  normalizeBulkDrillTags,
+  type DrillBulkRecord
+} from "@/lib/drills/bulk";
 
 export type DrillActionState = {
   error?: string;
@@ -40,6 +47,18 @@ export type DrillActionState = {
 export type DrillDeleteState = {
   error?: string;
   submissionId?: number;
+};
+
+export type DrillBulkAction = "archive" | "restore" | "favorite" | "unfavorite" | "add_tags" | "remove_tags" | "trash";
+
+export type DrillBulkActionResult = {
+  ok: boolean;
+  action: DrillBulkAction;
+  requestedCount: number;
+  affectedIds: string[];
+  unchangedCount: number;
+  failedIds: string[];
+  error?: string;
 };
 
 async function requireUser() {
@@ -431,4 +450,184 @@ export async function toggleFavorite(formData: FormData) {
   revalidatePath("/drills");
   revalidatePath(`/drills/${drillId}`);
   return { ok: true };
+}
+
+export async function bulkArchiveDrills(input: { drillIds: string[] }): Promise<DrillBulkActionResult> {
+  return runBulkDrillMutation("archive", input.drillIds, (record) => !record.deleted_at && !record.archived_at, {
+    archived_at: new Date().toISOString(),
+    deleted_at: null
+  });
+}
+
+export async function bulkRestoreDrills(input: { drillIds: string[] }): Promise<DrillBulkActionResult> {
+  return runBulkDrillMutation("restore", input.drillIds, (record) => Boolean(record.archived_at || record.deleted_at), {
+    archived_at: null,
+    deleted_at: null
+  });
+}
+
+export async function bulkSetDrillFavorite(input: { drillIds: string[]; favorite: boolean }): Promise<DrillBulkActionResult> {
+  return runBulkDrillMutation(
+    input.favorite ? "favorite" : "unfavorite",
+    input.drillIds,
+    (record) => !record.deleted_at && !record.archived_at && Boolean(record.is_favorite) !== input.favorite,
+    { is_favorite: input.favorite }
+  );
+}
+
+export async function bulkMoveDrillsToTrash(input: { drillIds: string[] }): Promise<DrillBulkActionResult> {
+  return runBulkDrillMutation("trash", input.drillIds, (record) => !record.deleted_at, {
+    deleted_at: new Date().toISOString()
+  });
+}
+
+export async function bulkUpdateDrillTags(input: {
+  drillIds: string[];
+  tags: string[];
+  mode: "add" | "remove";
+}): Promise<DrillBulkActionResult> {
+  const action: DrillBulkAction = input.mode === "add" ? "add_tags" : "remove_tags";
+  const drillIds = normalizeBulkDrillIds(input.drillIds);
+  const tags = normalizeBulkDrillTags(input.tags);
+  if (!drillIds.length || !tags.length) return emptyBulkResult(action, drillIds.length, "Select at least one drill and one tag.");
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const loaded = await loadOwnedBulkDrills(db, user.id, drillIds);
+  if (loaded.error) return emptyBulkResult(action, drillIds.length, loaded.error, loaded.failedIds);
+
+  const eligible = loaded.records.filter((record) => !record.deleted_at && !record.archived_at);
+  const groups = groupDrillsByResultingTags(eligible, tags, input.mode);
+  const affectedIds: string[] = [];
+  const failedIds = [...loaded.failedIds];
+  const errors: string[] = [...loaded.errors];
+
+  for (const group of groups) {
+    for (const ids of chunkDrillBulkItems(group.ids)) {
+      const { data, error } = await db
+        .from("drills")
+        .update({ tags: group.tags })
+        .eq("user_id", user.id)
+        .in("id", ids)
+        .is("deleted_at", null)
+        .is("archived_at", null)
+        .select("id");
+      if (error) {
+        failedIds.push(...ids);
+        errors.push(error.message);
+      } else {
+        affectedIds.push(...((data ?? []) as Array<{ id: string }>).map((row) => row.id));
+      }
+    }
+  }
+
+  revalidateDrillLists();
+  return finishBulkResult(action, drillIds, affectedIds, failedIds, errors);
+}
+
+async function runBulkDrillMutation(
+  action: DrillBulkAction,
+  rawIds: string[],
+  isEligible: (record: DrillBulkRecord) => boolean,
+  update: Record<string, unknown>
+): Promise<DrillBulkActionResult> {
+  const drillIds = normalizeBulkDrillIds(rawIds);
+  if (!drillIds.length) return emptyBulkResult(action, 0, "Select at least one drill.");
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const loaded = await loadOwnedBulkDrills(db, user.id, drillIds);
+  if (loaded.error) return emptyBulkResult(action, drillIds.length, loaded.error, loaded.failedIds);
+
+  const eligibleIds = loaded.records.filter(isEligible).map((record) => record.id);
+  const affectedIds: string[] = [];
+  const failedIds = [...loaded.failedIds];
+  const errors: string[] = [...loaded.errors];
+
+  for (const ids of chunkDrillBulkItems(eligibleIds)) {
+    let updateQuery = db
+      .from("drills")
+      .update(update)
+      .eq("user_id", user.id)
+      .in("id", ids);
+    if (action === "archive") updateQuery = updateQuery.is("deleted_at", null).is("archived_at", null);
+    if (action === "favorite" || action === "unfavorite") updateQuery = updateQuery.is("deleted_at", null).is("archived_at", null);
+    if (action === "trash") updateQuery = updateQuery.is("deleted_at", null);
+    const { data, error } = await updateQuery.select("id");
+    if (error) {
+      failedIds.push(...ids);
+      errors.push(error.message);
+    } else {
+      affectedIds.push(...((data ?? []) as Array<{ id: string }>).map((row) => row.id));
+    }
+  }
+
+  revalidateDrillLists();
+  return finishBulkResult(action, drillIds, affectedIds, failedIds, errors);
+}
+
+async function loadOwnedBulkDrills(db: SupabaseClient, userId: string, drillIds: string[]) {
+  const records: DrillBulkRecord[] = [];
+  const failedIds: string[] = [];
+  const errors: string[] = [];
+
+  for (const ids of chunkDrillBulkItems(drillIds)) {
+    const { data, error } = await db
+      .from("drills")
+      .select("id,tags,is_favorite,archived_at,deleted_at")
+      .eq("user_id", userId)
+      .in("id", ids);
+    if (error) {
+      failedIds.push(...ids);
+      errors.push(error.message);
+    } else {
+      records.push(...((data ?? []) as DrillBulkRecord[]));
+    }
+  }
+
+  return {
+    records,
+    failedIds,
+    errors,
+    error: errors.length && !records.length ? errors.join(" ") : undefined
+  };
+}
+
+function finishBulkResult(
+  action: DrillBulkAction,
+  requestedIds: string[],
+  affectedIds: string[],
+  failedIds: string[],
+  errors: string[]
+): DrillBulkActionResult {
+  const affected = new Set(affectedIds);
+  const failed = new Set(failedIds.filter((id) => !affected.has(id)));
+  const unchangedCount = Math.max(0, requestedIds.length - affected.size - failed.size);
+  return {
+    ok: errors.length === 0 || affected.size > 0,
+    action,
+    requestedCount: requestedIds.length,
+    affectedIds: [...affected],
+    unchangedCount,
+    failedIds: [...failed],
+    error: errors.length ? Array.from(new Set(errors)).join(" ") : undefined
+  };
+}
+
+function emptyBulkResult(action: DrillBulkAction, requestedCount: number, error: string, failedIds: string[] = []): DrillBulkActionResult {
+  return {
+    ok: false,
+    action,
+    requestedCount,
+    affectedIds: [],
+    unchangedCount: Math.max(0, requestedCount - failedIds.length),
+    failedIds,
+    error
+  };
+}
+
+function revalidateDrillLists() {
+  revalidatePath("/drills");
+  revalidatePath("/dashboard");
+  revalidatePath("/sessions");
 }

@@ -13,9 +13,13 @@ import type { DrillUsageStats } from "@/lib/drills/usage";
 type DrillCardProps = {
   drill: Drill & { visual?: DrillVisual; usage?: DrillUsageStats };
   view?: "active" | "published" | "drafts" | "archived" | "trash";
+  selectionMode?: boolean;
+  selected?: boolean;
+  onSelectionToggle?: () => void;
+  selectionLabel?: string;
 };
 
-export function DrillCard({ drill, view = "active" }: DrillCardProps) {
+export function DrillCard({ drill, view = "active", selectionMode = false, selected = false, onSelectionToggle, selectionLabel }: DrillCardProps) {
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const materialsPopoverRef = useRef<HTMLDivElement | null>(null);
   const visibleMaterials = drill.materials.slice(0, 4);
@@ -41,7 +45,21 @@ export function DrillCard({ drill, view = "active" }: DrillCardProps) {
   }, [materialsOpen]);
 
   return (
-    <article className="min-w-0 break-words rounded-lg border border-board-line bg-white shadow-soft">
+    <article className={`group relative min-w-0 break-words rounded-lg border bg-white shadow-soft transition ${selected ? "border-board-green ring-2 ring-board-green/20" : "border-board-line"}`}>
+      {onSelectionToggle ? (
+        <label
+          className={`absolute left-3 top-3 z-20 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md border bg-white/95 shadow-sm transition focus-within:ring-2 focus-within:ring-board-green ${selectionMode || selected ? "border-board-green opacity-100" : "border-board-line opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}
+          title={selectionLabel ?? `Select Drill: ${drill.title}`}
+        >
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onSelectionToggle}
+            aria-label={selectionLabel ?? `Select Drill: ${drill.title}`}
+            className="h-5 w-5 rounded border-slate-300 text-board-green focus:ring-board-green"
+          />
+        </label>
+      ) : null}
       <div className="overflow-hidden rounded-t-lg bg-board-grass">
         <DrillVisualPreview visual={drill.visual} title={drill.title} previewMode="thumbnail" />
       </div>

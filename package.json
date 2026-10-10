@@ -27,6 +27,8 @@
     "test:squad-planner": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/squad-planner-regression.mjs",
     "test:drill-image-upload": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/drill-image-upload-regression.mjs",
     "test:drill-import": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/drill-import-regression.mjs",
+    "test:drill-bulk": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/drill-library-bulk-regression.mjs",
+    "test:drill-bulk-browser": "node scripts/drill-library-bulk-browser.mjs",
     "validate:drill-import": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/validate-drill-import.mjs",
     "fixture:drill-import": "node scripts/create-drill-import-fixture.mjs",
     "test:apply-as-expected": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/apply-as-expected-attendance-regression.mjs",

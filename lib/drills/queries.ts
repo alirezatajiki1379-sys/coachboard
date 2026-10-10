@@ -170,6 +170,25 @@ export async function listUserDrills(
   return sortDrills(drillsWithData, filters);
 }
 
+export async function listUserDrillTags(supabase: SupabaseServerClient, userId: string) {
+  const { data, error } = await supabase
+    .from("drills")
+    .select("tags")
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+  if (error) throw new Error(error.message);
+
+  const tags = new Map<string, string>();
+  for (const row of (data ?? []) as Array<{ tags: string[] | null }>) {
+    for (const rawTag of row.tags ?? []) {
+      const tag = rawTag.trim();
+      const key = tag.toLocaleLowerCase();
+      if (tag && !tags.has(key)) tags.set(key, tag);
+    }
+  }
+  return [...tags.values()].sort((left, right) => left.localeCompare(right));
+}
+
 function mapDrillListRow(row: Partial<DrillRow>): Drill {
   return mapDrillRow({
     id: row.id ?? "",

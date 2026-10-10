@@ -3,10 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
-import { DrillCard } from "@/components/drills/drill-card";
+import { DrillLibraryBulkManager } from "@/components/drills/drill-library-bulk-manager";
 import { DrillFilters } from "@/components/drills/drill-filters";
 import { createClient } from "@/lib/supabase/server";
-import { listUserDrills, parseDrillFilters } from "@/lib/drills/queries";
+import { listUserDrills, listUserDrillTags, parseDrillFilters } from "@/lib/drills/queries";
 import { getUserLocale } from "@/lib/i18n/server";
 
 type DrillLibraryPageProps = {
@@ -25,8 +25,11 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
 
   const resolvedSearchParams = await searchParams;
   const filters = parseDrillFilters(resolvedSearchParams);
-  const drills = await listUserDrills(supabase, user.id, filters);
-  const locale = await getUserLocale(supabase, user.id);
+  const [drills, libraryTags, locale] = await Promise.all([
+    listUserDrills(supabase, user.id, filters),
+    listUserDrillTags(supabase, user.id),
+    getUserLocale(supabase, user.id)
+  ]);
   const copy = drillLibraryCopy[locale];
   const draftCount = filters.view === "drafts" ? drills.length : await countDraftDrills(supabase, user.id);
   const viewLabels = {
@@ -87,10 +90,12 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
 
       <DrillFilters filters={filters} locale={locale} />
 
-      <section className={drills.length ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1900px]:grid-cols-5" : "space-y-4"}>
-        {drills.length ? (
-          drills.map((drill) => <DrillCard key={drill.id} drill={drill} view={filters.view} />)
-        ) : (
+      <DrillLibraryBulkManager
+        drills={drills}
+        view={filters.view}
+        locale={locale}
+        libraryTags={libraryTags}
+        emptyState={
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
             <h2 className="text-lg font-bold text-board-navy">{emptyTitle(filters, locale)}</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
@@ -104,8 +109,8 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
               </ButtonLink>
             </div>
           </div>
-        )}
-      </section>
+        }
+      />
     </div>
   );
 }
