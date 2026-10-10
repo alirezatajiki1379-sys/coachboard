@@ -18,6 +18,7 @@
     "test:import-duplicates": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/import-duplicate-regression.mjs",
     "test:import-composite": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/player-import-composite-regression.mjs",
     "test:trial-sync": "node --experimental-strip-types scripts/trial-player-sync-regression.mjs",
+    "test:trial-extension": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/trial-extension-regression.mjs",
     "test:availability": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/player-availability-regression.mjs",
     "test:rating-defaults": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/attendance-rating-defaults-regression.mjs",
     "test:session-review": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/session-review-regression.mjs",

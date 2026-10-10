@@ -208,7 +208,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
       {tab === "attendance" ? <AttendanceTab hub={hub} filter={attendanceFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "medical" ? <MedicalTab hub={hub} medicalError={medicalError} locale={locale} /> : null}
       {tab === "notes" ? <NotesTab hub={hub} /> : null}
-      {tab === "details" ? <DetailsTab hub={hub} medicalError={medicalError} contactError={contactError} deleteError={deleteError} /> : null}
+      {tab === "details" ? <DetailsTab hub={hub} medicalError={medicalError} contactError={contactError} deleteError={deleteError} locale={locale} /> : null}
     </div>
   );
 }
@@ -236,7 +236,8 @@ function PlayerHubHeader({ hub, period, tab, locale, scoutingPlayerId }: { hub: 
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 translate="no" className="text-3xl font-bold tracking-normal text-board-navy">{playerFullName(player)}</h1>
-              {player.playerType === "trial" ? <Badge tone="amber">Trial Player</Badge> : <Badge>Roster</Badge>}
+              {player.playerType === "trial" ? <Badge tone="amber">{locale === "de" ? "Probespieler" : "Trial Player"}</Badge> : <Badge>Roster</Badge>}
+              {hub.trialSummary ? <Badge tone={hub.trialSummary.status === "expired" ? "red" : "green"}>{trialStatusLabel(hub.trialSummary.status, locale)}</Badge> : null}
               {player.archivedAt ? <Badge tone="amber">Archived</Badge> : null}
               {hub.currentMedical ? <Badge tone={hub.currentMedical.type === "injured" ? "red" : "amber"}>{medicalLabel(hub.currentMedical)}</Badge> : null}
               {!hub.currentMedical && currentAvailability ? <Badge tone="red">Unavailable · {availabilityReasonLabel(currentAvailability.reason)}</Badge> : null}
@@ -248,6 +249,8 @@ function PlayerHubHeader({ hub, period, tab, locale, scoutingPlayerId }: { hub: 
               {player.strongFoot ? <InfoPill icon={<Footprints className="h-4 w-4" />} label="Dominant foot" value={player.strongFoot} /> : null}
               {player.club ? <InfoPill label="Club" value={player.club} /> : null}
               {player.dateOfBirth ? <InfoPill icon={<CalendarDays className="h-4 w-4" />} label="Birthdate" value={`${formatLongDate(player.dateOfBirth)}${age !== undefined ? ` · ${age} years` : ""}`} /> : null}
+              {hub.trialSummary?.currentEndDate ? <InfoPill label={locale === "de" ? "Probezeit bis" : "Trial until"} value={formatEventDate(hub.trialSummary.currentEndDate)} /> : null}
+              {hub.trialSummary?.remainingTrainingCount !== undefined ? <InfoPill label={locale === "de" ? "Verbleibende Probetrainings" : "Trial sessions remaining"} value={String(hub.trialSummary.remainingTrainingCount)} /> : null}
               {optionalItems.map((item) => <span key={item} className="rounded-md bg-slate-100 px-2 py-1 font-semibold text-board-navy">{item}</span>)}
             </div>
             {hub.currentMedical ? (
@@ -267,7 +270,7 @@ function PlayerHubHeader({ hub, period, tab, locale, scoutingPlayerId }: { hub: 
             <Printer className="h-4 w-4" />
             Report
           </ButtonLink>
-          <PlayerActions playerId={player.id} archived={Boolean(player.archivedAt)} />
+          <PlayerActions playerId={player.id} playerType={player.playerType} archived={Boolean(player.archivedAt)} initialTrialSummary={hub.trialSummary} />
         </div>
       </div>
 
@@ -729,7 +732,7 @@ function NotesTab({ hub }: { hub: PlayerHubData }) {
   );
 }
 
-function DetailsTab({ hub, medicalError, contactError, deleteError }: { hub: PlayerHubData; medicalError?: string; contactError?: string; deleteError?: string }) {
+function DetailsTab({ hub, medicalError, contactError, deleteError, locale }: { hub: PlayerHubData; medicalError?: string; contactError?: string; deleteError?: string; locale: "en" | "de" }) {
   const player = hub.player;
   const currentAvailability = currentAvailabilityPeriod(hub.availabilityPeriods);
   const hasEquipment = Boolean(player.topSize || player.jacketSize || player.trouserSize || player.shoeSize);
@@ -758,6 +761,9 @@ function DetailsTab({ hub, medicalError, contactError, deleteError }: { hub: Pla
             <DetailRow label="External player ID" value={player.externalPlayerId} />
             <DetailRow label="Trial start date" value={player.trialStartDate ? formatEventDate(player.trialStartDate) : undefined} />
             <DetailRow label="Trial duration" value={trialDurationLabel(player)} />
+            <DetailRow label={locale === "de" ? "Status der Probezeit" : "Trial status"} value={hub.trialSummary ? trialStatusLabel(hub.trialSummary.status, locale) : undefined} />
+            <DetailRow label={locale === "de" ? "Effektives Ende" : "Effective end"} value={hub.trialSummary?.currentEndDate ? formatEventDate(hub.trialSummary.currentEndDate) : undefined} />
+            <DetailRow label={locale === "de" ? "Verbleibende Probetrainings" : "Trial sessions remaining"} value={hub.trialSummary?.remainingTrainingCount !== undefined ? String(hub.trialSummary.remainingTrainingCount) : undefined} />
           </DetailGrid>
         </Card>
         <Card title="Football profile" icon={<Footprints className="h-5 w-5" />}>
@@ -885,6 +891,11 @@ function trialDurationLabel(player: SquadPlayer) {
   }
   if (player.trialDurationMode === "end_date" && player.trialEndDate) return `Until ${formatEventDate(player.trialEndDate)}`;
   return undefined;
+}
+
+function trialStatusLabel(status: "active" | "expired", locale: "en" | "de") {
+  if (locale === "de") return status === "expired" ? "Probezeit beendet" : "Probezeit aktiv";
+  return status === "expired" ? "Trial ended" : "Trial active";
 }
 
 function ClubSchedule({ value }: { value: string }) {

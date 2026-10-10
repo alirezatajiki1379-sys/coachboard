@@ -44,7 +44,7 @@ export function PlayerCard({ player, view }: { player: SquadPlayer; view: "activ
             Edit
           </ButtonLink>
         ) : null}
-        <PlayerActions playerId={player.id} archived={view === "archived"} />
+        <PlayerActions playerId={player.id} playerType={player.playerType} archived={view === "archived"} />
       </div>
     </article>
   );

@@ -7,12 +7,27 @@ import { createClient } from "@/lib/supabase/server";
 import { parseSquadPlayerForm, toSquadPlayerUpdate, type SquadPlayerFormField, type SquadPlayerFormValues } from "@/lib/squad/form";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { syncFutureAutoSyncTrainingsForPlayer } from "@/lib/squad/attendance-actions";
+import { extendedTrainingLimit, isValidTrialDateExtension, loadTrialPeriodData, type TrialPeriodSummary, type TrialTrainingEvent } from "@/lib/squad/trials";
 
 export type SquadPlayerActionState = {
   error?: string;
   fieldErrors?: Partial<Record<SquadPlayerFormField, string>>;
   values?: SquadPlayerFormValues;
   submissionId?: number;
+};
+
+export type TrialExtensionContext = {
+  summary: TrialPeriodSummary;
+  events: TrialTrainingEvent[];
+  trialStartDate?: string;
+};
+
+export type TrialExtensionActionState = {
+  ok: boolean;
+  code?: "invalid_player" | "invalid_sessions" | "invalid_date" | "stale" | "save_failed";
+  message?: string;
+  summary?: TrialPeriodSummary;
+  warning?: string;
 };
 
 async function requireUser() {
@@ -28,6 +43,84 @@ async function requireUser() {
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
+}
+
+export async function loadTrialExtensionContext(playerId: string): Promise<TrialExtensionContext | null> {
+  if (!playerId) return null;
+  const { supabase, user } = await requireUser();
+  const data = await loadTrialPeriodData(supabase as unknown as SupabaseClient, user.id, playerId);
+  if (!data) return null;
+  return {
+    summary: data.summary,
+    events: data.events,
+    trialStartDate: data.player.trial_start_date ?? undefined
+  };
+}
+
+export async function extendTrialPlayer(_: TrialExtensionActionState, formData: FormData): Promise<TrialExtensionActionState> {
+  const playerId = formString(formData, "playerId");
+  const method = formString(formData, "extensionMethod");
+  const expectedUpdatedAt = formString(formData, "expectedUpdatedAt");
+  if (!playerId || !expectedUpdatedAt || (method !== "training_count" && method !== "end_date")) {
+    return { ok: false, code: "invalid_player" };
+  }
+
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const current = await loadTrialPeriodData(db, user.id, playerId);
+  if (!current) return { ok: false, code: "invalid_player" };
+  if (current.player.updated_at !== expectedUpdatedAt) return { ok: false, code: "stale" };
+
+  let update: {
+    trial_duration_mode: "training_count" | "end_date";
+    trial_training_limit: number | null;
+    trial_end_date: string | null;
+  };
+
+  if (method === "training_count") {
+    const additionalSessions = Number(formString(formData, "additionalSessions"));
+    if (!Number.isInteger(additionalSessions) || additionalSessions < 1 || additionalSessions > 50) {
+      return { ok: false, code: "invalid_sessions" };
+    }
+    update = {
+      trial_duration_mode: "training_count",
+      trial_training_limit: extendedTrainingLimit(current.summary, additionalSessions),
+      trial_end_date: null
+    };
+  } else {
+    const newEndDate = formString(formData, "newEndDate");
+    if (!isValidTrialDateExtension(current.summary, newEndDate)) {
+      return { ok: false, code: "invalid_date" };
+    }
+    update = {
+      trial_duration_mode: "end_date",
+      trial_training_limit: null,
+      trial_end_date: newEndDate
+    };
+  }
+
+  const { data: updatedRows, error } = await db
+    .from("squad_players")
+    .update(update)
+    .eq("id", playerId)
+    .eq("user_id", user.id)
+    .eq("player_type", "trial")
+    .eq("updated_at", expectedUpdatedAt)
+    .select("id");
+  if (error) return { ok: false, code: "save_failed", message: error.message };
+  if (!updatedRows?.length) return { ok: false, code: "stale" };
+
+  let warning: string | undefined;
+  try {
+    await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
+  } catch (syncError) {
+    warning = syncError instanceof Error ? syncError.message : "Future Training participants could not be synchronized.";
+  }
+
+  const refreshed = await loadTrialPeriodData(db, user.id, playerId);
+  revalidatePath("/squad");
+  revalidatePath(`/squad/players/${playerId}`);
+  return { ok: true, summary: refreshed?.summary, warning };
 }
 
 export async function createSquadPlayer(_: SquadPlayerActionState, formData: FormData): Promise<SquadPlayerActionState> {

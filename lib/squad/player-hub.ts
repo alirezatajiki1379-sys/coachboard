@@ -32,6 +32,7 @@ import type {
   SquadPlayer
 } from "@/types/domain";
 import type { Database } from "@/types/database";
+import { loadTrialPeriodData, type TrialPeriodSummary } from "@/lib/squad/trials";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type AssessmentRow = Database["public"]["Tables"]["player_coach_assessments"]["Row"];
@@ -52,6 +53,7 @@ export type PlayerTimelineEvent = {
 
 export type PlayerHubData = {
   player: SquadPlayer;
+  trialSummary?: TrialPeriodSummary;
   analytics: NonNullable<Awaited<ReturnType<typeof getPlayerAnalytics>>>;
   periodLabel: string;
   periodRangeLabel: string;
@@ -112,7 +114,7 @@ export async function getPlayerHubData(
   if (!playerData) return null;
 
   const player = mapSquadPlayerRow(playerData as SquadPlayerRow);
-  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, preferences, analyticsBase] = await Promise.all([
+  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, preferences, analyticsBase, trialData] = await Promise.all([
     listPlayerRecords(db, userId, playerId),
     listAssessments(db, userId, playerId),
     getPlayerDevelopmentProfile(supabase, userId, playerId),
@@ -120,12 +122,14 @@ export async function getPlayerHubData(
     listMedicalPeriods(db, userId, playerId),
     listAvailabilityPeriods(db, userId, playerId),
     getHeaderPreferences(db, userId),
-    getPlayerAnalytics(supabase, userId, playerId, period, customFrom, customTo)
+    getPlayerAnalytics(supabase, userId, playerId, period, customFrom, customTo),
+    player.playerType === "trial" ? loadTrialPeriodData(db, userId, playerId) : Promise.resolve(null)
   ]);
 
   if (!analyticsBase) return null;
   return {
     player,
+    trialSummary: trialData?.summary,
     analytics: analyticsBase,
     periodLabel: analyticsPeriodLabels[period],
     periodRangeLabel: period === "custom" && customFrom && customTo ? `${formatEventDate(customFrom)} - ${formatEventDate(customTo)}` : analyticsPeriodLabels[period],
