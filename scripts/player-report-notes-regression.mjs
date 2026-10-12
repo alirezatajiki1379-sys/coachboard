@@ -25,6 +25,7 @@ const reportComponent = readFileSync(new URL("../components/squad/player-convers
 const notesComponent = readFileSync(new URL("../components/squad/player-notes.tsx", import.meta.url), "utf8");
 const noteActions = readFileSync(new URL("../lib/squad/player-note-actions.ts", import.meta.url), "utf8");
 const schema = readFileSync(new URL("../supabase/schema.sql", import.meta.url), "utf8");
+const globalStyles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const medicalSelect = reportPage.match(/player_medical_periods"\)\.select\("([^"]+)/)?.[1] ?? "";
 assert.equal(medicalSelect.includes("medication"), false, "4. Medication is not queried for the report");
 assert.equal(medicalSelect.includes("allergies"), false, "5. Allergies are not queried for the report");
@@ -55,6 +56,7 @@ assert.doesNotMatch(noteActions, /from\("squad_players"\)\.update/, "17. Legacy 
 assert.match(reportComponent, /Injuries & availability/); assert.match(reportComponent, /Verletzungen & Verfügbarkeit/, "18. Report copy exists in EN and DE");
 assert.match(notesComponent, /Quick note/); assert.match(notesComponent, /Schnelle Notiz/, "18b. Note copy exists in EN and DE");
 assert.match(notesComponent, /md:grid-cols|lg:col-span/, "19. Notes UI includes responsive layouts");
-assert.match(reportComponent, /print:hidden/); assert.match(reportComponent, /@page \{ size: A4/, "20. Composer is hidden and report remains printable");
+assert.match(reportComponent, /print:hidden/); assert.match(reportComponent, /player-report-sheet/, "20. Composer is hidden and report uses the canonical printable sheet");
+assert.match(globalStyles, /@page player-report\s*\{[\s\S]*size:\s*A4 portrait;[\s\S]*margin:\s*10mm 12mm;/, "20b. Player Reports use the canonical A4 page definition");
 
-console.log("Player Report 2.0 notes/privacy regression: PASS (20 checks)");
+console.log("Player Report 2.0 notes/privacy regression: PASS (21 checks)");

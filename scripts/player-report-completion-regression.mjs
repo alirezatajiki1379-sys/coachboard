@@ -10,6 +10,7 @@ const hub = read("lib/squad/player-hub.ts");
 const hubPage = read("app/(app)/squad/players/[id]/page.tsx");
 const workspace = read("components/squad/coach-workspace.tsx");
 const pack = read("app/(app)/squad/reports/page.tsx");
+const globalStyles = read("app/globals.css");
 
 assert.doesNotMatch(report, /summary\.highestRatedArea[\s\S]{0,160}strengths/, "Strengths are never inferred from the highest rating");
 assert.doesNotMatch(report, /summary\.lowestRatedArea[\s\S]{0,160}developmentFocus/, "Development focus is never inferred from the lowest rating");
@@ -28,8 +29,9 @@ assert.match(report, /coachNote: undefined/, "Player Conversation snapshots stri
 assert.match(workspace, /Generate reports|Reports erstellen/, "Squad bulk action exposes report generation");
 assert.match(pack, /\.is\("archived_at", null\)\.is\("deleted_at", null\)/, "Bulk packs reject archived and deleted Players server-side");
 assert.doesNotMatch(pack, /completePlayerConversation|player_review_conversations/, "Bulk packs never complete conversations");
-assert.match(pack, /report-pack-item \+ \.report-pack-item/, "Every subsequent Player starts on a new print page");
+assert.match(globalStyles, /\.report-pack-item \+ \.report-pack-item[\s\S]*page-break-before:\s*always/, "Every subsequent Player starts on a new print page");
+assert.doesNotMatch(pack, /<style>|@page/, "Bulk reports use the shared print stylesheet without competing page rules");
 assert.match(pack, /<PrintButton \/>/, "One report-pack print action is available");
 assert.match(conversations, /contentSnapshot: row\.content_snapshot/, "Conversation history retains its snapshot");
 
-console.log("Player Report 2.0 completion regression: PASS (25 checks)");
+console.log("Player Report 2.0 completion regression: PASS (26 checks)");

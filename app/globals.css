@@ -193,6 +193,15 @@ textarea {
   margin: 10mm;
 }
 
+@page player-report {
+  size: A4 portrait;
+  margin: 10mm 12mm;
+}
+
+.player-report-sheet {
+  page: player-report;
+}
+
 /* Screen-only adaptations leave the A4/export rules and canvas geometry intact. */
 @media screen and (max-width: 1023px) {
   .app-main {
@@ -306,18 +315,157 @@ textarea {
     display: block !important;
   }
 
-  .lg\:pl-72 {
+  .app-shell-content {
     padding-left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
   }
 
-  main {
+  .app-main {
+    width: 100% !important;
+    max-width: none !important;
     padding: 0 !important;
+    margin: 0 !important;
   }
 
   .print-page {
     width: 100% !important;
+    max-width: none !important;
     margin: 0 !important;
     box-shadow: none !important;
+  }
+
+  .player-report-root,
+  .player-report-sheet,
+  .report-pack {
+    width: 100% !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .player-report-root {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .player-report-sheet {
+    margin-top: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    color: #13202f !important;
+    font-size: 10pt;
+    line-height: 1.35;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .player-report-header {
+    padding-bottom: 3mm !important;
+  }
+
+  .player-report-header-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) !important;
+    align-items: end !important;
+    gap: 8mm !important;
+    margin-top: 2mm !important;
+  }
+
+  .player-report-header h1 {
+    font-size: 22pt !important;
+    line-height: 1.05 !important;
+  }
+
+  .player-report-header-meta {
+    border: 1px solid #d9e2dc;
+    padding: 2.5mm !important;
+    font-size: 9pt !important;
+    line-height: 1.35 !important;
+  }
+
+  .player-report-section {
+    margin-top: 5mm !important;
+  }
+
+  .player-report-section > h2 {
+    margin: 0 !important;
+    font-size: 12pt !important;
+    line-height: 1.2 !important;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .player-report-section > h2 + * {
+    margin-top: 2.5mm !important;
+  }
+
+  .player-report-identity-card {
+    padding: 3mm !important;
+  }
+
+  .player-report-identity-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 2.5mm 5mm !important;
+    margin-top: 3mm !important;
+  }
+
+  .player-report-identity-grid dt,
+  .player-report-metrics p:first-child {
+    font-size: 8.5pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .player-report-identity-grid dd {
+    font-size: 9.5pt !important;
+    line-height: 1.25 !important;
+  }
+
+  .player-report-metrics {
+    display: grid !important;
+    gap: 2.5mm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .player-report-metrics-four {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .player-report-metrics-five {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  .player-report-stat {
+    padding: 2.5mm !important;
+  }
+
+  .player-report-stat p:last-child {
+    margin-top: 1mm !important;
+    font-size: 15pt !important;
+    line-height: 1.1 !important;
+  }
+
+  .player-report-keep {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-pack {
+    display: block !important;
+  }
+
+  .report-pack-item {
+    margin: 0 !important;
+  }
+
+  .report-pack-item + .report-pack-item {
+    break-before: page;
+    page-break-before: always;
   }
 
   .staff-brief-composer {

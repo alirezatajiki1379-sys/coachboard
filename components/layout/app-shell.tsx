@@ -124,7 +124,7 @@ export function AppShell({ children, coachName, teams = [], locale }: AppShellPr
         />
       </aside>
 
-      <div className="relative z-0 min-w-0 overflow-x-clip transition-[padding] duration-200 motion-reduce:transition-none lg:pl-[var(--app-sidebar-width)]">
+      <div className="app-shell-content relative z-0 min-w-0 overflow-x-clip transition-[padding] duration-200 motion-reduce:transition-none lg:pl-[var(--app-sidebar-width)]">
         <header className="app-mobile-header sticky top-0 z-50 min-h-[var(--app-mobile-header-height)] border-b border-board-line bg-white/90 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between px-4 py-3">
             <button
