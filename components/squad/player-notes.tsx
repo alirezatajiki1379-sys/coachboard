@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import {
   createPlayerNote,
   deletePlayerNote,
-  initialPlayerNoteActionState,
-  updatePlayerNote
+  updatePlayerNote,
+  type PlayerNoteActionState
 } from "@/lib/squad/player-note-actions";
 import { formatDate, type Locale } from "@/lib/i18n";
 import type { PlayerNote } from "@/types/domain";
+
+const initialPlayerNoteActionState: PlayerNoteActionState = { ok: true, message: "" };
 
 const copy = {
   en: {

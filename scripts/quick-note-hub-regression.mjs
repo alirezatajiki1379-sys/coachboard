@@ -9,6 +9,8 @@ const conversations = read("lib/squad/player-review-conversations.ts");
 const hub = read("lib/squad/player-hub.ts");
 
 assert.match(actions, /from\("player_notes"\)\.insert/, "Quick Note writes to the canonical player_notes table");
+assert.doesNotMatch(actions, /export const initialPlayerNoteActionState/, "The use server module does not export a runtime initial-state object");
+assert.match(notesComponent, /const initialPlayerNoteActionState: PlayerNoteActionState/, "Quick Note initial state lives in the client component");
 assert.match(actions, /revalidatePlayer\(playerId\)/, "A successful Quick Note refreshes the Player Hub");
 assert.match(actions, /revalidatePath\(`\/squad\/players\/\$\{playerId\}`\)/, "The Player Overview path is revalidated");
 assert.match(notesComponent, /action=\{action\}/, "Quick Note stays in the inline Server Action flow");
@@ -21,4 +23,4 @@ assert.doesNotMatch(hub, /listPlayerReviewConversations\(db, userId, playerId\)/
 assert.match(hub, /for \(const note of notes\)/, "Saved Quick Notes still enter the unified Player timeline");
 assert.match(hub, /conversations\.filter\(\(item\) => item\.status === "finalized"\)/, "Finalized conversations still enter History when available");
 
-console.log("Quick Note Player Hub regression: PASS (12 checks)");
+console.log("Quick Note Player Hub regression: PASS (14 checks)");

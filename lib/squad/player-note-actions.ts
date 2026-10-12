@@ -11,8 +11,6 @@ export type PlayerNoteActionState = {
   completedAt?: number;
 };
 
-export const initialPlayerNoteActionState: PlayerNoteActionState = { ok: true, message: "" };
-
 export async function createPlayerNote(_previous: PlayerNoteActionState, formData: FormData): Promise<PlayerNoteActionState> {
   const note = text(formData, "note");
   const playerId = text(formData, "playerId");
