@@ -6,7 +6,7 @@ import { DialogPortal } from "@/components/shared/dialog-portal";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
-import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowDown, ArrowUp, BarChart3, CalendarDays, CheckSquare, Copy, Eye, FileText, GripVertical, Mail, RotateCcw, Search, Stethoscope, Target, Trash2, X } from "lucide-react";
 import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { formatMessage, getMessages, type Locale, type Messages } from "@/lib/i18n";
@@ -79,12 +79,15 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkMessage, setBulkMessage] = useState("");
   const [emailComposerOpen, setEmailComposerOpen] = useState(false);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [isBulkPending, startBulkTransition] = useTransition();
   const [isSavingColumnOrder, startColumnOrderSave] = useTransition();
   const columns = useMemo(() => visibleDesktopColumns(data, columnOrder).map((column) => localizeColumn(column, messages)), [data, columnOrder, messages]);
   const visiblePlayerIds = useMemo(() => data.players.map((player) => player.analytics.player.id), [data.players]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedPlayers = useMemo(() => data.players.filter((player) => selectedIdSet.has(player.analytics.player.id)), [data.players, selectedIdSet]);
+  const activePlayerIds = useMemo(() => data.allPlayers.filter((item) => !item.analytics.player.archivedAt && !item.analytics.player.deletedAt).map((item) => item.analytics.player.id), [data.allPlayers]);
+  const filteredActivePlayerIds = useMemo(() => data.players.filter((item) => !item.analytics.player.archivedAt && !item.analytics.player.deletedAt).map((item) => item.analytics.player.id), [data.players]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(data.state.selectedPlayer ?? null);
   const selectedPlayer = useMemo(
     () => data.players.find((player) => player.analytics.player.id === selectedPlayerId),
@@ -211,6 +214,10 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
                     <Mail className="h-4 w-4" />
                     {messages.squad.actions.email}
                   </Button>
+                  <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => setReportDialogOpen(true)} disabled={!activePlayerIds.length || isBulkPending}>
+                    <FileText className="h-4 w-4" />
+                    {activeLocale === "de" ? "Reports erstellen" : "Generate reports"}
+                  </Button>
                   {data.state.players === "trash" ? (
                     <>
                       <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => runBulkAction("restore")} disabled={!selectedIds.length || isBulkPending}>
@@ -275,8 +282,20 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
       <p className="sr-only" aria-live="polite">{columnOrderMessage}</p>
       {columnOrderMessage ? <p className="text-xs font-semibold text-slate-500 xl:block hidden">{columnOrderMessage}</p> : null}
       {emailComposerOpen ? <EmailDraftDialog players={selectedPlayers} onClose={() => setEmailComposerOpen(false)} /> : null}
+      {reportDialogOpen ? <BulkReportDialog selectedIds={selectedIds.filter((id) => activePlayerIds.includes(id))} filteredIds={filteredActivePlayerIds} activeIds={activePlayerIds} locale={activeLocale} onClose={() => setReportDialogOpen(false)} /> : null}
     </div>
   );
+}
+
+function BulkReportDialog({ selectedIds, filteredIds, activeIds, locale, onClose }: { selectedIds: string[]; filteredIds: string[]; activeIds: string[]; locale: Locale; onClose: () => void }) {
+  const dialogRef = useDialogFocus<HTMLFormElement>(true, onClose);
+  const [scope, setScope] = useState<"selected" | "filtered" | "active">(selectedIds.length ? "selected" : "filtered");
+  const [period, setPeriod] = useState("last10");
+  const copy = locale === "de"
+    ? { title: "Reports erstellen", players: "Spieler", selected: "Ausgewählte Spieler", filtered: "Alle gefilterten Spieler", active: "Alle aktiven Spieler", type: "Berichtsart", internal: "Trainerreport", conversation: "Spielergespräch", period: "Zeitraum", generate: "Reports erstellen", cancel: "Abbrechen", from: "Von", to: "Bis" }
+    : { title: "Generate reports", players: "Players", selected: "Selected Players", filtered: "All filtered Players", active: "All active Players", type: "Report type", internal: "Coach report", conversation: "Player Conversation", period: "Period", generate: "Generate reports", cancel: "Cancel", from: "From", to: "To" };
+  const ids = scope === "selected" ? selectedIds : scope === "filtered" ? filteredIds : activeIds;
+  return <DialogPortal><div className={cn("fixed inset-0 flex items-center justify-center bg-board-navy/40 p-4", PLAYER_TABLE_LAYER_CLASSES.modal)} role="dialog" aria-modal="true" aria-labelledby="bulk-report-title"><form ref={dialogRef} action="/squad/reports" method="get" tabIndex={-1} className="app-dialog-panel max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl outline-none"><div className="flex items-start justify-between gap-3"><h2 id="bulk-report-title" className="text-lg font-bold text-board-navy">{copy.title}</h2><button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100" aria-label="Close"><X className="h-5 w-5" /></button></div><fieldset className="mt-4 space-y-2"><legend className="text-sm font-bold text-board-navy">{copy.players}</legend>{([ ["selected", copy.selected, selectedIds.length], ["filtered", copy.filtered, filteredIds.length], ["active", copy.active, activeIds.length] ] as const).map(([value, label, count]) => <label key={value} className="flex min-h-11 items-center gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"><input type="radio" name="scope" value={value} checked={scope === value} disabled={!count} onChange={() => setScope(value)} />{label} ({count})</label>)}</fieldset><fieldset className="mt-4 space-y-2"><legend className="text-sm font-bold text-board-navy">{copy.type}</legend><label className="flex items-center gap-2"><input type="radio" name="mode" value="internal_coach_report" defaultChecked />{copy.internal}</label><label className="flex items-center gap-2"><input type="radio" name="mode" value="player_conversation" />{copy.conversation}</label></fieldset><label className="mt-4 block text-sm font-bold text-board-navy">{copy.period}<select name="period" value={period} onChange={(event) => setPeriod(event.target.value)} className={fieldClass()}><option value="last5">Last 5</option><option value="last10">Last 10</option><option value="30d">30 days</option><option value="90d">90 days</option><option value="season">Season</option><option value="all">All time</option><option value="custom">Custom</option></select></label>{period === "custom" ? <div className="mt-3 grid gap-3 sm:grid-cols-2"><Field label={copy.from}><input name="from" type="date" required className={fieldClass()} /></Field><Field label={copy.to}><input name="to" type="date" required className={fieldClass()} /></Field></div> : null}{ids.map((id) => <input key={id} type="hidden" name="player" value={id} />)}<div className="mt-5 flex flex-wrap justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>{copy.cancel}</Button><Button type="submit" disabled={!ids.length}>{copy.generate}</Button></div></form></div></DialogPortal>;
 }
 
 type EmailRecipientMode = "players" | "parents" | "both";

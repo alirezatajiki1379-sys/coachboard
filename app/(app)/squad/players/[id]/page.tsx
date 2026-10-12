@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
-import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, Minus, Phone, Printer, Shirt, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, MessageSquareText, Minus, Phone, Printer, Shirt, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { PlayerUnavailabilityForm } from "@/components/squad/player-unavailability-form";
@@ -32,6 +32,7 @@ import { formatNumber } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { trainingNowParts } from "@/lib/trainings/utils";
 import type { PlayerAvailabilityPeriod, PlayerContact, PlayerMedicalPeriod, SquadPlayer } from "@/types/domain";
+import { latestCompletedConversation, type PlayerReviewConversation } from "@/lib/squad/player-review-conversations";
 
 type PlayerDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -42,6 +43,7 @@ const tabs: Array<{ id: PlayerHubTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "analytics", label: "Analytics" },
   { id: "development", label: "Development" },
+  { id: "reviews", label: "Reviews" },
   { id: "history", label: "History" },
   { id: "attendance", label: "Attendance" },
   { id: "medical", label: "Availability" },
@@ -56,6 +58,7 @@ const timelineFilters: Array<{ id: PlayerTimelineFilter; label: string }> = [
   { id: "ratings", label: "Ratings" },
   { id: "attendance", label: "Attendance" },
   { id: "development", label: "Development" },
+  { id: "reviews", label: "Reviews" },
   { id: "observations", label: "Observations" },
   { id: "medical", label: "Medical" },
   { id: "notes", label: "Notes" },
@@ -200,12 +203,13 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
       </Link>
 
       <PlayerHubHeader hub={hub} period={period} tab={tab} locale={locale} scoutingPlayerId={scoutingLinkResult.data?.id} />
-      <PlayerHubTabs playerId={hub.player.id} activeTab={tab} period={period} customFrom={customFrom} customTo={customTo} />
+      <PlayerHubTabs playerId={hub.player.id} activeTab={tab} period={period} customFrom={customFrom} customTo={customTo} locale={locale} />
       {isPeriodAwareTab(tab) ? <PeriodControls playerId={hub.player.id} tab={tab} period={period} customFrom={customFrom} customTo={customTo} /> : null}
 
       {tab === "overview" ? <OverviewTab hub={hub} period={period} attentionItems={attentionItems} locale={locale} /> : null}
       {tab === "analytics" ? <AnalyticsTab hub={hub} period={period} /> : null}
       {tab === "development" ? <PlayerDevelopmentSection playerId={hub.player.id} development={hub.development} /> : null}
+      {tab === "reviews" ? <ReviewsTab hub={hub} locale={locale} /> : null}
       {tab === "history" ? <HistoryTab hub={hub} filter={timelineFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "attendance" ? <AttendanceTab hub={hub} filter={attendanceFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "medical" ? <MedicalTab hub={hub} medicalError={medicalError} locale={locale} /> : null}
@@ -304,7 +308,7 @@ function PlayerHubHeader({ hub, period, tab, locale, scoutingPlayerId }: { hub: 
   );
 }
 
-function PlayerHubTabs({ playerId, activeTab, period, customFrom, customTo }: { playerId: string; activeTab: PlayerHubTab; period: AnalyticsPeriod; customFrom?: string; customTo?: string }) {
+function PlayerHubTabs({ playerId, activeTab, period, customFrom, customTo, locale }: { playerId: string; activeTab: PlayerHubTab; period: AnalyticsPeriod; customFrom?: string; customTo?: string; locale: "en" | "de" }) {
   return (
     <nav aria-label="Player Hub tabs" className="overflow-x-auto rounded-lg border border-board-line bg-white p-2 shadow-soft">
       <div role="tablist" className="flex min-w-max gap-2">
@@ -319,7 +323,7 @@ function PlayerHubTabs({ playerId, activeTab, period, customFrom, customTo }: { 
               activeTab === item.id ? "bg-board-green text-white" : "text-slate-600 hover:bg-green-50 hover:text-board-green"
             )}
           >
-            {item.label}
+            {locale === "de" && item.id === "reviews" ? "Gespräche" : item.label}
           </Link>
         ))}
       </div>
@@ -355,6 +359,7 @@ function OverviewTab({ hub, period, attentionItems, locale }: { hub: PlayerHubDa
       </section>
       <section className="space-y-6">
         <QuickPlayerNoteCard playerId={hub.player.id} notes={hub.notes} locale={locale} />
+        <LatestReviewCard playerId={hub.player.id} conversations={hub.conversations} locale={locale} />
         <Card title="Current status" icon={<UserRound className="h-5 w-5" />}>
           <DetailGrid>
             <DetailRow label="Player type" value={hub.player.playerType === "trial" ? "Trial Player" : "Roster"} />
@@ -378,6 +383,28 @@ function OverviewTab({ hub, period, attentionItems, locale }: { hub: PlayerHubDa
       </section>
     </div>
   );
+}
+
+function LatestReviewCard({ playerId, conversations, locale }: { playerId: string; conversations: PlayerReviewConversation[]; locale: "en" | "de" }) {
+  const review = latestCompletedConversation(conversations);
+  const labels = locale === "de"
+    ? { title: "Letztes Gespräch", empty: "Noch kein abgeschlossenes Spielergespräch.", strengths: "Stärken", focus: "Entwicklungsfokus", perspective: "Sicht des Spielers", steps: "Vereinbarte Maßnahmen", next: "Nächstes Gespräch", open: "Gespräch öffnen" }
+    : { title: "Latest Review", empty: "No completed Player Conversation yet.", strengths: "Strengths", focus: "Development focus", perspective: "Player perspective", steps: "Agreed next steps", next: "Next review", open: "Open review" };
+  return <Card title={labels.title} icon={<MessageSquareText className="h-5 w-5" />}>
+    {review ? <div className="space-y-2 text-sm text-slate-600"><p className="font-bold text-board-navy">{formatEventDate(review.conversationDate)}</p>{review.strengths ? <p><strong>{labels.strengths}:</strong> <span translate="no">{review.strengths}</span></p> : null}{review.developmentFocus ? <p><strong>{labels.focus}:</strong> <span translate="no">{review.developmentFocus}</span></p> : null}{review.playerPerspective ? <p><strong>{labels.perspective}:</strong> <span translate="no">{review.playerPerspective}</span></p> : null}{review.agreedNextSteps ? <p><strong>{labels.steps}:</strong> <span translate="no">{review.agreedNextSteps}</span></p> : null}{review.nextReviewOn ? <p><strong>{labels.next}:</strong> {formatEventDate(review.nextReviewOn)}</p> : null}<Link href={`/squad/players/${playerId}/report?conversation=${review.id}`} className="inline-flex font-bold text-board-green underline-offset-4 hover:underline">{labels.open}</Link></div> : <p className="text-sm text-slate-600">{labels.empty}</p>}
+  </Card>;
+}
+
+function ReviewsTab({ hub, locale }: { hub: PlayerHubData; locale: "en" | "de" }) {
+  const labels = locale === "de"
+    ? { title: "Spielergespräche", help: "Bereite Gespräche vor und öffne abgeschlossene historische Stände.", create: "Neues Gespräch vorbereiten", draft: "Entwurf", completed: "Abgeschlossen", continue: "Entwurf fortsetzen", open: "Gespräch öffnen", print: "Drucken", period: "Zeitraum", next: "Nächstes Gespräch", strengths: "Stärken", focus: "Entwicklungsfokus", empty: "Noch keine Gesprächsentwürfe oder abgeschlossenen Gespräche." }
+    : { title: "Player Conversations", help: "Prepare conversations and open completed historical snapshots.", create: "Prepare new conversation", draft: "Draft", completed: "Completed", continue: "Continue draft", open: "Open review", print: "Print", period: "Period", next: "Next review", strengths: "Strengths", focus: "Development focus", empty: "No conversation drafts or completed conversations yet." };
+  return <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="text-lg font-bold text-board-navy">{labels.title}</h2><p className="mt-1 text-sm text-slate-600">{labels.help}</p></div><ButtonLink href={`/squad/players/${hub.player.id}/report`}><MessageSquareText className="h-4 w-4" />{labels.create}</ButtonLink></div><div className="mt-5 space-y-3">{hub.conversations.length ? hub.conversations.map((conversation) => <article key={conversation.id} className="rounded-md border border-board-line p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-board-navy">{formatEventDate(conversation.conversationDate)}</p><Badge tone={conversation.status === "finalized" ? "green" : "amber"}>{conversation.status === "finalized" ? labels.completed : labels.draft}</Badge><Badge>{conversationTypeLabel(conversation.conversationType, locale)}</Badge></div><p className="mt-2 text-sm text-slate-600"><strong>{labels.period}:</strong> {formatEventDate(conversation.periodStart)} – {formatEventDate(conversation.periodEnd)}</p>{conversation.strengths ? <p translate="no" className="mt-2 line-clamp-2 text-sm text-slate-600"><strong>{labels.strengths}:</strong> {conversation.strengths}</p> : null}{conversation.developmentFocus ? <p translate="no" className="mt-1 line-clamp-2 text-sm text-slate-600"><strong>{labels.focus}:</strong> {conversation.developmentFocus}</p> : null}{conversation.nextReviewOn ? <p className="mt-1 text-sm text-slate-600"><strong>{labels.next}:</strong> {formatEventDate(conversation.nextReviewOn)}</p> : null}</div><div className="flex flex-wrap gap-2"><ButtonLink href={`/squad/players/${hub.player.id}/report?conversation=${conversation.id}`} variant="secondary">{conversation.status === "finalized" ? labels.open : labels.continue}</ButtonLink>{conversation.status === "finalized" ? <ButtonLink href={`/squad/players/${hub.player.id}/report?conversation=${conversation.id}`} variant="ghost"><Printer className="h-4 w-4" />{labels.print}</ButtonLink> : null}</div></div></article>) : <p className="rounded-md border border-dashed border-board-line p-4 text-sm text-slate-600">{labels.empty}</p>}</div></section>;
+}
+
+function conversationTypeLabel(type: PlayerReviewConversation["conversationType"], locale: "en" | "de") {
+  const labels = locale === "de" ? { development_review: "Entwicklungsgespräch", trial_feedback: "Probetraining-Feedback", general: "Allgemein", season_review: "Saisongespräch" } : { development_review: "Development review", trial_feedback: "Trial feedback", general: "General", season_review: "Season review" };
+  return labels[type];
 }
 
 function AttentionSummaryCard({ playerId, items }: { playerId: string; items: AttentionItem[] }) {

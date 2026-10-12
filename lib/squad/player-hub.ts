@@ -35,12 +35,13 @@ import type {
 import type { Database } from "@/types/database";
 import { loadTrialPeriodData, type TrialPeriodSummary } from "@/lib/squad/trials";
 import { listPlayerNotes } from "@/lib/squad/player-notes";
+import { listPlayerReviewConversations, type PlayerReviewConversation } from "@/lib/squad/player-review-conversations";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type AssessmentRow = Database["public"]["Tables"]["player_coach_assessments"]["Row"];
 
-export type PlayerHubTab = "overview" | "analytics" | "development" | "history" | "attendance" | "medical" | "notes" | "details";
-export type PlayerTimelineFilter = "all" | "trainings" | "ratings" | "attendance" | "development" | "observations" | "medical" | "notes" | "coach";
+export type PlayerHubTab = "overview" | "analytics" | "development" | "reviews" | "history" | "attendance" | "medical" | "notes" | "details";
+export type PlayerTimelineFilter = "all" | "trainings" | "ratings" | "attendance" | "development" | "reviews" | "observations" | "medical" | "notes" | "coach";
 
 export type PlayerTimelineEvent = {
   id: string;
@@ -64,6 +65,7 @@ export type PlayerHubData = {
   availabilityPeriods: PlayerAvailabilityPeriod[];
   medicalPeriods: PlayerMedicalPeriod[];
   notes: PlayerNote[];
+  conversations: PlayerReviewConversation[];
   currentMedical?: PlayerMedicalPeriod;
   headerPreferences: PlayerHeaderPreferences;
   timeline: PlayerTimelineEvent[];
@@ -78,14 +80,14 @@ export type PlayerHubData = {
 
 export function parsePlayerHubTab(value?: string | string[]): PlayerHubTab {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === "analytics" || raw === "development" || raw === "history" || raw === "attendance" || raw === "medical" || raw === "notes" || raw === "details"
+  return raw === "analytics" || raw === "development" || raw === "reviews" || raw === "history" || raw === "attendance" || raw === "medical" || raw === "notes" || raw === "details"
     ? raw
     : "overview";
 }
 
 export function parsePlayerHubTimelineFilter(value?: string | string[]): PlayerTimelineFilter {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === "trainings" || raw === "ratings" || raw === "attendance" || raw === "development" || raw === "observations" || raw === "medical" || raw === "notes" || raw === "coach"
+  return raw === "trainings" || raw === "ratings" || raw === "attendance" || raw === "development" || raw === "reviews" || raw === "observations" || raw === "medical" || raw === "notes" || raw === "coach"
     ? raw
     : "all";
 }
@@ -117,7 +119,7 @@ export async function getPlayerHubData(
   if (!playerData) return null;
 
   const player = mapSquadPlayerRow(playerData as SquadPlayerRow);
-  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, notes, preferences, analyticsBase, trialData] = await Promise.all([
+  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, notes, conversations, preferences, analyticsBase, trialData] = await Promise.all([
     listPlayerRecords(db, userId, playerId),
     listAssessments(db, userId, playerId),
     getPlayerDevelopmentProfile(supabase, userId, playerId),
@@ -125,6 +127,7 @@ export async function getPlayerHubData(
     listMedicalPeriods(db, userId, playerId),
     listAvailabilityPeriods(db, userId, playerId),
     listPlayerNotes(db, userId, playerId),
+    listPlayerReviewConversations(db, userId, playerId),
     getHeaderPreferences(db, userId),
     getPlayerAnalytics(supabase, userId, playerId, period, customFrom, customTo),
     player.playerType === "trial" ? loadTrialPeriodData(db, userId, playerId) : Promise.resolve(null)
@@ -142,9 +145,10 @@ export async function getPlayerHubData(
     availabilityPeriods,
     medicalPeriods,
     notes,
+    conversations,
     currentMedical: currentMedicalPeriod(medicalPeriods),
     headerPreferences: preferences,
-    timeline: buildPlayerTimeline(records, assessments, development, medicalPeriods, availabilityPeriods, notes, player),
+    timeline: buildPlayerTimeline(records, assessments, development, medicalPeriods, availabilityPeriods, notes, conversations, player),
     lifetime: {
       trainings: records.length,
       ratings: records.filter((record) => record.overallRating).length,
@@ -203,6 +207,7 @@ function buildPlayerTimeline(
   medicalPeriods: PlayerMedicalPeriod[],
   availabilityPeriods: PlayerAvailabilityPeriod[],
   notes: PlayerNote[],
+  conversations: PlayerReviewConversation[],
   player: SquadPlayer
 ): PlayerTimelineEvent[] {
   const items: PlayerTimelineEvent[] = [];
@@ -302,6 +307,16 @@ function buildPlayerTimeline(
       title: "General player note",
       detail: note.note,
       href: `/squad/players/${note.playerId}?tab=notes`
+    });
+  }
+  for (const conversation of conversations.filter((item) => item.status === "finalized")) {
+    items.push({
+      id: `player-review-${conversation.id}`,
+      date: conversation.conversationDate,
+      type: "reviews",
+      title: "Player Conversation completed",
+      detail: [conversation.developmentFocus ? `Development focus: ${conversation.developmentFocus}` : "", conversation.nextReviewOn ? `Next review: ${conversation.nextReviewOn}` : ""].filter(Boolean).join(" · "),
+      href: `/squad/players/${player.id}/report?conversation=${conversation.id}`
     });
   }
   if (player.convertedAt) {
