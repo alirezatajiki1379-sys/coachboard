@@ -1506,6 +1506,96 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["player_availability_periods"]["Insert"]>;
         Relationships: [];
       };
+      player_notes: {
+        Row: {
+          id: string;
+          user_id: string;
+          squad_id: string;
+          player_id: string;
+          note: string;
+          note_date: string;
+          visibility: "internal" | "conversation_eligible";
+          pinned: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          squad_id: string;
+          player_id: string;
+          note: string;
+          note_date?: string;
+          visibility?: "internal" | "conversation_eligible";
+          pinned?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_notes"]["Insert"]>;
+        Relationships: [];
+      };
+      player_review_conversations: {
+        Row: {
+          id: string;
+          user_id: string;
+          squad_id: string;
+          player_id: string;
+          report_type: "player_conversation" | "internal_coach_report";
+          period_start: string;
+          period_end: string;
+          title: string | null;
+          strengths: string | null;
+          development_focus: string | null;
+          player_perspective: string | null;
+          agreed_next_steps: string | null;
+          next_review_on: string | null;
+          section_options: Json;
+          content_snapshot: Json;
+          status: "draft" | "finalized";
+          finalized_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          squad_id: string;
+          player_id: string;
+          report_type?: "player_conversation" | "internal_coach_report";
+          period_start: string;
+          period_end: string;
+          title?: string | null;
+          strengths?: string | null;
+          development_focus?: string | null;
+          player_perspective?: string | null;
+          agreed_next_steps?: string | null;
+          next_review_on?: string | null;
+          section_options?: Json;
+          content_snapshot?: Json;
+          status?: "draft" | "finalized";
+          finalized_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_review_conversations"]["Insert"]>;
+        Relationships: [];
+      };
+      player_review_conversation_notes: {
+        Row: {
+          conversation_id: string;
+          note_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          conversation_id: string;
+          note_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_review_conversation_notes"]["Insert"]>;
+        Relationships: [];
+      };
       player_header_preferences: {
         Row: {
           user_id: string;

@@ -29,16 +29,18 @@ import type {
   PlayerHeaderPreferences,
   PlayerMedicalPeriod,
   PlayerMedicalPeriodType,
+  PlayerNote,
   SquadPlayer
 } from "@/types/domain";
 import type { Database } from "@/types/database";
 import { loadTrialPeriodData, type TrialPeriodSummary } from "@/lib/squad/trials";
+import { listPlayerNotes } from "@/lib/squad/player-notes";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type AssessmentRow = Database["public"]["Tables"]["player_coach_assessments"]["Row"];
 
 export type PlayerHubTab = "overview" | "analytics" | "development" | "history" | "attendance" | "medical" | "notes" | "details";
-export type PlayerTimelineFilter = "all" | "trainings" | "ratings" | "attendance" | "development" | "observations" | "medical" | "coach";
+export type PlayerTimelineFilter = "all" | "trainings" | "ratings" | "attendance" | "development" | "observations" | "medical" | "notes" | "coach";
 
 export type PlayerTimelineEvent = {
   id: string;
@@ -61,6 +63,7 @@ export type PlayerHubData = {
   contacts: PlayerContact[];
   availabilityPeriods: PlayerAvailabilityPeriod[];
   medicalPeriods: PlayerMedicalPeriod[];
+  notes: PlayerNote[];
   currentMedical?: PlayerMedicalPeriod;
   headerPreferences: PlayerHeaderPreferences;
   timeline: PlayerTimelineEvent[];
@@ -82,7 +85,7 @@ export function parsePlayerHubTab(value?: string | string[]): PlayerHubTab {
 
 export function parsePlayerHubTimelineFilter(value?: string | string[]): PlayerTimelineFilter {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === "trainings" || raw === "ratings" || raw === "attendance" || raw === "development" || raw === "observations" || raw === "medical" || raw === "coach"
+  return raw === "trainings" || raw === "ratings" || raw === "attendance" || raw === "development" || raw === "observations" || raw === "medical" || raw === "notes" || raw === "coach"
     ? raw
     : "all";
 }
@@ -114,13 +117,14 @@ export async function getPlayerHubData(
   if (!playerData) return null;
 
   const player = mapSquadPlayerRow(playerData as SquadPlayerRow);
-  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, preferences, analyticsBase, trialData] = await Promise.all([
+  const [records, assessments, development, contacts, medicalPeriods, availabilityPeriods, notes, preferences, analyticsBase, trialData] = await Promise.all([
     listPlayerRecords(db, userId, playerId),
     listAssessments(db, userId, playerId),
     getPlayerDevelopmentProfile(supabase, userId, playerId),
     listContacts(db, userId, playerId),
     listMedicalPeriods(db, userId, playerId),
     listAvailabilityPeriods(db, userId, playerId),
+    listPlayerNotes(db, userId, playerId),
     getHeaderPreferences(db, userId),
     getPlayerAnalytics(supabase, userId, playerId, period, customFrom, customTo),
     player.playerType === "trial" ? loadTrialPeriodData(db, userId, playerId) : Promise.resolve(null)
@@ -137,9 +141,10 @@ export async function getPlayerHubData(
     contacts,
     availabilityPeriods,
     medicalPeriods,
+    notes,
     currentMedical: currentMedicalPeriod(medicalPeriods),
     headerPreferences: preferences,
-    timeline: buildPlayerTimeline(records, assessments, development, medicalPeriods, availabilityPeriods, player),
+    timeline: buildPlayerTimeline(records, assessments, development, medicalPeriods, availabilityPeriods, notes, player),
     lifetime: {
       trainings: records.length,
       ratings: records.filter((record) => record.overallRating).length,
@@ -197,6 +202,7 @@ function buildPlayerTimeline(
   development: PlayerDevelopmentProfile,
   medicalPeriods: PlayerMedicalPeriod[],
   availabilityPeriods: PlayerAvailabilityPeriod[],
+  notes: PlayerNote[],
   player: SquadPlayer
 ): PlayerTimelineEvent[] {
   const items: PlayerTimelineEvent[] = [];
@@ -287,6 +293,16 @@ function buildPlayerTimeline(
         detail: period.note
       });
     }
+  }
+  for (const note of notes) {
+    items.push({
+      id: `general-note-${note.id}`,
+      date: note.noteDate,
+      type: "notes",
+      title: "General player note",
+      detail: note.note,
+      href: `/squad/players/${note.playerId}?tab=notes`
+    });
   }
   if (player.convertedAt) {
     items.push({

@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { PlayerUnavailabilityForm } from "@/components/squad/player-unavailability-form";
 import { PlayerDevelopmentSection } from "@/components/squad/player-development";
+import { GeneralPlayerNotes, QuickPlayerNoteCard } from "@/components/squad/player-notes";
 import { permanentlyDeleteSquadPlayer } from "@/lib/squad/actions";
 import { createPlayerCoachAssessment } from "@/lib/squad/analytics-actions";
 import {
@@ -57,6 +58,7 @@ const timelineFilters: Array<{ id: PlayerTimelineFilter; label: string }> = [
   { id: "development", label: "Development" },
   { id: "observations", label: "Observations" },
   { id: "medical", label: "Medical" },
+  { id: "notes", label: "Notes" },
   { id: "coach", label: "Coach assessments" }
 ];
 
@@ -207,7 +209,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
       {tab === "history" ? <HistoryTab hub={hub} filter={timelineFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "attendance" ? <AttendanceTab hub={hub} filter={attendanceFilter} period={period} customFrom={customFrom} customTo={customTo} /> : null}
       {tab === "medical" ? <MedicalTab hub={hub} medicalError={medicalError} locale={locale} /> : null}
-      {tab === "notes" ? <NotesTab hub={hub} /> : null}
+      {tab === "notes" ? <NotesTab hub={hub} locale={locale} /> : null}
       {tab === "details" ? <DetailsTab hub={hub} medicalError={medicalError} contactError={contactError} deleteError={deleteError} locale={locale} /> : null}
     </div>
   );
@@ -352,6 +354,7 @@ function OverviewTab({ hub, period, attentionItems, locale }: { hub: PlayerHubDa
         </Card>
       </section>
       <section className="space-y-6">
+        <QuickPlayerNoteCard playerId={hub.player.id} notes={hub.notes} locale={locale} />
         <Card title="Current status" icon={<UserRound className="h-5 w-5" />}>
           <DetailGrid>
             <DetailRow label="Player type" value={hub.player.playerType === "trial" ? "Trial Player" : "Roster"} />
@@ -699,11 +702,12 @@ async function AttendanceTab({ hub, filter, period, customFrom, customTo }: { hu
   );
 }
 
-function NotesTab({ hub }: { hub: PlayerHubData }) {
+function NotesTab({ hub, locale }: { hub: PlayerHubData; locale: "en" | "de" }) {
   const publicNotes = hub.analytics.summary.records.filter((entry) => entry.coachNote && !entry.sensitiveNote);
   const privateNotes = hub.analytics.summary.records.filter((entry) => entry.coachNote && entry.sensitiveNote);
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      <GeneralPlayerNotes playerId={hub.player.id} notes={hub.notes} locale={locale} />
       <Card title="Coach notes" icon={<FileText className="h-5 w-5" />}>
         <NoteList entries={publicNotes} empty="No non-private coach notes in this period." />
       </Card>

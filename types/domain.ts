@@ -323,6 +323,7 @@ export type PlayerMedicalPeriodType = "injured" | "sick";
 export type PlayerMedicalPeriodStatus = "active" | "completed" | "cancelled";
 export type PlayerAvailabilityReason = "school" | "work" | "holiday" | "private" | "other";
 export type PlayerAvailabilityStatus = "active" | "cancelled";
+export type PlayerNoteVisibility = "internal" | "conversation_eligible";
 
 export type PlayerContact = {
   id: string;
@@ -365,6 +366,19 @@ export type PlayerAvailabilityPeriod = {
   endsOn?: string;
   note?: string;
   status: PlayerAvailabilityStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlayerNote = {
+  id: string;
+  userId: string;
+  squadId: string;
+  playerId: string;
+  note: string;
+  noteDate: string;
+  visibility: PlayerNoteVisibility;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 };
