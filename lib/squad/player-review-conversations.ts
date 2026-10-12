@@ -75,6 +75,18 @@ export async function listPlayerReviewConversations(db: SupabaseClient, userId: 
   return rows.map((row) => mapConversation(row, noteIdsByConversation.get(row.id) ?? []));
 }
 
+export async function listPlayerReviewConversationsForHub(db: SupabaseClient, userId: string, playerId: string) {
+  try {
+    return await listPlayerReviewConversations(db, userId, playerId);
+  } catch (error) {
+    console.error("player_hub_review_conversations_load_failed", {
+      playerId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return [];
+  }
+}
+
 export async function getPlayerReviewConversation(db: SupabaseClient, userId: string, conversationId: string) {
   const { data, error } = await db
     .from("player_review_conversations")

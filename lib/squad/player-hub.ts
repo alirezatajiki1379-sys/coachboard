@@ -35,7 +35,7 @@ import type {
 import type { Database } from "@/types/database";
 import { loadTrialPeriodData, type TrialPeriodSummary } from "@/lib/squad/trials";
 import { listPlayerNotes } from "@/lib/squad/player-notes";
-import { listPlayerReviewConversations, type PlayerReviewConversation } from "@/lib/squad/player-review-conversations";
+import { listPlayerReviewConversationsForHub, type PlayerReviewConversation } from "@/lib/squad/player-review-conversations";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type AssessmentRow = Database["public"]["Tables"]["player_coach_assessments"]["Row"];
@@ -127,7 +127,7 @@ export async function getPlayerHubData(
     listMedicalPeriods(db, userId, playerId),
     listAvailabilityPeriods(db, userId, playerId),
     listPlayerNotes(db, userId, playerId),
-    listPlayerReviewConversations(db, userId, playerId),
+    listPlayerReviewConversationsForHub(db, userId, playerId),
     getHeaderPreferences(db, userId),
     getPlayerAnalytics(supabase, userId, playerId, period, customFrom, customTo),
     player.playerType === "trial" ? loadTrialPeriodData(db, userId, playerId) : Promise.resolve(null)

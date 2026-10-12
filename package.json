@@ -31,6 +31,7 @@
     "test:drill-bulk-browser": "node scripts/drill-library-bulk-browser.mjs",
     "test:player-report": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/player-report-notes-regression.mjs",
     "test:player-report-completion": "node scripts/player-report-completion-regression.mjs",
+    "test:quick-note-hub": "node scripts/quick-note-hub-regression.mjs",
     "validate:drill-import": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/validate-drill-import.mjs",
     "fixture:drill-import": "node scripts/create-drill-import-fixture.mjs",
     "test:apply-as-expected": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/apply-as-expected-attendance-regression.mjs",
