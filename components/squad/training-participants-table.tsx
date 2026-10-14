@@ -776,8 +776,9 @@ function availabilityRank(entry: SquadAttendanceEntry) {
 function actualStatusRank(entry: SquadAttendanceEntry) {
   if (entry.finalStatus === "present") return 0;
   if (entry.finalStatus === "Z") return 1;
-  if (entry.finalStatus) return 2;
-  return 3;
+  if (entry.finalStatus === "left_early") return 2;
+  if (entry.finalStatus) return 3;
+  return 4;
 }
 
 function playerProfileHref(playerId: string, eventId: string) {

@@ -20,7 +20,8 @@ const stubs = {
   "@/lib/squad/attendance-actions": `
     export async function updateAttendanceRating(data) { window.qa.saves.push(Object.fromEntries(data)); if(window.qa.fail) throw new Error("Offline"); return {ok:true, overallRating: data.get("overallRating") ? Number(data.get("overallRating")) : null}; }
     export const updateAttendanceRatingInline=updateAttendanceRating;
-    export async function updateFinalAttendanceInline(data) { window.qa.saves.push(Object.fromEntries(data)); if(window.qa.fail) throw new Error("Offline"); return {ok:true,status:data.get("finalStatus"),actualAbsenceReason:data.get("actualAbsenceReason"),overallRating:null,latePenaltyApplied:true}; }
+    export async function updateFinalAttendanceInline(data) { window.qa.saves.push(Object.fromEntries(data)); if(window.qa.fail) throw new Error("Offline"); return {ok:true,status:data.get("finalStatus"),actualAbsenceReason:data.get("actualAbsenceReason"),actualAttendanceNote:data.get("actualAttendanceNote"),lateMinutes:data.get("lateMinutes")?Number(data.get("lateMinutes")):null,leftEarlyMinute:data.get("leftEarlyMinute")?Number(data.get("leftEarlyMinute")):null,overallRating:null,latePenaltyApplied:true}; }
+    export async function applyAttendanceAsExpected() { return {ok:true,updatedCount:0,reviewCount:0,updates:[]}; }
     export const completeTrainingEvent=()=>{};
     export const markAllExpectedPresent=()=>{};
     export const markAllPresent=()=>{};
@@ -44,7 +45,8 @@ const bundle = await build({
     const params=new URLSearchParams(location.search);
     const locale=params.get("locale")||"en";
     const view=params.get("view")||"review";
-    const entry={id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:"present",overallRating:params.has("unrated")?undefined:4,latePenaltyApplied:true,player:{firstName:"Fictional",lastName:"Player",playerType:"roster",position:"CM",secondaryPositions:[]}};
+    const status=params.get("status")||"present";
+    const entry={id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:status,actualAbsenceReason:status==="left_early"?"injured":undefined,actualAttendanceNote:status==="left_early"?"Fictional attendance context":undefined,leftEarlyMinute:status==="left_early"?2:undefined,overallRating:params.has("unrated")?undefined:4,latePenaltyApplied:true,player:{firstName:"Fictional",lastName:"Player",playerType:"roster",position:"CM",secondaryPositions:[]}};
     const review={objectiveOutcome:"achieved",overallQuality:4,intensity:3,playerResponse:5,workedWell:"Existing feedback",drillReviews:[]};
     const root=createRoot(document.getElementById("root"));
     function render(){root.render(<I18nProvider locale={locale}><GermanLocalizationBoundary locale={locale}>
@@ -157,6 +159,12 @@ try {
     }
   }
   await page.setViewportSize({width:390,height:844});
+  await page.goto(`${base}?locale=de&view=check-in&status=left_early`);
+  await page.getByText("Training abgebrochen", { exact: true }).first().waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "left-early check-in mobile overflow");
+  assert.ok(await page.getByText("Tatsächlicher Grund", { exact: false }).count());
+  assert.ok(await page.getByText("Anwesenheitsnotiz", { exact: true }).count());
+  console.log("PASS: left-early attendance editor at 390px in German");
   await page.goto(`${base}?locale=de&view=check-in`);
   await page.getByText("Fictional Player",{exact:true}).waitFor();
   await page.screenshot({path:"/private/tmp/coachboard-mobile-checkin-de.png",fullPage:true});

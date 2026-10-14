@@ -3,7 +3,7 @@
 import { useSystemText } from "@/components/i18n/use-system-text";
 
 
-import { Check, ClipboardCheck, Clock3, HelpCircle, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
+import { Check, ClipboardCheck, Clock3, HelpCircle, LogOut, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useActionState, useContext, useEffect, useState, useTransition } from "react";
@@ -19,7 +19,6 @@ import {
   markAllExpected,
   updateAttendanceRating,
   updateAttendanceRatingInline,
-  updateFinalAttendance,
   updateFinalAttendanceInline,
   updatePlannedAttendanceInline,
   updatePlannedAttendance
@@ -31,6 +30,8 @@ import { attendanceCounts } from "@/lib/squad/attendance-format";
 import {
   attendanceReasonLabels,
   getApplyAsExpectedSummary,
+  isAbsentAttendanceStatus,
+  isParticipatingAttendanceStatus,
   normalizePlannedAttendanceReason,
   overallRatingInitialValue,
   plannedAttendanceReasonOptions,
@@ -67,13 +68,14 @@ function useCheckInTransition() {
   return transition;
 }
 
-type CheckInFilter = "all" | "present" | "absent" | "late" | "roster" | "trial";
+type CheckInFilter = "all" | "present" | "absent" | "late" | "leftEarly" | "roster" | "trial";
 
 const checkInFilterLabels: Record<CheckInFilter, string> = {
   all: "All",
   present: "Present",
   absent: "Absent",
   late: "Late",
+  leftEarly: "Left early",
   roster: "Roster",
   trial: "Trial players"
 };
@@ -84,11 +86,12 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
   const [filter, setFilter] = useState<CheckInFilter>(initialFilter);
   useEffect(() => setEntries(event.attendance), [event.attendance]);
   const counts = attendanceCounts(entries);
-  const presentEntries = entries.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
+  const presentEntries = entries.filter((entry) => isParticipatingAttendanceStatus(entry.finalStatus));
   const visibleEntries = entries.filter((entry) => {
-    if (filter === "present") return entry.finalStatus === "present" || entry.finalStatus === "Z";
+    if (filter === "present") return isParticipatingAttendanceStatus(entry.finalStatus);
     if (filter === "late") return entry.finalStatus === "Z";
-    if (filter === "absent") return Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z");
+    if (filter === "leftEarly") return entry.finalStatus === "left_early";
+    if (filter === "absent") return isAbsentAttendanceStatus(entry.finalStatus);
     if (filter === "roster") return entry.player?.playerType !== "trial";
     if (filter === "trial") return entry.player?.playerType === "trial";
     return true;
@@ -103,7 +106,7 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
     setEntries((current) => current.map((entry) => {
       const update = updatesById.get(entry.id);
       if (!update) return entry;
-      const isAbsent = update.finalStatus !== "present" && update.finalStatus !== "Z";
+      const isAbsent = isAbsentAttendanceStatus(update.finalStatus);
       return {
         ...entry,
         finalStatus: update.finalStatus,
@@ -124,10 +127,11 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
 
   return (
     <>
-      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <CheckInMetric label={ui("Present")} value={counts.present} tone="success" />
-        <CheckInMetric label={ui("Absent")} value={counts.absent} tone="danger" />
         <CheckInMetric label={ui("Late")} value={counts.late} tone="warning" />
+        <CheckInMetric label={ui("Left early")} value={counts.leftEarly} tone="warning" />
+        <CheckInMetric label={ui("Absent")} value={counts.absent} tone="danger" />
         <CheckInMetric label={ui("Total")} value={entries.length} />
       </div>
       {presentEntries.length ? (
@@ -419,12 +423,15 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
     onEntryChange?.(nextEntry);
   }
   const isLate = entryWithState.finalStatus === "Z";
-  const isAbsent = Boolean(entryWithState.finalStatus && entryWithState.finalStatus !== "present" && entryWithState.finalStatus !== "Z");
-  const isParticipating = entryWithState.finalStatus === "present" || entryWithState.finalStatus === "Z";
+  const isLeftEarly = entryWithState.finalStatus === "left_early";
+  const isAbsent = isAbsentAttendanceStatus(entryWithState.finalStatus);
+  const isParticipating = isParticipatingAttendanceStatus(entryWithState.finalStatus);
   const actualAbsenceReason = effectiveActualAbsenceReason(entryWithState);
   const statusTone = entryWithState.finalStatus
     ? entryWithState.finalStatus === "present" || entryWithState.finalStatus === "Z"
       ? "bg-green-50 text-green-700"
+      : entryWithState.finalStatus === "left_early"
+        ? "bg-orange-50 text-orange-700"
       : "bg-red-50 text-red-700"
     : "bg-amber-50 text-amber-700";
 
@@ -445,11 +452,17 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
                 {ui("Planned: ")}{ui(plannedStatusLabel(entryWithState.plannedStatus))}{plannedReasonLabel(entryWithState.plannedReason) ? ` · ${ui(plannedReasonLabel(entryWithState.plannedReason))}` : ""}
               </span>
               <span className={`rounded-full px-2 py-1 ${statusTone}`}>
-                {ui("Actual: ")}{isAbsent ? `${ui("Absent")}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}` : ui(finalStatusLabel(entryWithState.finalStatus))}
+                {ui("Actual: ")}{isAbsent ? `${ui("Absent")}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}` : `${ui(finalStatusLabel(entryWithState.finalStatus))}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}`}
               </span>
             </div>
             {entryWithState.plannedReasonNote ? (
               <p translate="no" className="mt-1 text-sm text-slate-500">&ldquo;{entryWithState.plannedReasonNote}&rdquo;</p>
+            ) : null}
+            {isLeftEarly && entryWithState.leftEarlyMinute !== undefined ? (
+              <p className="mt-2 text-sm font-semibold text-orange-700">{ui("Left after minute")}: {entryWithState.leftEarlyMinute}</p>
+            ) : null}
+            {entryWithState.actualAttendanceNote ? (
+              <p translate="no" className="mt-1 text-sm text-slate-700">&ldquo;{entryWithState.actualAttendanceNote}&rdquo;</p>
             ) : null}
             {entryWithState.medicalAvailability ? (
               <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-2.5 py-2 text-xs text-red-800">
@@ -467,35 +480,20 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
             {entryWithState.coachNote ? <p className="mt-2 text-sm text-slate-600">{entryWithState.coachNote}</p> : null}
             {error ? <p className="mt-2 text-sm font-semibold text-red-700" role="alert">{ui(error)}</p> : null}
           </div>
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
             <FinalStatusButton entry={entryWithState} eventId={eventId} status="present" label={ui("Present")} icon={<Check className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
             <FinalStatusButton entry={entryWithState} eventId={eventId} status="Z" label={ui("Late")} icon={<Clock3 className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
             <FinalStatusButton entry={entryWithState} eventId={eventId} status="absent" label={ui("Absent")} icon={<UserMinus className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="left_early" label={ui("Left early")} icon={<LogOut className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
           </div>
         </div>
         {isParticipating ? (
           <InlineRatingControl entry={entryWithState} eventId={eventId} onOptimisticEntry={handleEntryChange} onError={setError} />
         ) : null}
-        {isLate ? (
-          <form action={updateFinalAttendance} className="grid gap-2 rounded-md bg-amber-50 p-3 sm:grid-cols-[120px_150px_auto] sm:items-end">
-            <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="attendanceId" value={entryWithState.id} />
-            <input type="hidden" name="finalStatus" value="Z" />
-            <input type="hidden" name="returnTo" value={`/squad/attendance/${eventId}/check-in`} />
-            <label>
-              <span className="text-xs font-bold uppercase text-amber-700">{ui("Late minutes")}</span>
-              <input name="lateMinutes" type="number" min="0" defaultValue={entryWithState.lateMinutes ?? ""} className="mt-1 h-10 w-full rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-            </label>
-            <label className="flex h-10 items-center gap-2 rounded-md border border-amber-200 bg-white px-3 text-sm font-semibold text-slate-600">
-              <input name="latePenaltyApplied" type="checkbox" defaultChecked={entryWithState.latePenaltyApplied} className="h-4 w-4" />
-              {ui("Reliability penalty")}</label>
-            <Button type="submit" variant="secondary" className="h-10">{ui("Save late details")}</Button>
-          </form>
+        {isLate || isAbsent || isLeftEarly ? (
+          <ActualAttendanceDetails key={`${entryWithState.id}-${entryWithState.finalStatus}`} entry={entryWithState} eventId={eventId} onEntryChange={handleEntryChange} onError={setError} />
         ) : null}
-        {isAbsent ? (
-          <AbsenceReasonControl entry={entryWithState} eventId={eventId} onOptimisticEntry={handleEntryChange} onError={setError} />
-        ) : null}
-        {entryWithState.medicalAvailability?.periodId && (entryWithState.finalStatus === "present" || entryWithState.finalStatus === "Z") ? (
+        {entryWithState.medicalAvailability?.periodId && isParticipating ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
             <p className="text-sm font-bold text-amber-900">{ui("This player still has an active medical absence.")}</p>
             <p className="mt-1 text-sm text-amber-800">{ui("Mark as returned, or keep the medical status active.")}</p>
@@ -684,76 +682,98 @@ function InlineRatingControl({
   );
 }
 
-function AbsenceReasonControl({
+export function ActualAttendanceDetails({
   entry,
   eventId,
-  onOptimisticEntry,
+  onEntryChange,
   onError
 }: {
   entry: SquadAttendanceEntry;
   eventId: string;
-  onOptimisticEntry: (entry: SquadAttendanceEntry) => void;
-  onError: (message: string) => void;
+  onEntryChange?: (entry: SquadAttendanceEntry) => void;
+  onError?: (message: string) => void;
 }) {
   const ui = useSystemText();
-  const [isPending, startTransition] = useCheckInTransition();
-  const currentReason = effectiveActualAbsenceReason(entry) ?? defaultActualAbsenceReason(entry);
+  const [isPending, startTransition] = useTransition();
+  const [savedEntry, setSavedEntry] = useState(entry);
+  useEffect(() => setSavedEntry(entry), [entry]);
+  const status = savedEntry.finalStatus;
+  const needsReason = status === "left_early" || isAbsentAttendanceStatus(status);
+  const currentReason = effectiveActualAbsenceReason(savedEntry) ?? defaultActualAbsenceReason(savedEntry);
+  const tone = status === "left_early" ? "border-orange-200 bg-orange-50" : status === "Z" ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50";
 
-  function updateReason(reason: SquadActualAbsenceReason) {
-    if (isPending) return;
-    const previous = entry;
-    const optimistic: SquadAttendanceEntry = {
-      ...entry,
-      finalStatus: legacyFinalStatusForReason(reason),
-      actualAbsenceReason: reason,
-      overallRating: undefined,
-      ratingTechnique: undefined,
-      ratingGameUnderstanding: undefined,
-      ratingIntensity: undefined,
-      ratingBehavior: undefined,
-      ratingAutoSuggestion: undefined
-    };
-    onError("");
-    onOptimisticEntry(optimistic);
+  function saveDetails(formData: FormData) {
+    if (isPending || !status) return;
+    const reason = formData.get("actualAbsenceReason");
+    if (needsReason && !reason) {
+      onError?.("Select an actual reason before saving.");
+      return;
+    }
+    onError?.("");
     startTransition(async () => {
-      const formData = new FormData();
       formData.set("eventId", eventId);
-      formData.set("attendanceId", entry.id);
-      formData.set("finalStatus", "absent");
-      formData.set("actualAbsenceReason", reason);
+      formData.set("attendanceId", savedEntry.id);
+      formData.set("finalStatus", isAbsentAttendanceStatus(status) ? "absent" : status);
       const result = await safeAttendanceMutation(() => updateFinalAttendanceInline(formData));
       if (!result.ok) {
-        onOptimisticEntry(previous);
-        onError(result.message || "Absence reason could not be updated.");
+        onError?.(result.message || "Attendance details could not be updated.");
         return;
       }
-      onOptimisticEntry({
-        ...optimistic,
+      const nextEntry: SquadAttendanceEntry = {
+        ...savedEntry,
         finalStatus: result.status,
         actualAbsenceReason: result.actualAbsenceReason ?? undefined,
+        actualAttendanceNote: result.actualAttendanceNote ?? undefined,
+        lateMinutes: result.lateMinutes ?? undefined,
+        leftEarlyMinute: result.leftEarlyMinute ?? undefined,
+        latePenaltyApplied: result.latePenaltyApplied,
         overallRating: result.overallRating ?? undefined
-      });
-      onError(result.warning ?? "");
+      };
+      setSavedEntry(nextEntry);
+      onEntryChange?.(nextEntry);
+      onError?.(result.warning ?? "");
     });
   }
 
   return (
-    <div className="grid gap-2 rounded-md bg-red-50 p-3 sm:grid-cols-[minmax(180px,1fr)_auto] sm:items-end">
-      <label>
-        <span className="text-xs font-bold uppercase text-red-700">{ui("Reason")}</span>
-        <select
-          value={currentReason}
-          onChange={(event) => updateReason(event.target.value as SquadActualAbsenceReason)}
-          disabled={isPending}
-          className="mt-1 h-10 w-full rounded-md border border-red-200 bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 disabled:cursor-wait disabled:opacity-70"
-        >
-          {actualAbsenceOptions.map((option) => <option key={option.reason} value={option.reason}>{ui(option.label)}</option>)}
-        </select>
+    <form action={saveDetails} className={`grid gap-3 rounded-md border p-3 ${tone} sm:grid-cols-2`}>
+      {needsReason ? (
+        <label>
+          <span className="text-xs font-bold uppercase text-slate-600">{ui("Actual reason")} *</span>
+          <select name="actualAbsenceReason" defaultValue={currentReason ?? ""} disabled={isPending} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+            <option value="">{ui("Select reason")}</option>
+            {actualAbsenceOptions.map((option) => <option key={option.reason} value={option.reason}>{ui(option.label)}</option>)}
+          </select>
+        </label>
+      ) : null}
+      {status === "Z" ? (
+        <label>
+          <span className="text-xs font-bold uppercase text-slate-600">{ui("Late minutes")}</span>
+          <input name="lateMinutes" type="number" min="0" defaultValue={savedEntry.lateMinutes ?? ""} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+        </label>
+      ) : null}
+      {status === "left_early" ? (
+        <label>
+          <span className="text-xs font-bold uppercase text-slate-600">{ui("Left after minute")}</span>
+          <input name="leftEarlyMinute" type="number" min="0" defaultValue={savedEntry.leftEarlyMinute ?? ""} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+        </label>
+      ) : null}
+      <label className={needsReason ? "sm:col-span-2" : ""}>
+        <span className="text-xs font-bold uppercase text-slate-600">{ui("Attendance note")}</span>
+        <textarea name="actualAttendanceNote" rows={3} defaultValue={savedEntry.actualAttendanceNote ?? ""} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
       </label>
-      <span className="inline-flex h-10 items-center rounded-md bg-white px-3 text-xs font-bold text-red-700 ring-1 ring-red-200">
-        {isPending ? "Saving..." : "Required for absence"}
-      </span>
-    </div>
+      {status === "Z" ? (
+        <label className="flex min-h-11 items-center gap-2 rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-slate-600">
+          <input name="latePenaltyApplied" type="checkbox" defaultChecked={savedEntry.latePenaltyApplied} className="h-4 w-4" />
+          {ui("Reliability penalty")}
+        </label>
+      ) : null}
+      <div className={status === "Z" ? "" : "sm:col-span-2"}>
+        <Button type="submit" disabled={isPending} variant="secondary" className="h-11 w-full justify-center sm:w-auto">
+          {ui(isPending ? "Saving..." : "Save attendance details")}
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -776,7 +796,7 @@ function FinalStatusButton({
 }) {
   const ui = useSystemText();
   const active = status === "absent"
-    ? Boolean(entry.finalStatus && entry.finalStatus !== "present" && entry.finalStatus !== "Z")
+    ? isAbsentAttendanceStatus(entry.finalStatus)
     : entry.finalStatus === status;
   const [isPending, startTransition] = useCheckInTransition();
   const tone =
@@ -784,29 +804,35 @@ function FinalStatusButton({
       ? "bg-green-600 text-white hover:bg-green-700"
       : status === "Z"
         ? "bg-amber-500 text-white hover:bg-amber-600"
-        : "bg-red-600 text-white hover:bg-red-700";
+        : status === "left_early"
+          ? "bg-orange-600 text-white hover:bg-orange-700"
+          : "bg-red-600 text-white hover:bg-red-700";
   const idle =
     status === "present"
       ? "bg-white text-green-700 ring-1 ring-green-200 hover:bg-green-50"
       : status === "Z"
         ? "bg-white text-amber-700 ring-1 ring-amber-200 hover:bg-amber-50"
-        : "bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50";
+        : status === "left_early"
+          ? "bg-white text-orange-700 ring-1 ring-orange-200 hover:bg-orange-50"
+          : "bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50";
   function updateStatus() {
     if (isPending || active) return;
     const previous = entry;
-    const actualAbsenceReason = status === "absent" ? defaultActualAbsenceReason(entry) : undefined;
+    const actualAbsenceReason = status === "absent" || status === "left_early" ? defaultActualAbsenceReason(entry) : undefined;
     const optimistic: SquadAttendanceEntry = {
       ...entry,
       finalStatus: status,
       actualAbsenceReason,
+      actualAttendanceNote: status === "present" ? undefined : entry.actualAttendanceNote,
       lateMinutes: status === "Z" ? entry.lateMinutes : undefined,
+      leftEarlyMinute: status === "left_early" ? entry.leftEarlyMinute : undefined,
       latePenaltyApplied: status === "Z" ? entry.latePenaltyApplied : true,
-      overallRating: status === "present" || status === "Z" ? entry.overallRating : undefined,
-      ratingTechnique: status === "present" || status === "Z" ? entry.ratingTechnique : undefined,
-      ratingGameUnderstanding: status === "present" || status === "Z" ? entry.ratingGameUnderstanding : undefined,
-      ratingIntensity: status === "present" || status === "Z" ? entry.ratingIntensity : undefined,
-      ratingBehavior: status === "present" || status === "Z" ? entry.ratingBehavior : undefined,
-      ratingAutoSuggestion: status === "present" || status === "Z" ? entry.ratingAutoSuggestion : undefined
+      overallRating: isParticipatingAttendanceStatus(status) ? entry.overallRating : undefined,
+      ratingTechnique: isParticipatingAttendanceStatus(status) ? entry.ratingTechnique : undefined,
+      ratingGameUnderstanding: isParticipatingAttendanceStatus(status) ? entry.ratingGameUnderstanding : undefined,
+      ratingIntensity: isParticipatingAttendanceStatus(status) ? entry.ratingIntensity : undefined,
+      ratingBehavior: isParticipatingAttendanceStatus(status) ? entry.ratingBehavior : undefined,
+      ratingAutoSuggestion: isParticipatingAttendanceStatus(status) ? entry.ratingAutoSuggestion : undefined
     };
     onError("");
     onOptimisticEntry(optimistic);
@@ -816,6 +842,8 @@ function FinalStatusButton({
       formData.set("attendanceId", entry.id);
       formData.set("finalStatus", status);
       if (actualAbsenceReason) formData.set("actualAbsenceReason", actualAbsenceReason);
+      if (entry.actualAttendanceNote) formData.set("actualAttendanceNote", entry.actualAttendanceNote);
+      if (status === "left_early" && entry.leftEarlyMinute !== undefined) formData.set("leftEarlyMinute", String(entry.leftEarlyMinute));
       if (status === "Z" && entry.latePenaltyApplied) formData.set("latePenaltyApplied", "on");
       const result = await safeAttendanceMutation(() => updateFinalAttendanceInline(formData));
       if (!result.ok) {
@@ -827,7 +855,9 @@ function FinalStatusButton({
         ...optimistic,
         finalStatus: result.status,
         actualAbsenceReason: result.actualAbsenceReason ?? undefined,
+        actualAttendanceNote: result.actualAttendanceNote ?? undefined,
         lateMinutes: result.lateMinutes ?? undefined,
+        leftEarlyMinute: result.leftEarlyMinute ?? undefined,
         latePenaltyApplied: result.latePenaltyApplied,
         overallRating: result.overallRating ?? undefined
       });
@@ -858,23 +888,14 @@ async function safeAttendanceMutation<T extends AttendanceMutationResult | Ratin
   }
 }
 
-function defaultActualAbsenceReason(entry: SquadAttendanceEntry): SquadActualAbsenceReason {
+function defaultActualAbsenceReason(entry: SquadAttendanceEntry): SquadActualAbsenceReason | undefined {
   if (entry.actualAbsenceReason) return entry.actualAbsenceReason;
   if (entry.finalStatus === "V") return "injured";
   if (entry.finalStatus === "K") return "sick";
   if (entry.finalStatus === "E") return "excused";
   if (entry.finalStatus === "P") return "private";
   if (entry.finalStatus === "U") return "unexcused";
-  return plannedReasonToActualAbsenceReason(entry.plannedReason) ?? "unexcused";
-}
-
-function legacyFinalStatusForReason(reason: SquadActualAbsenceReason): SquadFinalAttendanceStatus {
-  if (reason === "injured") return "V";
-  if (reason === "sick") return "K";
-  if (reason === "excused") return "E";
-  if (reason === "private") return "P";
-  if (reason === "unexcused") return "U";
-  return "absent";
+  return plannedReasonToActualAbsenceReason(entry.plannedReason) ?? undefined;
 }
 
 function CheckInMetric({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "success" | "warning" | "danger" }) {
@@ -931,9 +952,11 @@ function RatingSelect({ name, label, defaultValue }: { name: string; label: stri
 export function MissingStatusesNotice({ entries }: { entries: SquadAttendanceEntry[] }) {
   const ui = useSystemText();
   const missing = entries.filter((entry) => !entry.finalStatus).length;
-  return missing ? (
+  const missingReasons = entries.filter((entry) => (isAbsentAttendanceStatus(entry.finalStatus) || entry.finalStatus === "left_early") && !effectiveActualAbsenceReason(entry)).length;
+  return missing || missingReasons ? (
     <p className="inline-flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
       <ShieldAlert className="h-4 w-4" />
-      {ui("{count} players still need an actual status.", { count: missing })}</p>
+      <span>{missing ? ui("{count} players still need an actual status.", { count: missing }) : null}{missing && missingReasons ? " " : ""}{missingReasons ? ui("{count} absent or left-early players still need an actual reason.", { count: missingReasons }) : null}</span>
+    </p>
   ) : null;
 }

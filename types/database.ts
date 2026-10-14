@@ -1196,9 +1196,11 @@ export type Database = {
           planned_reason: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | null;
           planned_reason_note: string | null;
           planned_status_source: "default" | "manual" | "medical" | "availability" | null;
-          final_status: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
+          final_status: "present" | "absent" | "left_early" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
           actual_absence_reason: "unexcused" | "excused" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other" | null;
+          actual_attendance_note: string | null;
           late_minutes: number | null;
+          left_early_minute: number | null;
           late_penalty_applied: boolean;
           overall_rating: number | null;
           rating_technique: number | null;
@@ -1220,9 +1222,11 @@ export type Database = {
           planned_reason?: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | null;
           planned_reason_note?: string | null;
           planned_status_source?: "default" | "manual" | "medical" | "availability" | null;
-          final_status?: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
+          final_status?: "present" | "absent" | "left_early" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
           actual_absence_reason?: "unexcused" | "excused" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other" | null;
+          actual_attendance_note?: string | null;
           late_minutes?: number | null;
+          left_early_minute?: number | null;
           late_penalty_applied?: boolean;
           overall_rating?: number | null;
           rating_technique?: number | null;

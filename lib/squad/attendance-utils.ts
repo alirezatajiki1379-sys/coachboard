@@ -43,17 +43,25 @@ export function isExpectedFromPlannedStatus(entry: Pick<SquadAttendanceEntry, "p
 }
 
 export function isConfirmedAttending(entry: SquadAttendanceEntry) {
-  if (entry.finalStatus === "present" || entry.finalStatus === "Z") return true;
+  if (isParticipatingAttendanceStatus(entry.finalStatus)) return true;
   if (entry.finalStatus) return false;
   return isExpectedFromPlannedStatus(entry);
 }
 
 export function isRateableAttendance(entry: Pick<SquadAttendanceEntry, "finalStatus">) {
-  return entry.finalStatus === "present" || entry.finalStatus === "Z";
+  return isParticipatingAttendanceStatus(entry.finalStatus);
 }
 
 export function isDefaultRatingCandidate(entry: Pick<SquadAttendanceEntry, "plannedStatus" | "finalStatus">) {
-  return isExpectedFromPlannedStatus(entry) && isRateableAttendance(entry);
+  return isExpectedFromPlannedStatus(entry) && (entry.finalStatus === "present" || entry.finalStatus === "Z");
+}
+
+export function isParticipatingAttendanceStatus(status?: SquadFinalAttendanceStatus | null) {
+  return status === "present" || status === "Z" || status === "left_early";
+}
+
+export function isAbsentAttendanceStatus(status?: SquadFinalAttendanceStatus | null) {
+  return status === "absent" || status === "V" || status === "K" || status === "E" || status === "P" || status === "S" || status === "U";
 }
 
 export function overallRatingInitialValue(entry: Pick<SquadAttendanceEntry, "plannedStatus" | "finalStatus" | "overallRating">) {
@@ -152,17 +160,18 @@ export function getPlannedAttendanceSummary(entries: SquadAttendanceEntry[]) {
 }
 
 export function getFinalAttendanceSummary(entries: SquadAttendanceEntry[]) {
-  const presentEntries = entries.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
-  const composition = participantComposition(presentEntries);
+  const participatingEntries = entries.filter((entry) => isParticipatingAttendanceStatus(entry.finalStatus));
+  const composition = participantComposition(participatingEntries);
   return {
-    present: presentEntries.length,
+    present: entries.filter((entry) => entry.finalStatus === "present").length,
     late: entries.filter((entry) => entry.finalStatus === "Z").length,
-    absent: entries.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus)).length,
+    leftEarly: entries.filter((entry) => entry.finalStatus === "left_early").length,
+    absent: entries.filter((entry) => isAbsentAttendanceStatus(entry.finalStatus)).length,
     unresolved: entries.filter((entry) => !entry.finalStatus).length,
     fieldPlayersPresent: composition.fieldPlayers,
     goalkeepersPresent: composition.goalkeepers,
     unassignedPresent: composition.unassigned,
-    trialPlayersPresent: presentEntries.filter((entry) => entry.player?.playerType === "trial").length,
+    trialPlayersPresent: participatingEntries.filter((entry) => entry.player?.playerType === "trial").length,
     totalParticipants: entries.length
   };
 }
@@ -223,7 +232,7 @@ export function participantComposition(entries: SquadAttendanceEntry[]) {
 }
 
 export function calculateReliabilityPenaltyFromStatus(status?: SquadFinalAttendanceStatus | null, latePenaltyApplied = true) {
-  if (!status || status === "present" || status === "absent" || status === "V" || status === "K" || status === "E") return 0;
+  if (!status || status === "present" || status === "left_early" || status === "absent" || status === "V" || status === "K" || status === "E") return 0;
   if (status === "Z") return latePenaltyApplied ? -0.5 : 0;
   if (status === "P") return -0.5;
   if (status === "S") return -1;

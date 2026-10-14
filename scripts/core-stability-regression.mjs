@@ -87,7 +87,9 @@ function actionMocks(db) {
     "@/lib/trainings/utils": training,
     "@/lib/squad/squads": {},
     "@/lib/squad/participant-sync": {},
-    "@/lib/squad/availability": {}
+    "@/lib/squad/availability": {},
+    "@/lib/scouting/db": { asScoutingDb: (value) => value },
+    "@/lib/drills/graphics": {}
   };
 }
 
@@ -197,12 +199,61 @@ test("workflow-status failure reports a warning without pretending a saved ratin
   assert.equal(db.tables.squad_attendance_records[0].overall_rating, 3);
 });
 
-test("absent legacy ratings never become a UI default; late counts once in present total", () => {
+test("absent legacy ratings never become a UI default; final outcomes stay separate", () => {
   assert.equal(attendance.overallRatingInitialValue({ plannedStatus: "expected", finalStatus: "absent", overallRating: 4 }), undefined);
   const summary = attendance.getFinalAttendanceSummary([{ finalStatus: "present" }, { finalStatus: "Z" }, { finalStatus: "absent" }]);
-  assert.equal(summary.present, 2);
+  assert.equal(summary.present, 1);
   assert.equal(summary.late, 1);
   assert.equal(summary.absent, 1);
+});
+
+test("actual attendance context transitions preserve and clear the right fields", async () => {
+  const db = attendanceDb(null);
+  const record = db.tables.squad_attendance_records[0];
+  record.actual_absence_reason = null;
+  record.actual_attendance_note = null;
+  record.left_early_minute = null;
+  record.late_minutes = null;
+  record.late_penalty_applied = true;
+  const actions = loadModule("lib/squad/attendance-actions.ts", actionMocks(db));
+  const update = async (values) => {
+    const form = new FormData();
+    form.set("eventId", "event");
+    form.set("attendanceId", "record");
+    for (const [key, value] of Object.entries(values)) form.set(key, String(value));
+    const result = await actions.updateFinalAttendanceInline(form);
+    assert.equal(result.ok, true);
+    return result;
+  };
+
+  await update({ finalStatus: "absent" });
+  assert.equal(record.final_status, "absent");
+  assert.equal(record.actual_absence_reason, null);
+
+  await update({ finalStatus: "absent", actualAbsenceReason: "school", actualAttendanceNote: "Class trip" });
+  assert.equal(record.actual_absence_reason, "school");
+  assert.equal(record.actual_attendance_note, "Class trip");
+
+  await update({ finalStatus: "left_early", leftEarlyMinute: 2 });
+  assert.equal(record.final_status, "left_early");
+  assert.equal(record.actual_absence_reason, "school");
+  assert.equal(record.actual_attendance_note, "Class trip");
+  assert.equal(record.left_early_minute, 2);
+
+  await update({ finalStatus: "absent" });
+  assert.equal(record.actual_absence_reason, "school");
+  assert.equal(record.actual_attendance_note, "Class trip");
+  assert.equal(record.left_early_minute, null);
+
+  await update({ finalStatus: "present" });
+  assert.equal(record.actual_absence_reason, null);
+  assert.equal(record.actual_attendance_note, null);
+  assert.equal(record.left_early_minute, null);
+  assert.equal(record.late_minutes, null);
+
+  await update({ finalStatus: "Z", lateMinutes: 10, actualAttendanceNote: "Traffic", latePenaltyApplied: "on" });
+  assert.equal(record.late_minutes, 10);
+  assert.equal(record.actual_attendance_note, "Traffic");
 });
 
 test("availability sync preserves historical/manual/final rows and batches future updates", async () => {

@@ -20,7 +20,8 @@ import {
 import { createPlayerAvailabilityPeriod, createPlayerContact, createPlayerMedicalPeriod, deletePlayerAvailabilityPeriod, deletePlayerContact, savePlayerHeaderPreferences, updatePlayerAvailabilityPeriodDetails, updatePlayerMedicalPeriodDetails, updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { getPlayerAttentionSummary } from "@/lib/squad/attention-queries";
 import { attentionPriorityLabels, attentionTone, type AttentionItem } from "@/lib/squad/attention";
-import { formatEventDate, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
+import { actualAbsenceReasonLabel, effectiveActualAbsenceReason, formatEventDate, finalStatusLabel, plannedReasonLabel, plannedStatusLabel, reliabilityMalus } from "@/lib/squad/attendance-format";
+import { isAbsentAttendanceStatus } from "@/lib/squad/attendance-utils";
 import { calculateAge, formatLongDate, formatPlayerBirthDate, playerFullName } from "@/lib/squad/format";
 import { availabilityReasonLabel, getPlayerHubData, medicalLabel, parsePlayerHubPeriod, parsePlayerHubTab, parsePlayerHubTimelineFilter, type PlayerHubData, type PlayerHubTab, type PlayerTimelineFilter } from "@/lib/squad/player-hub";
 import { formatPositionLabel } from "@/lib/squad/positions";
@@ -65,11 +66,12 @@ const timelineFilters: Array<{ id: PlayerTimelineFilter; label: string }> = [
   { id: "coach", label: "Coach assessments" }
 ];
 
-type AttendanceFilter = "all" | "present" | "late" | "absent" | "injured" | "sick" | "excused" | "private" | "cancelled" | "unexcused";
+type AttendanceFilter = "all" | "present" | "late" | "leftEarly" | "absent" | "injured" | "sick" | "excused" | "private" | "cancelled" | "unexcused";
 const attendanceFilters: Array<{ id: AttendanceFilter; label: string }> = [
   { id: "all", label: "All" },
   { id: "present", label: "Present" },
   { id: "late", label: "Late" },
+  { id: "leftEarly", label: "Left early" },
   { id: "absent", label: "Absent" },
   { id: "injured", label: "Injured" },
   { id: "sick", label: "Sick" },
@@ -1422,8 +1424,10 @@ async function AttendanceEntryCard({ entry }: { entry: PlayerAnalyticsRecord }) 
           <p className="mt-1 text-sm text-slate-600">
             {ui("Planned: {planned} · Actual: {actual}", { planned: plannedStatusLabel(entry.plannedStatus, locale), actual: finalStatusLabel(entry.finalStatus, locale) })}
             {entry.overallRating ? ` · ${ui("Rating: {rating}", { rating: entry.overallRating })}` : ""}
-            {entry.plannedReason ? ` · ${ui("Reason: {reason}", { reason: plannedReasonLabel(entry.plannedReason, locale) })}` : ""}
+            {entry.plannedReason ? ` · ${ui("Planned reason: {reason}", { reason: plannedReasonLabel(entry.plannedReason, locale) })}` : ""}
+            {effectiveActualAbsenceReason(entry) ? ` · ${ui("Actual reason: {reason}", { reason: actualAbsenceReasonLabel(effectiveActualAbsenceReason(entry), locale) })}` : ""}
             {entry.lateMinutes ? ` · ${ui("Late: {minutes} min", { minutes: entry.lateMinutes })}` : ""}
+            {entry.leftEarlyMinute !== undefined ? ` · ${ui("Left after minute")}: ${entry.leftEarlyMinute}` : ""}
             {` · ${ui("Malus: {value}", { value: formatNumber(reliabilityMalus(entry), locale) })}`}
           </p>
           {entry.medicalAvailability ? (
@@ -1433,6 +1437,7 @@ async function AttendanceEntryCard({ entry }: { entry: PlayerAnalyticsRecord }) 
               {entry.medicalAvailability.needsReview ? ` · ${ui("Return needs review")}` : ""}
             </p>
           ) : null}
+          {entry.actualAttendanceNote ? <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{entry.actualAttendanceNote}</p> : null}
         </div>
         {entry.sensitiveNote ? <Badge tone="red">{ui("Private note")}</Badge> : null}
       </div>
@@ -1601,7 +1606,7 @@ function isPeriodAwareTab(tab: PlayerHubTab) {
 
 function parseAttendanceFilter(value?: string | string[]): AttendanceFilter {
   const raw = one(value);
-  return raw === "present" || raw === "late" || raw === "absent" || raw === "injured" || raw === "sick" || raw === "excused" || raw === "private" || raw === "cancelled" || raw === "unexcused"
+  return raw === "present" || raw === "late" || raw === "leftEarly" || raw === "absent" || raw === "injured" || raw === "sick" || raw === "excused" || raw === "private" || raw === "cancelled" || raw === "unexcused"
     ? raw
     : "all";
 }
@@ -1610,7 +1615,8 @@ function filterAttendanceRecords(records: PlayerAnalyticsRecord[], filter: Atten
   if (filter === "all") return records;
   if (filter === "present") return records.filter((entry) => entry.finalStatus === "present");
   if (filter === "late") return records.filter((entry) => entry.finalStatus === "Z");
-  if (filter === "absent") return records.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus));
+  if (filter === "leftEarly") return records.filter((entry) => entry.finalStatus === "left_early");
+  if (filter === "absent") return records.filter((entry) => isAbsentAttendanceStatus(entry.finalStatus));
   if (filter === "injured") return records.filter((entry) => entry.finalStatus === "V" || entry.plannedReason === "V");
   if (filter === "sick") return records.filter((entry) => entry.finalStatus === "K" || entry.plannedReason === "K");
   if (filter === "excused") return records.filter((entry) => entry.finalStatus === "E" || entry.plannedReason === "E");

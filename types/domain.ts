@@ -315,7 +315,7 @@ export type SquadTrainingEventStatus = "draft" | "prepared" | "in_progress" | "r
 export type ParticipantSourceMode = "current_squad_sync" | "custom_selection";
 export type SquadPlannedAttendanceStatus = "expected" | "unavailable" | "unclear";
 export type SquadAttendanceReason = "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other";
-export type SquadFinalAttendanceStatus = "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
+export type SquadFinalAttendanceStatus = "present" | "absent" | "left_early" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
 export type SquadActualAbsenceReason = "unexcused" | "excused" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other";
 export type SquadPlannedAttendanceSource = "default" | "manual" | "medical" | "availability";
 export type PlayerContactRelationship = "mother" | "father" | "parent" | "guardian" | "emergency" | "other";
@@ -414,7 +414,9 @@ export type SquadAttendanceEntry = {
   plannedStatusSource?: SquadPlannedAttendanceSource;
   finalStatus?: SquadFinalAttendanceStatus;
   actualAbsenceReason?: SquadActualAbsenceReason;
+  actualAttendanceNote?: string;
   lateMinutes?: number;
+  leftEarlyMinute?: number;
   latePenaltyApplied: boolean;
   overallRating?: number;
   ratingTechnique?: number;

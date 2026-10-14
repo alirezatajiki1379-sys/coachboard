@@ -125,9 +125,10 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
       <section className="grid gap-6 lg:grid-cols-2">
         <Panel title="Actual attendance" icon={<UsersRound className="h-5 w-5" />}>
           <MissingStatusesNotice entries={event.attendance} />
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Metric label="Present" value={String(finalAttendance.present)} />
             <Metric label="Late" value={String(finalAttendance.late)} />
+            <Metric label="Left early" value={String(finalAttendance.leftEarly)} />
             <Metric label="Absent" value={String(finalAttendance.absent)} />
           </div>
           <ButtonLink href={`/trainings/${event.id}/check-in`} className="mt-4 justify-center">Open quick check-in</ButtonLink>
@@ -469,7 +470,7 @@ async function loadTrainingGroups(supabase: Awaited<ReturnType<typeof createClie
 function TrainingGroupsPanel({ eventId, attendance, groups }: { eventId: string; attendance: SquadAttendanceEntry[]; groups: TrainingGroup[] }) {
   const assignedPlayerIds = new Set(groups.flatMap((group) => group.members.map((member) => member.playerId).filter(Boolean) as string[]));
   const availablePlayers = attendance.filter((entry) => entry.player);
-  const presentLate = availablePlayers.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
+  const presentLate = availablePlayers.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z" || entry.finalStatus === "left_early");
   const primaryPlayers = presentLate.length ? presentLate : availablePlayers.filter((entry) => entry.plannedStatus === "expected");
   const shownPlayers = primaryPlayers.length ? primaryPlayers : availablePlayers;
 
@@ -592,6 +593,7 @@ function TrainingGroupsPanel({ eventId, attendance, groups }: { eventId: string;
 function statusLabel(entry: SquadAttendanceEntry) {
   if (entry.finalStatus === "present") return "Present";
   if (entry.finalStatus === "Z") return "Late";
+  if (entry.finalStatus === "left_early") return "Left early";
   if (entry.finalStatus) return finalStatusLabel(entry.finalStatus);
   if (entry.plannedStatus) return plannedStatusLabel(entry.plannedStatus);
   return "Expected";

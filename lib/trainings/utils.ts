@@ -49,7 +49,7 @@ export function trainingPlanStatus(event: Pick<SquadTrainingEventDetail, "linked
 }
 
 export function trainingRatingStats(event: SquadTrainingEventDetail) {
-  const rateable = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z");
+  const rateable = event.attendance.filter((entry) => entry.finalStatus === "present" || entry.finalStatus === "Z" || entry.finalStatus === "left_early");
   return {
     rated: rateable.filter((entry) => entry.overallRating).length,
     rateable: rateable.length

@@ -102,6 +102,7 @@ function TrainingStatusSummary({
         <span className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.present} {ui(" present")}</span>
         <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.absent} {ui(" absence")}</span>
         <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{counts.late} {ui(" late")}</span>
+        <span className="rounded-md bg-orange-50 px-2 py-1 text-orange-700">{counts.leftEarly} {ui(" left early")}</span>
         <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-700">{ratings.rated} {ui(" of ")}{ratings.rateable} {ui(" rated")}</span>
         <span className={hasReview ? "rounded-md bg-green-50 px-2 py-1 text-green-700" : "rounded-md bg-amber-50 px-2 py-1 text-amber-700"}>
           {ui(hasReview ? "Review saved" : "Review missing")}
@@ -116,6 +117,7 @@ function TrainingStatusSummary({
         <span className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.present} {ui(" present")}</span>
         <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.absent} {ui(" absence")}</span>
         <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{counts.late} {ui(" late")}</span>
+        <span className="rounded-md bg-orange-50 px-2 py-1 text-orange-700">{counts.leftEarly} {ui(" left early")}</span>
       </div>
     );
   }

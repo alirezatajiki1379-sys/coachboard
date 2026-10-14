@@ -79,6 +79,7 @@ export type TeamAnalyticsEvent = {
   attendance: {
     present: number;
     late: number;
+    leftEarly: number;
     absent: number;
     notExpected: number;
     notRecorded: number;
@@ -110,6 +111,7 @@ export type TeamAnalyticsOverview = {
   teamAttendanceRate: number | null;
   present: number;
   late: number;
+  leftEarly: number;
   absent: number;
   notExpected: number;
   notRecorded: number;
@@ -152,6 +154,7 @@ export type RatingDistribution = Record<1 | 2 | 3 | 4 | 5, number>;
 export type AttendanceDistribution = {
   present: number;
   late: number;
+  leftEarly: number;
   injured: number;
   sick: number;
   excused: number;
@@ -284,6 +287,7 @@ export function calculateAttendanceDistribution(records: PlayerAnalyticsRecord[]
   return {
     present: records.filter((record) => record.finalStatus === "present").length,
     late: records.filter((record) => record.finalStatus === "Z").length,
+    leftEarly: records.filter((record) => record.finalStatus === "left_early").length,
     injured: records.filter((record) => record.finalStatus === "V").length,
     sick: records.filter((record) => record.finalStatus === "K").length,
     excused: records.filter((record) => record.finalStatus === "E").length,
@@ -498,7 +502,7 @@ export function isExpectedAnalyticsRecord(record: Pick<PlayerAnalyticsRecord, "p
 }
 
 export function hasParticipated(record: Pick<PlayerAnalyticsRecord, "finalStatus">) {
-  return record.finalStatus === "present" || record.finalStatus === "Z";
+  return record.finalStatus === "present" || record.finalStatus === "Z" || record.finalStatus === "left_early";
 }
 
 export function isPastAttendanceEvent(event?: SquadTrainingEvent, now = new Date()) {
@@ -561,6 +565,7 @@ export function attendanceStatusLabel(key: keyof AttendanceDistribution) {
   const labels: Record<keyof AttendanceDistribution, string> = {
     present: "Present",
     late: "Late",
+    leftEarly: "Left early",
     injured: attendanceReasonLabels.V,
     sick: attendanceReasonLabels.K,
     excused: attendanceReasonLabels.E,

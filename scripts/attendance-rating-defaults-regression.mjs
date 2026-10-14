@@ -36,6 +36,13 @@ test("expected late player gets unsaved UI default rating 3", () => {
   assert.equal(overallRatingInitialValue(value), 3);
 });
 
+test("left-early player is optionally rateable without an automatic default", () => {
+  const value = entry({ plannedStatus: "expected", finalStatus: "left_early" });
+  assert.equal(isRateableAttendance(value), true);
+  assert.equal(isDefaultRatingCandidate(value), false);
+  assert.equal(overallRatingInitialValue(value), undefined);
+});
+
 test("saved rating wins over default rating", () => {
   const value = entry({ plannedStatus: "expected", finalStatus: "present", overallRating: 4 });
   assert.equal(overallRatingInitialValue(value), 4);

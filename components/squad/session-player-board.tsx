@@ -26,7 +26,7 @@ export type SessionBoardPlayer = {
   secondaryPositions: string[];
   playerType: "roster" | "trial";
   plannedStatus?: "expected" | "unavailable" | "unclear";
-  finalStatus?: "present" | "absent" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
+  finalStatus?: "present" | "absent" | "left_early" | "Z" | "V" | "K" | "E" | "P" | "S" | "U";
 };
 
 export type SessionBoardGroup = {
@@ -82,7 +82,7 @@ export function SessionPlayerBoard({ eventId, players, groups }: SessionPlayerBo
       const groupLabels = groupByPlayerId.get(player.id) ?? [];
       const matchesSearch = !needle || [player.name, player.position, ...player.secondaryPositions, ...groupLabels].filter(Boolean).join(" ").toLowerCase().includes(needle);
       if (!matchesSearch) return false;
-      if (filter === "presentLate") return player.finalStatus === "present" || player.finalStatus === "Z";
+      if (filter === "presentLate") return player.finalStatus === "present" || player.finalStatus === "Z" || player.finalStatus === "left_early";
       if (filter === "expected") return !player.plannedStatus || player.plannedStatus === "expected";
       if (filter === "trial") return player.playerType === "trial";
       if (filter === "guest") return false;
@@ -325,7 +325,7 @@ function calculateStatusCounts(sourcePlayers: SessionBoardPlayer[], guestCount: 
 }
 
 function playersForCompositionScope(players: SessionBoardPlayer[], scope: CompositionScope) {
-  if (scope === "present") return players.filter((player) => player.finalStatus === "present" || player.finalStatus === "Z");
+  if (scope === "present") return players.filter((player) => player.finalStatus === "present" || player.finalStatus === "Z" || player.finalStatus === "left_early");
   if (scope === "all") return players;
   return players.filter((player) => !player.plannedStatus || player.plannedStatus === "expected");
 }
@@ -404,7 +404,7 @@ function PlayerChip({ player, selected, groupLabels, positionMissing, onToggle }
         "w-full rounded-md border px-2 py-1.5 text-left transition focus:outline-none focus:ring-4 focus:ring-green-100",
         meta.chipClassName,
         selected ? "ring-2 ring-board-green" : "hover:border-board-green",
-        player.finalStatus && !["present", "Z"].includes(player.finalStatus) ? "opacity-70" : ""
+        player.finalStatus && !["present", "Z", "left_early"].includes(player.finalStatus) ? "opacity-70" : ""
       )}
     >
       <span className="flex items-center gap-1.5">

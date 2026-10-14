@@ -331,7 +331,7 @@ async function loadPlanEventIds(
 }
 
 function availabilityBucket(row: AttendanceRow): "confirmed" | "declined" | "open" {
-  if (row.final_status === "present" || row.final_status === "Z") return "confirmed";
+  if (row.final_status === "present" || row.final_status === "Z" || row.final_status === "left_early") return "confirmed";
   if (row.final_status) return "declined";
   if (row.planned_status === "expected") return "confirmed";
   if (row.planned_status === "unavailable") return "declined";

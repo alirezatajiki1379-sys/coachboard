@@ -266,7 +266,7 @@ export function PlayerConversationReport(props: PlayerConversationReportProps) {
         <PlayerIdentityCard summary={summary} identity={props.playerCard} locale={locale} />
         <section className="player-report-section player-report-keep mt-6"><h2 className="text-lg font-bold text-board-navy">2. {text.reviewPeriod}</h2><p className="mt-2 text-sm font-semibold text-slate-700">{periodLabel || "-"}</p></section>
 
-        {sections.attendance ? <AttendanceSection summary={summary} missed={missed} absences={absences} locale={locale} showReasons={sections.absenceReasons} /> : null}
+        {sections.attendance ? <AttendanceSection summary={summary} missed={missed} absences={absences} locale={locale} showReasons={sections.absenceReasons} mode={props.mode} /> : null}
         {sections.availability ? <AvailabilitySection medical={medical} availability={availability} locale={locale} /> : null}
         {sections.performance ? <PerformanceSection summary={summary} locale={locale} /> : null}
 
@@ -372,7 +372,7 @@ function reportSnapshot(props: PlayerConversationReportProps) {
   const safeSummary = {
     ...props.summary,
     player: safePlayer,
-    records: props.summary.records.map((record) => ({ ...record, event: record.event ? { ...record.event, generalNotes: undefined } : undefined, coachNote: undefined, sensitiveNote: false, [["planned", "ReasonNote"].join("")]: undefined }))
+    records: props.summary.records.map((record) => ({ ...record, event: record.event ? { ...record.event, generalNotes: undefined } : undefined, coachNote: undefined, sensitiveNote: false, actualAttendanceNote: undefined, [["planned", "ReasonNote"].join("")]: undefined }))
   };
   const safeDevelopment = {
     goals: props.development.goals.map((goal) => ({ ...goal, coachNotes: undefined, actions: [], observations: [], progressUpdates: [] })),
@@ -401,11 +401,12 @@ function inputClass(extra = "") { return `mt-1 w-full rounded-md border border-b
 function Narrative({ value, empty = "-" }: { value: string; empty?: string }) { return <p translate="no" className="whitespace-pre-wrap text-sm text-slate-700">{value || empty}</p>; }
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 
-function AttendanceSection({ summary, missed, absences, locale, showReasons }: { summary: PlayerAnalyticsSummary; missed: PlayerAnalyticsSummary["records"]; absences: ReturnType<typeof absenceDistribution>; locale: Locale; showReasons: boolean }) {
+function AttendanceSection({ summary, missed, absences, locale, showReasons, mode }: { summary: PlayerAnalyticsSummary; missed: PlayerAnalyticsSummary["records"]; absences: ReturnType<typeof absenceDistribution>; locale: Locale; showReasons: boolean; mode: PlayerConversationReportProps["mode"] }) {
   const text = copy[locale];
+  const contextRecords = summary.records.filter((record) => isMissedTraining(record) || record.finalStatus === "left_early");
   return <ReportSection title={`3. ${text.attendance}`}>
     <div className="player-report-metrics player-report-metrics-five grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Stat label={text.participated} value={`${summary.attended}/${summary.trainings}`} /><Stat label={text.participationRate} value={formatPercent(summary.participationRate, locale)} /><Stat label={text.attendanceExpected} value={formatPercent(summary.attendanceWhenExpectedRate, locale)} /><Stat label={text.late} value={String(summary.late)} /><Stat label={text.missed} value={String(missed.length)} /></div>
-    {showReasons ? <><h3 className="mt-4 text-sm font-bold text-board-navy">{text.absenceSummary}</h3><div className="mt-2 flex flex-wrap gap-2">{absences.length ? absences.map((item) => <span key={item.reason} className="rounded-md bg-slate-100 px-2.5 py-1 text-sm font-semibold text-slate-700">{absenceReasonLabel(item.reason, locale)}: {item.count}</span>) : <span className="text-sm text-slate-600">{text.noAbsences}</span>}</div>{missed.length ? <details className="mt-4 print:block" open><summary className="cursor-pointer text-sm font-bold text-board-navy">{text.absenceHistory}</summary><div className="mt-2 space-y-2">{missed.map((record) => <div key={record.id} className="player-report-keep flex flex-wrap justify-between gap-2 rounded-md border border-board-line p-3 text-sm"><span>{record.event ? `${formatDate(record.event.date, locale)} · ${record.event.label || "Training"}` : "Training"}</span><span className="font-bold text-slate-700">{finalStatusLabel(record.finalStatus, locale)} · {absenceReasonLabel(absenceReason(record), locale)}</span></div>)}</div></details> : null}</> : null}
+    {showReasons ? <><h3 className="mt-4 text-sm font-bold text-board-navy">{text.absenceSummary}</h3><div className="mt-2 flex flex-wrap gap-2">{absences.length ? absences.map((item) => <span key={item.reason} className="rounded-md bg-slate-100 px-2.5 py-1 text-sm font-semibold text-slate-700">{absenceReasonLabel(item.reason, locale)}: {item.count}</span>) : <span className="text-sm text-slate-600">{text.noAbsences}</span>}</div>{contextRecords.length ? <details className="mt-4 print:block" open><summary className="cursor-pointer text-sm font-bold text-board-navy">{text.absenceHistory}</summary><div className="mt-2 space-y-2">{contextRecords.map((record) => <div key={record.id} className="player-report-keep rounded-md border border-board-line p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span>{record.event ? `${formatDate(record.event.date, locale)} · ${record.event.label || "Training"}` : "Training"}</span><span className="font-bold text-slate-700">{finalStatusLabel(record.finalStatus, locale)} · {absenceReasonLabel(absenceReason(record), locale)}{record.leftEarlyMinute !== undefined ? ` · Minute ${record.leftEarlyMinute}` : ""}</span></div>{mode === "internal_coach_report" && record.actualAttendanceNote ? <p className="mt-2 whitespace-pre-wrap text-slate-700">{record.actualAttendanceNote}</p> : null}</div>)}</div></details> : null}</> : null}
   </ReportSection>;
 }
 

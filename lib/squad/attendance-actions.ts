@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { asScoutingDb } from "@/lib/scouting/db";
 import { createClient } from "@/lib/supabase/server";
-import { applyAsExpectedDecision, calculateSuggestedOverallRating, normalizePlannedAttendanceReason } from "@/lib/squad/attendance-utils";
+import { applyAsExpectedDecision, calculateSuggestedOverallRating, isParticipatingAttendanceStatus, normalizePlannedAttendanceReason, plannedReasonToActualAbsenceReason } from "@/lib/squad/attendance-utils";
 import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, isTrainingUpcoming, seasonLabelForDate, trainingNowParts, weekdayForDate } from "@/lib/trainings/utils";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
@@ -43,7 +43,7 @@ export type TrainingEventActionState = {
 
 const plannedStatuses = ["expected", "unavailable", "unclear"] as const;
 const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U", "injured", "sick", "school", "work", "holiday", "private", "other"] as const;
-const finalStatuses = ["present", "absent", "Z", "V", "K", "E", "P", "S", "U"] as const;
+const finalStatuses = ["present", "absent", "left_early", "Z", "V", "K", "E", "P", "S", "U"] as const;
 const actualAbsenceReasons = ["unexcused", "excused", "sick", "injured", "school", "work", "holiday", "private", "other"] as const;
 
 export type AttendanceMutationResult =
@@ -54,7 +54,9 @@ export type AttendanceMutationResult =
       playerId: string;
       status: (typeof finalStatuses)[number];
       actualAbsenceReason: (typeof actualAbsenceReasons)[number] | null;
+      actualAttendanceNote: string | null;
       lateMinutes: number | null;
+      leftEarlyMinute: number | null;
       latePenaltyApplied: boolean;
       overallRating: number | null;
       updatedAt: string;
@@ -213,6 +215,50 @@ function finalStatusForActualAbsence(reason: (typeof actualAbsenceReasons)[numbe
   if (reason === "private") return "P";
   if (reason === "unexcused") return "U";
   return "absent";
+}
+
+type AttendanceRecordSnapshot = {
+  player_id: string;
+  planned_reason: string | null;
+  final_status: (typeof finalStatuses)[number] | null;
+  actual_absence_reason: (typeof actualAbsenceReasons)[number] | null;
+  actual_attendance_note: string | null;
+  late_minutes: number | null;
+  left_early_minute: number | null;
+  late_penalty_applied: boolean;
+};
+
+function resolveActualAttendanceUpdate(
+  requestedStatus: (typeof finalStatuses)[number],
+  formData: FormData,
+  current: AttendanceRecordSnapshot
+) {
+  const hasAbsenceContext = requestedStatus === "absent" || requestedStatus === "left_early";
+  const submittedReason = actualAbsenceReasonValue(formString(formData, "actualAbsenceReason"));
+  const currentReason = current.actual_absence_reason ?? actualAbsenceReasonFromFinalStatus(current.final_status ?? "");
+  const plannedReason = plannedReasonToActualAbsenceReason(current.planned_reason as Parameters<typeof plannedReasonToActualAbsenceReason>[0]);
+  const actualAbsenceReason = hasAbsenceContext
+    ? submittedReason ?? currentReason ?? plannedReason
+    : actualAbsenceReasonFromFinalStatus(requestedStatus);
+  const finalStatus = requestedStatus === "absent"
+    ? finalStatusForActualAbsence(actualAbsenceReason)
+    : requestedStatus;
+  const actualAttendanceNote = requestedStatus === "present"
+    ? null
+    : formData.has("actualAttendanceNote")
+      ? optional(formString(formData, "actualAttendanceNote"))
+      : current.actual_attendance_note;
+  const lateMinutes = finalStatus === "Z"
+    ? formData.has("lateMinutes") ? numberOrNull(formString(formData, "lateMinutes")) : current.late_minutes
+    : null;
+  const leftEarlyMinute = finalStatus === "left_early"
+    ? formData.has("leftEarlyMinute") ? numberOrNull(formString(formData, "leftEarlyMinute")) : current.left_early_minute
+    : null;
+  const latePenaltyApplied = finalStatus === "Z"
+    ? formData.has("latePenaltyApplied") ? formData.get("latePenaltyApplied") === "on" || formData.get("latePenaltyApplied") === "true" : current.late_penalty_applied
+    : true;
+
+  return { finalStatus, actualAbsenceReason, actualAttendanceNote, lateMinutes, leftEarlyMinute, latePenaltyApplied };
 }
 
 function eventPath(eventId: string, suffix = "") {
@@ -1008,16 +1054,14 @@ export async function markAllExpected(formData: FormData) {
 export async function updateFinalAttendance(formData: FormData) {
   const eventId = formString(formData, "eventId");
   const attendanceId = formString(formData, "attendanceId");
-  let finalStatus = formString(formData, "finalStatus");
-  if (!finalStatuses.includes(finalStatus as (typeof finalStatuses)[number])) redirect(eventPath(eventId));
-
-  const actualAbsenceReason = finalStatus === "absent"
-    ? actualAbsenceReasonValue(formString(formData, "actualAbsenceReason")) ?? "unexcused"
-    : actualAbsenceReasonFromFinalStatus(finalStatus);
-  if (finalStatus === "absent") finalStatus = finalStatusForActualAbsence(actualAbsenceReason);
-  const lateMinutes = finalStatus === "Z" ? numberOrNull(formString(formData, "lateMinutes")) : null;
-  const latePenaltyApplied = finalStatus === "Z" ? formData.get("latePenaltyApplied") === "on" : true;
-  const ratingCleanup = finalStatus === "present" || finalStatus === "Z" ? {} : {
+  const requestedStatus = formString(formData, "finalStatus");
+  if (!finalStatuses.includes(requestedStatus as (typeof finalStatuses)[number])) redirect(eventPath(eventId));
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const validation = await validateAttendanceMutation(db, user.id, eventId, attendanceId);
+  if (!validation.ok) redirect(formString(formData, "returnTo") || eventPath(eventId));
+  const update = resolveActualAttendanceUpdate(requestedStatus as (typeof finalStatuses)[number], formData, validation.record);
+  const ratingCleanup = isParticipatingAttendanceStatus(update.finalStatus) ? {} : {
     overall_rating: null,
     rating_technique: null,
     rating_game_understanding: null,
@@ -1025,15 +1069,15 @@ export async function updateFinalAttendance(formData: FormData) {
     rating_behavior: null,
     rating_auto_suggestion: null
   };
-  const { supabase, user } = await requireUser();
-  const db = supabase as unknown as SupabaseClient;
   const { error } = await db
     .from("squad_attendance_records")
     .update({
-      final_status: finalStatus,
-      actual_absence_reason: actualAbsenceReason,
-      late_minutes: lateMinutes,
-      late_penalty_applied: latePenaltyApplied,
+      final_status: update.finalStatus,
+      actual_absence_reason: update.actualAbsenceReason,
+      actual_attendance_note: update.actualAttendanceNote,
+      late_minutes: update.lateMinutes,
+      left_early_minute: update.leftEarlyMinute,
+      late_penalty_applied: update.latePenaltyApplied,
       ...ratingCleanup
     })
     .eq("id", attendanceId)
@@ -1049,18 +1093,16 @@ export async function updateFinalAttendance(formData: FormData) {
 export async function updateFinalAttendanceInline(formData: FormData): Promise<AttendanceMutationResult> {
   const eventId = formString(formData, "eventId");
   const attendanceId = formString(formData, "attendanceId");
-  let finalStatus = formString(formData, "finalStatus");
-  if (!finalStatuses.includes(finalStatus as (typeof finalStatuses)[number])) {
+  const requestedStatus = formString(formData, "finalStatus");
+  if (!finalStatuses.includes(requestedStatus as (typeof finalStatuses)[number])) {
     return attendanceMutationError("invalid_status", "Attendance could not be updated.");
   }
-
-  const actualAbsenceReason = finalStatus === "absent"
-    ? actualAbsenceReasonValue(formString(formData, "actualAbsenceReason")) ?? "unexcused"
-    : actualAbsenceReasonFromFinalStatus(finalStatus);
-  if (finalStatus === "absent") finalStatus = finalStatusForActualAbsence(actualAbsenceReason);
-  const lateMinutes = finalStatus === "Z" ? numberOrNull(formString(formData, "lateMinutes")) : null;
-  const latePenaltyApplied = finalStatus === "Z" ? formData.get("latePenaltyApplied") === "on" : true;
-  const ratingCleanup = finalStatus === "present" || finalStatus === "Z" ? {} : {
+  const { supabase, user } = await requireUser();
+  const db = supabase as unknown as SupabaseClient;
+  const validation = await validateAttendanceMutation(db, user.id, eventId, attendanceId);
+  if (!validation.ok) return validation;
+  const update = resolveActualAttendanceUpdate(requestedStatus as (typeof finalStatuses)[number], formData, validation.record);
+  const ratingCleanup = isParticipatingAttendanceStatus(update.finalStatus) ? {} : {
     overall_rating: null,
     rating_technique: null,
     rating_game_understanding: null,
@@ -1068,21 +1110,19 @@ export async function updateFinalAttendanceInline(formData: FormData): Promise<A
     rating_behavior: null,
     rating_auto_suggestion: null
   };
-  const { supabase, user } = await requireUser();
-  const db = supabase as unknown as SupabaseClient;
-  const validation = await validateAttendanceMutation(db, user.id, eventId, attendanceId);
-  if (!validation.ok) return validation;
 
   const { data, error } = await db
     .from("squad_attendance_records")
     .update({
-      final_status: finalStatus,
-      actual_absence_reason: actualAbsenceReason,
-      late_minutes: lateMinutes,
-      late_penalty_applied: latePenaltyApplied,
+      final_status: update.finalStatus,
+      actual_absence_reason: update.actualAbsenceReason,
+      actual_attendance_note: update.actualAttendanceNote,
+      late_minutes: update.lateMinutes,
+      left_early_minute: update.leftEarlyMinute,
+      late_penalty_applied: update.latePenaltyApplied,
       ...ratingCleanup
     })
-    .select("id, player_id, overall_rating, updated_at")
+    .select("id, player_id, final_status, actual_absence_reason, actual_attendance_note, late_minutes, left_early_minute, late_penalty_applied, overall_rating, updated_at")
     .eq("id", attendanceId)
     .eq("event_id", eventId)
     .eq("user_id", user.id)
@@ -1097,10 +1137,12 @@ export async function updateFinalAttendanceInline(formData: FormData): Promise<A
     warning,
     attendanceId: data.id,
     playerId: data.player_id,
-    status: finalStatus as (typeof finalStatuses)[number],
-    actualAbsenceReason,
-    lateMinutes,
-    latePenaltyApplied,
+    status: data.final_status as (typeof finalStatuses)[number],
+    actualAbsenceReason: data.actual_absence_reason,
+    actualAttendanceNote: data.actual_attendance_note,
+    lateMinutes: data.late_minutes,
+    leftEarlyMinute: data.left_early_minute,
+    latePenaltyApplied: data.late_penalty_applied,
     overallRating: data.overall_rating,
     updatedAt: data.updated_at
   };
@@ -1112,7 +1154,7 @@ export async function markAllExpectedPresent(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   const { error } = await db
     .from("squad_attendance_records")
-    .update({ final_status: "present", actual_absence_reason: null, late_minutes: null, late_penalty_applied: true })
+    .update({ final_status: "present", actual_absence_reason: null, actual_attendance_note: null, late_minutes: null, left_early_minute: null, late_penalty_applied: true })
     .eq("event_id", eventId)
     .eq("user_id", user.id)
     .is("final_status", null)
@@ -1187,7 +1229,9 @@ export async function applyAttendanceAsExpected(eventId: string): Promise<ApplyA
       .update({
         final_status: decision.finalStatus,
         actual_absence_reason: decision.actualAbsenceReason,
+        actual_attendance_note: null,
         late_minutes: null,
+        left_early_minute: null,
         late_penalty_applied: true,
         ...ratingCleanup
       })
@@ -1229,7 +1273,7 @@ export async function markAllPresent(formData: FormData) {
   const db = supabase as unknown as SupabaseClient;
   const { error } = await db
     .from("squad_attendance_records")
-    .update({ final_status: "present", actual_absence_reason: null, late_minutes: null, late_penalty_applied: true })
+    .update({ final_status: "present", actual_absence_reason: null, actual_attendance_note: null, late_minutes: null, left_early_minute: null, late_penalty_applied: true })
     .eq("event_id", eventId)
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);
@@ -1272,7 +1316,7 @@ export async function updateAttendanceRating(formData: FormData): Promise<Rating
     .eq("id", attendanceId)
     .eq("event_id", eventId)
     .eq("user_id", user.id)
-    .in("final_status", ["present", "Z"])
+    .in("final_status", ["present", "Z", "left_early"])
     .select("id,player_id,overall_rating,updated_at")
     .maybeSingle();
   if (error) return attendanceMutationError("database_error", "Rating could not be updated.");
@@ -1305,7 +1349,7 @@ export async function updateAttendanceRatingInline(formData: FormData): Promise<
     .eq("id", attendanceId)
     .eq("event_id", eventId)
     .eq("user_id", user.id)
-    .in("final_status", ["present", "Z"])
+    .in("final_status", ["present", "Z", "left_early"])
     .maybeSingle();
   if (error) return attendanceMutationError("database_error", "Rating could not be updated.");
   if (!data) return attendanceMutationError("invalid_status", "Absent players cannot receive a performance rating.");
@@ -1803,11 +1847,11 @@ function plannedAttendanceMutationError(code: string, message: string): PlannedA
   return { ok: false, code, message };
 }
 
-function attendanceMutationError(code: string, message: string): AttendanceMutationResult {
+function attendanceMutationError(code: string, message: string): Extract<AttendanceMutationResult, { ok: false }> {
   return { ok: false, code, message };
 }
 
-async function validateAttendanceMutation(db: SupabaseClient, userId: string, eventId: string, attendanceId: string): Promise<{ ok: true } | AttendanceMutationResult> {
+async function validateAttendanceMutation(db: SupabaseClient, userId: string, eventId: string, attendanceId: string): Promise<{ ok: true; record: AttendanceRecordSnapshot } | { ok: false; code: string; message: string }> {
   if (!eventId || !attendanceId) return attendanceMutationError("missing_input", "Attendance could not be updated.");
   const { data: event, error: eventError } = await db
     .from("squad_training_events")
@@ -1820,7 +1864,7 @@ async function validateAttendanceMutation(db: SupabaseClient, userId: string, ev
 
   const { data: record, error: recordError } = await db
     .from("squad_attendance_records")
-    .select("id, player_id")
+    .select("id, player_id, planned_reason, final_status, actual_absence_reason, actual_attendance_note, late_minutes, left_early_minute, late_penalty_applied")
     .eq("id", attendanceId)
     .eq("event_id", eventId)
     .eq("user_id", userId)
@@ -1839,7 +1883,7 @@ async function validateAttendanceMutation(db: SupabaseClient, userId: string, ev
   if (event.squad_id && player.squad_id !== event.squad_id) {
     return attendanceMutationError("wrong_team", "Player does not belong to this Team.");
   }
-  return { ok: true };
+  return { ok: true, record: record as AttendanceRecordSnapshot };
 }
 
 async function markEventRatingOpen(db: SupabaseClient, userId: string, eventId: string) {

@@ -40,6 +40,7 @@ export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"], l
   const labels: Record<NonNullable<SquadAttendanceEntry["finalStatus"]>, string> = {
     present: "Present",
     absent: "Absent",
+    left_early: "Left early",
     Z: "Late",
     V: "Injured",
     K: "Sick",

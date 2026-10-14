@@ -13,6 +13,7 @@ import {
   type AnalyticsSection,
   type AnalyticsSortDirection,
   type AnalyticsSortKey,
+  hasParticipated,
   type PlayerAnalyticsRecord,
   type PlayerAnalyticsSummary,
   type TeamAnalyticsEvent,
@@ -458,6 +459,7 @@ export function createTeamAnalytics(
     teamAttendanceRate: attendance.attendanceWhenExpectedRate,
     present: attendance.present,
     late: attendance.late,
+    leftEarly: attendance.leftEarly,
     absent: attendance.absent,
     notExpected: attendance.notExpected,
     notRecorded: attendance.notRecorded,
@@ -504,6 +506,7 @@ export function createTeamAnalytics(
 function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEvent["attendance"] {
   let present = 0;
   let late = 0;
+  let leftEarly = 0;
   let absent = 0;
   let notExpected = 0;
   let notRecorded = 0;
@@ -516,16 +519,17 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
     }
     if (record.finalStatus === "present") present += 1;
     else if (record.finalStatus === "Z") late += 1;
+    else if (record.finalStatus === "left_early") leftEarly += 1;
     else absent += 1;
   }
 
-  const attended = present + late;
+  const attended = present + late + leftEarly;
   const recorded = attended + absent;
   const rateRecords = records.filter((record) => (!record.plannedStatus || record.plannedStatus === "expected") && Boolean(record.finalStatus));
-  const rateAttended = rateRecords.filter((record) => record.finalStatus === "present" || record.finalStatus === "Z").length;
+  const rateAttended = rateRecords.filter(hasParticipated).length;
   const participationRate = records.length ? attended / records.length : null;
   const attendanceWhenExpectedRate = rateRecords.length ? rateAttended / rateRecords.length : null;
-  return { present, late, absent, notExpected, notRecorded, attended, recorded, participationRate, attendanceWhenExpectedRate, rate: attendanceWhenExpectedRate };
+  return { present, late, leftEarly, absent, notExpected, notRecorded, attended, recorded, participationRate, attendanceWhenExpectedRate, rate: attendanceWhenExpectedRate };
 }
 
 function createFocusDistribution(events: SquadTrainingEvent[]) {

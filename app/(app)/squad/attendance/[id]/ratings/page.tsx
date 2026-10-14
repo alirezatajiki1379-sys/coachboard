@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { RatingRow } from "@/components/squad/attendance-controls";
+import { ActualAttendanceDetails, RatingRow } from "@/components/squad/attendance-controls";
 import { attendanceDisplayName, eventTimeRange, eventTitle, finalStatusLabel, formatEventDate } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
-import { isDefaultRatingCandidate, isRateableAttendance } from "@/lib/squad/attendance-utils";
+import { isAbsentAttendanceStatus, isDefaultRatingCandidate, isRateableAttendance } from "@/lib/squad/attendance-utils";
+import { getActiveLocale } from "@/lib/i18n/server";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
 import { getActiveDevelopmentGoalsForPlayers } from "@/lib/squad/development";
 import { createClient } from "@/lib/supabase/server";
 
@@ -20,15 +22,17 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+  const ui = createSystemTranslator(await getActiveLocale());
 
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
   const goalsByPlayer = await getActiveDevelopmentGoalsForPlayers(supabase, user.id, event.attendance.map((entry) => entry.playerId));
   const rateableEntries = event.attendance.filter(isRateableAttendance);
-  const activeEntries = rateableEntries.filter(isDefaultRatingCandidate);
-  const additionalRateableEntries = rateableEntries.filter((entry) => !isDefaultRatingCandidate(entry));
+  const partialEntries = rateableEntries.filter((entry) => entry.finalStatus === "left_early");
+  const activeEntries = rateableEntries.filter((entry) => entry.finalStatus !== "left_early" && isDefaultRatingCandidate(entry));
+  const additionalRateableEntries = rateableEntries.filter((entry) => entry.finalStatus !== "left_early" && !isDefaultRatingCandidate(entry));
   const unresolvedEntries = event.attendance.filter((entry) => !entry.finalStatus);
-  const absentEntries = event.attendance.filter((entry) => entry.finalStatus && !["present", "Z"].includes(entry.finalStatus));
+  const absentEntries = event.attendance.filter((entry) => isAbsentAttendanceStatus(entry.finalStatus));
 
   return (
     <div className="space-y-5">
@@ -61,6 +65,20 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
                 {additionalRateableEntries.map((entry) => <RatingRow key={entry.id} entry={entry} eventId={event.id} goals={goalsByPlayer.get(entry.playerId) ?? []} />)}
               </div>
             ) : null}
+            {partialEntries.length ? (
+              <div className="space-y-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <div>
+                  <h2 className="font-bold text-board-navy">{ui("Partial participation")}</h2>
+                  <p className="mt-1 text-sm text-slate-600">{ui("These players participated but did not complete the Training. Ratings remain optional.")}</p>
+                </div>
+                {partialEntries.map((entry) => (
+                  <div key={entry.id} className="space-y-3">
+                    <ActualAttendanceDetails entry={entry} eventId={event.id} />
+                    <RatingRow entry={entry} eventId={event.id} goals={goalsByPlayer.get(entry.playerId) ?? []} />
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {unresolvedEntries.length ? (
               <div className="rounded-lg border border-board-line bg-board-paper p-4">
                 <h2 className="font-bold text-board-navy">Unresolved check-in</h2>
@@ -80,8 +98,9 @@ export default async function EventRatingsPage({ params }: RatingsPageProps) {
                 <p className="mt-1 text-sm text-slate-600">Absent players are shown for context and are not included in rating progress.</p>
                 <div className="mt-3 space-y-3">
                   {absentEntries.map((entry) => (
-                    <div key={entry.id} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-board-line">
-                      {attendanceDisplayName(entry)} · {finalStatusLabel(entry.finalStatus)}
+                    <div key={entry.id} className="space-y-3 rounded-md bg-white p-3 text-sm font-semibold text-slate-700 ring-1 ring-board-line">
+                      <p>{attendanceDisplayName(entry)} · {finalStatusLabel(entry.finalStatus)}</p>
+                      <ActualAttendanceDetails entry={entry} eventId={event.id} />
                     </div>
                   ))}
                 </div>
