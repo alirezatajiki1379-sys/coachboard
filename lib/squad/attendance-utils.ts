@@ -18,6 +18,26 @@ export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
   other: "Other"
 };
 
+export const plannedAttendanceReasonOptions: readonly SquadAttendanceReason[] = [
+  "injured",
+  "sick",
+  "school",
+  "work",
+  "holiday",
+  "private",
+  "other",
+  "E",
+  "S",
+  "U"
+];
+
+export function normalizePlannedAttendanceReason(reason?: SquadAttendanceReason | null): SquadAttendanceReason | undefined {
+  if (reason === "V") return "injured";
+  if (reason === "K") return "sick";
+  if (reason === "P") return "private";
+  return reason ?? undefined;
+}
+
 export function isExpectedFromPlannedStatus(entry: Pick<SquadAttendanceEntry, "plannedStatus">) {
   return !entry.plannedStatus || entry.plannedStatus === "expected";
 }
@@ -60,12 +80,13 @@ export type ApplyAsExpectedDecision = {
 };
 
 export function plannedReasonToActualAbsenceReason(reason?: SquadAttendanceReason | null): SquadActualAbsenceReason | null {
-  if (reason === "V" || reason === "injured") return "injured";
-  if (reason === "K" || reason === "sick") return "sick";
-  if (reason === "E") return "excused";
-  if (reason === "P" || reason === "private") return "private";
-  if (reason === "U") return "unexcused";
-  if (reason === "school" || reason === "work" || reason === "holiday" || reason === "other") return reason;
+  const normalized = normalizePlannedAttendanceReason(reason);
+  if (normalized === "injured") return "injured";
+  if (normalized === "sick") return "sick";
+  if (normalized === "E") return "excused";
+  if (normalized === "private") return "private";
+  if (normalized === "U") return "unexcused";
+  if (normalized === "school" || normalized === "work" || normalized === "holiday" || normalized === "other") return normalized;
   return null;
 }
 

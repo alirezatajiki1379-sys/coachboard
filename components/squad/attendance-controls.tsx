@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { createContext, useActionState, useContext, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { developmentCategoryLabel, developmentGoalCategories } from "@/config/development";
+import { formatDate } from "@/lib/i18n";
 import { createPlayerObservation } from "@/lib/squad/development-actions";
 import {
   completeTrainingEvent,
@@ -27,7 +28,15 @@ import type { ApplyAsExpectedAttendanceResult, AttendanceMutationResult, Planned
 import { updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
 import { actualAbsenceReasonLabel, attendanceDisplayName, effectiveActualAbsenceReason, finalStatusLabel, plannedReasonLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
-import { attendanceReasonLabels, getApplyAsExpectedSummary, overallRatingInitialValue, toggleRatingValue } from "@/lib/squad/attendance-utils";
+import {
+  attendanceReasonLabels,
+  getApplyAsExpectedSummary,
+  normalizePlannedAttendanceReason,
+  overallRatingInitialValue,
+  plannedAttendanceReasonOptions,
+  plannedReasonToActualAbsenceReason,
+  toggleRatingValue
+} from "@/lib/squad/attendance-utils";
 import { cn } from "@/lib/utils";
 import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 import type { PlayerDevelopmentGoal, SquadActualAbsenceReason, SquadAttendanceEntry, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus, SquadTrainingEventDetail } from "@/types/domain";
@@ -232,8 +241,9 @@ export function ApplyAsExpectedAttendance({
 
 export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry: SquadAttendanceEntry; eventId: string; returnTo: string }) {
   const ui = useSystemText();
+  const initialReason = normalizePlannedAttendanceReason(entry.plannedReason) ?? "";
   const [currentEntry, setCurrentEntry] = useState(entry);
-  const [reason, setReason] = useState(entry.plannedReason ?? "");
+  const [reason, setReason] = useState(initialReason);
   const [reasonNote, setReasonNote] = useState(entry.plannedReasonNote ?? "");
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
@@ -241,7 +251,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
 
   useEffect(() => {
     setCurrentEntry(entry);
-    setReason(entry.plannedReason ?? "");
+    setReason(normalizePlannedAttendanceReason(entry.plannedReason) ?? "");
     setReasonNote(entry.plannedReasonNote ?? "");
   }, [entry]);
 
@@ -329,7 +339,7 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
             aria-label={ui("Not expected reason")}
           >
             <option value="">{ui("Reason optional")}</option>
-            {(["injured", "sick", "school", "work", "holiday", "private", "other", "V", "K", "E", "P", "S"] as const).map((reason) => (
+            {plannedAttendanceReasonOptions.map((reason) => (
               <option key={reason} value={reason}>{ui(attendanceReasonLabels[reason])}</option>
             ))}
           </select>
@@ -398,6 +408,7 @@ export function MarkAllExpectedButton({ eventId }: { eventId: string }) {
 
 export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry: SquadAttendanceEntry; eventId: string; eventDate: string; onEntryChange?: (entry: SquadAttendanceEntry) => void }) {
   const ui = useSystemText();
+  const locale = useOptionalI18n()?.locale ?? "en";
   const transition = useTransition();
   const [currentEntry, setCurrentEntry] = useState(entry);
   const [error, setError] = useState("");
@@ -436,13 +447,23 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
               <span className={`rounded-full px-2 py-1 ${statusTone}`}>
                 {ui("Actual: ")}{isAbsent ? `${ui("Absent")}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}` : ui(finalStatusLabel(entryWithState.finalStatus))}
               </span>
-              {entryWithState.medicalAvailability ? (
-                <span className="rounded-full bg-red-50 px-2 py-1 text-red-700">
-                  {ui(entryWithState.medicalAvailability.label)}
-                  {entryWithState.medicalAvailability.needsReview ? " · review" : ""}
-                </span>
-              ) : null}
             </div>
+            {entryWithState.plannedReasonNote ? (
+              <p translate="no" className="mt-1 text-sm text-slate-500">&ldquo;{entryWithState.plannedReasonNote}&rdquo;</p>
+            ) : null}
+            {entryWithState.medicalAvailability ? (
+              <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-2.5 py-2 text-xs text-red-800">
+                <p className="flex flex-wrap items-center gap-1 font-bold">
+                  <Stethoscope className="h-3.5 w-3.5" />
+                  <span>{ui("Medical")}: {ui(entryWithState.medicalAvailability.label)}</span>
+                  {entryWithState.medicalAvailability.description ? <span translate="no">· {entryWithState.medicalAvailability.description}</span> : null}
+                  {entryWithState.medicalAvailability.needsReview ? <span>· {ui("Return needs review")}</span> : null}
+                </p>
+                {entryWithState.medicalAvailability.until ? (
+                  <p className="mt-1">{ui("Expected return")}: {formatDate(entryWithState.medicalAvailability.until, locale)}</p>
+                ) : null}
+              </div>
+            ) : null}
             {entryWithState.coachNote ? <p className="mt-2 text-sm text-slate-600">{entryWithState.coachNote}</p> : null}
             {error ? <p className="mt-2 text-sm font-semibold text-red-700" role="alert">{ui(error)}</p> : null}
           </div>
@@ -844,16 +865,7 @@ function defaultActualAbsenceReason(entry: SquadAttendanceEntry): SquadActualAbs
   if (entry.finalStatus === "E") return "excused";
   if (entry.finalStatus === "P") return "private";
   if (entry.finalStatus === "U") return "unexcused";
-  if (entry.plannedReason === "injured" || entry.plannedReason === "V") return "injured";
-  if (entry.plannedReason === "sick" || entry.plannedReason === "K") return "sick";
-  if (entry.plannedReason === "school") return "school";
-  if (entry.plannedReason === "work") return "work";
-  if (entry.plannedReason === "holiday") return "holiday";
-  if (entry.plannedReason === "private" || entry.plannedReason === "P") return "private";
-  if (entry.plannedReason === "other") return "other";
-  if (entry.plannedReason === "E") return "excused";
-  if (entry.plannedReason === "U") return "unexcused";
-  return "unexcused";
+  return plannedReasonToActualAbsenceReason(entry.plannedReason) ?? "unexcused";
 }
 
 function legacyFinalStatusForReason(reason: SquadActualAbsenceReason): SquadFinalAttendanceStatus {

@@ -1,7 +1,7 @@
 import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
 import { formatDate, type Locale } from "@/lib/i18n";
 import { systemText } from "@/lib/i18n/system-text";
-import { attendanceReasonLabels, calculateAttendanceForecast, calculateReliabilityPenalty } from "@/lib/squad/attendance-utils";
+import { attendanceReasonLabels, calculateAttendanceForecast, calculateReliabilityPenalty, normalizePlannedAttendanceReason } from "@/lib/squad/attendance-utils";
 
 export function formatEventDate(value: string, locale?: Locale) {
   if (locale) return formatDate(value, locale, { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -32,7 +32,8 @@ export function plannedStatusLabel(status?: SquadAttendanceEntry["plannedStatus"
 }
 
 export function plannedReasonLabel(reason?: SquadAttendanceEntry["plannedReason"], locale: Locale = "en") {
-  return reason ? systemText(locale, attendanceReasonLabels[reason]) : "";
+  const normalized = normalizePlannedAttendanceReason(reason);
+  return normalized ? systemText(locale, attendanceReasonLabels[normalized]) : "";
 }
 
 export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"], locale: Locale = "en") {

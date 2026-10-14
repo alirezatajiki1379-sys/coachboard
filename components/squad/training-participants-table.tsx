@@ -390,7 +390,14 @@ function ParticipantCell({ eventId, entry, columnId, groupLabels }: { eventId: s
   }
   if (columnId === "position") return <PositionCell entry={entry} />;
   if (columnId === "planned") return <PlannedAttendanceControls entry={entry} eventId={eventId} returnTo={`/trainings/${eventId}`} />;
-  if (columnId === "reason") return <span className="font-semibold text-slate-600">{entry.plannedReason ? ui(plannedReasonLabel(entry.plannedReason)) : "-"}</span>;
+  if (columnId === "reason") {
+    return (
+      <div className="min-w-0">
+        <p className="font-semibold text-slate-600">{entry.plannedReason ? ui(plannedReasonLabel(entry.plannedReason)) : "-"}</p>
+        {entry.plannedReasonNote ? <p translate="no" className="mt-0.5 break-words text-xs text-slate-500">{entry.plannedReasonNote}</p> : null}
+      </div>
+    );
+  }
   if (columnId === "group") return <GroupCell eventId={eventId} labels={groupLabels} />;
   if (columnId === "age") return <span className="font-semibold text-slate-700">{calculateAge(player?.dateOfBirth) ?? "-"}</span>;
   if (columnId === "availability") return <span className="font-semibold text-slate-700">{ui(availabilityLabel(entry))}</span>;

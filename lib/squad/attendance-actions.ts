@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { asScoutingDb } from "@/lib/scouting/db";
 import { createClient } from "@/lib/supabase/server";
-import { applyAsExpectedDecision, calculateSuggestedOverallRating } from "@/lib/squad/attendance-utils";
+import { applyAsExpectedDecision, calculateSuggestedOverallRating, normalizePlannedAttendanceReason } from "@/lib/squad/attendance-utils";
 import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, isTrainingUpcoming, seasonLabelForDate, trainingNowParts, weekdayForDate } from "@/lib/trainings/utils";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
@@ -917,7 +917,7 @@ export async function updatePlannedAttendance(formData: FormData) {
   const plannedReason = formString(formData, "plannedReason");
   const safeReason =
     plannedStatus === "unavailable" && plannedReasons.includes(plannedReason as (typeof plannedReasons)[number])
-      ? plannedReason
+      ? normalizePlannedAttendanceReason(plannedReason as (typeof plannedReasons)[number]) ?? null
       : null;
 
   const { supabase, user } = await requireUser();
@@ -950,7 +950,7 @@ export async function updatePlannedAttendanceInline(formData: FormData): Promise
   const plannedReason = formString(formData, "plannedReason");
   const safeReason =
     plannedStatus === "unavailable" && plannedReasons.includes(plannedReason as (typeof plannedReasons)[number])
-      ? plannedReason as (typeof plannedReasons)[number]
+      ? normalizePlannedAttendanceReason(plannedReason as (typeof plannedReasons)[number]) ?? null
       : null;
   const plannedReasonNote = plannedStatus === "unavailable" ? optional(formString(formData, "plannedReasonNote")) : null;
 

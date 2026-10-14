@@ -1,6 +1,7 @@
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import type { Database } from "@/types/database";
 import type { SquadAttendanceEntry, SquadTrainingEvent } from "@/types/domain";
+import { normalizePlannedAttendanceReason } from "@/lib/squad/attendance-utils";
 
 export type SquadTrainingEventRow = Database["public"]["Tables"]["squad_training_events"]["Row"];
 export type SquadAttendanceRow = Database["public"]["Tables"]["squad_attendance_records"]["Row"];
@@ -45,7 +46,7 @@ export function mapAttendanceRow(row: SquadAttendanceRow, player?: SquadPlayerRo
     eventId: row.event_id,
     playerId: row.player_id,
     plannedStatus: row.planned_status ?? undefined,
-    plannedReason: row.planned_reason ?? undefined,
+    plannedReason: normalizePlannedAttendanceReason(row.planned_reason),
     plannedReasonNote: row.planned_reason_note ?? undefined,
     plannedStatusSource: row.planned_status_source ?? undefined,
     finalStatus: row.final_status ?? undefined,

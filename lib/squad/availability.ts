@@ -88,12 +88,29 @@ async function loadAvailabilityPeriods(db: SupabaseClient, userId: string, date:
   };
 }
 
-function availabilityOnDate(periods: { medical: MedicalRow[]; general: AvailabilityRow[] }, date: string) {
+export function availabilityOnDate(periods: { medical: MedicalRow[]; general: AvailabilityRow[] }, date: string) {
   const result = new Map<string, PlayerAvailabilityMatch>();
+
+  // Explicit general availability wins. For overlaps, the latest applicable
+  // start date and then the latest edit identify the coach's current intent.
+  const availabilityRows = periods.general
+    .filter((row) => dateInRange(date, row.starts_on, row.ends_on))
+    .sort((a, b) => b.starts_on.localeCompare(a.starts_on) || b.updated_at.localeCompare(a.updated_at) || a.reason.localeCompare(b.reason));
+
+  for (const row of availabilityRows) {
+    if (result.has(row.player_id)) continue;
+    result.set(row.player_id, {
+      playerId: row.player_id,
+      reason: row.reason,
+      plannedReason: absenceReasonToPlannedReason(row.reason),
+      note: row.note ?? undefined,
+      source: "availability"
+    });
+  }
 
   const medicalRows = periods.medical
     .filter((row) => dateInRange(date, row.start_date, row.actual_return_date ?? row.end_date))
-    .sort((a, b) => b.start_date.localeCompare(a.start_date) || b.updated_at.localeCompare(a.updated_at));
+    .sort((a, b) => b.start_date.localeCompare(a.start_date) || b.updated_at.localeCompare(a.updated_at) || a.type.localeCompare(b.type));
 
   for (const row of medicalRows) {
     if (result.has(row.player_id)) continue;
@@ -104,21 +121,6 @@ function availabilityOnDate(periods: { medical: MedicalRow[]; general: Availabil
       plannedReason: absenceReasonToPlannedReason(reason),
       note: row.description ?? undefined,
       source: "medical"
-    });
-  }
-
-  const availabilityRows = periods.general
-    .filter((row) => dateInRange(date, row.starts_on, row.ends_on))
-    .sort((a, b) => reasonPriority(a.reason) - reasonPriority(b.reason) || b.starts_on.localeCompare(a.starts_on) || b.updated_at.localeCompare(a.updated_at));
-
-  for (const row of availabilityRows) {
-    if (result.has(row.player_id)) continue;
-    result.set(row.player_id, {
-      playerId: row.player_id,
-      reason: row.reason,
-      plannedReason: absenceReasonToPlannedReason(row.reason),
-      note: row.note ?? undefined,
-      source: "availability"
     });
   }
 
@@ -190,17 +192,4 @@ function dateInRange(date: string, start: string, end?: string | null) {
   if (date < start) return false;
   if (end && date > end) return false;
   return true;
-}
-
-function reasonPriority(reason: PlayerAbsenceReason) {
-  const priorities: Record<PlayerAbsenceReason, number> = {
-    injured: 1,
-    sick: 2,
-    school: 3,
-    work: 4,
-    holiday: 5,
-    private: 6,
-    other: 7
-  };
-  return priorities[reason];
 }

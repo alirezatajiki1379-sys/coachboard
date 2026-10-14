@@ -433,7 +433,7 @@ async function getMedicalByPlayer(db: SupabaseClient, userId: string, eventDate:
   return result;
 }
 
-function applyMedicalPrefill<T extends ReturnType<typeof mapAttendanceRow>>(entry: T, medical: PlayerMedicalPeriod | undefined, canUpdatePlanned: boolean): T {
+export function applyMedicalPrefill<T extends ReturnType<typeof mapAttendanceRow>>(entry: T, medical: PlayerMedicalPeriod | undefined, canUpdatePlanned: boolean): T {
   if (!medical) {
     if (canUpdatePlanned && entry.plannedStatusSource === "medical" && !entry.finalStatus) {
       return { ...entry, plannedStatus: "expected", plannedReason: undefined, plannedReasonNote: undefined, plannedStatusSource: "default" };
@@ -448,7 +448,10 @@ function applyMedicalPrefill<T extends ReturnType<typeof mapAttendanceRow>>(entr
     description: medical.description,
     needsReview: medicalNeedsReview(medical)
   };
-  if (!canUpdatePlanned || entry.finalStatus || entry.plannedStatusSource === "manual") return { ...entry, medicalAvailability: availability };
+  const medicalMayPrefill = canUpdatePlanned && !entry.finalStatus && (
+    !entry.plannedStatusSource || entry.plannedStatusSource === "default" || entry.plannedStatusSource === "medical"
+  );
+  if (!medicalMayPrefill) return { ...entry, medicalAvailability: availability };
   return {
     ...entry,
     plannedStatus: "unavailable",
