@@ -78,5 +78,9 @@ assert.match(controls, /"Note about leaving early"/);
 assert.match(controls, /"Late note"/);
 assert.doesNotMatch(controls, /name="actualAttendanceNote" rows=\{3\}/);
 assert.match(controls, /name="actualAttendanceNote" type="text"/);
+assert.match(controls, /savedEntry\.actualAttendanceNote \?\? savedEntry\.plannedReasonNote \?\? ""/);
+assert.match(controls, /savedEntry\.actualAttendanceNote \?\? ""/);
+assert.match(controls, /plannedReasonNote && !showsActualAttendanceDetails/);
+assert.match(controls, /actualAttendanceNote && !showsActualAttendanceDetails/);
 
 console.log("Actual attendance context regression passed.");

@@ -426,6 +426,7 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
   const isLeftEarly = entryWithState.finalStatus === "left_early";
   const isAbsent = isAbsentAttendanceStatus(entryWithState.finalStatus);
   const isParticipating = isParticipatingAttendanceStatus(entryWithState.finalStatus);
+  const showsActualAttendanceDetails = isLate || isAbsent || isLeftEarly;
   const actualAbsenceReason = effectiveActualAbsenceReason(entryWithState);
   const statusTone = entryWithState.finalStatus
     ? entryWithState.finalStatus === "present" || entryWithState.finalStatus === "Z"
@@ -455,13 +456,13 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
                 {ui("Actual: ")}{isAbsent ? `${ui("Absent")}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}` : `${ui(finalStatusLabel(entryWithState.finalStatus))}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}`}
               </span>
             </div>
-            {entryWithState.plannedReasonNote ? (
+            {entryWithState.plannedReasonNote && !showsActualAttendanceDetails ? (
               <p translate="no" className="mt-1 text-sm text-slate-500">&ldquo;{entryWithState.plannedReasonNote}&rdquo;</p>
             ) : null}
             {isLeftEarly && entryWithState.leftEarlyMinute !== undefined ? (
               <p className="mt-2 text-sm font-semibold text-orange-700">{ui("Left after minute")}: {entryWithState.leftEarlyMinute}</p>
             ) : null}
-            {entryWithState.actualAttendanceNote ? (
+            {entryWithState.actualAttendanceNote && !showsActualAttendanceDetails ? (
               <p translate="no" className="mt-1 text-sm text-slate-700">&ldquo;{entryWithState.actualAttendanceNote}&rdquo;</p>
             ) : null}
             {entryWithState.medicalAvailability ? (
@@ -700,6 +701,9 @@ export function ActualAttendanceDetails({
   const status = savedEntry.finalStatus;
   const needsReason = status === "left_early" || isAbsentAttendanceStatus(status);
   const currentReason = effectiveActualAbsenceReason(savedEntry) ?? defaultActualAbsenceReason(savedEntry);
+  const effectiveAttendanceNote = isAbsentAttendanceStatus(status)
+    ? savedEntry.actualAttendanceNote ?? savedEntry.plannedReasonNote ?? ""
+    : savedEntry.actualAttendanceNote ?? "";
   const tone = status === "left_early" ? "border-orange-200 bg-orange-50" : status === "Z" ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50";
   const noteLabel = status === "left_early"
     ? "Note about leaving early"
@@ -775,7 +779,7 @@ export function ActualAttendanceDetails({
       ) : null}
       <label>
         <span className="text-xs font-bold uppercase text-slate-600">{ui(noteLabel)}</span>
-        <input name="actualAttendanceNote" type="text" defaultValue={savedEntry.actualAttendanceNote ?? ""} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+        <input name="actualAttendanceNote" type="text" defaultValue={effectiveAttendanceNote} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
       </label>
       {status === "Z" ? (
         <label className="flex min-h-11 items-center gap-2 rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-slate-600">

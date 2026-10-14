@@ -46,7 +46,7 @@ const bundle = await build({
     const locale=params.get("locale")||"en";
     const view=params.get("view")||"review";
     const status=params.get("status")||"present";
-    const entry={id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:status,actualAbsenceReason:status==="left_early"?"injured":undefined,actualAttendanceNote:status==="left_early"?"Fictional attendance context":undefined,leftEarlyMinute:status==="left_early"?2:undefined,overallRating:params.has("unrated")?undefined:4,latePenaltyApplied:true,player:{firstName:"Fictional",lastName:"Player",playerType:"roster",position:"CM",secondaryPositions:[]}};
+    const entry={id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",plannedReasonNote:params.get("planned")||undefined,finalStatus:status,actualAbsenceReason:status==="left_early"?"injured":undefined,actualAttendanceNote:params.get("actual")||(status==="left_early"&&!params.has("planned")?"Fictional attendance context":undefined),leftEarlyMinute:status==="left_early"?2:undefined,overallRating:params.has("unrated")?undefined:4,latePenaltyApplied:true,player:{firstName:"Fictional",lastName:"Player",playerType:"roster",position:"CM",secondaryPositions:[]}};
     const review={objectiveOutcome:"achieved",overallQuality:4,intensity:3,playerResponse:5,workedWell:"Existing feedback",drillReviews:[]};
     const root=createRoot(document.getElementById("root"));
     function render(){root.render(<I18nProvider locale={locale}><GermanLocalizationBoundary locale={locale}>
@@ -185,6 +185,54 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${layout.status}: mobile overflow`);
   }
   console.log("PASS: compact actual-attendance layouts and EN/DE labels at desktop and mobile widths");
+
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto(`${base}?view=check-in&status=absent&planned=${encodeURIComponent("Braucht Pause")}`);
+  const absentNote = page.locator('input[name="actualAttendanceNote"]');
+  await absentNote.waitFor();
+  assert.equal(await absentNote.inputValue(), "Braucht Pause");
+  assert.equal(await page.getByText("Braucht Pause", { exact: true }).count(), 0, "planned note must not be duplicated above the actual-details editor");
+  await page.locator('select[name="actualAbsenceReason"]').selectOption("other");
+  const prefillSaveCount = await page.evaluate(() => window.qa.saves.length);
+  await page.getByRole("button", { name: "Save attendance details", exact: true }).click();
+  await page.waitForFunction((count) => window.qa.saves.length > count, prefillSaveCount);
+  const prefillSave = await page.evaluate(() => window.qa.saves.at(-1));
+  assert.equal(prefillSave.actualAttendanceNote, "Braucht Pause");
+  assert.equal("plannedReasonNote" in prefillSave, false, "saving actual details must not modify the planned note");
+
+  await page.goto(`${base}?view=check-in&status=absent&planned=${encodeURIComponent("Braucht Pause")}&actual=${encodeURIComponent("Braucht Pause")}`);
+  const editedAbsentNote = page.locator('input[name="actualAttendanceNote"]');
+  await editedAbsentNote.waitFor();
+  await page.locator('select[name="actualAbsenceReason"]').selectOption("other");
+  await editedAbsentNote.fill("Musste wegen Beschwerden pausieren");
+  const editedSaveCount = await page.evaluate(() => window.qa.saves.length);
+  await page.getByRole("button", { name: "Save attendance details", exact: true }).click();
+  await page.waitForFunction((count) => window.qa.saves.length > count, editedSaveCount);
+  const editedSave = await page.evaluate(() => window.qa.saves.at(-1));
+  assert.equal(editedSave.actualAttendanceNote, "Musste wegen Beschwerden pausieren");
+  assert.equal("plannedReasonNote" in editedSave, false);
+  await page.goto(`${base}?view=check-in&status=absent&planned=${encodeURIComponent("Braucht Pause")}&actual=${encodeURIComponent("Musste wegen Beschwerden pausieren")}`);
+  await page.locator('input[name="actualAttendanceNote"]').waitFor();
+  assert.equal(await page.locator('input[name="actualAttendanceNote"]').inputValue(), "Musste wegen Beschwerden pausieren");
+
+  await page.goto(`${base}?view=check-in&status=absent&planned=${encodeURIComponent("Klassenfahrt")}&actual=${encodeURIComponent("War krank")}`);
+  await page.locator('input[name="actualAttendanceNote"]').waitFor();
+  assert.equal(await page.locator('input[name="actualAttendanceNote"]').inputValue(), "War krank");
+  assert.equal(await page.getByText("Klassenfahrt", { exact: true }).count(), 0);
+  assert.equal(await page.getByText("War krank", { exact: true }).count(), 0);
+
+  await page.goto(`${base}?view=check-in&status=absent`);
+  await page.locator('input[name="actualAttendanceNote"]').waitFor();
+  assert.equal(await page.locator('input[name="actualAttendanceNote"]').inputValue(), "");
+
+  for (const status of ["left_early", "Z"]) {
+    await page.goto(`${base}?view=check-in&status=${status}&planned=${encodeURIComponent("Unrelated planned note")}`);
+    await page.locator('input[name="actualAttendanceNote"]').waitFor();
+    assert.equal(await page.locator('input[name="actualAttendanceNote"]').inputValue(), "", `${status}: planned note must not prefill actual note`);
+    assert.equal(await page.getByText("Unrelated planned note", { exact: true }).count(), 0);
+  }
+  console.log("PASS: absent note fallback, actual-note precedence, explicit save, and no late/left-early fallback");
+
   for (const locale of ["en", "de"]) {
     for (const width of [320, 360, 375, 390, 430, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
