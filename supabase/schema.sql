@@ -1574,6 +1574,7 @@ create table if not exists public.squad_attendance_records (
       or final_status in (
         'present',
         'absent',
+        'left_early',
         'Z',
         'V',
         'K',
@@ -1598,6 +1599,14 @@ create table if not exists public.squad_attendance_records (
         'private',
         'other'
       )
+    ),
+
+  actual_attendance_note text,
+
+  left_early_minute integer
+    check (
+      left_early_minute is null
+      or left_early_minute >= 0
     ),
 
   late_minutes integer
@@ -1659,6 +1668,8 @@ create table if not exists public.squad_attendance_records (
 alter table public.squad_attendance_records
 add column if not exists planned_reason text,
 add column if not exists actual_absence_reason text,
+add column if not exists actual_attendance_note text,
+add column if not exists left_early_minute integer,
 add column if not exists planned_status_source text default 'default';
 
 update public.squad_attendance_records
@@ -1682,6 +1693,9 @@ alter table public.squad_attendance_records
 drop constraint if exists squad_attendance_records_actual_absence_reason_check;
 
 alter table public.squad_attendance_records
+drop constraint if exists squad_attendance_records_left_early_minute_check;
+
+alter table public.squad_attendance_records
 add constraint squad_attendance_records_planned_status_check
 check (
   planned_status is null
@@ -1699,7 +1713,7 @@ alter table public.squad_attendance_records
 add constraint squad_attendance_records_final_status_check
 check (
   final_status is null
-  or final_status in ('present', 'absent', 'Z', 'V', 'K', 'E', 'P', 'S', 'U')
+  or final_status in ('present', 'absent', 'left_early', 'Z', 'V', 'K', 'E', 'P', 'S', 'U')
 );
 
 alter table public.squad_attendance_records
@@ -1715,6 +1729,22 @@ check (
   actual_absence_reason is null
   or actual_absence_reason in ('unexcused', 'excused', 'sick', 'injured', 'school', 'work', 'holiday', 'private', 'other')
 );
+
+alter table public.squad_attendance_records
+add constraint squad_attendance_records_left_early_minute_check
+check (
+  left_early_minute is null
+  or left_early_minute >= 0
+);
+
+comment on column public.squad_attendance_records.actual_attendance_note is
+  'Factual context about what actually happened regarding attendance.';
+
+comment on column public.squad_attendance_records.left_early_minute is
+  'Optional non-negative Training minute when the Player left early.';
+
+comment on column public.squad_attendance_records.actual_absence_reason is
+  'Canonical actual attendance reason used for absent and left-early outcomes.';
 
 
 -- =========================================================
