@@ -23,9 +23,10 @@ import {
   type AnalyticsSortDirection,
   type AnalyticsSortKey,
   type PlayerAnalyticsSummary,
+  type TeamAnalyticsEvent,
   type TeamAnalyticsOverview
 } from "@/lib/squad/analytics";
-import { getSquadAnalyticsOverview, parseAnalyticsFilters } from "@/lib/squad/analytics-queries";
+import { getSquadAnalyticsOverview, parseAnalyticsFilters, type AnalyticsFilters } from "@/lib/squad/analytics-queries";
 import { createClient } from "@/lib/supabase/server";
 import { getUserLocale } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
@@ -53,7 +54,8 @@ const analyticsSortOptions: Record<"en" | "de", Array<{ id: AnalyticsSortKey; la
     { id: "position", label: "Position" },
     { id: "status", label: "Status" },
     { id: "trainings", label: "Trainings" },
-    { id: "attendance", label: "Participation rate" },
+    { id: "ratingCoverage", label: "Rating coverage" },
+    { id: "attendance", label: "Attendance when expected" },
     { id: "average", label: "Average rating" },
     { id: "latestFive", label: "Latest 5" },
     { id: "trend", label: "Trend" },
@@ -67,7 +69,8 @@ const analyticsSortOptions: Record<"en" | "de", Array<{ id: AnalyticsSortKey; la
     { id: "position", label: "Position" },
     { id: "status", label: "Status" },
     { id: "trainings", label: "Trainingseinheiten" },
-    { id: "attendance", label: "Teilnahmequote" },
+    { id: "ratingCoverage", label: "Bewertungsabdeckung" },
+    { id: "attendance", label: "Anwesenheit bei Einplanung" },
     { id: "average", label: "Durchschnittsbewertung" },
     { id: "latestFive", label: "Letzte 5" },
     { id: "trend", label: "Trend" },
@@ -103,10 +106,6 @@ const analyticsCopy = {
     resetFilters: "Reset filters",
     activeTeam: "Active team",
     attended: (count: number) => `${count} participated`,
-    participationDetail: (attended: number, total: number) => `${attended} of ${total} participated`,
-    expectedAttendanceDetail: (attended: number, total: number, notExpected: number) => `${attended}/${total} when expected · ${notExpected} not expected`,
-    finalRatingsOnly: "Final overall ratings only",
-    manualCoachStatus: "Manual coach status",
     noDataTitle: "No analytics data for this view.",
     noDataDescription: "Adjust the filters or complete trainings with attendance and ratings.",
     createTraining: "Create training",
@@ -132,9 +131,9 @@ const analyticsCopy = {
     metrics: {
       players: "Players",
       trainings: "Trainings",
-      teamAttendance: "Team participation",
-      ratedPerformances: "Rated performances",
-      openAssessments: "Open assessments"
+      attendanceWhenExpected: "Attendance when expected",
+      ratingCoverage: "Rating coverage",
+      averageRating: "Average performance rating"
     },
     headers: {
       player: "Player",
@@ -152,8 +151,10 @@ const analyticsCopy = {
     helpItems: [
       { title: "Average rating", text: "only final overall ratings intentionally entered by the coach. Unrated trainings are not counted as 3." },
       { title: "Trend", text: "latest five rated trainings compared with the five rated trainings before them, inside the selected period." },
-      { title: "Participation rate", text: "Present and Late divided by every relevant historical participant snapshot, including not expected and not recorded trainings." },
-      { title: "Attendance when expected", text: "Present and Late divided only by expected trainings with a recorded actual outcome. Not expected trainings are excluded." },
+      { title: "Attendance when expected", text: "Present, Late and Left early divided by expected trainings with a recorded actual outcome. Not expected trainings are excluded." },
+      { title: "Rating coverage", text: "saved overall ratings for expected Players who were Present or Late, divided by all ratings expected for those Players." },
+      { title: "Data coverage", text: "recorded actual attendance divided by all Player-training combinations in the selected view." },
+      { title: "Planning and actual outcome", text: "Expected and Not expected describe planning. Participated and Absent describe what actually happened." },
       { title: "Reliability", text: "existing malus rules; late only counts when the penalty is active." },
       { title: "Evidence", text: "shows how many rated trainings support the performance view." },
       { title: "Coach assessment", text: "manual coach marker, separate from automatic summaries." },
@@ -184,10 +185,6 @@ const analyticsCopy = {
     resetFilters: "Filter zurücksetzen",
     activeTeam: "Aktive Mannschaft",
     attended: (count: number) => `${count} teilgenommen`,
-    participationDetail: (attended: number, total: number) => `${attended} von ${total} teilgenommen`,
-    expectedAttendanceDetail: (attended: number, total: number, notExpected: number) => `${attended}/${total} bei Einplanung · ${notExpected} nicht eingeplant`,
-    finalRatingsOnly: "Nur abschließende Gesamtbewertungen",
-    manualCoachStatus: "Manuelle Trainerbewertung",
     noDataTitle: "Keine Analysedaten für diese Ansicht.",
     noDataDescription: "Passe die Filter an oder schließe Trainingseinheiten mit Anwesenheit und Bewertungen ab.",
     createTraining: "Training erstellen",
@@ -213,9 +210,9 @@ const analyticsCopy = {
     metrics: {
       players: "Spieler",
       trainings: "Trainingseinheiten",
-      teamAttendance: "Mannschaftsteilnahme",
-      ratedPerformances: "Bewertete Leistungen",
-      openAssessments: "Offene Bewertungen"
+      attendanceWhenExpected: "Anwesenheit bei Einplanung",
+      ratingCoverage: "Bewertungsabdeckung",
+      averageRating: "Ø Leistungsbewertung"
     },
     headers: {
       player: "Spieler",
@@ -233,8 +230,10 @@ const analyticsCopy = {
     helpItems: [
       { title: "Durchschnittsbewertung", text: "nur abschließende Gesamtbewertungen, die der Trainer bewusst eingetragen hat. Nicht bewertete Trainings zählen nicht als 3." },
       { title: "Trend", text: "die letzten fünf bewerteten Trainings im Vergleich zu den fünf bewerteten Trainings davor, innerhalb des gewählten Zeitraums." },
-      { title: "Teilnahmequote", text: "Anwesend und Verspätet geteilt durch alle relevanten historischen Teilnehmerdatensätze, einschließlich nicht eingeplanter und nicht erfasster Trainings." },
-      { title: "Anwesenheit bei eingeplanten Trainings", text: "Anwesend und Verspätet geteilt nur durch eingeplante Trainings mit erfasstem Ergebnis. Nicht eingeplante Trainings sind ausgeschlossen." },
+      { title: "Anwesenheit bei Einplanung", text: "Anwesend, Verspätet und Training abgebrochen geteilt durch eingeplante Trainings mit erfasstem tatsächlichem Ergebnis. Nicht eingeplante Trainings sind ausgeschlossen." },
+      { title: "Bewertungsabdeckung", text: "gespeicherte Gesamtbewertungen für eingeplante Spieler, die anwesend oder verspätet waren, geteilt durch alle für diese Spieler erwarteten Bewertungen." },
+      { title: "Datenvollständigkeit", text: "erfasste tatsächliche Anwesenheiten geteilt durch alle Spieler-Training-Kombinationen der gewählten Ansicht." },
+      { title: "Planung und tatsächliches Ergebnis", text: "Eingeplant und Nicht eingeplant beschreiben die Planung. Teilgenommen und Abwesend beschreiben das tatsächliche Ergebnis." },
       { title: "Zuverlässigkeit", text: "bestehende Malus-Regeln; Verspätung zählt nur, wenn der Abzug aktiv ist." },
       { title: "Belege", text: "zeigt, wie viele bewertete Trainings die Leistungsansicht stützen." },
       { title: "Trainereinschätzung", text: "manuelle Einschätzung des Trainers, getrennt von automatischen Zusammenfassungen." },
@@ -258,8 +257,6 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
   const sortOptions = analyticsSortOptions[locale];
   const { summaries, positions, seasonSettings, teamAnalytics, availableEvents } = await getSquadAnalyticsOverview(supabase, user.id, filters);
   const periodDefinition = getPeriodDefinition(filters, teamAnalytics.events.map((item) => item.event), seasonSettings, locale);
-  const totalRated = summaries.reduce((sum, summary) => sum + summary.rated, 0);
-  const openAssessments = summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length;
   const activeFilters = countActiveFilters(filters);
 
   return (
@@ -269,10 +266,16 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
         title={copy.title}
         description={copy.description}
         actions={(
-        <ButtonLink href="#analytics-help" variant="secondary" className="justify-center">
-          <Info className="h-4 w-4" />
-          {copy.helpTitle}
-        </ButtonLink>
+          <>
+            <ButtonLink href={reportHrefFor(filters)} variant="secondary" className="justify-center">
+              <Printer className="h-4 w-4" />
+              {locale === "de" ? "Bericht erstellen" : "Create report"}
+            </ButtonLink>
+            <ButtonLink href="#analytics-help" variant="secondary" className="justify-center">
+              <Info className="h-4 w-4" />
+              {copy.helpTitle}
+            </ButtonLink>
+          </>
         )}
       />
 
@@ -404,46 +407,19 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryMetric icon={<Users className="h-4 w-4" />} label={copy.metrics.players} value={String(summaries.length)} hint={`${copy.activeTeam}: ${teamAnalytics.activeSquad.name}`} />
-        <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label={copy.metrics.trainings} value={String(teamAnalytics.trainingSessions)} hint={periodDefinition.shortLabel} />
-        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label={copy.metrics.teamAttendance} value={formatPercent(teamAnalytics.teamParticipationRate, locale)} hint={copy.attended(teamAnalytics.present + teamAnalytics.late)} />
-        <SummaryMetric icon={<Star className="h-4 w-4" />} label={copy.metrics.ratedPerformances} value={String(totalRated)} hint={copy.finalRatingsOnly} />
-        <SummaryMetric icon={<Info className="h-4 w-4" />} label={copy.metrics.openAssessments} value={String(openAssessments)} hint={copy.manualCoachStatus} />
+        <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label={copy.metrics.trainings} value={String(teamAnalytics.trainingSessions)} hint={`${periodDefinition.shortLabel} · ${copy.availableTrainings(teamAnalytics.trainingSessions)}`} />
+        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label={copy.metrics.attendanceWhenExpected} value={formatPercent(teamAnalytics.teamAttendanceWhenExpectedRate, locale)} hint={locale === "de" ? `${teamAnalytics.attendedWhenExpectedCount} von ${teamAnalytics.expectedRecordedCount} eingeplanten Teilnahmen` : `${teamAnalytics.attendedWhenExpectedCount} of ${teamAnalytics.expectedRecordedCount} expected attendances`} />
+        <SummaryMetric icon={<Star className="h-4 w-4" />} label={copy.metrics.ratingCoverage} value={formatPercent(teamAnalytics.ratingCoverageRate, locale)} hint={locale === "de" ? `${teamAnalytics.ratingCompletedCount} von ${teamAnalytics.ratingEligibleCount} erwarteten Bewertungen` : `${teamAnalytics.ratingCompletedCount} of ${teamAnalytics.ratingEligibleCount} expected ratings`} />
+        <SummaryMetric icon={<BarChart3 className="h-4 w-4" />} label={copy.metrics.averageRating} value={teamAnalytics.teamAverageOverallRating === null ? formatRating(null, locale) : `${formatRating(teamAnalytics.teamAverageOverallRating, locale)} / 5`} hint={locale === "de" ? `${teamAnalytics.totalRatedPerformances} Bewertungen` : `${teamAnalytics.totalRatedPerformances} ratings`} />
       </section>
 
       <AnalyticsSectionPanel section={filters.section} teamAnalytics={teamAnalytics} summaries={summaries} />
 
       {(filters.section === "players" || filters.section === "attendance") && summaries.length ? (
         <>
-          <section className="hidden overflow-x-auto rounded-lg border border-board-line bg-white shadow-soft lg:block">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <SortableHeader label={copy.headers.player} sortKey="name" filters={filters} />
-                  <SortableHeader label={copy.headers.position} sortKey="position" filters={filters} />
-                  <SortableHeader label={copy.headers.status} sortKey="status" filters={filters} />
-                  <SortableHeader label={copy.headers.trainings} sortKey="trainings" filters={filters} align="right" />
-                  <SortableHeader label={copy.headers.attendance} sortKey="attendance" filters={filters} align="right" />
-                  <SortableHeader label={copy.headers.average} sortKey="average" filters={filters} align="right" />
-                  <SortableHeader label={copy.headers.latestFive} sortKey="latestFive" filters={filters} align="right" />
-                  <SortableHeader label={copy.headers.trend} sortKey="trend" filters={filters} align="right" />
-                  <SortableHeader label={copy.headers.reliability} sortKey="reliability" filters={filters} align="right" />
-                  <SortableHeader label={copy.headers.evidence} sortKey="evidence" filters={filters} />
-                  <SortableHeader label={copy.headers.coachAssessment} sortKey="coachAssessment" filters={filters} />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {summaries.map((summary) => (
-                  <PlayerAnalyticsRow key={summary.player.id} summary={summary} activeSort={filters.sort} />
-                ))}
-              </tbody>
-            </table>
-          </section>
-
-          <section className="space-y-3 lg:hidden">
-            {summaries.map((summary) => (
-              <PlayerAnalyticsMobileCard key={summary.player.id} summary={summary} activeSort={filters.sort} />
-            ))}
-          </section>
+          {filters.section === "attendance"
+            ? <AttendanceAnalyticsTable summaries={summaries} filters={filters} />
+            : <PerformanceAnalyticsTable summaries={summaries} filters={filters} />}
         </>
       ) : filters.section === "players" || filters.section === "attendance" ? (
         <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
@@ -483,8 +459,9 @@ async function AnalyticsSectionPanel({
   const ui = createSystemTranslator(locale);
   if (section === "training" || section === "overview") {
     return (
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <Panel title={ui("Training Sessions")} icon={<CalendarCheck className="h-5 w-5" />}>
+      <div className="space-y-4">
+        <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <Panel title={ui("Training Sessions")} icon={<CalendarCheck className="h-5 w-5" />}>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MiniStat label={ui("Sessions")} value={teamAnalytics.trainingSessions} />
             <MiniStat label={ui("Reviewed")} value={`${teamAnalytics.reviewedSessions}/${teamAnalytics.trainingSessions}`} />
@@ -499,8 +476,8 @@ async function AnalyticsSectionPanel({
             <OutcomeBadge label={ui("Partly")} value={teamAnalytics.objectiveOutcomes.partly_achieved} />
             <OutcomeBadge label={ui("Not achieved")} value={teamAnalytics.objectiveOutcomes.not_achieved} />
           </div>
-        </Panel>
-        <Panel title={ui("Training Focus")} icon={<Target className="h-5 w-5" />}>
+          </Panel>
+          <Panel title={ui("Training Focus")} icon={<Target className="h-5 w-5" />}>
           {teamAnalytics.focusDistribution.length ? (
             <div className="space-y-3">
               {teamAnalytics.focusDistribution.slice(0, 6).map((item) => (
@@ -510,25 +487,48 @@ async function AnalyticsSectionPanel({
           ) : (
             <EmptyPanelText>{ui("No structured focus has been saved for trainings in this period.")}</EmptyPanelText>
           )}
-        </Panel>
-      </section>
+          </Panel>
+        </section>
+        <TrainingAnalyticsTable events={teamAnalytics.events} locale={locale} />
+      </div>
     );
   }
 
   if (section === "attendance") {
+    const coverageComplete = teamAnalytics.notRecorded === 0;
     return (
-      <Panel title={ui("Team Attendance")} icon={<UserCheck className="h-5 w-5" />}>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-          <MiniStat label={locale === "de" ? "Teilnahmequote" : "Participation rate"} value={formatPercent(teamAnalytics.teamParticipationRate, locale)} />
-          <MiniStat label={locale === "de" ? "Anwesenheit bei Einplanung" : "Attendance when expected"} value={formatPercent(teamAnalytics.teamAttendanceWhenExpectedRate, locale)} />
-          <MiniStat label={ui("Recorded attendance")} value={`${teamAnalytics.attendanceRecordCount}/${teamAnalytics.participantRecordCount}`} />
-          <MiniStat label={ui("Present")} value={teamAnalytics.present} />
-          <MiniStat label={ui("Late")} value={teamAnalytics.late} />
-          <MiniStat label={ui("Absent")} value={teamAnalytics.absent} />
-          <MiniStat label={ui("Not expected")} value={teamAnalytics.notExpected} />
-          <MiniStat label={ui("Not recorded")} value={teamAnalytics.notRecorded} />
+      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-lg font-bold text-board-navy">
+            <UserCheck className="h-5 w-5 text-board-green" />
+            {locale === "de" ? "Anwesenheit" : "Attendance"}
+          </div>
+          <div className={cn("rounded-md px-3 py-2 text-sm font-semibold", coverageComplete ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800")}>
+            <p>{coverageComplete
+              ? `${locale === "de" ? "Anwesenheit vollständig erfasst" : "Attendance fully recorded"} · ${formatPercent(teamAnalytics.dataCoverageRate, locale)}`
+              : `${teamAnalytics.notRecorded} ${locale === "de" ? "Anwesenheiten fehlen" : "attendance records missing"} · ${formatPercent(teamAnalytics.dataCoverageRate, locale)}`}</p>
+            <p className="mt-0.5 text-xs font-medium">{teamAnalytics.attendanceRecordCount} {locale === "de" ? "von" : "of"} {teamAnalytics.participantRecordCount} {locale === "de" ? "Spieler-Training-Kombinationen erfasst" : "player-training records captured"}</p>
+          </div>
         </div>
-      </Panel>
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr_1.1fr]">
+          <AnalyticsMetricGroup title={locale === "de" ? "Anwesenheit bei Einplanung" : "When expected"}>
+            <ProgressMetric label={locale === "de" ? "Anwesenheit bei Einplanung" : "Attendance when expected"} value={teamAnalytics.teamAttendanceWhenExpectedRate} count={`${teamAnalytics.attendedWhenExpectedCount} / ${teamAnalytics.expectedRecordedCount}`} locale={locale} tone="green" />
+            <ProgressMetric label={locale === "de" ? "Fehlquote bei Einplanung" : "Absence when expected"} value={teamAnalytics.absenceWhenExpectedRate} count={`${teamAnalytics.absentWhenExpectedCount} / ${teamAnalytics.expectedRecordedCount}`} locale={locale} tone="amber" />
+          </AnalyticsMetricGroup>
+          <AnalyticsMetricGroup title={locale === "de" ? "Planung" : "Planning"}>
+            <ProgressMetric label={locale === "de" ? "Eingeplant" : "Expected"} value={teamAnalytics.participantRecordCount ? teamAnalytics.plannedExpectedCount / teamAnalytics.participantRecordCount : null} count={`${teamAnalytics.plannedExpectedCount} ${locale === "de" ? "von" : "of"} ${teamAnalytics.participantRecordCount}`} locale={locale} />
+            <ProgressMetric label={locale === "de" ? "Nicht eingeplant" : "Not expected"} value={teamAnalytics.plannedUnavailableRate} count={`${teamAnalytics.notExpected} ${locale === "de" ? "von" : "of"} ${teamAnalytics.participantRecordCount}`} locale={locale} />
+          </AnalyticsMetricGroup>
+          <AnalyticsMetricGroup title={locale === "de" ? "Tatsächliche Teilnahme" : "Actual outcome"}>
+            <ProgressMetric label={locale === "de" ? "Teilgenommen" : "Participated"} value={teamAnalytics.actualParticipationRate} count={`${teamAnalytics.present + teamAnalytics.late + teamAnalytics.leftEarly} ${locale === "de" ? "von" : "of"} ${teamAnalytics.attendanceRecordCount}`} locale={locale} tone="green" />
+            <ProgressMetric label={locale === "de" ? "Abwesend" : "Absent"} value={teamAnalytics.actualAbsenceRate} count={`${teamAnalytics.absent} ${locale === "de" ? "von" : "of"} ${teamAnalytics.attendanceRecordCount}`} locale={locale} tone="amber" />
+            <div className="grid grid-cols-2 gap-2">
+              <MiniStat label={ui("Late")} value={`${formatPercent(teamAnalytics.lateRate, locale)} · ${teamAnalytics.late}`} />
+              <MiniStat label={ui("Left early")} value={`${formatPercent(teamAnalytics.leftEarlyRate, locale)} · ${teamAnalytics.leftEarly}`} />
+            </div>
+          </AnalyticsMetricGroup>
+        </div>
+      </section>
     );
   }
 
@@ -618,94 +618,102 @@ async function AnalyticsSectionPanel({
         <MiniStat label={ui("Players shown")} value={summaries.length} />
         <MiniStat label={ui("Rated players")} value={summaries.filter((summary) => summary.rated > 0).length} />
         <MiniStat label={ui("Participation data")} value={summaries.filter((summary) => summary.participationRate !== null).length} />
-        <MiniStat label={ui("Open assessments")} value={summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length} />
+        <MiniStat label={locale === "de" ? "Offene Trainereinschätzungen" : "Open coach assessments"} value={summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length} />
       </div>
     </Panel>
   );
 }
 
-async function PlayerAnalyticsRow({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
+async function AttendanceAnalyticsTable({ summaries, filters }: { summaries: PlayerAnalyticsSummary[]; filters: AnalyticsFilters }) {
   const locale = await getActiveLocale();
-  const ui = createSystemTranslator(locale);
-  const copy = analyticsCopy[locale];
-  return (
-    <tr className="align-middle hover:bg-slate-50/70">
-      <td className="px-3 py-3">
-        <Link translate="no" href={`/squad/players/${summary.player.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
-          {playerName(summary.player)}
-        </Link>
-        <p className="mt-1 text-xs text-slate-500">{summary.latestTraining?.event?.label || ui("No latest training")}</p>
-      </td>
-      <MetricCell active={activeSort === "position"}>
-        <span className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{summary.player.position || ui("No position")}</span>
-      </MetricCell>
-      <MetricCell active={activeSort === "status"}>{ui(summary.player.playerType === "trial" ? "Trial" : "Roster")}</MetricCell>
-      <MetricCell active={activeSort === "trainings"} align="right">{summary.trainings}</MetricCell>
-      <MetricCell active={activeSort === "attendance"} align="right">
-        <MetricStack
-          value={formatPercent(summary.participationRate, locale)}
-          detail={`${copy.participationDetail(summary.attended, summary.trainings)} · ${copy.expectedAttendanceDetail(summary.attendedWhenExpected, summary.attendanceWhenExpectedRecorded, summary.notExpectedTrainings)}`}
-        />
-      </MetricCell>
-      <MetricCell active={activeSort === "average"} align="right">
-        <MetricStack value={formatRating(summary.averageRating, locale)} detail={ui("{count} ratings", { count: summary.rated })} />
-      </MetricCell>
-      <MetricCell active={activeSort === "latestFive"} align="right">{formatRating(summary.latestFiveAverage, locale)}</MetricCell>
-      <MetricCell active={activeSort === "trend"} align="right">
-        <TrendLabel summary={summary} />
-      </MetricCell>
-      <MetricCell active={activeSort === "reliability"} align="right">
-        <MetricStack value={formatNumber(summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 })} detail={ui("{count} late · {unexcused} unexcused", { count: summary.late, unexcused: summary.unexcused })} />
-      </MetricCell>
-      <MetricCell active={activeSort === "evidence"}>
-        <span className={cn("inline-flex rounded-full px-2 py-1 text-xs font-bold", evidenceBadgeTone(summary.evidenceBase.label))}>{ui(summary.evidenceBase.label)}</span>
-        <p className="mt-1 text-xs text-slate-500">{ui("{count} rated", { count: summary.rated })}</p>
-      </MetricCell>
-      <MetricCell active={activeSort === "coachAssessment"}>
-        <span className="line-clamp-2 text-sm font-semibold text-board-navy">
-          {ui(summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : ui("Decision open"))}
-        </span>
-      </MetricCell>
-    </tr>
-  );
+  const labels = locale === "de"
+    ? { expected: "Eingeplant", participated: "Teilgenommen", attendance: "Anwesenheit bei Einplanung", unavailable: "Nicht eingeplant", absent: "Abwesend bei Einplanung", late: "Verspätet", leftEarly: "Abgebrochen", reliability: "Zuverlässigkeit" }
+    : { expected: "Expected", participated: "Participated", attendance: "Attendance when expected", unavailable: "Not expected", absent: "Absent when expected", late: "Late", leftEarly: "Left early", reliability: "Reliability" };
+  return <>
+    <section className="hidden overflow-x-auto rounded-lg border border-board-line bg-white shadow-soft lg:block">
+      <table className="w-full border-collapse text-left text-sm">
+        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+          <SortableHeader label={analyticsCopy[locale].headers.player} sortKey="name" filters={filters} />
+          <SortableHeader label={analyticsCopy[locale].headers.position} sortKey="position" filters={filters} />
+          <SortableHeader label={labels.expected} sortKey="trainings" filters={filters} align="right" />
+          <th className={cn(STICKY_TABLE_HEADER_CLASS, "px-3 py-3 text-right")}>{labels.participated}</th>
+          <SortableHeader label={labels.attendance} sortKey="attendance" filters={filters} align="right" />
+          <th className={cn(STICKY_TABLE_HEADER_CLASS, "px-3 py-3 text-right")}>{labels.unavailable}</th>
+          <th className={cn(STICKY_TABLE_HEADER_CLASS, "px-3 py-3 text-right")}>{labels.absent}</th>
+          <th className={cn(STICKY_TABLE_HEADER_CLASS, "px-3 py-3 text-right")}>{labels.late}</th>
+          <th className={cn(STICKY_TABLE_HEADER_CLASS, "px-3 py-3 text-right")}>{labels.leftEarly}</th>
+          <SortableHeader label={labels.reliability} sortKey="reliability" filters={filters} align="right" />
+        </tr></thead>
+        <tbody className="divide-y divide-slate-100">{summaries.map((summary) => <tr key={summary.player.id} className="hover:bg-slate-50/70">
+          <PlayerNameCell summary={summary} />
+          <PositionCell summary={summary} active={filters.sort === "position"} />
+          <MetricCell active={filters.sort === "trainings"} align="right">{summary.expectedTrainings}</MetricCell>
+          <MetricCell active={false} align="right">{summary.attended}</MetricCell>
+          <MetricCell active={filters.sort === "attendance"} align="right"><MetricStack value={formatPercent(summary.attendanceWhenExpectedRate, locale)} detail={`${summary.attendedWhenExpected} / ${summary.attendanceWhenExpectedRecorded}`} /></MetricCell>
+          <MetricCell active={false} align="right">{summary.notExpectedTrainings}</MetricCell>
+          <MetricCell active={false} align="right">{summary.absentWhenExpected}</MetricCell>
+          <MetricCell active={false} align="right">{summary.late}</MetricCell>
+          <MetricCell active={false} align="right">{summary.leftEarly}</MetricCell>
+          <MetricCell active={filters.sort === "reliability"} align="right">{formatNumber(summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 })}</MetricCell>
+        </tr>)}</tbody>
+      </table>
+    </section>
+    <section className="space-y-3 lg:hidden">{summaries.map((summary) => <article key={summary.player.id} className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
+      <MobilePlayerHeader summary={summary} />
+      <div className="mt-4 rounded-md bg-green-50 p-3"><p className="text-xs font-bold uppercase text-green-800">{labels.attendance}</p><p className="mt-1 text-2xl font-bold text-board-navy">{formatPercent(summary.attendanceWhenExpectedRate, locale)}</p><p className="text-sm text-slate-600">{summary.attendedWhenExpected} / {summary.attendanceWhenExpectedRecorded}</p></div>
+      <div className="mt-3 grid grid-cols-2 gap-2"><CompactMetric label={labels.participated} value={`${summary.attended} / ${summary.expectedTrainings}`} /><CompactMetric label={labels.absent} value={String(summary.absentWhenExpected)} /><CompactMetric label={labels.unavailable} value={String(summary.notExpectedTrainings)} /><CompactMetric label={`${labels.late} / ${labels.leftEarly}`} value={`${summary.late} / ${summary.leftEarly}`} /></div>
+    </article>)}</section>
+  </>;
 }
 
-async function PlayerAnalyticsMobileCard({ summary, activeSort }: { summary: PlayerAnalyticsSummary; activeSort: AnalyticsSortKey }) {
+async function PerformanceAnalyticsTable({ summaries, filters }: { summaries: PlayerAnalyticsSummary[]; filters: AnalyticsFilters }) {
   const locale = await getActiveLocale();
   const ui = createSystemTranslator(locale);
-  const primary = mobilePrimaryMetric(summary, activeSort, locale);
-  return (
-    <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Link translate="no" href={`/squad/players/${summary.player.id}`} className="text-lg font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
-            {playerName(summary.player)}
-          </Link>
-          <p className="mt-1 text-sm text-slate-600">
-            <span className={cn(activeSort === "position" && "font-bold text-board-navy")}>{summary.player.position || ui("No position")}</span>
-            {" · "}
-            {ui(summary.player.playerType === "trial" ? "Trial" : "Roster")}
-          </p>
-        </div>
-        <ButtonLink href={`/squad/players/${summary.player.id}/report`} variant="ghost" className="h-9 px-3">
-          <Printer className="h-4 w-4" />
-          {ui("Report")}</ButtonLink>
-      </div>
-      <div className="mt-4 rounded-md bg-slate-50 p-3">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{primary.label}</p>
-        <p className="mt-1 text-2xl font-bold text-board-navy">{primary.value}</p>
-        <p className="mt-1 text-sm text-slate-600">{primary.detail}</p>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        <CompactMetric label={ui("Average")} value={formatRating(summary.averageRating, locale)} muted={activeSort === "average"} />
-        <CompactMetric label={analyticsCopy[locale].headers.attendance} value={formatPercent(summary.participationRate, locale)} muted={activeSort === "attendance"} />
-        <CompactMetric label={locale === "de" ? "Anwesenheit bei Einplanung" : "Attendance when expected"} value={formatPercent(summary.attendanceWhenExpectedRate, locale)} />
-        <CompactMetric label={ui("Not expected")} value={String(summary.notExpectedTrainings)} />
-        <CompactMetric label={ui("Trend")} value={summary.trend.value === null ? ui(summary.trend.label) : formatNumber(summary.trend.value, locale, { minimumFractionDigits: 1, signDisplay: "exceptZero" })} muted={activeSort === "trend"} />
-        <CompactMetric label={ui("Evidence")} value={ui(summary.evidenceBase.label)} />
-      </div>
-    </article>
-  );
+  const headers = analyticsCopy[locale].headers;
+  const ratings = locale === "de" ? "Bewertungen" : "Ratings";
+  const coverage = locale === "de" ? "Bewertungsabdeckung" : "Rating coverage";
+  return <>
+    <section className="hidden overflow-x-auto rounded-lg border border-board-line bg-white shadow-soft lg:block"><table className="w-full border-collapse text-left text-sm">
+      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
+        <SortableHeader label={headers.player} sortKey="name" filters={filters} />
+        <SortableHeader label={headers.position} sortKey="position" filters={filters} />
+        <SortableHeader label={headers.status} sortKey="status" filters={filters} />
+        <SortableHeader label={headers.trainings} sortKey="trainings" filters={filters} align="right" />
+        <SortableHeader label={ratings} sortKey="rated" filters={filters} align="right" />
+        <SortableHeader label={coverage} sortKey="ratingCoverage" filters={filters} align="right" />
+        <SortableHeader label={headers.average} sortKey="average" filters={filters} align="right" />
+        <SortableHeader label={headers.latestFive} sortKey="latestFive" filters={filters} align="right" />
+        <SortableHeader label={headers.trend} sortKey="trend" filters={filters} align="right" />
+        <SortableHeader label={headers.evidence} sortKey="evidence" filters={filters} />
+        <SortableHeader label={headers.coachAssessment} sortKey="coachAssessment" filters={filters} />
+      </tr></thead>
+      <tbody className="divide-y divide-slate-100">{summaries.map((summary) => <tr key={summary.player.id} className="hover:bg-slate-50/70">
+        <PlayerNameCell summary={summary} /><PositionCell summary={summary} active={filters.sort === "position"} />
+        <MetricCell active={filters.sort === "status"}>{ui(summary.player.playerType === "trial" ? "Trial" : "Roster")}</MetricCell>
+        <MetricCell active={filters.sort === "trainings"} align="right">{summary.trainings}</MetricCell>
+        <MetricCell active={filters.sort === "rated"} align="right">{summary.ratingCompletedExpectedCount} / {summary.ratingEligibleCount}</MetricCell>
+        <MetricCell active={filters.sort === "ratingCoverage"} align="right"><MetricStack value={formatPercent(summary.ratingCoverageRate, locale)} detail={`${summary.ratingCompletedExpectedCount} / ${summary.ratingEligibleCount}`} /></MetricCell>
+        <MetricCell active={filters.sort === "average"} align="right">{formatRating(summary.averageRating, locale)}</MetricCell>
+        <MetricCell active={filters.sort === "latestFive"} align="right">{formatRating(summary.latestFiveAverage, locale)}</MetricCell>
+        <MetricCell active={filters.sort === "trend"} align="right"><TrendLabel summary={summary} /></MetricCell>
+        <MetricCell active={filters.sort === "evidence"}><span className={cn("inline-flex rounded-full px-2 py-1 text-xs font-bold", evidenceBadgeTone(summary.evidenceBase.label))}>{ui(summary.evidenceBase.label)}</span><p className="mt-1 text-xs text-slate-500">{summary.rated} {locale === "de" ? "bewertet" : "rated"}</p></MetricCell>
+        <MetricCell active={filters.sort === "coachAssessment"}>{ui(summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : "Decision open")}</MetricCell>
+      </tr>)}</tbody>
+    </table></section>
+    <section className="space-y-3 lg:hidden">{summaries.map((summary) => <article key={summary.player.id} className="rounded-lg border border-board-line bg-white p-4 shadow-soft"><MobilePlayerHeader summary={summary} /><div className="mt-4 rounded-md bg-slate-50 p-3"><p className="text-xs font-bold uppercase text-slate-500">{locale === "de" ? "Ø Leistungsbewertung" : "Average rating"}</p><p className="mt-1 text-2xl font-bold text-board-navy">{formatRating(summary.averageRating, locale)}</p><p className="text-sm text-slate-600">{summary.rated} {locale === "de" ? "Bewertungen" : "ratings"}</p></div><div className="mt-3 grid grid-cols-2 gap-2"><CompactMetric label={coverage} value={`${formatPercent(summary.ratingCoverageRate, locale)} · ${summary.ratingCompletedExpectedCount}/${summary.ratingEligibleCount}`} /><CompactMetric label={headers.latestFive} value={formatRating(summary.latestFiveAverage, locale)} /><CompactMetric label={headers.trend} value={summary.trend.value === null ? ui(summary.trend.label) : formatNumber(summary.trend.value, locale, { minimumFractionDigits: 1, signDisplay: "exceptZero" })} /><CompactMetric label={headers.evidence} value={`${summary.rated} ${locale === "de" ? "bewertet" : "rated"}`} /></div></article>)}</section>
+  </>;
+}
+
+function PlayerNameCell({ summary }: { summary: PlayerAnalyticsSummary }) {
+  return <td className="px-3 py-3"><Link translate="no" href={`/squad/players/${summary.player.id}`} className="font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">{playerName(summary.player)}</Link></td>;
+}
+
+function PositionCell({ summary, active }: { summary: PlayerAnalyticsSummary; active: boolean }) {
+  return <MetricCell active={active}><span className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{summary.player.position || "-"}</span></MetricCell>;
+}
+
+function MobilePlayerHeader({ summary }: { summary: PlayerAnalyticsSummary }) {
+  return <div className="flex items-start justify-between gap-3"><div><Link translate="no" href={`/squad/players/${summary.player.id}`} className="text-lg font-bold text-board-navy hover:text-board-green">{playerName(summary.player)}</Link><p className="mt-1 text-sm text-slate-600">{summary.player.position || "-"}</p></div><ButtonLink href={`/squad/players/${summary.player.id}/report`} variant="ghost" className="h-9 px-3"><Printer className="h-4 w-4" /><span className="sr-only">Report</span></ButtonLink></div>;
 }
 
 async function TrendLabel({ summary }: { summary: PlayerAnalyticsSummary }) {
@@ -758,6 +766,29 @@ function SummaryMetric({ icon, label, value, hint }: { icon: ReactNode; label: s
       <p className="mt-1 text-xs font-semibold text-slate-500">{hint}</p>
     </div>
   );
+}
+
+function AnalyticsMetricGroup({ title, children }: { title: string; children: ReactNode }) {
+  return <div className="rounded-md border border-slate-100 p-4"><h3 className="text-sm font-bold text-board-navy">{title}</h3><div className="mt-3 space-y-4">{children}</div></div>;
+}
+
+function ProgressMetric({ label, value, count, locale, tone = "navy" }: { label: string; value: number | null; count: string; locale: Locale; tone?: "navy" | "green" | "amber" }) {
+  const bar = tone === "green" ? "bg-board-green" : tone === "amber" ? "bg-amber-500" : "bg-board-navy";
+  return <div><div className="flex items-baseline justify-between gap-3"><p className="text-sm font-semibold text-slate-700">{label}</p><p className="text-lg font-bold text-board-navy">{formatPercent(value, locale)}</p></div><div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className={cn("h-full rounded-full", bar)} style={{ width: `${value === null ? 0 : Math.max(2, Math.min(100, value * 100))}%` }} /></div><p className="mt-1 text-xs font-semibold text-slate-500">{count}</p></div>;
+}
+
+function TrainingAnalyticsTable({ events, locale }: { events: TeamAnalyticsEvent[]; locale: Locale }) {
+  const copy = locale === "de"
+    ? { title: "Trainingseinheiten im Vergleich", date: "Datum", training: "Training", expected: "Eingeplante Spieler", attendance: "Anwesenheit bei Einplanung", coverage: "Bewertungsabdeckung", average: "Ø Bewertung", review: "Trainingsreflexion", plan: "Trainingsplan", open: "Bewertungen öffnen", saved: "Gespeichert", missing: "Fehlt", available: "Vorhanden" }
+    : { title: "Training comparison", date: "Date", training: "Training", expected: "Expected players", attendance: "Attendance when expected", coverage: "Rating coverage", average: "Average rating", review: "Session review", plan: "Training plan", open: "Open ratings", saved: "Saved", missing: "Missing", available: "Available" };
+  if (!events.length) return null;
+  return <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft"><h2 className="text-lg font-bold text-board-navy">{copy.title}</h2>
+    <div className="mt-4 hidden overflow-x-auto lg:block"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">{copy.date}</th><th className="px-3 py-3">{copy.training}</th><th className="px-3 py-3 text-right">{copy.expected}</th><th className="px-3 py-3 text-right">{copy.attendance}</th><th className="px-3 py-3 text-right">{copy.coverage}</th><th className="px-3 py-3 text-right">{copy.average}</th><th className="px-3 py-3">{copy.review}</th><th className="px-3 py-3">{copy.plan}</th></tr></thead><tbody className="divide-y divide-slate-100">{events.map((item) => {
+      const missingRatings = item.attendance.ratingEligibleCount - item.attendance.ratingCompletedCount;
+      return <tr key={item.event.id}><td className="px-3 py-3 tabular-nums">{formatDate(item.event.date, locale)}</td><td className="px-3 py-3 font-bold text-board-navy">{item.event.label || (locale === "de" ? "Training" : "Training")}</td><td className="px-3 py-3 text-right">{item.attendance.expected}</td><td className="px-3 py-3 text-right"><MetricStack value={formatPercent(item.attendance.attendanceWhenExpectedRate, locale)} detail={`${item.attendance.attendedWhenExpected} / ${item.attendance.expectedRecorded}`} /></td><td className="px-3 py-3 text-right"><MetricStack value={formatPercent(item.attendance.ratingCoverageRate, locale)} detail={`${item.attendance.ratingCompletedCount} / ${item.attendance.ratingEligibleCount}`} />{missingRatings > 0 ? <Link href={`/trainings/${item.event.id}/ratings`} className="mt-1 inline-block text-xs font-bold text-amber-700 hover:underline">{missingRatings} {locale === "de" ? "offen" : "missing"} · {copy.open}</Link> : null}</td><td className="px-3 py-3 text-right">{formatRating(item.attendance.averageOverallRating, locale)}</td><td className="px-3 py-3">{item.review ? copy.saved : copy.missing}</td><td className="px-3 py-3">{item.planDrillCount > 0 ? copy.available : copy.missing}</td></tr>;
+    })}</tbody></table></div>
+    <div className="mt-4 space-y-3 lg:hidden">{events.map((item) => { const missingRatings = item.attendance.ratingEligibleCount - item.attendance.ratingCompletedCount; return <article key={item.event.id} className="rounded-md border border-slate-100 p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-bold text-board-navy">{item.event.label || "Training"}</p><p className="text-sm text-slate-500">{formatDate(item.event.date, locale)}</p></div>{missingRatings > 0 ? <ButtonLink href={`/trainings/${item.event.id}/ratings`} variant="ghost" className="h-9 px-2">{copy.open}</ButtonLink> : null}</div><div className="mt-3 grid grid-cols-2 gap-2"><CompactMetric label={copy.attendance} value={`${formatPercent(item.attendance.attendanceWhenExpectedRate, locale)} · ${item.attendance.attendedWhenExpected}/${item.attendance.expectedRecorded}`} /><CompactMetric label={copy.coverage} value={`${formatPercent(item.attendance.ratingCoverageRate, locale)} · ${item.attendance.ratingCompletedCount}/${item.attendance.ratingEligibleCount}`} /><CompactMetric label={copy.review} value={item.review ? copy.saved : copy.missing} /><CompactMetric label={copy.plan} value={item.planDrillCount > 0 ? copy.available : copy.missing} /></div></article>; })}</div>
+  </section>;
 }
 
 function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
@@ -883,23 +914,6 @@ function CompactMetric({ label, value, muted }: { label: string; value: string; 
       <p className="mt-1 font-bold text-board-navy">{value}</p>
     </div>
   );
-}
-
-function mobilePrimaryMetric(summary: PlayerAnalyticsSummary, sort: AnalyticsSortKey, locale: Locale) {
-  const ui = createSystemTranslator(locale);
-  const copy = analyticsCopy[locale];
-  const rated = ui("{count} rated trainings", { count: summary.rated });
-  if (sort === "position") return { label: ui("Position"), value: summary.player.position || ui("No position"), detail: ui(summary.player.playerType === "trial" ? "Trial player" : "Roster player") };
-  if (sort === "status") return { label: ui("Status"), value: ui(summary.player.playerType === "trial" ? "Trial" : "Roster"), detail: summary.player.position || ui("No position") };
-  if (sort === "average") return { label: ui("Average rating"), value: formatRating(summary.averageRating, locale), detail: rated };
-  if (sort === "latestFive") return { label: ui("Latest 5"), value: formatRating(summary.latestFiveAverage, locale), detail: ui("Average of latest five rated trainings") };
-  if (sort === "attendance") return { label: copy.headers.attendance, value: formatPercent(summary.participationRate, locale), detail: `${copy.participationDetail(summary.attended, summary.trainings)} · ${copy.expectedAttendanceDetail(summary.attendedWhenExpected, summary.attendanceWhenExpectedRecorded, summary.notExpectedTrainings)}` };
-  if (sort === "trend") return { label: ui("Trend"), value: summary.trend.value === null ? ui("No trend yet") : formatNumber(summary.trend.value, locale, { minimumFractionDigits: 1, signDisplay: "exceptZero" }), detail: ui(summary.trend.label) };
-  if (sort === "reliability") return { label: ui("Reliability malus"), value: formatNumber(summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 }), detail: ui("{count} late · {unexcused} unexcused", { count: summary.late, unexcused: summary.unexcused }) };
-  if (sort === "lastTraining") return { label: ui("Last training"), value: summary.latestTraining?.event?.date ? formatShortDate(summary.latestTraining.event.date, locale) : ui("No data"), detail: summary.latestTraining?.event?.label || ui("No latest training") };
-  if (sort === "evidence") return { label: ui("Evidence"), value: ui(summary.evidenceBase.label), detail: rated };
-  if (sort === "coachAssessment") return { label: ui("Coach assessment"), value: ui(summary.assessment ? coachAssessmentLabels[summary.assessment.assessment] : "Decision open"), detail: ui("Manual coach marker") };
-  return { label: ui("Trainings"), value: String(summary.trainings), detail: `${rated} · ${summary.attended} ${ui("present")}` };
 }
 
 function getPeriodDefinition(
@@ -1039,6 +1053,14 @@ function hrefFor(filters: {
   if (filters.direction !== defaultSortDirection(filters.sort)) params.set("direction", filters.direction);
   const query = params.toString();
   return query ? `/squad/analysis?${query}` : "/squad/analysis";
+}
+
+function reportHrefFor(filters: AnalyticsFilters) {
+  const source = hrefFor(filters);
+  const query = source.includes("?") ? source.slice(source.indexOf("?") + 1) : "";
+  const params = new URLSearchParams(query);
+  params.set("mode", filters.section === "attendance" ? "attendance" : filters.section === "players" ? "performance" : "combined");
+  return `/squad/analysis/report?${params.toString()}`;
 }
 
 function nextSortDirection(currentSort: AnalyticsSortKey, currentDirection: AnalyticsSortDirection, nextSort: AnalyticsSortKey): AnalyticsSortDirection {

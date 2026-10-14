@@ -41,7 +41,7 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
   const reviewSummaries = await listTrainingSessionReviewSummaries(supabase, userId, trainingEvents.map((event) => event.id));
   const today = new Date().toISOString().slice(0, 10);
   const candidateItems = [
-    ...getTrainingAttentionItems(trainingEvents.map((event) => ({ ...event, reviewCompleted: reviewSummaries.has(event.id) })), { today }),
+    ...getTrainingAttentionItems(trainingEvents.map((event) => ({ ...event, reviewCompleted: reviewSummaries.has(event.id) })), { today }, preferences),
     ...workspace.allPlayers.flatMap((player) => getPlayerAttentionItems(player, preferences, {
       today,
       periodLabel: workspace.periodRangeLabel || workspace.periodLabel

@@ -3,6 +3,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
 import {
   calculateAverageRating,
+  calculateRatingCoverage,
   berlinDateKey,
   createPlayerAnalyticsSummary,
   defaultSortDirection,
@@ -84,6 +85,7 @@ export function parseAnalyticsFilters(searchParams: Record<string, string | stri
     sort === "status" ||
     sort === "trainings" ||
     sort === "rated" ||
+    sort === "ratingCoverage" ||
     sort === "average" ||
     sort === "latestFive" ||
     sort === "trend" ||
@@ -173,8 +175,10 @@ export async function getSquadAnalyticsOverview(
       )
     )
     .filter((summary) => (filters.ratedOnly ? summary.rated > 0 : true));
+  const filteredPlayerIds = new Set(summaries.map((summary) => summary.player.id));
+  const filteredPlayerRecords = periodRecords.filter((record) => filteredPlayerIds.has(record.playerId));
 
-  const teamAnalytics = createTeamAnalytics(activeSquad, periodEvents, periodRecords, periodSessionReviews, drillInstances, drillReviews, goals, progressUpdates, filters, seasonSettings);
+  const teamAnalytics = createTeamAnalytics(activeSquad, periodEvents, periodRecords, periodSessionReviews, drillInstances, drillReviews, goals, progressUpdates, filters, seasonSettings, filteredPlayerRecords);
   return { summaries: sortPlayerAnalytics(summaries, filters.sort, filters.direction), positions, seasonSettings, teamAnalytics, availableEvents };
 }
 
@@ -412,9 +416,10 @@ export function createTeamAnalytics(
   goals: DevelopmentGoalAnalytics[],
   progressUpdates: DevelopmentProgressAnalytics[],
   filters: AnalyticsFilters,
-  seasonSettings: SeasonSettings
+  seasonSettings: SeasonSettings,
+  filteredPlayerRecords: PlayerAnalyticsRecord[] = periodRecords
 ): TeamAnalyticsOverview {
-  const eventRecords = groupBy(periodRecords, (record) => record.eventId);
+  const eventRecords = groupBy(filteredPlayerRecords, (record) => record.eventId);
   const reviewsByEvent = new Map(periodSessionReviews.map((review) => [review.event_id, review]));
   const drillsByEvent = groupBy(drillInstances, (instance) => instance.event_id);
   const events: TeamAnalyticsEvent[] = periodEvents.map((event) => {
@@ -436,7 +441,7 @@ export function createTeamAnalytics(
     };
   });
 
-  const attendance = summarizeAttendance(periodRecords);
+  const attendance = summarizeAttendance(filteredPlayerRecords);
   const reviewedSessions = new Set(periodSessionReviews.map((review) => review.event_id)).size;
   const activeGoals = goals.filter((goal) => goal.status === "identified" || goal.status === "in_progress");
   const dateRange = dateRangeForPeriod(filters, periodEvents, seasonSettings);
@@ -452,11 +457,27 @@ export function createTeamAnalytics(
     periodRangeLabel: describePeriodRange(filters, periodEvents, seasonSettings),
     trainingSessions: periodEvents.length,
     sessionsWithAttendance: events.filter((event) => event.attendance.recorded > 0).length,
-    participantRecordCount: periodRecords.length,
+    participantRecordCount: filteredPlayerRecords.length,
     attendanceRecordCount: attendance.recorded,
     teamParticipationRate: attendance.participationRate,
     teamAttendanceWhenExpectedRate: attendance.attendanceWhenExpectedRate,
     teamAttendanceRate: attendance.attendanceWhenExpectedRate,
+    dataCoverageRate: attendance.dataCoverageRate,
+    plannedExpectedCount: attendance.expected,
+    plannedUnavailableRate: attendance.plannedUnavailableRate,
+    expectedRecordedCount: attendance.expectedRecorded,
+    attendedWhenExpectedCount: attendance.attendedWhenExpected,
+    absentWhenExpectedCount: attendance.absentWhenExpected,
+    absenceWhenExpectedRate: attendance.absenceWhenExpectedRate,
+    actualParticipationRate: attendance.recorded ? attendance.attended / attendance.recorded : null,
+    actualAbsenceRate: attendance.actualAbsenceRate,
+    lateRate: attendance.lateRate,
+    leftEarlyRate: attendance.leftEarlyRate,
+    ratingEligibleCount: attendance.ratingEligibleCount,
+    ratingCompletedCount: attendance.ratingCompletedCount,
+    ratingCoverageRate: attendance.ratingCoverageRate,
+    teamAverageOverallRating: attendance.averageOverallRating,
+    totalRatedPerformances: attendance.totalRated,
     present: attendance.present,
     late: attendance.late,
     leftEarly: attendance.leftEarly,
@@ -525,11 +546,40 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
 
   const attended = present + late + leftEarly;
   const recorded = attended + absent;
+  const expected = records.filter((record) => !record.plannedStatus || record.plannedStatus === "expected").length;
   const rateRecords = records.filter((record) => (!record.plannedStatus || record.plannedStatus === "expected") && Boolean(record.finalStatus));
   const rateAttended = rateRecords.filter(hasParticipated).length;
   const participationRate = records.length ? attended / records.length : null;
   const attendanceWhenExpectedRate = rateRecords.length ? rateAttended / rateRecords.length : null;
-  return { present, late, leftEarly, absent, notExpected, notRecorded, attended, recorded, participationRate, attendanceWhenExpectedRate, rate: attendanceWhenExpectedRate };
+  const ratingCoverage = calculateRatingCoverage(records);
+  return {
+    present,
+    late,
+    leftEarly,
+    absent,
+    notExpected,
+    notRecorded,
+    attended,
+    expected,
+    expectedRecorded: rateRecords.length,
+    attendedWhenExpected: rateAttended,
+    absentWhenExpected: rateRecords.length - rateAttended,
+    recorded,
+    participationRate,
+    attendanceWhenExpectedRate,
+    dataCoverageRate: records.length ? recorded / records.length : null,
+    plannedUnavailableRate: records.length ? notExpected / records.length : null,
+    absenceWhenExpectedRate: rateRecords.length ? (rateRecords.length - rateAttended) / rateRecords.length : null,
+    actualAbsenceRate: recorded ? absent / recorded : null,
+    lateRate: attended ? late / attended : null,
+    leftEarlyRate: attended ? leftEarly / attended : null,
+    ratingEligibleCount: ratingCoverage.eligible,
+    ratingCompletedCount: ratingCoverage.completed,
+    ratingCoverageRate: ratingCoverage.rate,
+    averageOverallRating: ratingCoverage.average,
+    totalRated: ratingCoverage.totalRated,
+    rate: attendanceWhenExpectedRate
+  };
 }
 
 function createFocusDistribution(events: SquadTrainingEvent[]) {

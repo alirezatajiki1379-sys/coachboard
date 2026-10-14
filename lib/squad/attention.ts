@@ -1,12 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AnalyticsPeriod } from "@/lib/squad/analytics";
 import { formatEventDate } from "@/lib/squad/attendance-format";
+import { isDefaultRatingCandidate } from "@/lib/squad/attendance-utils";
 import type { WorkspacePlayerSummary } from "@/lib/squad/workspace";
+import type { SquadAttendanceEntry } from "@/types/domain";
 
 export type AttentionPriority = "critical" | "high" | "medium" | "low" | "info";
 export type AttentionCategory = "review" | "observation" | "performance" | "attendance" | "development" | "medical" | "trial" | "data-quality";
 export type AttentionType =
   | "training-review-incomplete"
+  | "training-ratings-missing"
   | "training-plan-missing"
   | "training-availability-missing"
   | "review-overdue"
@@ -189,6 +192,7 @@ export const defaultAttentionPreferences: AttentionPreferences = {
   version: 1,
   enabledRules: {
     "training-review-incomplete": true,
+    "training-ratings-missing": true,
     "training-plan-missing": true,
     "training-availability-missing": true,
     "review-overdue": true,
@@ -617,9 +621,10 @@ export function getTrainingAttentionItems(
     linkedTrainingSessionTitle?: string;
     status: string;
     reviewCompleted?: boolean;
-    attendance: Array<{ plannedStatus?: string; finalStatus?: string; overallRating?: number }>;
+    attendance: Array<Pick<SquadAttendanceEntry, "plannedStatus" | "finalStatus" | "overallRating" | "player">>;
   }>,
-  context: { today: string }
+  context: { today: string },
+  preferences: AttentionPreferences = defaultAttentionPreferences
 ): AttentionItem[] {
   const items: AttentionItem[] = [];
   for (const event of events) {
@@ -711,6 +716,47 @@ export function getTrainingAttentionItems(
         dismissible: true,
         snoozeable: true
       });
+    }
+
+    if (!missingAttendance && preferences.enabledRules["training-ratings-missing"] !== false) {
+      const eligibleRatings = event.attendance.filter(isDefaultRatingCandidate);
+      const completedRatings = eligibleRatings.filter((entry) => isStoredRating(entry.overallRating));
+      const missingRatings = eligibleRatings.length - completedRatings.length;
+      if (missingRatings > 0) {
+        const missingPlayerNames = eligibleRatings
+          .filter((entry) => !isStoredRating(entry.overallRating))
+          .map((entry) => entry.player ? `${entry.player.firstName} ${entry.player.lastName ?? ""}`.trim() : "")
+          .filter(Boolean);
+        const ratingEvidence: Array<[string, string | number]> = [
+          ["Training date", formatEventDate(event.date)],
+          ["Rated", `${completedRatings.length} / ${eligibleRatings.length}`],
+          ["Missing", missingRatings]
+        ];
+        if (missingPlayerNames.length) {
+          const visibleNames = missingPlayerNames.slice(0, 5).join(", ");
+          ratingEvidence.push(["Players", missingPlayerNames.length > 5 ? `${visibleNames} +${missingPlayerNames.length - 5}` : visibleNames]);
+        }
+        items.push({
+          key: `training-ratings-missing:${event.id}`,
+          targetKind: "training",
+          targetId: event.id,
+          playerName: event.squadName ?? "Training",
+          playerPosition: event.date,
+          playerType: "roster",
+          type: "training-ratings-missing",
+          category: "performance",
+          priority: daysUntil < -2 ? "high" : "medium",
+          title: `${missingRatings} Training rating${missingRatings === 1 ? "" : "s"} missing`,
+          explanation: `${missingRatings} of ${eligibleRatings.length} expected overall ratings are still missing for ${trainingLabel(event)}.`,
+          evidence: evidence(ratingEvidence),
+          thresholdLabel: "Past or current training has complete attendance and missing expected ratings.",
+          dueDate: event.date,
+          detectedAt: context.today,
+          suggestedActions: [{ label: "Open ratings", href: `/trainings/${event.id}/ratings`, primary: true }],
+          dismissible: true,
+          snoozeable: true
+        });
+      }
     }
   }
   return sortAttentionItems(items, parseAttentionCenterState({}));
@@ -837,6 +883,10 @@ function evidence(values: Array<[string, string | number | undefined | null]>): 
 
 function trainingLabel(event: { label?: string; date: string; startTime: string }) {
   return event.label ? `${event.label} · ${formatEventDate(event.date)}` : `${formatEventDate(event.date)} · ${event.startTime}`;
+}
+
+function isStoredRating(value?: number | null) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5;
 }
 
 function priorityRank(priority: AttentionPriority) {

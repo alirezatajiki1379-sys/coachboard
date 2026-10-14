@@ -198,8 +198,17 @@ textarea {
   margin: 10mm 12mm;
 }
 
+@page analytics-report {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
 .player-report-sheet {
   page: player-report;
+}
+
+.analytics-report-sheet {
+  page: analytics-report;
 }
 
 /* Screen-only adaptations leave the A4/export rules and canvas geometry intact. */
@@ -337,6 +346,8 @@ textarea {
 
   .player-report-root,
   .player-report-sheet,
+  .analytics-report-root,
+  .analytics-report-sheet,
   .report-pack {
     width: 100% !important;
     max-width: none !important;
@@ -361,6 +372,55 @@ textarea {
     line-height: 1.35;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  .analytics-report-sheet {
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    color: #13202f !important;
+    font-size: 8.5pt;
+    line-height: 1.25;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .analytics-report-summary {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 2mm !important;
+  }
+
+  .analytics-report-summary > * {
+    break-inside: avoid;
+    padding: 2.5mm !important;
+  }
+
+  .analytics-report-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto;
+  }
+
+  .analytics-report-table-wrap {
+    overflow: visible !important;
+  }
+
+  .analytics-report-table thead {
+    display: table-header-group;
+  }
+
+  .analytics-report-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .analytics-report-table th,
+  .analytics-report-table td {
+    padding: 1.7mm 1.5mm !important;
+  }
+
+  .analytics-training-overview {
+    break-before: auto;
   }
 
   .player-report-header {

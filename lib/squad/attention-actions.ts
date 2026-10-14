@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 const optionalRules: AttentionType[] = [
   "review-overdue",
   "training-review-incomplete",
+  "training-ratings-missing",
   "training-plan-missing",
   "review-due",
   "no-recent-observation",

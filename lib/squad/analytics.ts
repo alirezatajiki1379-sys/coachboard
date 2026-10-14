@@ -1,4 +1,4 @@
-import { attendanceReasonLabels, calculateReliabilityPenalty } from "@/lib/squad/attendance-utils";
+import { attendanceReasonLabels, calculateReliabilityPenalty, isDefaultRatingCandidate } from "@/lib/squad/attendance-utils";
 import { seasonLabelForDate } from "@/lib/trainings/utils";
 import { formatNumber, type Locale } from "@/lib/i18n";
 import { systemText } from "@/lib/i18n/system-text";
@@ -22,6 +22,7 @@ export type AnalyticsSortKey =
   | "status"
   | "trainings"
   | "rated"
+  | "ratingCoverage"
   | "average"
   | "latestFive"
   | "trend"
@@ -46,11 +47,16 @@ export type PlayerAnalyticsSummary = {
   recordedTrainings: number;
   notRecordedTrainings: number;
   attendedWhenExpected: number;
+  absentWhenExpected: number;
   attendanceWhenExpectedRecorded: number;
   late: number;
+  leftEarly: number;
   absent: number;
   unexcused: number;
   rated: number;
+  ratingEligibleCount: number;
+  ratingCompletedExpectedCount: number;
+  ratingCoverageRate: number | null;
   averageRating: number | null;
   latestFiveAverage: number | null;
   trend: PerformanceTrend;
@@ -84,9 +90,24 @@ export type TeamAnalyticsEvent = {
     notExpected: number;
     notRecorded: number;
     attended: number;
+    expected: number;
+    expectedRecorded: number;
+    attendedWhenExpected: number;
+    absentWhenExpected: number;
     recorded: number;
     participationRate: number | null;
     attendanceWhenExpectedRate: number | null;
+    dataCoverageRate: number | null;
+    plannedUnavailableRate: number | null;
+    absenceWhenExpectedRate: number | null;
+    actualAbsenceRate: number | null;
+    lateRate: number | null;
+    leftEarlyRate: number | null;
+    ratingEligibleCount: number;
+    ratingCompletedCount: number;
+    ratingCoverageRate: number | null;
+    averageOverallRating: number | null;
+    totalRated: number;
     rate: number | null;
   };
   review?: {
@@ -109,6 +130,22 @@ export type TeamAnalyticsOverview = {
   teamParticipationRate: number | null;
   teamAttendanceWhenExpectedRate: number | null;
   teamAttendanceRate: number | null;
+  dataCoverageRate: number | null;
+  plannedExpectedCount: number;
+  plannedUnavailableRate: number | null;
+  expectedRecordedCount: number;
+  attendedWhenExpectedCount: number;
+  absentWhenExpectedCount: number;
+  absenceWhenExpectedRate: number | null;
+  actualParticipationRate: number | null;
+  actualAbsenceRate: number | null;
+  lateRate: number | null;
+  leftEarlyRate: number | null;
+  ratingEligibleCount: number;
+  ratingCompletedCount: number;
+  ratingCoverageRate: number | null;
+  teamAverageOverallRating: number | null;
+  totalRatedPerformances: number;
   present: number;
   late: number;
   leftEarly: number;
@@ -283,6 +320,19 @@ export function calculateAttendanceWhenExpectedRate(records: PlayerAnalyticsReco
   return attended / recorded.length;
 }
 
+export function calculateRatingCoverage(records: PlayerAnalyticsRecord[]) {
+  const eligible = records.filter(isDefaultRatingCandidate);
+  const completed = eligible.filter((record) => isRating(record.overallRating));
+  const allRatings = records.map((record) => record.overallRating).filter(isRating);
+  return {
+    eligible: eligible.length,
+    completed: completed.length,
+    rate: eligible.length ? completed.length / eligible.length : null,
+    totalRated: allRatings.length,
+    average: calculateAverageRating(allRatings)
+  };
+}
+
 export function calculateAttendanceDistribution(records: PlayerAnalyticsRecord[]): AttendanceDistribution {
   return {
     present: records.filter((record) => record.finalStatus === "present").length,
@@ -446,6 +496,8 @@ export function createPlayerAnalyticsSummary(
   const trend = calculatePerformanceTrend(ratings);
   const attended = records.filter(hasParticipated).length;
   const attendedWhenExpected = expectedRecordedAttendance.filter(hasParticipated).length;
+  const absentWhenExpected = expectedRecordedAttendance.length - attendedWhenExpected;
+  const ratingCoverage = calculateRatingCoverage(records);
   const participationRate = calculateParticipationRate(records);
   const attendanceWhenExpectedRate = calculateAttendanceWhenExpectedRate(records);
   const latestRating = ratings[0];
@@ -462,11 +514,16 @@ export function createPlayerAnalyticsSummary(
     recordedTrainings: recordedAttendance.length,
     notRecordedTrainings: records.length - recordedAttendance.length,
     attendedWhenExpected,
+    absentWhenExpected,
     attendanceWhenExpectedRecorded: expectedRecordedAttendance.length,
     late: attendanceDistribution.late,
+    leftEarly: attendanceDistribution.leftEarly,
     absent: recordedAttendance.filter((record) => !hasParticipated(record)).length,
     unexcused: attendanceDistribution.unexcused,
     rated: ratings.length,
+    ratingEligibleCount: ratingCoverage.eligible,
+    ratingCompletedExpectedCount: ratingCoverage.completed,
+    ratingCoverageRate: ratingCoverage.rate,
     averageRating,
     latestFiveAverage: calculateAverageRating(ratings.slice(0, 5)),
     trend,
@@ -527,10 +584,11 @@ export function sortPlayerAnalytics(summaries: PlayerAnalyticsSummary[], sort: A
     if (sort === "status") return directionMultiplier * a.player.playerType.localeCompare(b.player.playerType) || nameFallback;
     if (sort === "trainings") return directionMultiplier * (a.trainings - b.trainings) || nameFallback;
     if (sort === "rated") return directionMultiplier * (a.rated - b.rated) || nameFallback;
+    if (sort === "ratingCoverage") return nullableCompare(a.ratingCoverageRate, b.ratingCoverageRate, direction) || nameFallback;
     if (sort === "average") return nullableCompare(a.averageRating, b.averageRating, direction) || nameFallback;
     if (sort === "latestFive") return nullableCompare(a.latestFiveAverage, b.latestFiveAverage, direction) || nameFallback;
     if (sort === "trend") return nullableCompare(a.trend.value, b.trend.value, direction) || nameFallback;
-    if (sort === "attendance") return nullableCompare(a.participationRate, b.participationRate, direction) || nameFallback;
+    if (sort === "attendance") return nullableCompare(a.attendanceWhenExpectedRate, b.attendanceWhenExpectedRate, direction) || nameFallback;
     if (sort === "reliability") return directionMultiplier * (a.reliabilityPenalty - b.reliabilityPenalty) || nameFallback;
     if (sort === "lastTraining") {
       return directionMultiplier * (a.latestTraining?.event?.date ?? "").localeCompare(b.latestTraining?.event?.date ?? "") || nameFallback;

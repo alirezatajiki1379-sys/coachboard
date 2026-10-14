@@ -653,6 +653,12 @@ export const germanUiDictionary: Record<string, string> = {
   "Note": "Notiz",
   "Save changes": "Änderungen speichern",
   "No active absence is recorded for today.": "Für heute ist keine aktive Abwesenheit erfasst.",
+  "Training ratings missing": "Trainingsbewertungen offen",
+  "Missing Training ratings": "Fehlende Trainingsbewertungen",
+  "Open ratings": "Bewertungen öffnen",
+  "Rated": "Bewertet",
+  "Training date": "Trainingsdatum",
+  "Past or current training has complete attendance and missing expected ratings.": "Für ein vergangenes oder heutiges Training ist die Anwesenheit vollständig, aber erwartete Bewertungen fehlen.",
 
   "Destination": "Ziel",
   "Automatic match": "Automatische Zuordnung",
@@ -706,6 +712,8 @@ export const germanUiDictionary: Record<string, string> = {
 };
 
 export const germanUiPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
+  [/^(\d+) Training ratings? missing$/i, (match) => `${match[1]} Trainingsbewertungen offen`],
+  [/^(\d+) of (\d+) expected overall ratings are still missing for (.+)\.$/i, (match) => `Für ${match[3]} fehlen noch ${match[1]} von ${match[2]} erwarteten Gesamtbewertungen.`],
   [/^(\d+) included · (\d+) unassigned · (\d+) excluded$/i, (match) => `${match[1]} einbezogen · ${match[2]} nicht zugeordnet · ${match[3]} ausgeschlossen`],
   [/^(.+) · (\d+)\/(\d+) starters · (\d+) depth assignments$/i, (match) => `${match[1]} · ${match[2]}/${match[3]} Startspieler · ${match[4]} Positionszuordnungen`],
   [/^([A-Z]+) depth$/i, (match) => `${match[1]} Positionsbesetzung`],

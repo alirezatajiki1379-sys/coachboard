@@ -37,6 +37,7 @@ const priorities: Array<{ id: AttentionPriority; label: string }> = [
 const optionalRules: Array<{ id: AttentionType; label: string }> = [
   { id: "review-overdue", label: "Review overdue" },
   { id: "review-due", label: "Review due soon" },
+  { id: "training-ratings-missing", label: "Missing Training ratings" },
   { id: "no-recent-observation", label: "No recent observation" },
   { id: "no-recent-rating", label: "No recent rating" },
   { id: "declining-trend", label: "Declining trend" },
