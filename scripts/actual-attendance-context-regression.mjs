@@ -73,5 +73,10 @@ assert.match(actions, /left_early_minute: update\.leftEarlyMinute/);
 assert.match(controls, /value="">\{ui\("Select reason"\)\}/);
 assert.match(controls, /status="left_early"/);
 assert.match(controls, /actualAttendanceNote/);
+assert.match(controls, /"Absence note"/);
+assert.match(controls, /"Note about leaving early"/);
+assert.match(controls, /"Late note"/);
+assert.doesNotMatch(controls, /name="actualAttendanceNote" rows=\{3\}/);
+assert.match(controls, /name="actualAttendanceNote" type="text"/);
 
 console.log("Actual attendance context regression passed.");

@@ -701,6 +701,21 @@ export function ActualAttendanceDetails({
   const needsReason = status === "left_early" || isAbsentAttendanceStatus(status);
   const currentReason = effectiveActualAbsenceReason(savedEntry) ?? defaultActualAbsenceReason(savedEntry);
   const tone = status === "left_early" ? "border-orange-200 bg-orange-50" : status === "Z" ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50";
+  const noteLabel = status === "left_early"
+    ? "Note about leaving early"
+    : status === "Z"
+      ? "Late note"
+      : "Absence note";
+  const formLayout = status === "left_early"
+    ? "sm:grid-cols-[minmax(0,3fr)_minmax(7.5rem,2fr)_minmax(0,5fr)]"
+    : status === "Z"
+      ? "sm:grid-cols-[minmax(8.75rem,1fr)_minmax(0,2fr)]"
+      : "sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]";
+  const saveLayout = status === "left_early"
+    ? "sm:col-span-3"
+    : status === "Z"
+      ? "sm:justify-self-end"
+      : "sm:col-span-2";
 
   function saveDetails(formData: FormData) {
     if (isPending || !status) return;
@@ -736,7 +751,7 @@ export function ActualAttendanceDetails({
   }
 
   return (
-    <form action={saveDetails} className={`grid gap-3 rounded-md border p-3 ${tone} sm:grid-cols-2`}>
+    <form action={saveDetails} className={`grid gap-3 rounded-md border p-3 ${tone} ${formLayout}`}>
       {needsReason ? (
         <label>
           <span className="text-xs font-bold uppercase text-slate-600">{ui("Actual reason")} *</span>
@@ -758,9 +773,9 @@ export function ActualAttendanceDetails({
           <input name="leftEarlyMinute" type="number" min="0" defaultValue={savedEntry.leftEarlyMinute ?? ""} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
         </label>
       ) : null}
-      <label className={needsReason ? "sm:col-span-2" : ""}>
-        <span className="text-xs font-bold uppercase text-slate-600">{ui("Attendance note")}</span>
-        <textarea name="actualAttendanceNote" rows={3} defaultValue={savedEntry.actualAttendanceNote ?? ""} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+      <label>
+        <span className="text-xs font-bold uppercase text-slate-600">{ui(noteLabel)}</span>
+        <input name="actualAttendanceNote" type="text" defaultValue={savedEntry.actualAttendanceNote ?? ""} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
       </label>
       {status === "Z" ? (
         <label className="flex min-h-11 items-center gap-2 rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-slate-600">
@@ -768,7 +783,7 @@ export function ActualAttendanceDetails({
           {ui("Reliability penalty")}
         </label>
       ) : null}
-      <div className={status === "Z" ? "" : "sm:col-span-2"}>
+      <div className={saveLayout}>
         <Button type="submit" disabled={isPending} variant="secondary" className="h-11 w-full justify-center sm:w-auto">
           {ui(isPending ? "Saving..." : "Save attendance details")}
         </Button>

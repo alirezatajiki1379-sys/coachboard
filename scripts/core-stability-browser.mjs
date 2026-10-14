@@ -38,7 +38,7 @@ const bundle = await build({
     import React from "react";
     import {createRoot} from "react-dom/client";
     import {SessionReviewForm} from "@/components/squad/session-review-form";
-    import {RatingRow,CheckInRow} from "@/components/squad/attendance-controls";
+    import {ActualAttendanceDetails,RatingRow,CheckInRow} from "@/components/squad/attendance-controls";
     import {I18nProvider} from "@/components/i18n/i18n-provider";
     import {GermanLocalizationBoundary} from "@/components/i18n/german-localization-boundary";
     window.qa={fail:false,delay:false,saves:[]};
@@ -51,7 +51,8 @@ const bundle = await build({
     const root=createRoot(document.getElementById("root"));
     function render(){root.render(<I18nProvider locale={locale}><GermanLocalizationBoundary locale={locale}>
     {view==="review" ? <SessionReviewForm event={{id:"event",date:"2026-09-19",startTime:"18:00",label:"QA Training",squadName:"QA Team"}} review={review} drills={[]} attendanceSummary={{present:2,late:1,absent:1,total:3}} ratingsSummary={{rated:1,rateable:2}} observationCount={0} locale={locale}/>
-    :view==="rating" ? <RatingRow entry={entry} eventId="event"/> : <CheckInRow entry={entry} eventId="event" eventDate="2026-09-19"/>}
+    :view==="rating" ? <RatingRow entry={entry} eventId="event"/>
+    :view==="details" ? <ActualAttendanceDetails entry={entry} eventId="event"/> : <CheckInRow entry={entry} eventId="event" eventDate="2026-09-19"/>}
     </GermanLocalizationBoundary></I18nProvider>);}
     render();
     window.qa.refreshUnrated=()=>{entry.overallRating=undefined;render();};
@@ -146,6 +147,44 @@ try {
   assert.equal(await page.locator('[role="group"]').first().getByRole("button").nth(2).getAttribute("aria-pressed"), "true");
   assert.equal(await page.evaluate(() => window.qa.saves.length), 0);
   console.log("PASS: eligible default 3 has no save-on-open side effect");
+
+  const attendanceLayouts = [
+    { status: "absent", fields: ['select[name="actualAbsenceReason"]', 'input[name="actualAttendanceNote"]'], en: "Absence note", de: "Abwesenheitsnotiz" },
+    { status: "left_early", fields: ['select[name="actualAbsenceReason"]', 'input[name="leftEarlyMinute"]', 'input[name="actualAttendanceNote"]'], en: "Note about leaving early", de: "Notiz zum Abbruch" },
+    { status: "Z", fields: ['input[name="lateMinutes"]', 'input[name="actualAttendanceNote"]'], en: "Late note", de: "Verspätungsnotiz" }
+  ];
+  for (const layout of attendanceLayouts) {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto(`${base}?view=details&status=${layout.status}`);
+    await page.getByRole("button", { name: "Save attendance details", exact: true }).waitFor();
+    await page.getByText(layout.en, { exact: true }).waitFor();
+    const desktopBoxes = await Promise.all(layout.fields.map((selector) => page.locator(selector).boundingBox()));
+    assert.ok(desktopBoxes.every(Boolean));
+    assert.ok(desktopBoxes.every((box) => Math.abs(box.y - desktopBoxes[0].y) < 2), `${layout.status}: desktop fields must share one row`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${layout.status}: desktop overflow`);
+    if (layout.status === "left_early") assert.equal(await page.locator('input[name="actualAttendanceNote"]').inputValue(), "Fictional attendance context");
+    const saveCount = await page.evaluate(() => window.qa.saves.length);
+    await page.locator('input[name="actualAttendanceNote"]').fill(`${layout.status} context`);
+    if (layout.status === "absent") await page.locator('select[name="actualAbsenceReason"]').selectOption("school");
+    if (layout.status === "left_early") await page.locator('input[name="leftEarlyMinute"]').fill("37");
+    if (layout.status === "Z") await page.locator('input[name="lateMinutes"]').fill("12");
+    await page.getByRole("button", { name: "Save attendance details", exact: true }).click();
+    await page.waitForFunction((count) => window.qa.saves.length > count, saveCount);
+    const saved = await page.evaluate(() => window.qa.saves.at(-1));
+    assert.equal(saved.actualAttendanceNote, `${layout.status} context`);
+    if (layout.status === "absent") assert.equal(saved.actualAbsenceReason, "school");
+    if (layout.status === "left_early") assert.equal(saved.leftEarlyMinute, "37");
+    if (layout.status === "Z") assert.equal(saved.lateMinutes, "12");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${base}?locale=de&view=details&status=${layout.status}`);
+    await page.getByText(layout.de, { exact: true }).waitFor();
+    const mobileBoxes = await Promise.all(layout.fields.map((selector) => page.locator(selector).boundingBox()));
+    assert.ok(mobileBoxes.every(Boolean));
+    assert.ok(mobileBoxes.slice(1).every((box, index) => box.y > mobileBoxes[index].y), `${layout.status}: mobile fields must stack`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${layout.status}: mobile overflow`);
+  }
+  console.log("PASS: compact actual-attendance layouts and EN/DE labels at desktop and mobile widths");
   for (const locale of ["en", "de"]) {
     for (const width of [320, 360, 375, 390, 430, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -163,7 +202,7 @@ try {
   await page.getByText("Training abgebrochen", { exact: true }).first().waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "left-early check-in mobile overflow");
   assert.ok(await page.getByText("Tatsächlicher Grund", { exact: false }).count());
-  assert.ok(await page.getByText("Anwesenheitsnotiz", { exact: true }).count());
+  assert.ok(await page.getByText("Notiz zum Abbruch", { exact: true }).count());
   console.log("PASS: left-early attendance editor at 390px in German");
   await page.goto(`${base}?locale=de&view=check-in`);
   await page.getByText("Fictional Player",{exact:true}).waitFor();
