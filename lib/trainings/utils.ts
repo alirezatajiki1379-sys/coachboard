@@ -96,6 +96,15 @@ export function dashboardTrainingsForToday(events: SquadTrainingEventDetail[], n
     .sort((a, b) => trainingDateTimeKey(a).localeCompare(trainingDateTimeKey(b)));
 }
 
+export function dashboardTrainingsForNextDays(events: SquadTrainingEventDetail[], days = 7, now = trainingNowParts()) {
+  const today = parseDateOnly(now.date);
+  if (!today || days < 1) return [];
+  const lastDay = new Date(Date.UTC(today.year, today.month - 1, today.day + days)).toISOString().slice(0, 10);
+  return events
+    .filter((event) => !event.deletedAt && event.date > now.date && event.date <= lastDay)
+    .sort((a, b) => trainingDateTimeKey(a).localeCompare(trainingDateTimeKey(b)));
+}
+
 export function sortTrainings(events: SquadTrainingEventDetail[], now = trainingNowParts()) {
   const upcoming = events
     .filter((event) => isTrainingUpcoming(event, now))

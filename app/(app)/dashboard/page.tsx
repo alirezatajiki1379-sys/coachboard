@@ -1,48 +1,29 @@
-import { Bell, CalendarDays, CalendarPlus, ClipboardList, Dumbbell, LibraryBig, Target, UsersRound } from "lucide-react";
+import { Bell, CalendarDays, CalendarPlus, ChevronRight, ClipboardList, Dumbbell, LibraryBig, Target, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
-import { StatCard } from "@/components/ui/stat-card";
 import { TrainingWorkflowPanel } from "@/components/squad/training-workflow-panel";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, formatMessage, getMessages } from "@/lib/i18n";
+import { formatDate, formatMessage, getMessages, type Locale } from "@/lib/i18n";
 import { getUserLocale } from "@/lib/i18n/server";
 import { createSystemTranslator } from "@/lib/i18n/system-text";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
-import { attentionPriorityLabels, attentionTone } from "@/lib/squad/attention";
 import { getDashboardAttentionData } from "@/lib/squad/attention-queries";
 import { getDevelopmentDashboardSummary } from "@/lib/squad/development";
 import { listTrainingSessionReviewSummaries } from "@/lib/squad/session-review";
 import { listConcreteTrainingPlanEventIds } from "@/lib/squad/training-plan-queries";
-import { ensureActiveSquad, getActiveSquadPlayerCounts } from "@/lib/squad/squads";
+import { ensureActiveSquad } from "@/lib/squad/squads";
 import {
+  dashboardTrainingsForNextDays,
   dashboardTrainingsForToday,
   isTrainingUpcoming,
   sortTrainings,
   trainingDisplayTitle,
   trainingNowParts,
-  trainingSummaryCounts,
   trainingTimeRange
 } from "@/lib/trainings/utils";
 import { getTrainingWorkflowState } from "@/lib/trainings/workflow";
-
-type RecentDrill = {
-  id: string;
-  title: string;
-  main_focus: string;
-  duration_minutes: number;
-  updated_at: string;
-};
-
-type RecentSession = {
-  id: string;
-  title: string;
-  session_date: string | null;
-  main_focus: string | null;
-  duration_target_minutes: number | null;
-  updated_at: string;
-};
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -59,30 +40,7 @@ export default async function DashboardPage() {
     getUserLocale(supabase, user.id)
   ]);
   const messages = getMessages(locale);
-  const [planCount, playerCounts, recentDrills, recentSessions, developmentSummary, attentionData, trainingEventsRaw] = await Promise.all([
-    supabase
-      .from("training_sessions")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .is("archived_at", null)
-      .is("deleted_at", null),
-    getActiveSquadPlayerCounts(supabase, user.id, activeTeam.id),
-    supabase
-      .from("drills")
-      .select("id,title,main_focus,duration_minutes,updated_at")
-      .eq("user_id", user.id)
-      .is("archived_at", null)
-      .is("deleted_at", null)
-      .order("updated_at", { ascending: false })
-      .limit(5),
-    supabase
-      .from("training_sessions")
-      .select("id,title,session_date,main_focus,duration_target_minutes,updated_at")
-      .eq("user_id", user.id)
-      .is("archived_at", null)
-      .is("deleted_at", null)
-      .order("updated_at", { ascending: false })
-      .limit(5),
+  const [developmentSummary, attentionData, trainingEventsRaw] = await Promise.all([
     getDevelopmentDashboardSummary(supabase, user.id, activeTeam.id),
     getDashboardAttentionData(supabase, user.id, locale),
     listTrainingEventDetails(supabase, user.id, { squadId: activeTeam.id })
@@ -92,7 +50,9 @@ export default async function DashboardPage() {
   const trainingEvents = sortTrainings(trainingEventsRaw, now);
   const todayTrainings = dashboardTrainingsForToday(trainingEvents, now);
   const nextTraining = trainingEvents.find((event) => isTrainingUpcoming(event, now));
-  const workflowEvents = Array.from(new Map([...todayTrainings, ...(nextTraining ? [nextTraining] : [])].map((event) => [event.id, event])).values());
+  const weekTrainings = dashboardTrainingsForNextDays(trainingEvents, 7, now)
+    .filter((event) => todayTrainings.length > 0 || event.id !== nextTraining?.id);
+  const workflowEvents = Array.from(new Map([...todayTrainings, ...(nextTraining ? [nextTraining] : []), ...weekTrainings].map((event) => [event.id, event])).values());
   const [workflowReviews, concretePlanEventIds] = await Promise.all([
     listTrainingSessionReviewSummaries(supabase, user.id, workflowEvents.map((event) => event.id)),
     listConcreteTrainingPlanEventIds(supabase, user.id, workflowEvents.map((event) => event.id))
@@ -108,56 +68,40 @@ export default async function DashboardPage() {
     ?? todayWorkflowEntries.find((entry) => entry.workflow.phase === "follow_up" && entry.workflow.primaryAction)
     ?? todayWorkflowEntries.find((entry) => entry.workflow.phase === "preparation" && entry.workflow.primaryAction)
     ?? (nextTraining ? { event: nextTraining, workflow: workflowByEventId.get(nextTraining.id)! } : undefined);
-  const completedTrainings = trainingEvents.filter((event) => event.status === "completed").length;
-  const upcomingTrainings = trainingEvents.filter((event) => isTrainingUpcoming(event, now)).length;
-  const assignedPlanIds = new Set(trainingEvents.map((event) => event.linkedTrainingSessionId).filter((id): id is string => Boolean(id)));
-  const createdPlans = planCount.count ?? 0;
-  const assignedPlans = Math.min(createdPlans, assignedPlanIds.size);
-  const draftPlans = Math.max(0, createdPlans - assignedPlans);
-  const openRatings = trainingEvents.filter((event) => event.status === "rating_open");
   const dashboardPrimaryAction = dashboardActionEntry?.workflow.primaryAction;
   const planNextHref = dashboardPrimaryAction?.href ?? (dashboardActionEntry ? `/trainings/${dashboardActionEntry.event.id}` : "/trainings/new");
   const planNextLabel = dashboardPrimaryAction ? ui(dashboardPrimaryAction.label) : dashboardActionEntry ? ui("Open Training") : messages.dashboard.actions.createTraining;
+  const showDevelopment = developmentSummary.goalsDueForReview > 0 || developmentSummary.activeHighPriorityGoals > 0;
+  const isBrandNew = trainingEvents.length === 0;
 
-  const drills = (recentDrills.data ?? []) as RecentDrill[];
-  const sessions = (recentSessions.data ?? []) as RecentSession[];
   return (
     <PageContainer width="wide" className="space-y-8">
       <PageHeader
         eyebrow={messages.dashboard.eyebrow}
         title={messages.dashboard.title}
         description={messages.dashboard.description}
+        metadata={<span translate="no">{activeTeam.name}</span>}
         actions={(
           <>
-          <ButtonLink href={planNextHref}>
-            <ClipboardList className="h-4 w-4" />
-            {planNextLabel}
-          </ButtonLink>
-          <ButtonLink href="/trainings/new" variant="secondary">
-            <CalendarPlus className="h-4 w-4" />
-            {messages.dashboard.actions.createTraining}
-          </ButtonLink>
-          <ButtonLink href="/squad/import" variant="secondary">
-            <UsersRound className="h-4 w-4" />
-            {messages.dashboard.actions.addOrImportPlayers}
-          </ButtonLink>
-          <ButtonLink href="/drills/new" variant="secondary">
-            <Dumbbell className="h-4 w-4" />
-            {messages.dashboard.actions.createDrill}
-          </ButtonLink>
-          <ButtonLink href="/drills" variant="secondary">
-            <LibraryBig className="h-4 w-4" />
-            {messages.dashboard.actions.drillLibrary}
-          </ButtonLink>
+            <ButtonLink href={planNextHref} className="w-full justify-center sm:w-auto">
+              <ClipboardList className="h-4 w-4" />
+              {planNextLabel}
+            </ButtonLink>
+            {dashboardActionEntry ? (
+              <ButtonLink href="/trainings/new" variant="secondary" className="w-full justify-center sm:w-auto">
+                <CalendarPlus className="h-4 w-4" />
+                {messages.dashboard.actions.createTraining}
+              </ButtonLink>
+            ) : null}
           </>
         )}
       />
 
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <section data-dashboard-operational className="rounded-lg border border-board-line bg-white p-4 shadow-soft sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy">
             <CalendarDays className="h-5 w-5" />
-            {messages.dashboard.todaysTrainings}
+            {todayTrainings.length ? messages.dashboard.today : messages.dashboard.nextTraining}
           </h2>
           <Link href="/trainings" className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-board-green hover:underline">
             {messages.dashboard.actions.viewAllTrainings}
@@ -170,11 +114,11 @@ export default async function DashboardPage() {
               const workflow = workflowByEventId.get(event.id)!;
 
               return (
-                <article key={event.id} className="rounded-md border border-board-line p-4">
+                <article key={event.id} className={`rounded-md border p-4 ${workflow.phase === "complete" ? "border-slate-200 bg-slate-50/70" : "border-board-line"}`}>
                   <div className="min-w-0">
                     <h3 translate="no" className="break-words text-lg font-bold text-board-navy [overflow-wrap:anywhere]">{trainingDisplayTitle(event)}</h3>
                     <p className="mt-1 break-words text-sm text-slate-600 [overflow-wrap:anywhere]">
-                      {formatDate(event.date, locale)} · {trainingTimeRange(event)}{event.location ? ` · ${event.location}` : ""}
+                      {formatDate(event.date, locale)} · {trainingTimeRange(event)}{event.location ? <> · <span translate="no">{event.location}</span></> : null}
                     </p>
                   </div>
                   <TrainingWorkflowPanel workflow={workflow} compact openHref={`/trainings/${event.id}`} />
@@ -183,202 +127,139 @@ export default async function DashboardPage() {
             })}
           </div>
         ) : (
-          <div className="rounded-md border border-dashed border-board-line p-5">
-            <p className="text-sm text-slate-500">{messages.dashboard.noTrainingToday}</p>
-            <ButtonLink href="/trainings/new" className="mt-4 h-9 justify-center px-3">
-              <CalendarPlus className="h-4 w-4" />
-              {messages.dashboard.actions.createTraining}
-            </ButtonLink>
-          </div>
+          nextTraining ? (
+            <article className="rounded-md border border-board-line p-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-500">{formatDashboardDate(nextTraining.date, locale)} · {trainingTimeRange(nextTraining)}</p>
+                <h3 translate="no" className="mt-1 break-words text-xl font-bold text-board-navy [overflow-wrap:anywhere]">{trainingDisplayTitle(nextTraining)}</h3>
+                {nextTraining.location ? <p translate="no" className="mt-1 break-words text-sm text-slate-600 [overflow-wrap:anywhere]">{nextTraining.location}</p> : null}
+              </div>
+              <TrainingWorkflowPanel workflow={workflowByEventId.get(nextTraining.id)!} compact openHref={`/trainings/${nextTraining.id}`} />
+            </article>
+          ) : (
+            <div className="rounded-md border border-dashed border-board-line p-5">
+              <h3 className="font-bold text-board-navy">{isBrandNew ? messages.dashboard.startFirstTraining : messages.dashboard.noTrainingScheduled}</h3>
+              <p className="mt-1 text-sm text-slate-600">{messages.dashboard.noTrainingScheduledDetail}</p>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <ButtonLink href="/trainings/new" className="w-full justify-center sm:w-auto">
+                  <CalendarPlus className="h-4 w-4" />
+                  {messages.dashboard.actions.createTraining}
+                </ButtonLink>
+                {isBrandNew ? (
+                  <>
+                    <ButtonLink href="/squad" variant="ghost" className="w-full justify-center sm:w-auto">{messages.dashboard.actions.addPlayer}</ButtonLink>
+                    <ButtonLink href="/drills/new" variant="ghost" className="w-full justify-center sm:w-auto">{messages.dashboard.createDrillShort}</ButtonLink>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          )
         )}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label={messages.dashboard.nextTraining}
-          value={nextTraining ? trainingTimeRange(nextTraining) : messages.common.empty.none}
-          detail={nextTraining ? `${formatDate(nextTraining.date, locale)} · ${nextTraining.squadName ?? messages.dashboard.currentTeam}` : messages.dashboard.actions.createTraining}
-          icon={<CalendarDays className="h-5 w-5" />}
-          href={nextTraining ? `/trainings/${nextTraining.id}` : "/trainings/new"}
-        />
-        <StatCard
-          label={messages.dashboard.trainingSessions}
-          value={trainingEvents.length}
-          detail={`${completedTrainings} ${messages.dashboard.completed} · ${upcomingTrainings} ${messages.dashboard.upcoming}`}
-          icon={<CalendarDays className="h-5 w-5" />}
-          href="/trainings"
-        />
-        <StatCard
-          label={messages.dashboard.trainingPlans}
-          value={createdPlans}
-          detail={`${assignedPlans} ${messages.dashboard.assigned} · ${draftPlans} ${messages.dashboard.draftsUnassigned}`}
-          icon={<ClipboardList className="h-5 w-5" />}
-          href="/sessions"
-        />
-        <StatCard
-          label={messages.dashboard.squad}
-          value={playerCounts.active}
-          detail={`${playerCounts.trial} ${messages.dashboard.trialPlayers} · ${activeTeam.name}`}
-          icon={<UsersRound className="h-5 w-5" />}
-          href="/squad"
-        />
+      <section data-dashboard-week aria-labelledby="dashboard-week" className="min-w-0">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 id="dashboard-week" className="text-lg font-bold text-board-navy">{messages.dashboard.thisWeek}</h2>
+          <Link href="/trainings" className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-board-green hover:underline">{messages.dashboard.actions.viewAllTrainings}</Link>
+        </div>
+        {weekTrainings.length ? (
+          <div className="overflow-hidden rounded-lg border border-board-line bg-white shadow-soft">
+            {weekTrainings.slice(0, 4).map((event) => {
+              const workflow = workflowByEventId.get(event.id)!;
+              const planFact = workflow.facts.find((fact) => fact.label === "Plan");
+              return (
+                <Link key={event.id} href={`/trainings/${event.id}`} className="group flex min-w-0 flex-col gap-2 border-b border-board-line px-4 py-3 last:border-b-0 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-500">{formatDashboardDate(event.date, locale)} · {trainingTimeRange(event)}</p>
+                    <p translate="no" className="mt-0.5 break-words font-bold text-board-navy [overflow-wrap:anywhere]">{trainingDisplayTitle(event)}</p>
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1">{ui(workflow.phaseLabel ?? "")}</span>
+                    {planFact ? <span className="break-words [overflow-wrap:anywhere]">{ui(planFact.value, planFact.values)}</span> : null}
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-board-green" />
+                  </div>
+                </Link>
+              );
+            })}
+            {weekTrainings.length > 4 ? (
+              <Link href="/trainings?view=upcoming" className="block border-t border-board-line px-4 py-3 text-sm font-semibold text-board-green hover:bg-slate-50">
+                {formatMessage(messages.dashboard.moreTrainings, { count: weekTrainings.length - 4 })}
+              </Link>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">{messages.dashboard.noOtherTrainingsThisWeek}</p>
+        )}
       </section>
 
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <section data-dashboard-attention className="min-w-0">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Bell className="h-5 w-5" />{messages.dashboard.coachActions}</h2>
-            <p className="mt-1 text-sm text-slate-600">{formatMessage(messages.dashboard.highPriorityOpen, { count: attentionData.summary.critical + attentionData.summary.high, open: attentionData.summary.open })}</p>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Bell className="h-5 w-5" />{messages.dashboard.needsAttention}</h2>
           </div>
-          <ButtonLink href="/actions" variant="ghost" className="h-9 px-3">{formatMessage(messages.dashboard.viewAllOpenActions, { count: attentionData.summary.open })}</ButtonLink>
+          {attentionData.summary.open > 0 ? <ButtonLink href="/actions" variant="ghost" className="h-9 px-3">{formatMessage(messages.dashboard.viewAllOpenActions, { count: attentionData.summary.open })}</ButtonLink> : null}
         </div>
         {attentionData.items.length ? (
           <div className="grid gap-3 lg:grid-cols-3">
             {attentionData.items.map((item) => (
-              <Link key={item.key} href={item.suggestedActions[0]?.href ?? "/actions"} className="rounded-md border border-board-line bg-slate-50 p-4 transition hover:border-board-green/40 hover:bg-green-50">
-                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${attentionTone(item.priority) === "red" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{attentionPriorityLabels[item.priority].toUpperCase()}</span>
-                <h3 className="mt-3 font-bold text-board-navy">{item.title}</h3>
-                <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? messages.dashboard.currentTeam}</p>
-                <p className="mt-2 line-clamp-2 text-sm text-slate-500">{item.explanation}</p>
+              <Link key={item.key} href={item.suggestedActions[0]?.href ?? "/actions"} className="min-w-0 rounded-md border border-board-line bg-white p-4 shadow-soft transition-colors hover:border-board-green/40 hover:bg-green-50">
+                <h3 className="break-words font-bold text-board-navy [overflow-wrap:anywhere]">{item.title}</h3>
+                <p translate="no" className="mt-1 break-words text-sm text-slate-600 [overflow-wrap:anywhere]">{item.playerName} · {item.playerPosition ?? activeTeam.name}</p>
+                <p className="mt-2 line-clamp-2 break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{item.explanation}</p>
               </Link>
             ))}
           </div>
         ) : (
-          <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">{messages.dashboard.noHighPriorityActions}</p>
+          <p className="text-sm text-slate-500">{messages.dashboard.nothingUrgent}</p>
         )}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      {showDevelopment ? (
+        <section data-dashboard-development className="rounded-lg border border-board-line bg-white p-4 shadow-soft sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-lg font-bold text-board-navy"><Target className="h-5 w-5" />{messages.dashboard.development}</h2>
-            <ButtonLink href="/squad?view=reviews-due" variant="ghost" className="h-9 px-3">
-              {messages.dashboard.actions.openReviews}
-            </ButtonLink>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Link href="/squad?view=reviews-due" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-              <p className="text-xs font-bold uppercase text-slate-500">{messages.dashboard.review}</p>
-              <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.goalsDueForReview}</p>
-              <p className="mt-1 text-xs text-slate-500">{messages.dashboard.goalsNeedReview}</p>
-            </Link>
-            <Link href="/squad?view=development&developmentStatus=high-priority" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-              <p className="text-xs font-bold uppercase text-slate-500">{messages.dashboard.highPriority}</p>
-              <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.activeHighPriorityGoals}</p>
-              <p className="mt-1 text-xs text-slate-500">{messages.dashboard.activeGoals}</p>
-            </Link>
-            <Link href="/squad?view=development&sort=lastObservation&direction=asc" className="rounded-md bg-slate-50 p-3 transition hover:bg-green-50">
-              <p className="text-xs font-bold uppercase text-slate-500">{messages.dashboard.thisWeek}</p>
-              <p className="mt-1 text-xl font-bold text-board-navy">{developmentSummary.observationsThisWeek}</p>
-              <p className="mt-1 text-xs text-slate-500">{messages.dashboard.observations}</p>
-            </Link>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            {developmentSummary.goalsDueForReview > 0 ? (
+              <Link href="/squad?view=reviews-due" className="min-w-0 rounded-md bg-slate-50 px-4 py-3 font-semibold text-board-navy hover:bg-green-50">
+                {developmentSummary.goalsDueForReview === 1
+                  ? messages.dashboard.developmentGoalDue
+                  : formatMessage(messages.dashboard.developmentGoalsDue, { count: developmentSummary.goalsDueForReview })}
+              </Link>
+            ) : null}
+            {developmentSummary.activeHighPriorityGoals > 0 ? (
+              <Link href="/squad?view=development&developmentStatus=high-priority" className="min-w-0 rounded-md bg-slate-50 px-4 py-3 font-semibold text-board-navy hover:bg-green-50">
+                {developmentSummary.activeHighPriorityGoals === 1
+                  ? messages.dashboard.highDevelopmentFocusOne
+                  : formatMessage(messages.dashboard.highDevelopmentFocus, { count: developmentSummary.activeHighPriorityGoals })}
+              </Link>
+            ) : null}
           </div>
-        </div>
+        </section>
+      ) : null}
 
-        <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-board-navy">{messages.dashboard.recentDrills}</h2>
-            <ButtonLink href="/drills" variant="ghost" className="h-9 px-3">
-              {messages.dashboard.actions.openLibrary}
-            </ButtonLink>
-          </div>
-          <div className="space-y-3">
-            {drills.length ? (
-              drills.map((drill) => (
-                <div key={drill.id} className="rounded-md border border-board-line p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Link translate="no" href={`/drills/${drill.id}`} className="font-semibold text-board-navy hover:text-board-green">
-                        {drill.title}
-                      </Link>
-                      <p className="mt-1 text-sm text-slate-500">{drill.main_focus}</p>
-                    </div>
-                    <span className="rounded-md bg-green-50 px-2 py-1 text-xs font-semibold text-board-green">
-                      {drill.duration_minutes} min
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-md border border-dashed border-board-line p-5">
-                <p className="text-sm text-slate-500">
-                  {messages.dashboard.emptyDrills}
-                </p>
-                <ButtonLink href="/drills/new" className="mt-4 h-9 justify-center px-3">
-                  <Dumbbell className="h-4 w-4" />
-                  {messages.dashboard.createDrillShort}
-                </ButtonLink>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-board-navy">{messages.dashboard.recentTrainingPlans}</h2>
-            <ButtonLink href="/sessions" variant="ghost" className="h-9 px-3">
-              {messages.dashboard.actions.viewPlans}
-            </ButtonLink>
-          </div>
-          <div className="space-y-3">
-            {sessions.length ? (
-              sessions.map((session) => (
-                <div key={session.id} className="rounded-md border border-board-line p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Link translate="no" href={`/sessions/${session.id}`} className="font-semibold text-board-navy hover:text-board-green">
-                        {session.title}
-                      </Link>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {session.main_focus ?? messages.common.empty.noFocus} · {formatDate(session.session_date, locale) || messages.common.empty.noDate}
-                      </p>
-                    </div>
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-                      {session.duration_target_minutes ?? 0} min
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-md border border-dashed border-board-line p-5">
-                <p className="text-sm text-slate-500">
-                  {messages.dashboard.emptyPlans}
-                </p>
-                <ButtonLink href="/sessions/new" variant="secondary" className="mt-4 h-9 justify-center px-3">
-                  <CalendarPlus className="h-4 w-4" />
-                  {messages.dashboard.createPlan}
-                </ButtonLink>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-board-navy">{messages.dashboard.openRatingWork}</h2>
-            <ButtonLink href="/trainings?view=rating_open" variant="ghost" className="h-9 px-3">
-              {messages.dashboard.actions.view}
-            </ButtonLink>
-          </div>
-          <div className="space-y-3">
-            {openRatings.length ? (
-              openRatings.slice(0, 4).map((event) => {
-                const summary = trainingSummaryCounts(event);
-                return (
-                  <div key={event.id} className="rounded-md border border-board-line p-4">
-                    <Link href={`/trainings/${event.id}`} className="font-semibold text-board-navy hover:text-board-green">
-                      {trainingDisplayTitle(event)}
-                    </Link>
-                    <p className="mt-1 text-sm text-slate-500">{formatDate(event.date, locale)} · {formatMessage(messages.dashboard.ratedCount, { rated: summary.ratings.rated, rateable: summary.ratings.rateable })}</p>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="rounded-md border border-dashed border-board-line p-5 text-sm text-slate-500">{messages.dashboard.noOpenRatingWork}</p>
-            )}
-          </div>
+      <section data-dashboard-quick-links aria-labelledby="dashboard-quick-links" className="min-w-0 border-t border-board-line pt-5">
+        <h2 id="dashboard-quick-links" className="text-sm font-bold uppercase text-slate-500">{messages.dashboard.quickLinks}</h2>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <ButtonLink href="/trainings" variant="ghost" className="w-full justify-start sm:w-auto"><CalendarDays className="h-4 w-4" />{messages.navigation.trainings}</ButtonLink>
+          <ButtonLink href="/squad" variant="ghost" className="w-full justify-start sm:w-auto"><UsersRound className="h-4 w-4" />{messages.navigation.squad}</ButtonLink>
+          <ButtonLink href="/drills" variant="ghost" className="w-full justify-start sm:w-auto"><LibraryBig className="h-4 w-4" />{messages.dashboard.actions.drillLibrary}</ButtonLink>
+          <ButtonLink href="/sessions" variant="ghost" className="w-full justify-start sm:w-auto"><ClipboardList className="h-4 w-4" />{messages.navigation.trainingPlans}</ButtonLink>
+          {showDevelopment ? <ButtonLink href="/squad?view=development" variant="ghost" className="w-full justify-start sm:w-auto"><Target className="h-4 w-4" />{messages.dashboard.development}</ButtonLink> : null}
+          {isBrandNew ? <ButtonLink href="/drills/new" variant="ghost" className="w-full justify-start sm:w-auto"><Dumbbell className="h-4 w-4" />{messages.dashboard.createDrillShort}</ButtonLink> : null}
         </div>
       </section>
     </PageContainer>
   );
+}
+
+function formatDashboardDate(date: string, locale: Locale) {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return formatDate(date, locale);
+  return new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-GB", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(year, month - 1, day)));
 }

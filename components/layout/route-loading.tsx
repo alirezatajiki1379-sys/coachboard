@@ -90,13 +90,13 @@ export function TableSkeleton({ rows = 8, columns = 5 }: { rows?: number; column
 export function DashboardSkeleton() {
   return (
     <PageContainer width="wide" className="space-y-8" aria-busy="true">
-      <RouteHeaderSkeleton actions={5} />
+      <RouteHeaderSkeleton actions={2} />
       <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <Skeleton className="h-4 w-32 bg-green-100" />
         <Skeleton className="mt-3 h-8 w-80 max-w-full" />
         <Skeleton className="mt-3 h-4 w-full max-w-xl" />
       </div>
-      <MetricGridSkeleton />
+      <CardListSkeleton count={3} />
       <div className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
         <Skeleton className="h-6 w-52" />
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -109,10 +109,7 @@ export function DashboardSkeleton() {
           ))}
         </div>
       </div>
-      <section className="grid gap-6 lg:grid-cols-2">
-        <TableSkeleton rows={4} columns={3} />
-        <TableSkeleton rows={4} columns={3} />
-      </section>
+      <Skeleton className="h-10 w-full max-w-2xl" />
     </PageContainer>
   );
 }

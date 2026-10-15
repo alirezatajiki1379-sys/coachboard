@@ -29,6 +29,7 @@
     "test:analytics-2-browser": "node scripts/analytics-2-summary-browser.mjs",
     "test:analytics-report-browser": "node scripts/team-analytics-report-browser.mjs",
     "test:dashboard-today": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/dashboard-today-regression.mjs",
+    "test:dashboard-browser": "node scripts/dashboard-2-browser.mjs",
     "test:training-workflow": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/training-workflow-regression.mjs",
     "test:squad-planner": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/squad-planner-regression.mjs",
     "test:drill-image-upload": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/drill-image-upload-regression.mjs",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as training from "../lib/trainings/utils.ts";
 import { getTrainingWorkflowState } from "../lib/trainings/workflow.ts";
@@ -36,6 +37,18 @@ test("Dashboard keeps today visible before, during and after a session", () => {
   }
 });
 
+test("Dashboard week uses the next seven Berlin calendar days and excludes today", () => {
+  const now = { date: "2026-10-16", time: "15:00:00" };
+  const events = [
+    event("today", "2026-10-16", "18:00"),
+    event("tomorrow", "2026-10-17", "18:00"),
+    event("edge", "2026-10-23", "18:00"),
+    event("outside", "2026-10-24", "18:00"),
+    event("trash", "2026-10-18", "18:00", "prepared", { deletedAt: "2026-10-16" })
+  ];
+  assert.deepEqual(training.dashboardTrainingsForNextDays(events, 7, now).map((item) => item.id), ["tomorrow", "edge"]);
+});
+
 test("Dashboard today uses the canonical workflow without changing Past and Upcoming semantics", () => {
   const now = { date: "2026-09-19", time: "15:00:00" };
   const workflow = (value) => getTrainingWorkflowState({ event: value, hasPlan: false, hasReview: false, now });
@@ -54,4 +67,17 @@ test("Dashboard today uses the canonical workflow without changing Past and Upco
 test("Dashboard uses Berlin calendar boundaries", () => {
   assert.deepEqual(training.trainingNowParts("Europe/Berlin", new Date("2026-09-19T21:59:59Z")), { date: "2026-09-19", time: "23:59:59" });
   assert.deepEqual(training.trainingNowParts("Europe/Berlin", new Date("2026-09-19T22:00:00Z")), { date: "2026-09-20", time: "00:00:00" });
+});
+
+test("Dashboard 2.0 removes clutter and consumes canonical workflow data", () => {
+  const dashboard = readFileSync("app/(app)/dashboard/page.tsx", "utf8");
+  assert.match(dashboard, /dashboardTrainingsForNextDays/);
+  assert.match(dashboard, /getTrainingWorkflowState/);
+  assert.match(dashboard, /messages\.dashboard\.needsAttention/);
+  assert.match(dashboard, /messages\.dashboard\.quickLinks/);
+  assert.doesNotMatch(dashboard, /StatCard/);
+  assert.doesNotMatch(dashboard, /recentDrills/);
+  assert.doesNotMatch(dashboard, /recentSessions/);
+  assert.doesNotMatch(dashboard, /openRatings/);
+  assert.doesNotMatch(dashboard, /observationsThisWeek/);
 });
