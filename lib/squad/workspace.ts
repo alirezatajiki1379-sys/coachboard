@@ -15,7 +15,8 @@ import {
   type PlayerAnalyticsSummary
 } from "@/lib/squad/analytics";
 import { getSquadAnalyticsOverview } from "@/lib/squad/analytics-queries";
-import { getAttentionPreferences, getPlayerAttentionItems, attentionTone } from "@/lib/squad/attention";
+import { getAttentionPreferences, getPlayerAttentionItems, attentionTone, localizeAttentionItems } from "@/lib/squad/attention";
+import type { Locale } from "@/lib/i18n";
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
 import { mapGoalRow, mapObservationRow } from "@/lib/squad/development";
 import { calculateAge } from "@/lib/squad/format";
@@ -376,7 +377,7 @@ export async function getCoachWorkspaceData(
   supabase: SupabaseServerClient,
   userId: string,
   state: WorkspaceState,
-  options: { includeAttention?: boolean } = {}
+  options: { includeAttention?: boolean; locale?: Locale } = {}
 ): Promise<WorkspaceData> {
   const includeAttention = options.includeAttention ?? true;
   const db = supabase as unknown as SupabaseClient;
@@ -447,10 +448,10 @@ export async function getCoachWorkspaceData(
       review
     };
     const attention = includeAttention
-      ? getPlayerAttentionItems(workspaceSummary, attentionPreferences, {
+      ? localizeAttentionItems(getPlayerAttentionItems(workspaceSummary, attentionPreferences, {
           today: todayDate(),
           periodLabel: resolvedPeriodLabel
-        }).map((item) => ({
+        }), options.locale ?? "en").map((item) => ({
           id: item.key,
           label: item.title,
           tone: attentionTone(item.priority),

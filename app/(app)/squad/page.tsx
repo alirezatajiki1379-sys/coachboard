@@ -23,10 +23,8 @@ export default async function SquadPage({ searchParams }: SquadPageProps) {
 
   if (!user) redirect("/login");
 
-  const [data, locale] = await Promise.all([
-    getCoachWorkspaceData(supabase, user.id, state),
-    getUserLocale(supabase, user.id)
-  ]);
+  const locale = await getUserLocale(supabase, user.id);
+  const data = await getCoachWorkspaceData(supabase, user.id, state, { locale });
   const messages = getMessages(locale);
 
   return (

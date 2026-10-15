@@ -27,6 +27,7 @@ const bundle = await build({
     import {PlayerDevelopmentSection} from "@/components/squad/player-development";
     import {AnalyticsSectionPanel} from "@/app/(app)/squad/analysis/page";
     import {trainingSectionLabel} from "@/lib/i18n/training-labels";
+    import {localizeAttentionItems} from "@/lib/squad/attention";
     import SquadError from "@/app/(app)/squad/error";
     import ActionsError from "@/app/(app)/actions/error";
     import ActionsLoading from "@/app/(app)/actions/loading";
@@ -34,7 +35,7 @@ const bundle = await build({
     window.qa={locale:"en",saves:0,ready:false};
     const root=createRoot(document.getElementById("root"));
     const entry={id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player:{firstName:"Quality",lastName:"",playerType:"roster",position:"CM",secondaryPositions:[]}};
-    const analytics={trainingSessions:2,reviewedSessions:1,reviewCoverage:.5,averageSessionQuality:3.5,averageSessionIntensity:4.5,averagePlayerResponse:4,participantRecordCount:5,attendanceRecordCount:4,planCoverage:{rate:.5},objectiveOutcomes:{achieved:1,partly_achieved:1,not_achieved:0},focusDistribution:[],present:2,late:1,absent:1,notExpected:1,notRecorded:1,activeDevelopmentGoals:0,playersWithActiveGoals:0,goalsDueForReview:0,goalsAchievedInPeriod:0,activeGoalCategoryDistribution:[],progressUpdatesInPeriod:0,progressPlayersInPeriod:0,latestProgressDistribution:[],drillInstancesUsed:0,uniqueDrillsUsed:0,reviewedDrillInstances:0,averageDrillEffectiveness:null,drillUsage:[]};
+    const analytics={trainingSessions:2,reviewedSessions:1,reviewCoverage:.5,averageSessionQuality:3.5,averageSessionIntensity:4.5,averagePlayerResponse:4,participantRecordCount:5,attendanceRecordCount:4,planCoverage:{rate:.5},objectiveOutcomes:{achieved:1,partly_achieved:1,not_achieved:0},focusDistribution:[],events:[],present:2,late:1,absent:1,notExpected:1,notRecorded:1,activeDevelopmentGoals:0,playersWithActiveGoals:0,goalsDueForReview:0,goalsAchievedInPeriod:0,activeGoalCategoryDistribution:[],progressUpdatesInPeriod:0,progressPlayersInPeriod:0,latestProgressDistribution:[],drillInstancesUsed:0,uniqueDrillsUsed:0,reviewedDrillInstances:0,averageDrillEffectiveness:null,drillUsage:[]};
     async function resolveServer(node){
       if(Array.isArray(node)) return Promise.all(node.map(resolveServer));
       if(!React.isValidElement(node))return node;
@@ -47,6 +48,7 @@ const bundle = await build({
     async function render(){
       window.qa.ready=false;
       const locale=window.qa.locale;
+      const action=localizeAttentionItems([{key:"action",targetKind:"player",targetId:"player",playerId:"player",playerName:"John Smith",playerPosition:"CM",playerType:"roster",type:"high-priority-goal-follow-up",category:"development",priority:"high",title:"High-priority goal needs follow-up",explanation:'The high-priority goal "Press after loss" has no recent observation follow-up.',evidence:[{label:"Goal",value:"Press after loss"}],suggestedActions:[{label:"Open Player Hub",href:"/squad/players/player"}],thresholdLabel:"No progress observation after 14 days.",detectedAt:"2026-10-15",dismissible:false,snoozeable:true}],locale)[0];
       const server=await resolveServer(<>
         <section id="analytics">{["training","attendance","development","drills"].map(section=><AnalyticsSectionPanel key={section} section={section} teamAnalytics={analytics} summaries={[]}/>)}</section>
         <section id="history"><AttendanceEntryCard entry={{...entry,finalStatus:"Z",plannedReason:"school",lateMinutes:5,coachNote:"Present",event:{id:"event",date:"2026-09-19",label:"Quality"}}}/></section>
@@ -61,6 +63,8 @@ const bundle = await build({
         <section id="check-in"><CheckInRow entry={entry} eventId="event" eventDate="2026-09-19"/></section>
         <section id="ratings"><RatingRow entry={entry} eventId="event"/></section>
         <section id="sections" translate="no">{["activation","Main part 1","Main part 2","Cool-down"].map(value=><p key={value}>{trainingSectionLabel(value,locale)}</p>)}<p data-user-content>Quality</p></section>
+        <section id="actions-runtime" translate="no"><h2>{action.title}</h2><p>{action.playerName}</p><p>{action.explanation}</p><p>{action.thresholdLabel}</p><p>{action.evidence[0].label}: <span data-user-content>{action.evidence[0].value}</span></p><a href={action.suggestedActions[0].href}>{action.suggestedActions[0].label}</a></section>
+        <section id="protected-user-content" translate="no"><p>John Smith</p><p>Queens Park Rangers</p><p>Quick transition game</p><p>Press after loss</p></section>
         <p id="legacy" title={legacy}>{legacy}</p>
         <p id="custom" translate="no" title="Present">Present</p>
         <section id="errors"><SquadError error={new Error("Fictional failure")} reset={()=>{}}/><ActionsError reset={()=>{}}/></section>
@@ -94,7 +98,7 @@ const bundle = await build({
     builder.onLoad({filter:/squad\/players\/\[id\]\/page\.tsx$/},args=>{
       const tree=ts.createSourceFile(args.path,readFileSync(args.path,"utf8"),99,true,ts.ScriptKind.TSX);
       const functions=tree.statements.filter(n=>ts.isFunctionDeclaration(n)&&["AttendanceEntryCard","Badge"].includes(n.name?.text)).map(n=>n.getText(tree)).join("\n");
-      return {contents:`import Link from "next/link";import {getActiveLocale} from "@/lib/i18n/server";import {createSystemTranslator} from "@/lib/i18n/system-text";import {formatNumber} from "@/lib/i18n";import {cn} from "@/lib/utils";import {formatEventDate,plannedStatusLabel,finalStatusLabel,plannedReasonLabel,reliabilityMalus} from "@/lib/squad/attendance-format";${functions}\nexport {AttendanceEntryCard};`,loader:"tsx",resolveDir:path.dirname(args.path)};
+      return {contents:`import Link from "next/link";import {getActiveLocale} from "@/lib/i18n/server";import {createSystemTranslator} from "@/lib/i18n/system-text";import {formatNumber} from "@/lib/i18n";import {cn} from "@/lib/utils";import {formatEventDate,plannedStatusLabel,finalStatusLabel,plannedReasonLabel,reliabilityMalus,effectiveActualAbsenceReason} from "@/lib/squad/attendance-format";${functions}\nexport {AttendanceEntryCard};`,loader:"tsx",resolveDir:path.dirname(args.path)};
     });
   }}]
 });
@@ -108,7 +112,7 @@ await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
 let browser;
 try {
   browser=await chromium.launch({headless:true,executablePath:process.env.COACHBOARD_QA_CHROME??"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"});
-  const page=await browser.newPage({locale:"de-DE"});const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  const page=await browser.newPage({locale:"de-DE"});const errors=[];page.on("pageerror",e=>{errors.push(e.message);console.error(`Browser fixture error: ${e.stack ?? e.message}`);});
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.waitForFunction(()=>window.qa?.ready);
   for(const locale of ["en","de","en","de"]){
@@ -125,11 +129,18 @@ try {
     assert.ok((await page.locator("#sections").innerText()).includes(de?"Hauptteil 1":"Main part 1"));
     assert.equal(await page.locator("#custom").innerText(),"Present");
     assert.equal(await page.locator("#custom").getAttribute("title"),"Present");
+    assert.deepEqual(await page.locator("#protected-user-content p").allTextContents(),["John Smith","Queens Park Rangers","Quick transition game","Press after loss"]);
+    const actionText=await page.locator("#actions-runtime").innerText();
+    assert.ok(actionText.includes("John Smith"));
+    assert.ok(actionText.includes("Press after loss"));
+    assert.ok(actionText.includes(de?"Wichtiges Ziel muss nachverfolgt werden":"High-priority goal needs follow-up"));
+    assert.ok(actionText.includes(de?"Spielerprofil öffnen":"Open Player Hub"));
+    if(de)for(const phrase of ["High-priority goal needs follow-up","No progress observation after","Open Player Hub"])assert.ok(!actionText.includes(phrase),`English Action Center copy: ${phrase}`);
     assert.equal(await page.locator("#check-in [translate=no]").filter({hasText:/^Quality$/}).count(),1);
     assert.ok((await page.locator("#errors").innerText()).includes(de?"Der Kaderbereich konnte nicht geladen werden":"The squad workspace could not be loaded"));
     assert.equal(await page.locator('#loading [aria-busy="true"]').getAttribute("aria-label"),de?"Aktionsübersicht wird geladen":"Loading Action Center");
     assert.ok((await page.locator("#history").innerText()).includes(de?"Geplant: Eingeplant · Tatsächlich: Verspätet":"Planned: Expected · Actual: Late"));
-    assert.ok((await page.locator("#history").innerText()).includes(de?"Grund: Schule":"Reason: School"));
+    assert.ok((await page.locator("#history").innerText()).includes(de?"Geplanter Grund: Schule":"Planned reason: School"));
     assert.ok((await page.locator("#history").innerText()).includes("Quality"));
     const forbidden=de?["Training Sessions","Training Focus","Review coverage","Planned sessions","No structured focus has been saved"]:["Trainingseinheiten","Reflexionsabdeckung","Trainingsschwerpunkte"];
     for(const word of forbidden)assert.ok(!(await page.locator("#analytics").innerText()).includes(word),`Wrong-language Analytics copy: ${word}`);

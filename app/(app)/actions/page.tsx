@@ -20,6 +20,8 @@ import {
 import { getAttentionCenterData } from "@/lib/squad/attention-queries";
 import { createClient } from "@/lib/supabase/server";
 import { getUserLocale } from "@/lib/i18n/server";
+import type { Locale } from "@/lib/i18n";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
 import { cn } from "@/lib/utils";
 
 type ActionsPageProps = {
@@ -66,7 +68,8 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
 
   const locale = await getUserLocale(supabase, user.id);
   const copy = actionsCopy[locale];
-  const data = await getAttentionCenterData(supabase, user.id, state);
+  const ui = createSystemTranslator(locale);
+  const data = await getAttentionCenterData(supabase, user.id, state, locale);
   const returnTo = attentionHref(data.state, {});
 
   return (
@@ -90,19 +93,19 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
       />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="High Priority" value={data.summary.high + data.summary.critical} href={attentionHref(data.state, { status: "open", priority: "high-priority", category: "all" })} tone="red" />
-        <SummaryCard label="Open Items" value={data.summary.open} href={attentionHref(data.state, { status: "open", priority: "all", category: "all" })} />
-        <SummaryCard label="Snoozed" value={data.summary.snoozed} href={attentionHref(data.state, { status: "snoozed" })} />
-        <SummaryCard label="Dismissed" value={data.summary.dismissed} href={attentionHref(data.state, { status: "dismissed" })} />
+        <SummaryCard label={ui("High Priority")} value={data.summary.high + data.summary.critical} href={attentionHref(data.state, { status: "open", priority: "high-priority", category: "all" })} tone="red" />
+        <SummaryCard label={ui("Open Items")} value={data.summary.open} href={attentionHref(data.state, { status: "open", priority: "all", category: "all" })} />
+        <SummaryCard label={ui("Snoozed")} value={data.summary.snoozed} href={attentionHref(data.state, { status: "snoozed" })} />
+        <SummaryCard label={ui("Dismissed")} value={data.summary.dismissed} href={attentionHref(data.state, { status: "dismissed" })} />
       </section>
 
       <ActionFilters data={data} locale={locale} />
 
-      <ActionDiagnostics data={data} />
+      <ActionDiagnostics data={data} locale={locale} />
 
       {data.state.status === "open" && data.state.priority === "high-priority" && data.summary.open > 0 && data.summary.open === data.summary.high + data.summary.critical ? (
         <p className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
-          All current open items are classified as high priority.
+          {ui("All current open items are classified as high priority.")}
         </p>
       ) : null}
 
@@ -114,40 +117,41 @@ export default async function ActionsPage({ searchParams }: ActionsPageProps) {
               <div className="rounded-lg border border-board-line bg-white p-3 shadow-soft">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <p className="text-sm font-bold text-board-navy">Bulk manage visible actions</p>
-                    <p className="text-xs text-slate-500">Tick actions below, then resolve, snooze or dismiss only this filtered view.</p>
+                    <p className="text-sm font-bold text-board-navy">{ui("Bulk manage visible actions")}</p>
+                    <p className="text-xs text-slate-500">{ui("Tick actions below, then resolve, snooze or dismiss only this filtered view.")}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" name="operation" value="resolved" variant="secondary" className="h-9 px-3">Mark resolved</Button>
+                    <Button type="submit" name="operation" value="resolved" variant="secondary" className="h-9 px-3">{ui("Mark resolved")}</Button>
                     <select name="snooze" defaultValue="3d" className="h-9 rounded-md border border-board-line bg-white px-2 text-xs font-semibold text-slate-700">
-                      <option value="tomorrow">Tomorrow</option>
-                      <option value="3d">3 days</option>
-                      <option value="1w">Next week</option>
+                      <option value="tomorrow">{ui("Tomorrow")}</option>
+                      <option value="3d">{ui("3 days")}</option>
+                      <option value="1w">{ui("Next week")}</option>
                     </select>
-                    <Button type="submit" name="operation" value="snooze" variant="secondary" className="h-9 px-3">Snooze</Button>
-                    <Button type="submit" name="operation" value="dismiss" variant="ghost" className="h-9 px-3">Dismiss</Button>
-                    <Button type="submit" name="operation" value="not_relevant" variant="ghost" className="h-9 px-3">Not relevant</Button>
+                    <Button type="submit" name="operation" value="snooze" variant="secondary" className="h-9 px-3">{ui("Snooze")}</Button>
+                    <Button type="submit" name="operation" value="dismiss" variant="ghost" className="h-9 px-3">{ui("Dismiss")}</Button>
+                    <Button type="submit" name="operation" value="not_relevant" variant="ghost" className="h-9 px-3">{ui("Not relevant")}</Button>
                   </div>
                 </div>
               </div>
               {data.items.map((item) => (
-                <AttentionCard key={item.key} item={item} selected={data.selected?.key === item.key} stateHref={attentionHref(data.state, { item: item.key, player: item.playerId })} returnTo={returnTo} selectable />
+                <AttentionCard key={item.key} item={item} selected={data.selected?.key === item.key} stateHref={attentionHref(data.state, { item: item.key, player: item.playerId })} returnTo={returnTo} locale={locale} selectable />
               ))}
             </form>
-          ) : <EmptyState data={data} />}
+          ) : <EmptyState data={data} locale={locale} />}
         </div>
         <aside className="xl:sticky xl:top-6 xl:self-start">
-          <AttentionDetail item={data.selected} returnTo={returnTo} />
+          <AttentionDetail item={data.selected} returnTo={returnTo} locale={locale} />
         </aside>
       </section>
 
-      <AttentionSettings data={data} returnTo={returnTo} />
+      <AttentionSettings data={data} returnTo={returnTo} locale={locale} />
     </PageContainer>
   );
 }
 
 function ActionFilters({ data, locale }: { data: AttentionCenterData; locale: "en" | "de" }) {
   const copy = actionsCopy[locale];
+  const ui = createSystemTranslator(locale);
   const state = data.state;
   return (
     <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
@@ -156,13 +160,13 @@ function ActionFilters({ data, locale }: { data: AttentionCenterData; locale: "e
           <select name="priority" defaultValue={state.priority} className={fieldClass()}>
             <option value="all">{copy.allPriorities}</option>
             <option value="high-priority">{copy.highPriorityOnly}</option>
-            {priorities.map((priority) => <option key={priority.id} value={priority.id}>{priority.label}</option>)}
+            {priorities.map((priority) => <option key={priority.id} value={priority.id}>{ui(priority.label)}</option>)}
           </select>
         </Field>
         <Field label={copy.category}>
           <select name="category" defaultValue={state.category} className={fieldClass()}>
             <option value="all">{copy.allCategories}</option>
-            {attentionCategories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+            {attentionCategories.map((category) => <option key={category.id} value={category.id}>{ui(category.label)}</option>)}
           </select>
         </Field>
         <Field label={copy.playerType}>
@@ -300,14 +304,15 @@ const actionsCopy = {
   }
 } as const;
 
-function AttentionCard({ item, selected, stateHref, returnTo, selectable = false }: { item: AttentionItem; selected: boolean; stateHref: string; returnTo: string; selectable?: boolean }) {
+function AttentionCard({ item, selected, stateHref, returnTo, locale, selectable = false }: { item: AttentionItem; selected: boolean; stateHref: string; returnTo: string; locale: Locale; selectable?: boolean }) {
+  const ui = createSystemTranslator(locale);
   return (
     <article className={cn("rounded-lg border bg-white p-4 shadow-soft", selected ? "border-board-green ring-2 ring-green-100" : "border-board-line")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         {selectable ? (
           <label className="flex shrink-0 items-center gap-2 text-xs font-bold uppercase text-slate-500">
-            <input name="items" type="checkbox" value={bulkValue(item)} className="h-4 w-4 rounded border-board-line text-board-green" aria-label={`Select ${item.title}`} />
-            Select
+            <input name="items" type="checkbox" value={bulkValue(item)} className="h-4 w-4 rounded border-board-line text-board-green" aria-label={locale === "de" ? `${item.title} auswählen` : `Select ${item.title}`} />
+            {ui("Select")}
           </label>
         ) : null}
         <div className="min-w-0">
@@ -317,54 +322,54 @@ function AttentionCard({ item, selected, stateHref, returnTo, selectable = false
             ) : (
               <Link href={withReturnTo(`/trainings/${item.targetId}`, returnTo)} className="font-bold text-board-navy hover:text-board-green">{item.playerName}</Link>
             )}
-            <span className="text-sm text-slate-500">{item.playerPosition ?? "No position"}</span>
-            {item.targetKind === "player" ? <Badge tone={item.playerType === "trial" ? "amber" : "neutral"}>{item.playerType === "trial" ? "Trial" : "Roster"}</Badge> : <Badge tone="green">Training</Badge>}
+            <span className="text-sm text-slate-500">{item.playerPosition ?? ui("No position")}</span>
+            {item.targetKind === "player" ? <Badge tone={item.playerType === "trial" ? "amber" : "neutral"}>{ui(item.playerType === "trial" ? "Trial" : "Roster")}</Badge> : <Badge tone="green">{ui("Training")}</Badge>}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge tone={attentionTone(item.priority)}>{attentionPriorityLabels[item.priority]} Priority</Badge>
-            <Badge tone="neutral">{categoryLabel(item.category)}</Badge>
+            <Badge tone={attentionTone(item.priority)}>{ui(attentionPriorityLabels[item.priority])} {ui("Priority")}</Badge>
+            <Badge tone="neutral">{ui(categoryLabel(item.category))}</Badge>
           </div>
           <h2 className="mt-3 text-lg font-bold text-board-navy">{item.title}</h2>
           <p className="mt-1 text-sm text-slate-600">{item.explanation}</p>
           {item.priority === "critical" || item.priority === "high" ? (
-            <p className="mt-2 text-xs font-bold text-red-700">{highPriorityReason(item)}</p>
+            <p className="mt-2 text-xs font-bold text-red-700">{highPriorityReason(item, locale)}</p>
           ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <ButtonLink href={stateHref} variant="secondary" className="h-9 px-3">Details</ButtonLink>
+          <ButtonLink href={stateHref} variant="secondary" className="h-9 px-3">{ui("Details")}</ButtonLink>
           {item.suggestedActions[0] ? <ButtonLink href={withReturnTo(item.suggestedActions[0].href, returnTo)} className="h-9 px-3">{item.suggestedActions[0].label}</ButtonLink> : null}
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        {item.snoozeable ? <SnoozeForm item={item} returnTo={returnTo} /> : null}
+        {item.snoozeable ? <SnoozeForm item={item} returnTo={returnTo} locale={locale} /> : null}
         <form action={dismissAttentionItem}>
           <ActionHidden item={item} returnTo={returnTo} />
-          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Dismiss</Button>
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{ui("Dismiss")}</Button>
         </form>
         <form action={dismissAttentionItem}>
           <ActionHidden item={item} returnTo={returnTo} />
           <input type="hidden" name="reason" value="not_relevant" />
-          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Not relevant</Button>
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{ui("Not relevant")}</Button>
         </form>
         <form action={dismissAttentionItem}>
           <ActionHidden item={item} returnTo={returnTo} />
           <input type="hidden" name="reason" value="resolved" />
-          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Mark as resolved</Button>
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{ui("Mark as resolved")}</Button>
         </form>
         <form action={disableAttentionRule}>
           <ActionHidden item={item} returnTo={returnTo} />
           <ConfirmSubmitButton
-            message={`Stop showing "${item.title}" recommendations? You can enable this recommendation type again in Coach Actions settings.`}
+            message={locale === "de" ? `Empfehlungen „${item.title}“ nicht mehr anzeigen? Du kannst diesen Empfehlungstyp in den Aktionseinstellungen wieder aktivieren.` : `Stop showing "${item.title}" recommendations? You can enable this recommendation type again in Coach Actions settings.`}
             variant="ghost"
             className="h-8 px-2 text-xs"
           >
-            Do not show this type
+            {ui("Do not show this type")}
           </ConfirmSubmitButton>
         </form>
         {item.snoozedUntil || item.dismissedAt ? (
           <form action={clearAttentionState}>
             <ActionHidden item={item} returnTo={returnTo} />
-            <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Reactivate</Button>
+            <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{ui("Reactivate")}</Button>
           </form>
         ) : null}
       </div>
@@ -372,12 +377,13 @@ function AttentionCard({ item, selected, stateHref, returnTo, selectable = false
   );
 }
 
-function AttentionDetail({ item, returnTo }: { item?: AttentionItem; returnTo: string }) {
+function AttentionDetail({ item, returnTo, locale }: { item?: AttentionItem; returnTo: string; locale: Locale }) {
+  const ui = createSystemTranslator(locale);
   if (!item) {
     return (
       <section className="rounded-lg border border-dashed border-board-line bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-bold text-board-navy">Context</h2>
-        <p className="mt-2 text-sm text-slate-600">Select an action to see evidence, thresholds and the next useful steps.</p>
+        <h2 className="text-lg font-bold text-board-navy">{ui("Context")}</h2>
+        <p className="mt-2 text-sm text-slate-600">{ui("Select an action to see evidence, thresholds and the next useful steps.")}</p>
       </section>
     );
   }
@@ -385,23 +391,23 @@ function AttentionDetail({ item, returnTo }: { item?: AttentionItem; returnTo: s
     <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-bold uppercase text-slate-500">Context</p>
+          <p className="text-sm font-bold uppercase text-slate-500">{ui("Context")}</p>
           <h2 className="mt-1 text-xl font-bold text-board-navy">{item.title}</h2>
-          <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? "No position"} · {item.targetKind === "training" ? "Training" : item.playerType === "trial" ? "Trial" : "Roster"}</p>
+          <p className="mt-1 text-sm text-slate-600">{item.playerName} · {item.playerPosition ?? ui("No position")} · {ui(item.targetKind === "training" ? "Training" : item.playerType === "trial" ? "Trial" : "Roster")}</p>
         </div>
-        <Badge tone={attentionTone(item.priority)}>{attentionPriorityLabels[item.priority]} Priority</Badge>
+        <Badge tone={attentionTone(item.priority)}>{ui(attentionPriorityLabels[item.priority])} {ui("Priority")}</Badge>
       </div>
       <p className="mt-4 text-sm text-slate-700">{item.explanation}</p>
       {item.priority === "critical" || item.priority === "high" ? (
-        <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-800">{highPriorityReason(item)}</p>
+        <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-800">{highPriorityReason(item, locale)}</p>
       ) : null}
       <div className="mt-4 rounded-md bg-board-paper p-3">
-        <p className="text-xs font-bold uppercase text-slate-500">Threshold</p>
+        <p className="text-xs font-bold uppercase text-slate-500">{ui("Threshold")}</p>
         <p className="mt-1 text-sm font-semibold text-board-navy">{item.thresholdLabel}</p>
-        {item.periodLabel ? <p className="mt-1 text-xs text-slate-500">Period: {item.periodLabel}</p> : null}
+        {item.periodLabel ? <p className="mt-1 text-xs text-slate-500">{ui("Period")}: {item.periodLabel}</p> : null}
       </div>
       <div className="mt-4">
-        <h3 className="text-sm font-bold uppercase text-slate-500">Evidence</h3>
+        <h3 className="text-sm font-bold uppercase text-slate-500">{ui("Evidence")}</h3>
         <dl className="mt-2 grid gap-2">
           {item.evidence.map((evidence) => (
             <div key={evidence.label} className="rounded-md bg-slate-50 p-2">
@@ -417,29 +423,29 @@ function AttentionDetail({ item, returnTo }: { item?: AttentionItem; returnTo: s
         ))}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        {item.snoozeable ? <SnoozeForm item={item} returnTo={returnTo} /> : null}
+        {item.snoozeable ? <SnoozeForm item={item} returnTo={returnTo} locale={locale} /> : null}
         <form action={dismissAttentionItem}>
           <ActionHidden item={item} returnTo={returnTo} />
-          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Dismiss</Button>
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{ui("Dismiss")}</Button>
         </form>
         <form action={dismissAttentionItem}>
           <ActionHidden item={item} returnTo={returnTo} />
           <input type="hidden" name="reason" value="not_relevant" />
-          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Not relevant</Button>
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{ui("Not relevant")}</Button>
         </form>
         <form action={dismissAttentionItem}>
           <ActionHidden item={item} returnTo={returnTo} />
           <input type="hidden" name="reason" value="resolved" />
-          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Mark as resolved</Button>
+          <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{ui("Mark as resolved")}</Button>
         </form>
         <form action={disableAttentionRule}>
           <ActionHidden item={item} returnTo={returnTo} />
           <ConfirmSubmitButton
-            message={`Stop showing "${item.title}" recommendations? You can enable this recommendation type again in Coach Actions settings.`}
+            message={locale === "de" ? `Empfehlungen „${item.title}“ nicht mehr anzeigen? Du kannst diesen Empfehlungstyp in den Aktionseinstellungen wieder aktivieren.` : `Stop showing "${item.title}" recommendations? You can enable this recommendation type again in Coach Actions settings.`}
             variant="ghost"
             className="h-8 px-2 text-xs"
           >
-            Do not show this type
+            {ui("Do not show this type")}
           </ConfirmSubmitButton>
         </form>
       </div>
@@ -447,69 +453,71 @@ function AttentionDetail({ item, returnTo }: { item?: AttentionItem; returnTo: s
   );
 }
 
-function AttentionSettings({ data, returnTo }: { data: AttentionCenterData; returnTo: string }) {
+function AttentionSettings({ data, returnTo, locale }: { data: AttentionCenterData; returnTo: string; locale: Locale }) {
   const preferences = data.preferences;
+  const ui = createSystemTranslator(locale);
   return (
     <section id="attention-settings" className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase text-board-green">Attention settings</p>
-          <h2 className="mt-1 text-xl font-bold text-board-navy">Rules and thresholds</h2>
-          <p className="mt-1 text-sm text-slate-600">These settings change which facts CoachBoard surfaces. They do not change player data or formulas.</p>
+          <p className="text-sm font-semibold uppercase text-board-green">{ui("Attention settings")}</p>
+          <h2 className="mt-1 text-xl font-bold text-board-navy">{ui("Rules and thresholds")}</h2>
+          <p className="mt-1 text-sm text-slate-600">{ui("These settings change which facts CoachBoard surfaces. They do not change player data or formulas.")}</p>
         </div>
         <form action={resetAttentionSettings}>
           <input type="hidden" name="returnTo" value={returnTo} />
-          <ConfirmSubmitButton message="Reset attention settings to CoachBoard defaults? Player data will not be changed." variant="secondary" className="h-9 px-3">
-            Reset defaults
+          <ConfirmSubmitButton message={ui("Reset attention settings to CoachBoard defaults? Player data will not be changed.")} variant="secondary" className="h-9 px-3">
+            {ui("Reset defaults")}
           </ConfirmSubmitButton>
         </form>
       </div>
       <form action={saveAttentionSettings} className="mt-5 space-y-5">
         <input type="hidden" name="returnTo" value={returnTo} />
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="Observation age days"><input name="observationAgeDays" type="number" min="7" max="180" defaultValue={preferences.observationAgeDays} className={fieldClass()} /></Field>
-          <Field label="Low attendance %"><input name="lowAttendancePercent" type="number" min="40" max="100" defaultValue={preferences.lowAttendancePercent} className={fieldClass()} /></Field>
-          <Field label="No rating trainings"><input name="noRecentRatingTrainings" type="number" min="1" max="10" defaultValue={preferences.noRecentRatingTrainings} className={fieldClass()} /></Field>
-          <Field label="Declining trend"><input name="decliningTrendThreshold" type="number" min="-1.5" max="-0.1" step="0.1" defaultValue={preferences.decliningTrendThreshold} className={fieldClass()} /></Field>
-          <Field label="Repeated lateness"><input name="repeatedLatenessCount" type="number" min="1" max="10" defaultValue={preferences.repeatedLatenessCount} className={fieldClass()} /></Field>
-          <Field label="Trial duration days"><input name="trialDurationDays" type="number" min="7" max="180" defaultValue={preferences.trialDurationDays} className={fieldClass()} /></Field>
-          <Field label="Goal follow-up days"><input name="goalFollowUpDays" type="number" min="7" max="180" defaultValue={preferences.goalFollowUpDays} className={fieldClass()} /></Field>
+          <Field label={ui("Observation age days")}><input name="observationAgeDays" type="number" min="7" max="180" defaultValue={preferences.observationAgeDays} className={fieldClass()} /></Field>
+          <Field label={ui("Low attendance %")}><input name="lowAttendancePercent" type="number" min="40" max="100" defaultValue={preferences.lowAttendancePercent} className={fieldClass()} /></Field>
+          <Field label={ui("No rating trainings")}><input name="noRecentRatingTrainings" type="number" min="1" max="10" defaultValue={preferences.noRecentRatingTrainings} className={fieldClass()} /></Field>
+          <Field label={ui("Declining trend")}><input name="decliningTrendThreshold" type="number" min="-1.5" max="-0.1" step="0.1" defaultValue={preferences.decliningTrendThreshold} className={fieldClass()} /></Field>
+          <Field label={ui("Repeated lateness")}><input name="repeatedLatenessCount" type="number" min="1" max="10" defaultValue={preferences.repeatedLatenessCount} className={fieldClass()} /></Field>
+          <Field label={ui("Trial duration days")}><input name="trialDurationDays" type="number" min="7" max="180" defaultValue={preferences.trialDurationDays} className={fieldClass()} /></Field>
+          <Field label={ui("Goal follow-up days")}><input name="goalFollowUpDays" type="number" min="7" max="180" defaultValue={preferences.goalFollowUpDays} className={fieldClass()} /></Field>
         </div>
         <details className="rounded-md bg-board-paper p-3">
-          <summary className="cursor-pointer text-sm font-bold text-board-navy">Enabled rules</summary>
+          <summary className="cursor-pointer text-sm font-bold text-board-navy">{ui("Enabled rules")}</summary>
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
               <input type="checkbox" checked disabled className="h-4 w-4" />
-              Medical return review · mandatory
+              {ui("Medical return review")} · {ui("mandatory")}
             </label>
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
               <input type="checkbox" checked disabled className="h-4 w-4" />
-              Training plan missing · mandatory
+              {ui("Training plan missing")} · {ui("mandatory")}
             </label>
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
               <input type="checkbox" checked disabled className="h-4 w-4" />
-              Training review incomplete · mandatory
+              {ui("Training review incomplete")} · {ui("mandatory")}
             </label>
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
               <input type="checkbox" checked disabled className="h-4 w-4" />
-              Availability responses missing · mandatory
+              {ui("Availability responses missing")} · {ui("mandatory")}
             </label>
             {optionalRules.map((rule) => (
               <label key={rule.id} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
                 <input name={`rule:${rule.id}`} type="checkbox" defaultChecked={preferences.enabledRules[rule.id] !== false} className="h-4 w-4" />
-                {rule.label}
+                {ui(rule.label)}
               </label>
             ))}
           </div>
         </details>
-        <Button type="submit">Save attention settings</Button>
+        <Button type="submit">{ui("Save attention settings")}</Button>
       </form>
     </section>
   );
 }
 
-function ActionDiagnostics({ data }: { data: AttentionCenterData }) {
+function ActionDiagnostics({ data, locale }: { data: AttentionCenterData; locale: Locale }) {
   const diagnostics = data.diagnostics;
+  const ui = createSystemTranslator(locale);
   const rows = [
     ["Candidate actions generated", diagnostics.candidateActions],
     ["Invalid candidates removed", diagnostics.invalidCandidatesRemoved],
@@ -523,11 +531,11 @@ function ActionDiagnostics({ data }: { data: AttentionCenterData }) {
   ] as const;
   return (
     <details className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-      <summary className="cursor-pointer text-sm font-bold text-board-navy">Generation diagnostics</summary>
+      <summary className="cursor-pointer text-sm font-bold text-board-navy">{ui("Generation diagnostics")}</summary>
       <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
         {rows.map(([label, value]) => (
           <div key={label} className="rounded-md bg-board-paper px-3 py-2">
-            <p className="text-[11px] font-black uppercase text-slate-500">{label}</p>
+            <p className="text-[11px] font-black uppercase text-slate-500">{ui(label)}</p>
             <p className="mt-1 text-lg font-black text-board-navy">{value}</p>
           </div>
         ))}
@@ -536,17 +544,18 @@ function ActionDiagnostics({ data }: { data: AttentionCenterData }) {
   );
 }
 
-function SnoozeForm({ item, returnTo }: { item: AttentionItem; returnTo: string }) {
+function SnoozeForm({ item, returnTo, locale }: { item: AttentionItem; returnTo: string; locale: Locale }) {
+  const ui = createSystemTranslator(locale);
   return (
     <form action={snoozeAttentionItem} className="flex items-center gap-2">
       <ActionHidden item={item} returnTo={returnTo} />
       <select name="snooze" defaultValue="3d" className="h-8 rounded-md border border-board-line bg-white px-2 text-xs font-semibold text-slate-700">
-        <option value="tomorrow">Tomorrow</option>
-        <option value="3d">3 days</option>
-        <option value="1w">1 week</option>
-        <option value="2w">2 weeks</option>
+        <option value="tomorrow">{ui("Tomorrow")}</option>
+        <option value="3d">{ui("3 days")}</option>
+        <option value="1w">{ui("1 week")}</option>
+        <option value="2w">{ui("2 weeks")}</option>
       </select>
-      <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">Snooze</Button>
+      <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">{ui("Snooze")}</Button>
     </form>
   );
 }
@@ -573,7 +582,8 @@ function SummaryCard({ label, value, href, tone = "green" }: { label: string; va
   );
 }
 
-function EmptyState({ data }: { data: AttentionCenterData }) {
+function EmptyState({ data, locale }: { data: AttentionCenterData; locale: Locale }) {
+  const ui = createSystemTranslator(locale);
   const text = data.state.status === "snoozed"
     ? "No snoozed items."
     : data.state.status === "dismissed"
@@ -581,21 +591,24 @@ function EmptyState({ data }: { data: AttentionCenterData }) {
       : data.state.priority === "high-priority"
         ? "No high-priority Coach Actions."
     : data.state.priority !== "all"
-      ? `No ${attentionPriorityFilterLabels[data.state.priority].toLowerCase()} items.`
+        ? locale === "de" ? `Keine Einträge mit Priorität ${ui(attentionPriorityFilterLabels[data.state.priority]).toLowerCase()}.` : `No ${attentionPriorityFilterLabels[data.state.priority].toLowerCase()} items.`
       : data.state.category !== "all"
-        ? `No ${categoryLabel(data.state.category).toLowerCase()} items currently require attention.`
+        ? locale === "de" ? `Aktuell erfordern keine Einträge der Kategorie ${ui(categoryLabel(data.state.category)).toLowerCase()} Aufmerksamkeit.` : `No ${categoryLabel(data.state.category).toLowerCase()} items currently require attention.`
         : "You are up to date. No current Coach Actions match your active rules and filters.";
   return (
     <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
       <Bell className="mx-auto h-8 w-8 text-board-green" />
-      <h2 className="mt-3 text-lg font-bold text-board-navy">Nothing to process</h2>
-      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">{text}</p>
+      <h2 className="mt-3 text-lg font-bold text-board-navy">{ui("Nothing to process")}</h2>
+      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">{ui(text)}</p>
     </div>
   );
 }
 
-function highPriorityReason(item: AttentionItem) {
-  return `${attentionPriorityLabels[item.priority]} priority because: ${item.thresholdLabel}`;
+function highPriorityReason(item: AttentionItem, locale: Locale) {
+  const ui = createSystemTranslator(locale);
+  return locale === "de"
+    ? `${ui(attentionPriorityLabels[item.priority])}e Priorität, weil: ${item.thresholdLabel}`
+    : `${attentionPriorityLabels[item.priority]} priority because: ${item.thresholdLabel}`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

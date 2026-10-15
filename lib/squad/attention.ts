@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AnalyticsPeriod } from "@/lib/squad/analytics";
+import type { Locale } from "@/lib/i18n";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
 import { formatEventDate } from "@/lib/squad/attendance-format";
 import { isDefaultRatingCandidate } from "@/lib/squad/attendance-utils";
 import type { WorkspacePlayerSummary } from "@/lib/squad/workspace";
@@ -768,6 +770,45 @@ export function attentionTone(priority: AttentionPriority): "green" | "amber" | 
   if (priority === "medium") return "amber";
   if (priority === "low") return "neutral";
   return "green";
+}
+
+const translatableAttentionValues = new Set([
+  "Past due date",
+  "Next 7 days",
+  "None",
+  "Today",
+  "Injured",
+  "Sick",
+  "Not confirmed",
+  "Not set",
+  "Decision open",
+  "Missing",
+  "Saved",
+  "First impressions",
+  "Early tendency"
+]);
+
+/** Localizes only CoachBoard-owned attention copy. Player names, positions and
+ * free-text values remain exactly as entered. */
+export function localizeAttentionItems(items: AttentionItem[], locale: Locale): AttentionItem[] {
+  if (locale === "en") return items;
+  const ui = createSystemTranslator(locale);
+  return items.map((item) => ({
+    ...item,
+    title: ui(item.title),
+    explanation: ui(item.explanation),
+    thresholdLabel: ui(item.thresholdLabel),
+    periodLabel: item.periodLabel ? ui(item.periodLabel) : item.periodLabel,
+    evidence: item.evidence.map((entry) => ({
+      ...entry,
+      label: ui(entry.label),
+      value: typeof entry.value === "string" && translatableAttentionValues.has(entry.value)
+        ? ui(entry.value)
+        : entry.value,
+      supportingText: entry.supportingText ? ui(entry.supportingText) : entry.supportingText
+    })),
+    suggestedActions: item.suggestedActions.map((action) => ({ ...action, label: ui(action.label) }))
+  }));
 }
 
 export function filterAttentionItems(items: AttentionItem[], state: AttentionCenterState) {

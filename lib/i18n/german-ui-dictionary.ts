@@ -1,4 +1,5 @@
 import { workflowCopyDe } from "@/lib/i18n/workflow-copy-de";
+import { localizationCompletenessDe } from "@/lib/i18n/localization-completeness-de";
 
 export const germanUiDictionary: Record<string, string> = {
   "Action Center": "Aktionen",
@@ -708,10 +709,37 @@ export const germanUiDictionary: Record<string, string> = {
   "Profile": "Profil",
   "Account": "Konto",
   "Logout": "Abmelden",
-  ...workflowCopyDe
+  ...workflowCopyDe,
+  ...localizationCompletenessDe
 };
 
 export const germanUiPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
+  [/^The development review was due (\d+) days? ago\.$/i, (match) => `Die Entwicklungsüberprüfung war vor ${match[1]} Tag${match[1] === "1" ? "" : "en"} fällig.`],
+  [/^The development review is due in (\d+) days?\.$/i, (match) => `Die Entwicklungsüberprüfung ist in ${match[1]} Tag${match[1] === "1" ? "" : "en"} fällig.`],
+  [/^The latest observation was recorded (\d+) days ago\.$/i, (match) => `Die letzte Beobachtung wurde vor ${match[1]} Tagen erfasst.`],
+  [/^No observation after (\d+) days\.$/i, (match) => `Keine Beobachtung nach ${match[1]} Tagen.`],
+  [/^Participation is (\d+)% in the selected period across all relevant historical training snapshots\.$/i, (match) => `Die Teilnahmequote beträgt im ausgewählten Zeitraum über alle relevanten historischen Trainingsstände ${match[1]} %.`],
+  [/^Below (\d+)% in (.+)\.$/i, (match) => `Unter ${match[1]} % im Zeitraum ${match[2]}.`],
+  [/^(\d+) penalised late arrivals are recorded in the selected period\.$/i, (match) => `${match[1]} sanktionierte Verspätungen sind im ausgewählten Zeitraum erfasst.`],
+  [/^(\d+) or more penalised late arrivals\.$/i, (match) => `${match[1]} oder mehr sanktionierte Verspätungen.`],
+  [/^(\d+) late cancellations are recorded in the selected period\.$/i, (match) => `${match[1]} verspätete Absagen sind im ausgewählten Zeitraum erfasst.`],
+  [/^(\d+) rated trainings? are available in the selected period\.$/i, (match) => `${match[1]} bewertete${match[1] === "1" ? "s Training ist" : " Trainings sind"} im ausgewählten Zeitraum verfügbar.`],
+  [/^At least (\d+) rated attended trainings expected\.$/i, (match) => `Mindestens ${match[1]} bewertete Teilnahmen werden erwartet.`],
+  [/^The current trend is (-?\d+(?:\.\d+)?) in the selected period\.$/i, (match) => `Der aktuelle Trend beträgt im ausgewählten Zeitraum ${match[1].replace(".", ",")}.`],
+  [/^Trend at or below (-?\d+(?:\.\d+)?)\.$/i, (match) => `Trend bei oder unter ${match[1].replace(".", ",")}.`],
+  [/^The high-priority goal "(.+)" has no recent observation follow-up\.$/i, (match) => `Zum Ziel mit hoher Priorität „${match[1]}“ liegt keine aktuelle Folgebeobachtung vor.`],
+  [/^No progress observation after (\d+) days\.$/i, (match) => `Keine Fortschrittsbeobachtung nach ${match[1]} Tagen.`],
+  [/^Expected return passed (\d+) days? ago\. Actual return has not been confirmed\.$/i, (match) => `Die erwartete Rückkehr liegt ${match[1]} Tag${match[1] === "1" ? "" : "e"} zurück. Die tatsächliche Rückkehr wurde nicht bestätigt.`],
+  [/^Trial Player has been active for (\d+) days\.$/i, (match) => `Der Probespieler ist seit ${match[1]} Tagen aktiv.`],
+  [/^Decision reminder after (\d+) days\.$/i, (match) => `Entscheidungserinnerung nach ${match[1]} Tagen.`],
+  [/^Trial duration is (\d+) days\.$/i, (match) => `Das Probetraining läuft seit ${match[1]} Tagen.`],
+  [/^Trial duration above (\d+) days\.$/i, (match) => `Dauer des Probetrainings über ${match[1]} Tagen.`],
+  [/^Only (\d+) rated trainings? available for this Trial Player\.$/i, (match) => `Für diesen Probespieler ${match[1] === "1" ? "ist nur 1 bewertetes Training" : `sind nur ${match[1]} bewertete Trainings`} verfügbar.`],
+  [/^(.+) has no linked Training Plan yet\.$/i, (match) => `${match[1]} hat noch keinen verknüpften Trainingsplan.`],
+  [/^(\d+) player has not responded for (.+)\.$/i, (match) => `1 Spieler hat für ${match[2]} noch nicht geantwortet.`],
+  [/^(\d+) players have not responded for (.+)\.$/i, (match) => `${match[1]} Spieler haben für ${match[2]} noch nicht geantwortet.`],
+  [/^(.+) still needs final attendance before the session review\.$/i, (match) => `Für ${match[1]} muss vor der Einheitenreflexion noch die endgültige Anwesenheit erfasst werden.`],
+  [/^(.+) needs one coach reflection\.$/i, (match) => `Für ${match[1]} fehlt noch eine Trainerreflexion.`],
   [/^(\d+) Training ratings? missing$/i, (match) => `${match[1]} Trainingsbewertungen offen`],
   [/^(\d+) of (\d+) expected overall ratings are still missing for (.+)\.$/i, (match) => `Für ${match[3]} fehlen noch ${match[1]} von ${match[2]} erwarteten Gesamtbewertungen.`],
   [/^(\d+) included · (\d+) unassigned · (\d+) excluded$/i, (match) => `${match[1]} einbezogen · ${match[2]} nicht zugeordnet · ${match[3]} ausgeschlossen`],

@@ -193,7 +193,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
   ]);
   if (!hub) notFound();
   const [attentionItems, scoutingLinkResult] = await Promise.all([
-    getPlayerAttentionSummary(supabase, user.id, id, period),
+    getPlayerAttentionSummary(supabase, user.id, id, period, locale),
     asScoutingDb(supabase).from("scouting_players").select("id").eq("user_id", user.id).eq("linked_squad_player_id", id).maybeSingle()
   ]);
   if (scoutingLinkResult.error) throw new Error(scoutingLinkResult.error.message);

@@ -81,7 +81,7 @@ export default async function DashboardPage() {
       .order("updated_at", { ascending: false })
       .limit(5),
     getDevelopmentDashboardSummary(supabase, user.id, activeTeam.id),
-    getDashboardAttentionData(supabase, user.id),
+    getDashboardAttentionData(supabase, user.id, locale),
     listTrainingEventDetails(supabase, user.id, { squadId: activeTeam.id })
   ]);
   const now = trainingNowParts();

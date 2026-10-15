@@ -8,6 +8,7 @@ import { isExpectedFromPlannedStatus } from "../lib/squad/attendance-utils.ts";
 import { formatRating, formatPercent } from "../lib/squad/analytics.ts";
 import { developmentCategoryLabel } from "../config/development.ts";
 import { localizationInventory } from "./localization-inventory.mjs";
+import { localizeAttentionItems } from "../lib/squad/attention.ts";
 
 test("reported Analytics and Development labels translate in both directions", () => {
   const labels = {
@@ -64,10 +65,67 @@ test("interpolated user values are never translated", () => {
   assert.equal(systemText("de", "{count} active goal", { count: 1 }), "1 aktives Entwicklungsziel");
 });
 
-test("the route inventory contains actual App Router pages only", () => {
-  const { routes, findings } = localizationInventory();
+test("localization preserves representative user-entered content", () => {
+  for (const value of ["John Smith", "Queens Park Rangers", "Quick transition game", "Press after loss"]) {
+    assert.equal(systemText("de", value), value);
+  }
+  const localized = localizeAttentionItems([{
+    key: "player:goal",
+    targetKind: "player",
+    targetId: "player",
+    playerId: "player",
+    playerName: "John Smith",
+    playerPosition: "CM",
+    playerType: "roster",
+    type: "high-priority-goal-follow-up",
+    category: "development",
+    priority: "high",
+    title: "High-priority goal needs follow-up",
+    explanation: 'The high-priority goal "Press after loss" has no recent observation follow-up.',
+    evidence: [{ label: "Goal", value: "Press after loss" }],
+    suggestedActions: [{ label: "Open Player Hub", href: "/squad/players/player" }],
+    thresholdLabel: "No progress observation after 14 days.",
+    detectedAt: "2026-10-15",
+    dismissible: false,
+    snoozeable: true
+  }], "de")[0];
+  assert.equal(localized.playerName, "John Smith");
+  assert.equal(localized.evidence[0].value, "Press after loss");
+  assert.match(localized.explanation, /Press after loss/);
+  assert.doesNotMatch(localized.explanation, /high-priority goal/);
+});
+
+test("Action Center runtime copy is localized before rendering", () => {
+  const localized = localizeAttentionItems([{
+    key: "training:plan",
+    targetKind: "training",
+    targetId: "training",
+    playerName: "Queens Park Rangers",
+    playerType: "roster",
+    type: "training-plan-missing",
+    category: "development",
+    priority: "high",
+    title: "Training Plan missing",
+    explanation: "Quick transition game has no linked Training Plan yet.",
+    evidence: [{ label: "Plan", value: "Missing" }],
+    suggestedActions: [{ label: "Plan Training", href: "/trainings/training/plan" }],
+    thresholdLabel: "Upcoming training within 7 days has no linked plan.",
+    detectedAt: "2026-10-15",
+    dismissible: true,
+    snoozeable: true
+  }], "de")[0];
+  assert.equal(localized.playerName, "Queens Park Rangers");
+  assert.match(localized.explanation, /^Quick transition game hat/);
+  assert.equal(localized.evidence[0].value, "Fehlt");
+  assert.equal(localized.suggestedActions[0].label, "Training planen");
+});
+
+test("the strict route inventory contains no unresolved user-facing English copy", () => {
+  const { routes, candidates, findings, compatibilityCovered } = localizationInventory();
   assert.ok(routes.some(({ route }) => route === "/squad/analysis"));
   assert.ok(routes.some(({ route }) => route === "/trainings/[id]/plan"));
   assert.ok(routes.every(({ file, route }) => file.startsWith("app/") && !route.includes("..")));
-  assert.ok(findings.length > 0, "Source inventory must not pretend remaining legacy copy is fully localized.");
+  assert.ok(candidates.length >= 1000, "The strict audit must inspect the full user-facing source inventory.");
+  assert.equal(findings.length, 0, `Unresolved UI copy: ${findings.map((item) => `${item.file}:${item.line} ${item.text}`).join("\n")}`);
+  assert.equal(compatibilityCovered.length, candidates.length);
 });

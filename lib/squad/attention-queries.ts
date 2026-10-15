@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AnalyticsPeriod } from "@/lib/squad/analytics";
+import type { Locale } from "@/lib/i18n";
 import {
   applyAttentionStates,
   attentionSummary,
@@ -9,6 +10,7 @@ import {
   getTrainingAttentionItems,
   isSnoozed,
   listAttentionStates,
+  localizeAttentionItems,
   parseAttentionCenterState,
   sortAttentionItems,
   type AttentionCenterData,
@@ -23,7 +25,7 @@ import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
-export async function getAttentionCenterData(supabase: SupabaseServerClient, userId: string, state: AttentionCenterState): Promise<AttentionCenterData> {
+export async function getAttentionCenterData(supabase: SupabaseServerClient, userId: string, state: AttentionCenterState, locale: Locale = "en"): Promise<AttentionCenterData> {
   const db = supabase as unknown as SupabaseClient;
   const preferences = await getAttentionPreferences(db, userId);
   const states = await listAttentionStates(db, userId);
@@ -47,7 +49,7 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
       periodLabel: workspace.periodRangeLabel || workspace.periodLabel
     }))
   ];
-  const actionWorthyItems = candidateItems.filter(isActionCenterWorthy);
+  const actionWorthyItems = localizeAttentionItems(candidateItems.filter(isActionCenterWorthy), locale);
   const allItems = applyAttentionStates(actionWorthyItems, states);
   const filtered = sortAttentionItems(filterAttentionItems(allItems, state), state);
   const summary = attentionSummary(allItems);
@@ -74,21 +76,21 @@ function isActionCenterWorthy(item: { category: string; priority: string; type: 
   return true;
 }
 
-export async function getDashboardAttentionSummary(supabase: SupabaseServerClient, userId: string) {
-  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({}));
+export async function getDashboardAttentionSummary(supabase: SupabaseServerClient, userId: string, locale: Locale = "en") {
+  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({}), locale);
   return data.summary;
 }
 
-export async function getDashboardAttentionData(supabase: SupabaseServerClient, userId: string) {
-  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({ status: "open", priority: "all" }));
+export async function getDashboardAttentionData(supabase: SupabaseServerClient, userId: string, locale: Locale = "en") {
+  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({ status: "open", priority: "all" }), locale);
   return {
     summary: data.summary,
     items: dashboardAttentionItems(data.allItems)
   };
 }
 
-export async function getPlayerAttentionSummary(supabase: SupabaseServerClient, userId: string, playerId: string, period: AnalyticsPeriod = "30d") {
-  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({ period, player: playerId }));
+export async function getPlayerAttentionSummary(supabase: SupabaseServerClient, userId: string, playerId: string, period: AnalyticsPeriod = "30d", locale: Locale = "en") {
+  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({ period, player: playerId }), locale);
   return data.allItems.filter((item) => item.playerId === playerId && item.dismissedAt == null && !isSnoozed(item));
 }
 
