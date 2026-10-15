@@ -198,7 +198,7 @@ try {
     assert.equal(await page.locator("#workflow-complete [data-workflow-primary]").count(),0);
     assert.equal(await page.locator("#workflow-future a").count(),2,"Dashboard-style workflow has one primary action plus Open Training");
     assert.ok(!(await page.locator("#workflow-review").innerText()).includes(de?"Bewertungen":"Ratings"),"Untouched Ratings must not become workflow debt");
-    assert.ok((await page.locator("#check-in").innerText()).includes(de?"Eingeplant":"Expected"));
+    assert.ok(!(await page.locator("#check-in").innerText()).includes(de?"Geplant: Erwartet":"Planned: Expected"),"Expected planning context should stay quiet in Check-in");
     assert.equal(await page.locator("#check-in").getByRole("button",{name:de?"Anwesend":"Present",exact:true}).count(),1);
     assert.ok((await page.locator("#sections").innerText()).includes(de?"Hauptteil 1":"Main part 1"));
     assert.equal(await page.locator("#custom").innerText(),"Present");
@@ -217,7 +217,7 @@ try {
     assert.ok((await page.locator("#history").innerText()).includes(de?"Geplanter Grund: Schule":"Planned reason: School"));
     assert.ok((await page.locator("#history").innerText()).includes("Quality"));
     const lateCheckIn=await page.locator("#late-cancellation-check-in").innerText();
-    assert.ok(lateCheckIn.includes(de?"Tatsächlich: Abwesend · Verspätet abgesagt":"Actual: Absent · Late cancellation"));
+    assert.ok(lateCheckIn.includes(de?"Abwesend · Verspätet abgesagt":"Absent · Late cancellation"));
     const lateHistory=await page.locator("#late-cancellation-history").innerText();
     assert.ok(lateHistory.includes(de?"Tatsächlich: Abwesend · Verspätet abgesagt":"Actual: Absent · Late cancellation"));
     assert.ok(lateHistory.includes("Cancelled shortly before Training."),"Factual attendance note must remain unchanged");

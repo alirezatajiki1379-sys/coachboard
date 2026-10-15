@@ -68,6 +68,10 @@ export function actualAbsenceReasonLabel(reason?: SquadAttendanceEntry["actualAb
   return reason ? systemText(locale, labels[reason]) : "";
 }
 
+export function checkInOpenLabel(locale: Locale = "en") {
+  return locale === "de" ? "Offen" : "Open";
+}
+
 export function effectiveActualAbsenceReason(entry: SquadAttendanceEntry): SquadAttendanceEntry["actualAbsenceReason"] {
   if (entry.actualAbsenceReason) return entry.actualAbsenceReason;
   if (entry.finalStatus === "S") return "late_cancellation";

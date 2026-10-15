@@ -92,7 +92,7 @@ assert.ok(!action.includes("availability"), "bulk action must not use current av
 assert.ok(action.includes("overall_rating: null"), "absent records must not retain ratings");
 
 const controlsSource = readFileSync(new URL("../components/squad/attendance-controls.tsx", import.meta.url), "utf8");
-assert.ok(controlsSource.includes("<ApplyAsExpectedAttendance eventId={event.id}"), "Quick Check-in must expose the shared action");
+assert.ok(controlsSource.includes("<CheckInActions eventId={event.id}") && controlsSource.includes("<ApplyAsExpectedAttendance eventId={eventId}"), "Quick Check-in must expose the shared action behind its bulk controls");
 assert.ok(controlsSource.includes("w-full shrink-0 justify-center px-4 sm:w-auto"), "action must remain usable on mobile");
 const trainingPageSource = readFileSync(new URL("../app/(app)/trainings/[id]/page.tsx", import.meta.url), "utf8");
 assert.ok(trainingPageSource.includes("<ApplyAsExpectedAttendance eventId={event.id}"), "Training attendance screen must expose the shared action");

@@ -3,11 +3,12 @@
 import { useSystemText } from "@/components/i18n/use-system-text";
 
 
-import { Check, ClipboardCheck, Clock3, HelpCircle, LogOut, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Check, ChevronDown, ClipboardCheck, Clock3, HelpCircle, LogOut, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
 import type { ReactNode } from "react";
 import { createContext, useActionState, useContext, useEffect, useState, useTransition } from "react";
-import { Button } from "@/components/ui/button";
+import { DialogPortal } from "@/components/shared/dialog-portal";
+import { useDialogFocus } from "@/components/shared/use-dialog-focus";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { developmentCategoryLabel, developmentGoalCategories } from "@/config/development";
 import { formatDate } from "@/lib/i18n";
 import { createPlayerObservation } from "@/lib/squad/development-actions";
@@ -18,14 +19,13 @@ import {
   markAllPresent,
   markAllExpected,
   updateAttendanceRating,
-  updateAttendanceRatingInline,
   updateFinalAttendanceInline,
   updatePlannedAttendanceInline,
   updatePlannedAttendance
 } from "@/lib/squad/attendance-actions";
 import type { ApplyAsExpectedAttendanceResult, AttendanceMutationResult, PlannedAttendanceMutationResult, RatingMutationResult } from "@/lib/squad/attendance-actions";
 import { updatePlayerMedicalPeriodStatus } from "@/lib/squad/player-hub-actions";
-import { actualAbsenceReasonLabel, attendanceDisplayName, effectiveActualAbsenceReason, finalStatusLabel, plannedReasonLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
+import { actualAbsenceReasonLabel, attendanceDisplayName, checkInOpenLabel, effectiveActualAbsenceReason, finalStatusLabel, plannedReasonLabel, plannedStatusLabel } from "@/lib/squad/attendance-format";
 import { attendanceCounts } from "@/lib/squad/attendance-format";
 import {
   attendanceReasonLabels,
@@ -69,9 +69,10 @@ function useCheckInTransition() {
   return transition;
 }
 
-type CheckInFilter = "all" | "present" | "absent" | "late" | "leftEarly" | "roster" | "trial";
+type CheckInFilter = "open" | "all" | "present" | "absent" | "late" | "leftEarly" | "roster" | "trial";
 
 const checkInFilterLabels: Record<CheckInFilter, string> = {
+  open: "Open",
   all: "All",
   present: "Present",
   absent: "Absent",
@@ -83,13 +84,20 @@ const checkInFilterLabels: Record<CheckInFilter, string> = {
 
 export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTrainingEventDetail; initialFilter?: CheckInFilter }) {
   const ui = useSystemText();
+  const locale = useOptionalI18n()?.locale ?? "en";
   const [entries, setEntries] = useState(event.attendance);
   const [filter, setFilter] = useState<CheckInFilter>(initialFilter);
+  const [editingExceptions, setEditingExceptions] = useState<Set<string>>(new Set());
   useEffect(() => setEntries(event.attendance), [event.attendance]);
   const counts = attendanceCounts(entries);
-  const presentEntries = entries.filter((entry) => isParticipatingAttendanceStatus(entry.finalStatus));
+  const openCount = entries.filter((entry) => !entry.finalStatus || editingExceptions.has(entry.id)).length;
+  const recordedCount = entries.length - openCount;
+  useEffect(() => {
+    if (openCount === 0 && filter === "open") setFilter("all");
+  }, [filter, openCount]);
   const visibleEntries = entries.filter((entry) => {
-    if (filter === "present") return isParticipatingAttendanceStatus(entry.finalStatus);
+    if (filter === "open") return !entry.finalStatus || editingExceptions.has(entry.id);
+    if (filter === "present") return entry.finalStatus === "present";
     if (filter === "late") return entry.finalStatus === "Z";
     if (filter === "leftEarly") return entry.finalStatus === "left_early";
     if (filter === "absent") return isAbsentAttendanceStatus(entry.finalStatus);
@@ -100,6 +108,15 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
 
   function updateEntry(nextEntry: SquadAttendanceEntry) {
     setEntries((current) => current.map((entry) => entry.id === nextEntry.id ? nextEntry : entry));
+  }
+
+  function setExceptionEditing(attendanceId: string, editing: boolean) {
+    setEditingExceptions((current) => {
+      const next = new Set(current);
+      if (editing) next.add(attendanceId);
+      else next.delete(attendanceId);
+      return next;
+    });
   }
 
   function applyBulkUpdates(updates: Extract<ApplyAsExpectedAttendanceResult, { ok: true }>["updates"]) {
@@ -128,54 +145,92 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
 
   return (
     <>
-      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <CheckInMetric label={ui("Present")} value={counts.present} tone="success" />
-        <CheckInMetric label={ui("Late")} value={counts.late} tone="warning" />
-        <CheckInMetric label={ui("Left early")} value={counts.leftEarly} tone="warning" />
-        <CheckInMetric label={ui("Absent")} value={counts.absent} tone="danger" />
-        <CheckInMetric label={ui("Total")} value={entries.length} />
-      </div>
-      {presentEntries.length ? (
-        <p className="mt-3 text-xs font-semibold text-slate-500">
-          {ui("{count} goalkeepers present · {trials} trial players present", { count: counts.goalkeepersPresent, trials: counts.trialPlayersPresent })}</p>
+      {entries.length ? (
+        <div className="sticky top-[4.25rem] z-10 mt-5 rounded-lg border border-board-line bg-white/95 p-3 shadow-soft backdrop-blur sm:static sm:bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-board-navy">{ui("{recorded} of {total} recorded", { recorded: recordedCount, total: entries.length })}</p>
+              <p className={cn("text-sm font-bold", openCount ? "text-amber-700" : "text-board-green")}>
+                {openCount ? ui("{count} open", { count: openCount }) : ui("Attendance complete")}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-slate-600">
+              <span>{ui("Present")} {counts.present}</span>
+              {counts.late ? <span>{ui("Late")} {counts.late}</span> : null}
+              {counts.absent ? <span>{ui("Absent")} {counts.absent}</span> : null}
+              {counts.leftEarly ? <span>{ui("Left early")} {counts.leftEarly}</span> : null}
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:flex">
+            {(["open", "all"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setFilter(item)}
+                className={cn(
+                  "inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-bold transition",
+                  filter === item ? "bg-board-green text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                )}
+              >
+                {item === "open" ? checkInOpenLabel(locale) : ui(checkInFilterLabels[item])}{item === "open" ? ` ${openCount}` : ""}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : null}
       {entries.length ? (
         <div className="mt-4 space-y-3">
-          <ApplyAsExpectedAttendance eventId={event.id} entries={entries} onApplied={applyBulkUpdates} />
-          <CheckInActions eventId={event.id} />
+          <CheckInActions eventId={event.id} entries={entries} onApplied={applyBulkUpdates} />
         </div>
       ) : null}
 
       {entries.length ? (
-        <nav className="mt-5 flex gap-2 overflow-x-auto rounded-lg border border-board-line bg-white p-2 shadow-soft" aria-label={ui("Check-in filters")}>
-          {(Object.keys(checkInFilterLabels) as CheckInFilter[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setFilter(item)}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-2 text-sm font-semibold transition",
-                filter === item ? "bg-board-green text-white" : "text-slate-600 hover:bg-slate-100 hover:text-board-navy"
-              )}
-            >
-              {ui(checkInFilterLabels[item])}
-            </button>
-          ))}
-        </nav>
+        <details className="mt-3 rounded-lg border border-board-line bg-white shadow-soft">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 text-sm font-bold text-board-navy">
+            {ui("Filters")}
+            <ChevronDown className="h-4 w-4 text-slate-500" />
+          </summary>
+          <nav className="flex flex-wrap gap-2 border-t border-board-line p-2" aria-label={ui("Check-in filters")}>
+            {(["present", "absent", "late", "leftEarly", "roster", "trial"] as const).map((item) => {
+              const count = item === "present" ? counts.present : item === "absent" ? counts.absent : item === "late" ? counts.late : item === "leftEarly" ? counts.leftEarly : item === "trial" ? entries.filter((entry) => entry.player?.playerType === "trial").length : entries.filter((entry) => entry.player?.playerType !== "trial").length;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setFilter(item)}
+                  className={cn(
+                    "min-h-10 rounded-md px-3 py-2 text-sm font-semibold transition",
+                    filter === item ? "bg-board-green text-white" : "text-slate-600 hover:bg-slate-100 hover:text-board-navy"
+                  )}
+                >
+                  {ui(checkInFilterLabels[item])}{count ? ` ${count}` : ""}
+                </button>
+              );
+            })}
+          </nav>
+        </details>
+      ) : null}
+
+      {entries.length && openCount === 0 ? (
+        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="font-bold text-green-800">{ui("Attendance complete")}</p>
+          <ButtonLink href={`/trainings/${event.id}`} variant="secondary" className="w-full justify-center sm:w-auto">{ui("Back to training")}</ButtonLink>
+        </div>
       ) : null}
 
       <section className="mt-5 space-y-3">
         {entries.length ? (
           visibleEntries.length ? (
-            visibleEntries.map((entry) => <CheckInRow key={entry.id} entry={entry} eventId={event.id} eventDate={event.date} onEntryChange={updateEntry} />)
+            visibleEntries.map((entry) => <CheckInRow key={entry.id} entry={entry} eventId={event.id} eventDate={event.date} onEntryChange={updateEntry} onExceptionEditingChange={setExceptionEditing} />)
           ) : (
             <p className="rounded-lg border border-dashed border-board-line bg-white p-5 text-center text-sm font-semibold text-slate-500 shadow-soft">
               {ui("No players match this filter.")}</p>
           )
         ) : (
           <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
-            <h2 className="font-bold text-board-navy">{ui("No players to check in")}</h2>
-            <p className="mt-2 text-sm text-slate-600">{ui("Go back to the event and add squad or trial players first.")}</p>
+            <h2 className="font-bold text-board-navy">{ui("No players for this training")}</h2>
+            <p className="mt-2 text-sm text-slate-600">{ui("Add or sync players from the Training first.")}</p>
+            <ButtonLink href={`/trainings/${event.id}`} variant="secondary" className="mt-4 w-full justify-center sm:w-auto">{ui("Back to training")}</ButtonLink>
           </div>
         )}
       </section>
@@ -193,7 +248,6 @@ export function ApplyAsExpectedAttendance({
   onApplied?: (updates: Extract<ApplyAsExpectedAttendanceResult, { ok: true }>["updates"]) => void;
 }) {
   const ui = useSystemText();
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<ApplyAsExpectedAttendanceResult | null>(null);
   const summary = getApplyAsExpectedSummary(entries);
@@ -204,12 +258,11 @@ export function ApplyAsExpectedAttendance({
       const nextResult = await applyAttendanceAsExpected(eventId);
       setResult(nextResult);
       if (nextResult.ok) onApplied?.(nextResult.updates);
-      router.refresh();
     });
   }
 
   return (
-    <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 sm:p-4" aria-labelledby={`apply-as-expected-${eventId}`}>
+    <section className="rounded-md border border-emerald-200 bg-emerald-50 p-3" aria-labelledby={`apply-as-expected-${eventId}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h3 id={`apply-as-expected-${eventId}`} className="flex items-center gap-2 text-sm font-bold text-board-navy">
@@ -376,28 +429,57 @@ export function PlannedAttendanceControls({ entry, eventId, returnTo }: { entry:
   );
 }
 
-export function CheckInActions({ eventId }: { eventId: string }) {
+export function CheckInActions({
+  eventId,
+  entries,
+  onApplied
+}: {
+  eventId: string;
+  entries: SquadAttendanceEntry[];
+  onApplied?: (updates: Extract<ApplyAsExpectedAttendanceResult, { ok: true }>["updates"]) => void;
+}) {
   const ui = useSystemText();
+  const [confirmAllOpen, setConfirmAllOpen] = useState(false);
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-      <form action={markAllExpectedPresent}>
+    <div className="space-y-2">
+      <form action={markAllExpectedPresent} className="w-full sm:w-auto">
         <input type="hidden" name="eventId" value={eventId} />
-        <Button type="submit" variant="secondary" className="h-10 w-full justify-center px-3 sm:w-auto">{ui("Mark expected as present")}</Button>
+        <Button type="submit" className="h-11 w-full justify-center px-4 sm:w-auto">{ui("Mark expected as present")}</Button>
       </form>
-      <form action={markAllPresent}>
-        <input type="hidden" name="eventId" value={eventId} />
-        <Button
-          type="submit"
-          className="h-10 w-full justify-center px-3 sm:w-auto"
-          onClick={(event) => {
-            if (!window.confirm("Mark every player in this event as present? This can overwrite existing actual statuses.")) {
-              event.preventDefault();
-            }
-          }}
-        >
-          {ui("Mark all present")}</Button>
-      </form>
+      <details className="rounded-lg border border-board-line bg-white">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 text-sm font-bold text-board-navy">
+          {ui("More bulk actions")}
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </summary>
+        <div className="space-y-3 border-t border-board-line p-3">
+          <ApplyAsExpectedAttendance eventId={eventId} entries={entries} onApplied={onApplied} />
+          <Button type="button" variant="danger" className="h-11 w-full justify-center sm:w-auto" onClick={() => setConfirmAllOpen(true)}>
+            {ui("Mark all present")}
+          </Button>
+        </div>
+      </details>
+      {confirmAllOpen ? <MarkAllPresentDialog eventId={eventId} onClose={() => setConfirmAllOpen(false)} /> : null}
     </div>
+  );
+}
+
+function MarkAllPresentDialog({ eventId, onClose }: { eventId: string; onClose: () => void }) {
+  const ui = useSystemText();
+  const dialogRef = useDialogFocus<HTMLFormElement>(true, onClose);
+  return (
+    <DialogPortal>
+      <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-slate-950/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="mark-all-present-title">
+        <form ref={dialogRef} tabIndex={-1} action={markAllPresent} className="app-dialog-panel w-full max-w-md rounded-lg bg-white p-5 shadow-xl outline-none">
+          <input type="hidden" name="eventId" value={eventId} />
+          <h2 id="mark-all-present-title" className="text-lg font-bold text-board-navy">{ui("Mark all participants as present?")}</h2>
+          <p className="mt-2 text-sm text-slate-600">{ui("Existing actual attendance statuses can be overwritten.")}</p>
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="ghost" className="h-11 w-full sm:w-auto" onClick={onClose}>{ui("Cancel")}</Button>
+            <Button type="submit" variant="danger" className="h-11 w-full sm:w-auto">{ui("Mark all present")}</Button>
+          </div>
+        </form>
+      </div>
+    </DialogPortal>
   );
 }
 
@@ -411,15 +493,31 @@ export function MarkAllExpectedButton({ eventId }: { eventId: string }) {
   );
 }
 
-export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry: SquadAttendanceEntry; eventId: string; eventDate: string; onEntryChange?: (entry: SquadAttendanceEntry) => void }) {
+export function CheckInRow({
+  entry,
+  eventId,
+  eventDate,
+  onEntryChange,
+  onExceptionEditingChange
+}: {
+  entry: SquadAttendanceEntry;
+  eventId: string;
+  eventDate: string;
+  onEntryChange?: (entry: SquadAttendanceEntry) => void;
+  onExceptionEditingChange?: (attendanceId: string, editing: boolean) => void;
+}) {
   const ui = useSystemText();
   const locale = useOptionalI18n()?.locale ?? "en";
   const transition = useTransition();
   const [currentEntry, setCurrentEntry] = useState(entry);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => setCurrentEntry(entry), [entry]);
   const entryWithState = currentEntry;
-  function handleEntryChange(nextEntry: SquadAttendanceEntry) {
+  function handleOptimisticEntry(nextEntry: SquadAttendanceEntry) {
+    setCurrentEntry(nextEntry);
+  }
+  function handleCommittedEntry(nextEntry: SquadAttendanceEntry) {
     setCurrentEntry(nextEntry);
     onEntryChange?.(nextEntry);
   }
@@ -429,6 +527,14 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
   const isParticipating = isParticipatingAttendanceStatus(entryWithState.finalStatus);
   const showsActualAttendanceDetails = isLate || isAbsent || isLeftEarly;
   const actualAbsenceReason = effectiveActualAbsenceReason(entryWithState);
+  const showsPlannedContext = entryWithState.plannedStatus === "unavailable" || entryWithState.plannedStatus === "unclear" || Boolean(entryWithState.plannedReason);
+  const actualStatusText = isAbsent
+    ? `${ui("Absent")}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}`
+    : isLate
+      ? `${ui("Late")}${entryWithState.lateMinutes !== undefined ? ` · ${entryWithState.lateMinutes} ${ui("min.")}` : ""}`
+      : isLeftEarly
+        ? `${ui("Left early")}${entryWithState.leftEarlyMinute !== undefined ? ` · ${entryWithState.leftEarlyMinute}. ${ui("min.")}` : ""}`
+        : ui(finalStatusLabel(entryWithState.finalStatus));
   const statusTone = entryWithState.finalStatus
     ? entryWithState.finalStatus === "present" || entryWithState.finalStatus === "Z"
       ? "bg-green-50 text-green-700"
@@ -442,58 +548,46 @@ export function CheckInRow({ entry, eventId, eventDate, onEntryChange }: { entry
     <article className="min-w-0 break-words rounded-lg border border-board-line bg-white p-3 shadow-soft sm:p-4">
       <fieldset disabled={transition[0]} className="min-w-0 flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-lg font-bold text-board-navy">
               <span translate="no">{attendanceDisplayName(entryWithState)}</span>
-              {entryWithState.player?.playerType === "trial" ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{ui("Trial")}</span> : null}
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
               {entryWithState.player?.position ? <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{entryWithState.player.position}</span> : null}
               {entryWithState.player?.playerType === "trial" ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{ui("Trial player")}</span> : null}
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
-                {ui("Planned: ")}{ui(plannedStatusLabel(entryWithState.plannedStatus))}{plannedReasonLabel(entryWithState.plannedReason) ? ` · ${ui(plannedReasonLabel(entryWithState.plannedReason))}` : ""}
-              </span>
-              <span className={`rounded-full px-2 py-1 ${statusTone}`}>
-                {ui("Actual: ")}{isAbsent ? `${ui("Absent")}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}` : `${ui(finalStatusLabel(entryWithState.finalStatus))}${actualAbsenceReason ? ` · ${ui(actualAbsenceReasonLabel(actualAbsenceReason))}` : ""}`}
-              </span>
+              {showsPlannedContext ? (
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                  {ui(plannedStatusLabel(entryWithState.plannedStatus))}{plannedReasonLabel(entryWithState.plannedReason) ? ` · ${ui(plannedReasonLabel(entryWithState.plannedReason))}` : ""}
+                </span>
+              ) : null}
+              {entryWithState.finalStatus ? <span className={`rounded-full px-2 py-1 ${statusTone}`}>{actualStatusText}</span> : null}
             </div>
-            {entryWithState.plannedReasonNote && !showsActualAttendanceDetails ? (
+            {entryWithState.plannedReasonNote && !detailsOpen ? (
               <p translate="no" className="mt-1 text-sm text-slate-500">&ldquo;{entryWithState.plannedReasonNote}&rdquo;</p>
             ) : null}
-            {isLeftEarly && entryWithState.leftEarlyMinute !== undefined ? (
-              <p className="mt-2 text-sm font-semibold text-orange-700">{ui("Left after minute")}: {entryWithState.leftEarlyMinute}</p>
-            ) : null}
-            {entryWithState.actualAttendanceNote && !showsActualAttendanceDetails ? (
+            {entryWithState.actualAttendanceNote && !detailsOpen ? (
               <p translate="no" className="mt-1 text-sm text-slate-700">&ldquo;{entryWithState.actualAttendanceNote}&rdquo;</p>
             ) : null}
             {entryWithState.medicalAvailability ? (
-              <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-2.5 py-2 text-xs text-red-800">
-                <p className="flex flex-wrap items-center gap-1 font-bold">
-                  <Stethoscope className="h-3.5 w-3.5" />
-                  <span>{ui("Medical")}: {ui(entryWithState.medicalAvailability.label)}</span>
-                  {entryWithState.medicalAvailability.description ? <span translate="no">· {entryWithState.medicalAvailability.description}</span> : null}
-                  {entryWithState.medicalAvailability.needsReview ? <span>· {ui("Return needs review")}</span> : null}
-                </p>
-                {entryWithState.medicalAvailability.until ? (
-                  <p className="mt-1">{ui("Expected return")}: {formatDate(entryWithState.medicalAvailability.until, locale)}</p>
-                ) : null}
+              <div className="mt-2 inline-flex max-w-full flex-wrap items-center gap-1 rounded-md border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-800">
+                <Stethoscope className="h-3.5 w-3.5 shrink-0" />
+                <span>{ui(entryWithState.medicalAvailability.label)}</span>
+                {entryWithState.medicalAvailability.until ? <span>· {ui("Expected return")} {formatDate(entryWithState.medicalAvailability.until, locale)}</span> : null}
+                {entryWithState.medicalAvailability.needsReview ? <span>· {ui("Return needs review")}</span> : null}
               </div>
             ) : null}
             {entryWithState.coachNote ? <p className="mt-2 text-sm text-slate-600">{entryWithState.coachNote}</p> : null}
             {error ? <p className="mt-2 text-sm font-semibold text-red-700" role="alert">{ui(error)}</p> : null}
           </div>
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
-            <FinalStatusButton entry={entryWithState} eventId={eventId} status="present" label={ui("Present")} icon={<Check className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
-            <FinalStatusButton entry={entryWithState} eventId={eventId} status="Z" label={ui("Late")} icon={<Clock3 className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
-            <FinalStatusButton entry={entryWithState} eventId={eventId} status="absent" label={ui("Absent")} icon={<UserMinus className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
-            <FinalStatusButton entry={entryWithState} eventId={eventId} status="left_early" label={ui("Left early")} icon={<LogOut className="h-4 w-4" />} onOptimisticEntry={handleEntryChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="present" label={ui("Present")} icon={<Check className="h-4 w-4" />} onOptimisticEntry={handleOptimisticEntry} onCommittedEntry={handleCommittedEntry} onOpenDetails={() => setDetailsOpen(true)} onExceptionEditingChange={onExceptionEditingChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="Z" label={ui("Late")} icon={<Clock3 className="h-4 w-4" />} onOptimisticEntry={handleOptimisticEntry} onCommittedEntry={handleCommittedEntry} onOpenDetails={() => setDetailsOpen(true)} onExceptionEditingChange={onExceptionEditingChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="absent" label={ui("Absent")} icon={<UserMinus className="h-4 w-4" />} onOptimisticEntry={handleOptimisticEntry} onCommittedEntry={handleCommittedEntry} onOpenDetails={() => setDetailsOpen(true)} onExceptionEditingChange={onExceptionEditingChange} onError={setError} />
+            <FinalStatusButton entry={entryWithState} eventId={eventId} status="left_early" label={ui("Left early")} icon={<LogOut className="h-4 w-4" />} onOptimisticEntry={handleOptimisticEntry} onCommittedEntry={handleCommittedEntry} onOpenDetails={() => setDetailsOpen(true)} onExceptionEditingChange={onExceptionEditingChange} onError={setError} />
           </div>
         </div>
-        {isParticipating ? (
-          <InlineRatingControl entry={entryWithState} eventId={eventId} onOptimisticEntry={handleEntryChange} onError={setError} />
-        ) : null}
-        {isLate || isAbsent || isLeftEarly ? (
-          <ActualAttendanceDetails key={`${entryWithState.id}-${entryWithState.finalStatus}`} entry={entryWithState} eventId={eventId} onEntryChange={handleEntryChange} onError={setError} />
+        {showsActualAttendanceDetails && detailsOpen ? (
+          <ActualAttendanceDetails key={`${entryWithState.id}-${entryWithState.finalStatus}`} entry={entryWithState} eventId={eventId} onEntryChange={handleCommittedEntry} onDetailsSaved={() => { setDetailsOpen(false); onExceptionEditingChange?.(entryWithState.id, false); }} onError={setError} />
         ) : null}
         {entryWithState.medicalAvailability?.periodId && isParticipating ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
@@ -617,82 +711,17 @@ export function CompleteEventButton({ eventId }: { eventId: string }) {
   );
 }
 
-function InlineRatingControl({
-  entry,
-  eventId,
-  onOptimisticEntry,
-  onError
-}: {
-  entry: SquadAttendanceEntry;
-  eventId: string;
-  onOptimisticEntry: (entry: SquadAttendanceEntry) => void;
-  onError: (message: string) => void;
-}) {
-  const ui = useSystemText();
-  const [isPending, startTransition] = useCheckInTransition();
-
-  function updateRating(value: number | null) {
-    if (isPending) return;
-    const previous = entry;
-    const optimistic = { ...entry, overallRating: value ?? undefined };
-    onError("");
-    onOptimisticEntry(optimistic);
-    startTransition(async () => {
-      const formData = new FormData();
-      formData.set("eventId", eventId);
-      formData.set("attendanceId", entry.id);
-      if (value) formData.set("overallRating", String(value));
-      const result = await safeAttendanceMutation(() => updateAttendanceRatingInline(formData));
-      if (!result.ok) {
-        onOptimisticEntry(previous);
-        onError(result.message || "Rating could not be updated.");
-        return;
-      }
-      onOptimisticEntry({ ...optimistic, overallRating: result.overallRating ?? undefined });
-      onError(result.warning ?? "");
-    });
-  }
-
-  return (
-    <div className="rounded-md bg-green-50 p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs font-bold uppercase text-green-700">{ui("Rating")}</p>
-        <div className="flex flex-wrap gap-1.5">
-          {[1, 2, 3, 4, 5].map((rating) => {
-            const active = entry.overallRating === rating;
-            return (
-              <button
-                key={rating}
-                type="button"
-                disabled={isPending}
-                aria-pressed={active}
-                aria-label={ui(active ? "Rating {rating}, selected. Press again to remove rating." : "Rating {rating}", { rating })}
-                onClick={() => updateRating(toggleRatingValue(entry.overallRating, rating))}
-                className={cn(
-                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sm font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-board-green disabled:cursor-not-allowed disabled:opacity-70",
-                  active ? "bg-board-green text-white" : "bg-white text-board-navy ring-1 ring-green-200 hover:bg-green-100"
-                )}
-              >
-                {rating}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <p className="mt-1 text-xs text-green-800">{ui("Optional. Saved to the same rating used on the Ratings page.")}</p>
-    </div>
-  );
-}
-
 export function ActualAttendanceDetails({
   entry,
   eventId,
   onEntryChange,
+  onDetailsSaved,
   onError
 }: {
   entry: SquadAttendanceEntry;
   eventId: string;
   onEntryChange?: (entry: SquadAttendanceEntry) => void;
+  onDetailsSaved?: () => void;
   onError?: (message: string) => void;
 }) {
   const ui = useSystemText();
@@ -751,6 +780,7 @@ export function ActualAttendanceDetails({
       };
       setSavedEntry(nextEntry);
       onEntryChange?.(nextEntry);
+      onDetailsSaved?.();
       onError?.(result.warning ?? "");
     });
   }
@@ -759,7 +789,7 @@ export function ActualAttendanceDetails({
     <form action={saveDetails} className={`grid gap-3 rounded-md border p-3 ${tone} ${formLayout}`}>
       {needsReason ? (
         <label>
-          <span className="text-xs font-bold uppercase text-slate-600">{ui("Actual reason")} *</span>
+          <span className="text-xs font-bold uppercase text-slate-600">{ui("Reason")} *</span>
           <select name="actualAbsenceReason" defaultValue={currentReason ?? ""} disabled={isPending} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
             <option value="">{ui("Select reason")}</option>
             {actualAbsenceOptions.map((option) => <option key={option.reason} value={option.reason}>{ui(option.label)}</option>)}
@@ -785,7 +815,7 @@ export function ActualAttendanceDetails({
       {status === "Z" ? (
         <label className="flex min-h-11 items-center gap-2 rounded-md border border-board-line bg-white px-3 text-sm font-semibold text-slate-600">
           <input name="latePenaltyApplied" type="checkbox" defaultChecked={savedEntry.latePenaltyApplied} className="h-4 w-4" />
-          {ui("Reliability penalty")}
+          {ui("Count as late arrival")}
         </label>
       ) : null}
       <div className={saveLayout}>
@@ -804,6 +834,9 @@ function FinalStatusButton({
   label,
   icon,
   onOptimisticEntry,
+  onCommittedEntry,
+  onOpenDetails,
+  onExceptionEditingChange,
   onError
 }: {
   entry: SquadAttendanceEntry;
@@ -812,6 +845,9 @@ function FinalStatusButton({
   label: string;
   icon: ReactNode;
   onOptimisticEntry: (entry: SquadAttendanceEntry) => void;
+  onCommittedEntry: (entry: SquadAttendanceEntry) => void;
+  onOpenDetails: () => void;
+  onExceptionEditingChange?: (attendanceId: string, editing: boolean) => void;
   onError: (message: string) => void;
 }) {
   const ui = useSystemText();
@@ -836,7 +872,11 @@ function FinalStatusButton({
           ? "bg-white text-orange-700 ring-1 ring-orange-200 hover:bg-orange-50"
           : "bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50";
   function updateStatus() {
-    if (isPending || active) return;
+    if (isPending) return;
+    if (active) {
+      if (status !== "present") onOpenDetails();
+      return;
+    }
     const previous = entry;
     const actualAbsenceReason = status === "absent" || status === "left_early" ? defaultActualAbsenceReason(entry) : undefined;
     const optimistic: SquadAttendanceEntry = {
@@ -855,23 +895,25 @@ function FinalStatusButton({
       ratingAutoSuggestion: isParticipatingAttendanceStatus(status) ? entry.ratingAutoSuggestion : undefined
     };
     onError("");
+    const isException = status !== "present";
+    onExceptionEditingChange?.(entry.id, isException);
     onOptimisticEntry(optimistic);
+    if (isException) {
+      onOpenDetails();
+      return;
+    }
     startTransition(async () => {
       const formData = new FormData();
       formData.set("eventId", eventId);
       formData.set("attendanceId", entry.id);
-      formData.set("finalStatus", status);
-      if (actualAbsenceReason) formData.set("actualAbsenceReason", actualAbsenceReason);
-      if (entry.actualAttendanceNote) formData.set("actualAttendanceNote", entry.actualAttendanceNote);
-      if (status === "left_early" && entry.leftEarlyMinute !== undefined) formData.set("leftEarlyMinute", String(entry.leftEarlyMinute));
-      if (status === "Z" && entry.latePenaltyApplied) formData.set("latePenaltyApplied", "on");
+      formData.set("finalStatus", "present");
       const result = await safeAttendanceMutation(() => updateFinalAttendanceInline(formData));
       if (!result.ok) {
         onOptimisticEntry(previous);
         onError(result.message || "Attendance could not be updated. The previous status was restored.");
         return;
       }
-      onOptimisticEntry({
+      const committed = {
         ...optimistic,
         finalStatus: result.status,
         actualAbsenceReason: result.actualAbsenceReason ?? undefined,
@@ -880,7 +922,10 @@ function FinalStatusButton({
         leftEarlyMinute: result.leftEarlyMinute ?? undefined,
         latePenaltyApplied: result.latePenaltyApplied,
         overallRating: result.overallRating ?? undefined
-      });
+      };
+      onOptimisticEntry(committed);
+      onCommittedEntry(committed);
+      onExceptionEditingChange?.(entry.id, false);
       onError(result.warning ?? "");
     });
   }
@@ -890,7 +935,7 @@ function FinalStatusButton({
       type="button"
       aria-pressed={active}
       aria-busy={isPending}
-      disabled={isPending || active}
+      disabled={isPending || (active && status === "present")}
       onClick={updateStatus}
       className={`inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70 sm:flex-none sm:w-auto ${active ? tone : idle}`}
     >
@@ -916,21 +961,6 @@ function defaultActualAbsenceReason(entry: SquadAttendanceEntry): SquadActualAbs
   if (entry.finalStatus === "P") return "private";
   if (entry.finalStatus === "U") return "unexcused";
   return plannedReasonToActualAbsenceReason(entry.plannedReason) ?? undefined;
-}
-
-function CheckInMetric({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "success" | "warning" | "danger" }) {
-  const styles = {
-    neutral: "bg-slate-50 text-board-navy",
-    success: "bg-green-50 text-green-700",
-    warning: "bg-amber-50 text-amber-700",
-    danger: "bg-red-50 text-red-700"
-  };
-  return (
-    <div className={`rounded-md px-3 py-3 ${styles[tone]}`}>
-      <p className="text-xs font-bold uppercase tracking-wide opacity-75">{label}</p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
-    </div>
-  );
 }
 
 function RatingSelect({ name, label, defaultValue }: { name: string; label: string; defaultValue?: number }) {
