@@ -33,6 +33,8 @@
     "test:training-workflow": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/training-workflow-regression.mjs",
     "test:training-calendar-2": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/training-calendar-2-regression.mjs",
     "test:training-calendar-2-browser": "node scripts/training-calendar-2-browser.mjs",
+    "test:training-creation-2": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/training-creation-2-regression.mjs",
+    "test:training-creation-2-browser": "node scripts/training-creation-2-browser.mjs",
     "test:squad-planner": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/squad-planner-regression.mjs",
     "test:drill-image-upload": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/drill-image-upload-regression.mjs",
     "test:drill-import": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/drill-import-regression.mjs",

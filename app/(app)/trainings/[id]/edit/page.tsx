@@ -5,6 +5,7 @@ import { TrainingEventForm } from "@/components/squad/training-event-form";
 import { getLinkableTrainingSessions, getTrainingEventDetail, listTrainingParticipantOptions } from "@/lib/squad/attendance-queries";
 import { getTeamCalendarContext } from "@/lib/squad/regional-calendar-queries";
 import { listSquads } from "@/lib/squad/squads";
+import { getUserLocale } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 
 type EditTrainingPageProps = {
@@ -20,10 +21,11 @@ export default async function EditTrainingPage({ params }: EditTrainingPageProps
 
   if (!user) redirect("/login");
 
-  const [event, sessions, squads] = await Promise.all([
+  const [event, sessions, squads, locale] = await Promise.all([
     getTrainingEventDetail(supabase, user.id, id),
     getLinkableTrainingSessions(supabase, user.id),
-    listSquads(supabase, user.id)
+    listSquads(supabase, user.id),
+    getUserLocale(supabase, user.id)
   ]);
 
   if (!event) notFound();
@@ -31,17 +33,28 @@ export default async function EditTrainingPage({ params }: EditTrainingPageProps
     listTrainingParticipantOptions(supabase, user.id, event.squadId),
     getTeamCalendarContext(supabase, user.id, event.squadId, addMonths(event.date, -3), addMonths(event.date, 12))
   ]);
+  const copy = locale === "de" ? {
+    back: "Zurück zum Training",
+    eyebrow: "Trainings",
+    title: "Training bearbeiten",
+    description: "Passe Termin und Teilnehmer an, ohne bereits erfasste Anwesenheiten zu verändern."
+  } : {
+    back: "Back to Training",
+    eyebrow: "Trainings",
+    title: "Edit Training",
+    description: "Adjust the appointment and participants without changing recorded attendance history."
+  };
 
   return (
     <div className="space-y-6">
       <Link href={`/trainings/${event.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-board-navy">
         <ArrowLeft className="h-4 w-4" />
-        Back to training
+        {copy.back}
       </Link>
       <div>
-        <p className="text-sm font-semibold uppercase text-board-green">Trainings</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">Edit training</h1>
-        <p className="mt-2 text-slate-600">Adjust appointment details and participants without changing recorded attendance history.</p>
+        <p className="text-sm font-semibold uppercase text-board-green">{copy.eyebrow}</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{copy.title}</h1>
+        <p className="mt-2 text-slate-600">{copy.description}</p>
       </div>
       <TrainingEventForm sessions={sessions} squads={squads} participants={participants} event={event} mode="edit" calendarContext={calendarContext} />
     </div>
