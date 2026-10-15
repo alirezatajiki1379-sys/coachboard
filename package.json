@@ -23,6 +23,7 @@
     "test:rating-defaults": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/attendance-rating-defaults-regression.mjs",
     "test:session-review": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/session-review-regression.mjs",
     "test:analytics": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/analytics-data-correctness-regression.mjs",
+    "test:workspace-participation": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/workspace-participation-regression.mjs",
     "test:analytics-2": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/analytics-2-regression.mjs",
     "test:analytics-2-browser": "node scripts/analytics-2-summary-browser.mjs",
     "test:analytics-report-browser": "node scripts/team-analytics-report-browser.mjs",

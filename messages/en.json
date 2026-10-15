@@ -421,6 +421,7 @@
       "average": "Average",
       "attendance": "Attendance",
       "attendanceWhenExpected": "Attendance when expected",
+      "participatedDetail": "{attended} of {trainings} participated",
       "notExpected": "Not expected",
       "trend": "Trend",
       "review": "Review",

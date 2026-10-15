@@ -421,6 +421,7 @@
       "average": "Durchschnitt",
       "attendance": "Anwesenheit",
       "attendanceWhenExpected": "Anwesenheit bei Einplanung",
+      "participatedDetail": "{attended} von {trainings} teilgenommen",
       "notExpected": "Nicht eingeplant",
       "trend": "Trend",
       "review": "Überprüfung",
