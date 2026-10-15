@@ -732,10 +732,10 @@ function TrainingAnalyticsTable({ events, locale }: { events: TeamAnalyticsEvent
 
 function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-      <div className="mb-4 flex items-center gap-2 text-lg font-bold text-board-navy">
-        <span className="text-board-green">{icon}</span>
-        {title}
+    <section className="min-w-0 overflow-hidden rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <div className="mb-4 flex min-w-0 items-start gap-2 text-lg font-bold leading-tight text-board-navy">
+        <span className="shrink-0 text-board-green">{icon}</span>
+        <span className="min-w-0 break-words [overflow-wrap:anywhere]">{title}</span>
       </div>
       {children}
     </section>
@@ -744,9 +744,9 @@ function Panel({ title, icon, children }: { title: string; icon: ReactNode; chil
 
 function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-md bg-slate-50 p-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-bold text-board-navy">{value}</p>
+    <div className="min-w-0 overflow-hidden rounded-md bg-slate-50 p-3">
+      <p className="min-w-0 break-words text-xs font-bold uppercase leading-4 tracking-wide text-slate-500 [overflow-wrap:anywhere]">{label}</p>
+      <p className="mt-1 min-w-0 break-words text-xl font-bold leading-tight text-board-navy tabular-nums [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }
@@ -839,18 +839,18 @@ function MetricCell({ active, align, children }: { active: boolean; align?: "rig
 
 function MetricStack({ value, detail }: { value: string; detail: string }) {
   return (
-    <span className="inline-flex flex-col">
-      <span className="font-bold text-board-navy">{value}</span>
-      <span className="text-xs font-semibold text-slate-500">{detail}</span>
+    <span className="inline-flex min-w-0 max-w-full flex-col">
+      <span className="min-w-0 break-words font-bold leading-tight text-board-navy tabular-nums [overflow-wrap:anywhere]">{value}</span>
+      <span className="min-w-0 break-words text-xs font-semibold leading-4 text-slate-500 [overflow-wrap:anywhere]">{detail}</span>
     </span>
   );
 }
 
 function CompactMetric({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <div className={cn("rounded-md border border-slate-100 p-2", muted && "bg-green-50")}>
-      <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 font-bold text-board-navy">{value}</p>
+    <div className={cn("min-w-0 overflow-hidden rounded-md border border-slate-100 p-2", muted && "bg-green-50")}>
+      <p className="min-w-0 break-words text-xs font-bold uppercase leading-4 text-slate-500 [overflow-wrap:anywhere]">{label}</p>
+      <p className="mt-1 min-w-0 break-words font-bold leading-tight text-board-navy tabular-nums [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }

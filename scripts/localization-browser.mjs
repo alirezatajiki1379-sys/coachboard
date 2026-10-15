@@ -32,7 +32,7 @@ const bundle = await build({
     import SquadError from "@/app/(app)/squad/error";
     import ActionsError from "@/app/(app)/actions/error";
     import ActionsLoading from "@/app/(app)/actions/loading";
-    import {AttendanceEntryCard} from "@/app/(app)/squad/players/[id]/page";
+    import {AnalyticsMetricCard,AttendanceEntryCard,Mini,Stat} from "@/app/(app)/squad/players/[id]/page";
     window.qa={locale:"en",saves:0,ready:false};
     const root=createRoot(document.getElementById("root"));
     const entry={id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player:{firstName:"Quality",lastName:"",playerType:"roster",position:"CM",secondaryPositions:[]}};
@@ -54,6 +54,15 @@ const bundle = await build({
       const action=localizeAttentionItems([{key:"action",targetKind:"player",targetId:"player",playerId:"player",playerName:"John Smith",playerPosition:"CM",playerType:"roster",type:"high-priority-goal-follow-up",category:"development",priority:"high",title:"High-priority goal needs follow-up",explanation:'The high-priority goal "Press after loss" has no recent observation follow-up.',evidence:[{label:"Goal",value:"Press after loss"}],suggestedActions:[{label:"Open Player Hub",href:"/squad/players/player"}],thresholdLabel:"No progress observation after 14 days.",detectedAt:"2026-10-15",dismissible:false,snoozeable:true}],locale)[0];
       const server=await resolveServer(<>
         <section id="analytics">{["training","attendance","development","drills"].map(section=><AnalyticsSectionPanel key={section} section={section} teamAnalytics={analytics} summaries={[]}/>)}</section>
+        <section id="player-analytics-kpis" className="grid min-w-0 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <AnalyticsMetricCard href="#analytics" label={locale==="de"?"Durchschnittsbewertung":"Average rating"} value={locale==="de"?"4,2":"4.2"} detail={locale==="de"?"12 gespeicherte Bewertungen":"12 saved ratings"} tone="green"/>
+          <AnalyticsMetricCard href="#analytics" label={locale==="de"?"Zuverlässigkeit":"Reliability"} value="0" detail={locale==="de"?"Keine Zuverlässigkeitsabzüge":"No reliability penalties"} tone="green"/>
+        </section>
+        <section id="player-analytics-mini" className="grid min-w-0 gap-3 rounded-lg border border-board-line bg-white p-4 shadow-soft sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <Mini label={locale==="de"?"Tatsächliche Anwesenheit erfasst":"Recorded actual attendance"} value="12/12"/>
+          <Mini label={locale==="de"?"Anwesenheit bei Einplanung":"Attendance when expected"} value="100 %"/>
+          <Stat label={locale==="de"?"Durchschnittsbewertung":"Average rating"} value={locale==="de"?"4,2":"4.2"}/>
+        </section>
         <section id="history"><AttendanceEntryCard entry={{...entry,finalStatus:"Z",plannedReason:"school",lateMinutes:5,coachNote:"Present",event:{id:"event",date:"2026-09-19",label:"Quality"}}}/></section>
         <section id="late-cancellation-history"><AttendanceEntryCard entry={{...lateCancellationEntry,event:{id:"event-late-cancellation",date:"2026-09-20",label:"Fictional Training"}}}/></section>
         <section id="development"><PlayerDevelopmentSection playerId="player" development={populated?{
@@ -103,8 +112,8 @@ const bundle = await build({
     builder.onLoad({filter:/squad\/analysis\/page\.tsx$/},args=>({contents:readFileSync(args.path,"utf8")+"\nexport { AnalyticsSectionPanel };",loader:"tsx",resolveDir:path.dirname(args.path)}));
     builder.onLoad({filter:/squad\/players\/\[id\]\/page\.tsx$/},args=>{
       const tree=ts.createSourceFile(args.path,readFileSync(args.path,"utf8"),99,true,ts.ScriptKind.TSX);
-      const functions=tree.statements.filter(n=>ts.isFunctionDeclaration(n)&&["AttendanceEntryCard","Badge"].includes(n.name?.text)).map(n=>n.getText(tree)).join("\n");
-      return {contents:`import Link from "next/link";import {getActiveLocale} from "@/lib/i18n/server";import {createSystemTranslator} from "@/lib/i18n/system-text";import {formatNumber} from "@/lib/i18n";import {cn} from "@/lib/utils";import {actualAbsenceReasonLabel,formatEventDate,plannedStatusLabel,finalStatusLabel,plannedReasonLabel,reliabilityMalus,effectiveActualAbsenceReason} from "@/lib/squad/attendance-format";${functions}\nexport {AttendanceEntryCard};`,loader:"tsx",resolveDir:path.dirname(args.path)};
+      const functions=tree.statements.filter(n=>ts.isFunctionDeclaration(n)&&["AnalyticsMetricCard","AttendanceEntryCard","Badge","Mini","Stat","toneBorder","toneText"].includes(n.name?.text)).map(n=>n.getText(tree)).join("\n");
+      return {contents:`import type {ReactNode} from "react";import Link from "next/link";import {getActiveLocale} from "@/lib/i18n/server";import {createSystemTranslator} from "@/lib/i18n/system-text";import {formatNumber} from "@/lib/i18n";import {cn} from "@/lib/utils";import {actualAbsenceReasonLabel,formatEventDate,plannedStatusLabel,finalStatusLabel,plannedReasonLabel,reliabilityMalus,effectiveActualAbsenceReason} from "@/lib/squad/attendance-format";${functions}\nexport {AnalyticsMetricCard,AttendanceEntryCard,Mini,Stat};`,loader:"tsx",resolveDir:path.dirname(args.path)};
     });
   }}]
 });
@@ -128,6 +137,11 @@ try {
     const de=locale==="de";
     assert.ok((await page.locator("#analytics").innerText()).includes(de?"Trainingseinheiten":"Training Sessions"));
     assert.ok((await page.locator("#analytics").innerText()).includes(de?"3,5":"3.5"));
+    const playerAnalyticsText=await page.locator("#player-analytics-kpis, #player-analytics-mini").allInnerTexts();
+    const renderedPlayerAnalyticsText=playerAnalyticsText.join(" ").toLocaleUpperCase(locale);
+    for(const phrase of de?["Durchschnittsbewertung","Tatsächliche Anwesenheit erfasst","Keine Zuverlässigkeitsabzüge","Anwesenheit bei Einplanung"]:["Average rating","Recorded actual attendance","No reliability penalties","Attendance when expected"]){
+      assert.ok(renderedPlayerAnalyticsText.includes(phrase.toLocaleUpperCase(locale)),`Missing player Analytics label: ${phrase}; rendered: ${JSON.stringify(playerAnalyticsText)}`);
+    }
     assert.ok((await page.locator("#development").innerText()).includes(de?"Entwicklungsziel hinzufügen":"Add development goal"));
     assert.ok((await page.locator("#development").innerText()).includes(de?"0 aktive Entwicklungsziele":"0 active goals"));
     assert.ok((await page.locator("#check-in").innerText()).includes(de?"Eingeplant":"Expected"));
@@ -178,11 +192,21 @@ try {
     assert.equal(await page.locator('#development select[name="category"]').first().locator('option[value="physical"]').textContent(),locale==="de"?"Körperlich":"Physical");
   }
   assert.equal(await page.evaluate(()=>window.qa.saves),0,"Opening or switching language must not write data");
+  await page.setViewportSize({width:1440,height:1000});
+  const analyticsCard=page.locator("#player-analytics-kpis a").first();
+  await analyticsCard.scrollIntoViewIfNeeded();
+  const cardBeforeHover=await analyticsCard.boundingBox();
+  await analyticsCard.hover();
+  await page.waitForTimeout(250);
+  const cardAfterHover=await analyticsCard.boundingBox();
+  assert.deepEqual(cardAfterHover,cardBeforeHover,"Player Analytics KPI cards must not move or resize on hover");
   for(const locale of ["en","de"]){
     await page.getByRole("button",{name:locale.toUpperCase(),exact:true}).click();
     await page.waitForFunction(language=>window.qa.ready&&document.documentElement.lang===language,locale);
     for(const width of [320,360,375,390,430,768,1440]){
       await page.setViewportSize({width,height:1000});
+      const clippedAnalyticsText=await page.evaluate(()=>[...document.querySelectorAll("#player-analytics-kpis p, #player-analytics-mini p")].filter(el=>el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1).map(el=>el.textContent));
+      assert.deepEqual(clippedAnalyticsText,[],`${locale} clipped Player Analytics text at ${width}`);
       const overflowing=await page.evaluate(()=>[...document.querySelectorAll("#root *")].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1;}).slice(0,8).map(el=>({tag:el.tagName,text:el.textContent.slice(0,60),class:el.className})));
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${locale} overflow at ${width}: ${JSON.stringify(overflowing)}`);
     }

@@ -556,7 +556,7 @@ async function AnalyticsMetricGrid({ hub, period }: { hub: PlayerHubData; period
   const latestRatings = records.map((entry) => entry.overallRating).filter((rating): rating is number => typeof rating === "number").slice(0, 5);
   return (
     <section className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <AnalyticsMetricCard
           href={tabHref(hub.player.id, "analytics", period)}
           label={ui("Average rating")}
@@ -592,7 +592,7 @@ async function AnalyticsMetricGrid({ hub, period }: { hub: PlayerHubData; period
           icon={<ShieldAlert className="h-4 w-4" />}
         />
       </div>
-      <div className="grid gap-3 rounded-lg border border-board-line bg-white p-4 shadow-soft sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid min-w-0 gap-3 overflow-hidden rounded-lg border border-board-line bg-white p-4 shadow-soft sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <Mini label={ui("Attendance when expected")} value={formatPercent(summary.attendanceWhenExpectedRate, locale)} />
         <Mini label={ui("Not expected")} value={String(summary.notExpectedTrainings)} />
         <Mini label={ui("Recorded actual attendance")} value={`${summary.recordedTrainings}/${summary.trainings}`} />
@@ -1363,10 +1363,10 @@ function MedicalRecordCard({ playerId, period }: { playerId: string; period: Pla
 
 function AnalyticsMetricCard({ href, label, value, detail, tone, icon, children }: { href: string; label: string; value: string; detail: string; tone: MetricTone; icon?: ReactNode; children?: ReactNode }) {
   return (
-    <Link href={href} className={cn("block rounded-lg border bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-md", toneBorder(tone))}>
-      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">{icon}{label}</p>
-      <p className={cn("mt-2 text-3xl font-bold", toneText(tone))}>{value}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-600">{detail}</p>
+    <Link href={href} className={cn("block h-full min-w-0 overflow-hidden rounded-lg border bg-white p-4 shadow-soft transition-[border-color,background-color,box-shadow] duration-150 ease-out hover:border-board-green/40 hover:bg-slate-50/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-board-green/30", toneBorder(tone))}>
+      <p className="flex min-w-0 items-start gap-2 text-xs font-bold uppercase leading-4 tracking-wide text-slate-500">{icon ? <span className="mt-px shrink-0">{icon}</span> : null}<span className="min-w-0 break-words [overflow-wrap:anywhere]">{label}</span></p>
+      <p className={cn("mt-2 min-w-0 break-words text-2xl font-bold leading-tight tabular-nums sm:text-3xl", toneText(tone))}>{value}</p>
+      <p className="mt-1 min-w-0 break-words text-sm font-semibold leading-5 text-slate-600 [overflow-wrap:anywhere]">{detail}</p>
       {children ? <div className="mt-3">{children}</div> : null}
     </Link>
   );
@@ -1505,18 +1505,18 @@ function InfoPill({ label, value, icon }: { label: string; value: string; icon?:
 
 function Stat({ label, value, icon }: { label: string; value: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="rounded-md bg-slate-50 p-3">
-      <p className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500">{icon}{label}</p>
-      <div className="mt-1 text-xl font-bold text-board-navy">{value}</div>
+    <div className="min-w-0 overflow-hidden rounded-md bg-slate-50 p-3">
+      <p className="flex min-w-0 items-start gap-2 text-xs font-bold uppercase leading-4 text-slate-500">{icon ? <span className="shrink-0">{icon}</span> : null}<span className="min-w-0 break-words [overflow-wrap:anywhere]">{label}</span></p>
+      <div className="mt-1 min-w-0 break-words text-xl font-bold leading-tight text-board-navy tabular-nums [overflow-wrap:anywhere]">{value}</div>
     </div>
   );
 }
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-slate-50 p-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-bold text-board-navy">{value}</p>
+    <div className="min-w-0 overflow-hidden rounded-md bg-slate-50 p-3">
+      <p className="min-w-0 break-words text-xs font-bold uppercase leading-4 tracking-wide text-slate-500 [overflow-wrap:anywhere]">{label}</p>
+      <p className="mt-1 min-w-0 break-words text-sm font-bold leading-5 text-board-navy tabular-nums [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }

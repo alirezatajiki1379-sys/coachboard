@@ -53,7 +53,7 @@ export function AnalyticsPrimarySummary({
         />
       </section>
 
-      <section className="grid gap-3 md:grid-cols-3" data-primary-kpis>
+      <section className="grid min-w-0 items-stretch gap-3 md:grid-cols-3" data-primary-kpis>
         <PrimaryMetric
           icon={<Users className="h-4 w-4" />}
           label={singleTraining ? (locale === "de" ? "Teilnehmer" : "Participants") : (locale === "de" ? "Ø Teilnehmer / Training" : "Avg. participants / Training")}
@@ -154,19 +154,19 @@ function DataCompletenessStatus({
 
 function PrimaryMetric({ icon, label, value, hint }: { icon: ReactNode; label: string; value: string; hint: string }) {
   return (
-    <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft" data-primary-kpi>
-      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">{icon}{label}</p>
-      <p className="mt-2 text-2xl font-bold text-board-navy">{value}</p>
-      <p className="mt-1 text-xs font-semibold text-slate-500">{hint}</p>
+    <article className="h-full min-w-0 overflow-hidden rounded-lg border border-board-line bg-white p-4 shadow-soft" data-primary-kpi>
+      <p className="flex min-w-0 items-start gap-2 text-xs font-bold uppercase leading-4 tracking-wide text-slate-500"><span className="mt-px shrink-0">{icon}</span><span className="min-w-0 break-words [overflow-wrap:anywhere]">{label}</span></p>
+      <p className="mt-2 min-w-0 break-words text-2xl font-bold leading-tight text-board-navy tabular-nums [overflow-wrap:anywhere]">{value}</p>
+      <p className="mt-1 min-w-0 break-words text-xs font-semibold leading-4 text-slate-500 [overflow-wrap:anywhere]">{hint}</p>
     </article>
   );
 }
 
 function AttendanceMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="py-3 md:border-l md:border-slate-100 md:px-4 md:first:border-l-0 md:first:pl-0 md:last:pr-0" data-attendance-metric>
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-bold text-board-navy">{value}</p>
+    <div className="min-w-0 overflow-hidden py-3 md:border-l md:border-slate-100 md:px-4 md:first:border-l-0 md:first:pl-0 md:last:pr-0" data-attendance-metric>
+      <p className="min-w-0 break-words text-xs font-bold uppercase leading-4 tracking-wide text-slate-500 [overflow-wrap:anywhere]">{label}</p>
+      <p className="mt-1 min-w-0 break-words text-xl font-bold leading-tight text-board-navy tabular-nums [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }
