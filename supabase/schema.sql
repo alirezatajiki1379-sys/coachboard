@@ -1591,6 +1591,7 @@ create table if not exists public.squad_attendance_records (
       or actual_absence_reason in (
         'unexcused',
         'excused',
+        'late_cancellation',
         'sick',
         'injured',
         'school',
@@ -1727,7 +1728,7 @@ alter table public.squad_attendance_records
 add constraint squad_attendance_records_actual_absence_reason_check
 check (
   actual_absence_reason is null
-  or actual_absence_reason in ('unexcused', 'excused', 'sick', 'injured', 'school', 'work', 'holiday', 'private', 'other')
+  or actual_absence_reason in ('unexcused', 'excused', 'late_cancellation', 'sick', 'injured', 'school', 'work', 'holiday', 'private', 'other')
 );
 
 alter table public.squad_attendance_records
