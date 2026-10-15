@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as training from "../lib/trainings/utils.ts";
+import { getTrainingWorkflowState } from "../lib/trainings/workflow.ts";
 
 function event(id, date, startTime, status = "prepared", options = {}) {
   return {
@@ -35,13 +36,14 @@ test("Dashboard keeps today visible before, during and after a session", () => {
   }
 });
 
-test("Dashboard today states use start/end workflow without changing Past and Upcoming semantics", () => {
+test("Dashboard today uses the canonical workflow without changing Past and Upcoming semantics", () => {
   const now = { date: "2026-09-19", time: "15:00:00" };
-  assert.equal(training.dashboardTrainingState(event("upcoming", now.date, "18:00"), now), "upcoming_today");
-  assert.equal(training.dashboardTrainingState(event("live", now.date, "14:00", "prepared", { endTime: "16:00" }), now), "happening_now");
-  assert.equal(training.dashboardTrainingState(event("finished", now.date, "12:00", "prepared", { endTime: "14:00" }), now), "finished_today");
-  assert.equal(training.dashboardTrainingState(event("completed", now.date, "18:00", "completed"), now), "completed");
-  assert.equal(training.dashboardTrainingState(event("ratings", now.date, "12:00", "rating_open"), now), "finished_today");
+  const workflow = (value) => getTrainingWorkflowState({ event: value, hasPlan: false, hasReview: false, now });
+  assert.equal(workflow(event("upcoming", now.date, "18:00")).phase, "preparation");
+  assert.equal(workflow(event("live", now.date, "14:00", "prepared", { endTime: "16:00" })).phase, "live");
+  assert.equal(workflow(event("finished", now.date, "12:00", "prepared", { endTime: "14:00" })).phase, "follow_up");
+  assert.equal(workflow(event("completed", now.date, "18:00", "completed")).phase, "complete");
+  assert.equal(workflow(event("ratings", now.date, "12:00", "rating_open")).phase, "follow_up");
 
   const morning = event("morning", now.date, "10:00");
   assert.equal(training.dashboardTrainingsForToday([morning], now).length, 1);

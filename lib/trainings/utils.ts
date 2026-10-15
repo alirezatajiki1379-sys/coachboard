@@ -5,7 +5,6 @@ import { generateTrainingRecurrenceDates, parseDateOnly, weekdayForDate, type Tr
 export { generateTrainingRecurrenceDates, weekdayForDate };
 
 export type TrainingFilter = "all" | "upcoming" | "past" | "rating_open" | "completed" | "draft" | "trash";
-export type DashboardTrainingState = "upcoming_today" | "happening_now" | "finished_today" | "completed";
 export const trainingDefaultTimeZone = "Europe/Berlin";
 
 export type RecurringTrainingInput = {
@@ -95,18 +94,6 @@ export function dashboardTrainingsForToday(events: SquadTrainingEventDetail[], n
   return events
     .filter((event) => !event.deletedAt && isTrainingToday(event, now))
     .sort((a, b) => trainingDateTimeKey(a).localeCompare(trainingDateTimeKey(b)));
-}
-
-export function dashboardTrainingState(
-  event: Pick<SquadTrainingEventDetail, "date" | "startTime" | "endTime" | "status">,
-  now = trainingNowParts()
-): DashboardTrainingState {
-  if (event.status === "completed") return "completed";
-  if (event.status === "rating_open") return "finished_today";
-  if (trainingDateTimeKey(event) > `${now.date} ${now.time}`) return "upcoming_today";
-  if (event.status === "in_progress") return "happening_now";
-  if (event.endTime && `${event.date} ${normalizeTrainingTime(event.endTime)}` >= `${now.date} ${now.time}`) return "happening_now";
-  return "finished_today";
 }
 
 export function sortTrainings(events: SquadTrainingEventDetail[], now = trainingNowParts()) {

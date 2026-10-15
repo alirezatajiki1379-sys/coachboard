@@ -1,21 +1,23 @@
-import { Bell, CalendarDays, CalendarPlus, ClipboardCheck, ClipboardList, Dumbbell, LibraryBig, Star, Target, UsersRound } from "lucide-react";
+import { Bell, CalendarDays, CalendarPlus, ClipboardList, Dumbbell, LibraryBig, Target, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
+import { TrainingWorkflowPanel } from "@/components/squad/training-workflow-panel";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatMessage, getMessages } from "@/lib/i18n";
 import { getUserLocale } from "@/lib/i18n/server";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import { attentionPriorityLabels, attentionTone } from "@/lib/squad/attention";
 import { getDashboardAttentionData } from "@/lib/squad/attention-queries";
 import { getDevelopmentDashboardSummary } from "@/lib/squad/development";
 import { listTrainingSessionReviewSummaries } from "@/lib/squad/session-review";
+import { listConcreteTrainingPlanEventIds } from "@/lib/squad/training-plan-queries";
 import { ensureActiveSquad, getActiveSquadPlayerCounts } from "@/lib/squad/squads";
 import {
   dashboardTrainingsForToday,
-  dashboardTrainingState,
   isTrainingUpcoming,
   sortTrainings,
   trainingDisplayTitle,
@@ -23,6 +25,7 @@ import {
   trainingSummaryCounts,
   trainingTimeRange
 } from "@/lib/trainings/utils";
+import { getTrainingWorkflowState } from "@/lib/trainings/workflow";
 
 type RecentDrill = {
   id: string;
@@ -85,10 +88,26 @@ export default async function DashboardPage() {
     listTrainingEventDetails(supabase, user.id, { squadId: activeTeam.id })
   ]);
   const now = trainingNowParts();
+  const ui = createSystemTranslator(locale);
   const trainingEvents = sortTrainings(trainingEventsRaw, now);
   const todayTrainings = dashboardTrainingsForToday(trainingEvents, now);
-  const todayReviewSummaries = await listTrainingSessionReviewSummaries(supabase, user.id, todayTrainings.map((event) => event.id));
   const nextTraining = trainingEvents.find((event) => isTrainingUpcoming(event, now));
+  const workflowEvents = Array.from(new Map([...todayTrainings, ...(nextTraining ? [nextTraining] : [])].map((event) => [event.id, event])).values());
+  const [workflowReviews, concretePlanEventIds] = await Promise.all([
+    listTrainingSessionReviewSummaries(supabase, user.id, workflowEvents.map((event) => event.id)),
+    listConcreteTrainingPlanEventIds(supabase, user.id, workflowEvents.map((event) => event.id))
+  ]);
+  const workflowByEventId = new Map(workflowEvents.map((event) => [event.id, getTrainingWorkflowState({
+    event,
+    hasPlan: concretePlanEventIds.has(event.id),
+    hasReview: workflowReviews.has(event.id),
+    now
+  })]));
+  const todayWorkflowEntries = todayTrainings.map((event) => ({ event, workflow: workflowByEventId.get(event.id)! }));
+  const dashboardActionEntry = todayWorkflowEntries.find((entry) => entry.workflow.phase === "live" && entry.workflow.primaryAction)
+    ?? todayWorkflowEntries.find((entry) => entry.workflow.phase === "follow_up" && entry.workflow.primaryAction)
+    ?? todayWorkflowEntries.find((entry) => entry.workflow.phase === "preparation" && entry.workflow.primaryAction)
+    ?? (nextTraining ? { event: nextTraining, workflow: workflowByEventId.get(nextTraining.id)! } : undefined);
   const completedTrainings = trainingEvents.filter((event) => event.status === "completed").length;
   const upcomingTrainings = trainingEvents.filter((event) => isTrainingUpcoming(event, now)).length;
   const assignedPlanIds = new Set(trainingEvents.map((event) => event.linkedTrainingSessionId).filter((id): id is string => Boolean(id)));
@@ -96,12 +115,9 @@ export default async function DashboardPage() {
   const assignedPlans = Math.min(createdPlans, assignedPlanIds.size);
   const draftPlans = Math.max(0, createdPlans - assignedPlans);
   const openRatings = trainingEvents.filter((event) => event.status === "rating_open");
-  const planNextHref = nextTraining
-    ? nextTraining.linkedTrainingSessionId ? `/sessions/${nextTraining.linkedTrainingSessionId}` : `/trainings/${nextTraining.id}/plan`
-    : "/trainings/new";
-  const planNextLabel = nextTraining
-    ? nextTraining.linkedTrainingSessionId ? messages.dashboard.actions.reviewTrainingPlan : messages.dashboard.actions.planNextTraining
-    : messages.dashboard.actions.createTraining;
+  const dashboardPrimaryAction = dashboardActionEntry?.workflow.primaryAction;
+  const planNextHref = dashboardPrimaryAction?.href ?? (dashboardActionEntry ? `/trainings/${dashboardActionEntry.event.id}` : "/trainings/new");
+  const planNextLabel = dashboardPrimaryAction ? ui(dashboardPrimaryAction.label) : dashboardActionEntry ? ui("Open Training") : messages.dashboard.actions.createTraining;
 
   const drills = (recentDrills.data ?? []) as RecentDrill[];
   const sessions = (recentSessions.data ?? []) as RecentSession[];
@@ -151,63 +167,17 @@ export default async function DashboardPage() {
         {todayTrainings.length ? (
           <div className="space-y-3">
             {todayTrainings.map((event) => {
-              const summary = trainingSummaryCounts(event);
-              const state = dashboardTrainingState(event, now);
-              const postTraining = state === "finished_today" || state === "completed";
-              const reviewSaved = todayReviewSummaries.has(event.id);
-              const stateLabel = {
-                upcoming_today: messages.dashboard.trainingStates.upcomingToday,
-                happening_now: messages.dashboard.trainingStates.happeningNow,
-                finished_today: messages.dashboard.trainingStates.finishedToday,
-                completed: messages.dashboard.trainingStates.completed
-              }[state];
-              const stateTone = state === "happening_now"
-                ? "bg-green-50 text-board-green"
-                : state === "upcoming_today"
-                  ? "bg-blue-50 text-blue-700"
-                  : "bg-slate-100 text-slate-700";
-              const planHref = event.linkedTrainingSessionId ? `/sessions/${event.linkedTrainingSessionId}` : `/trainings/${event.id}/plan`;
+              const workflow = workflowByEventId.get(event.id)!;
 
               return (
                 <article key={event.id} className="rounded-md border border-board-line p-4">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-bold text-board-navy">{trainingDisplayTitle(event)}</h3>
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${stateTone}`}>{stateLabel}</span>
-                      </div>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {formatDate(event.date, locale)} · {trainingTimeRange(event)}{event.location ? ` · ${event.location}` : ""}
-                      </p>
-                      <p className="mt-2 text-sm font-semibold text-slate-700">
-                        {summary.attendance.confirmedTotal} {messages.dashboard.expected} · {summary.attendance.present} {messages.dashboard.present} · {summary.attendance.absent} {messages.dashboard.absent}
-                      </p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">
-                        {summary.attendance.goalkeepers} {messages.dashboard.goalkeepers} · {summary.attendance.fieldPlayers} {messages.dashboard.fieldPlayers} · {formatMessage(messages.dashboard.ratedCount, { rated: summary.ratings.rated, rateable: summary.ratings.rateable })} · {event.linkedTrainingSessionId ? messages.dashboard.planAvailable : messages.dashboard.noPlan}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <ButtonLink href={`/trainings/${event.id}`} variant="secondary" className="justify-center">{messages.common.actions.open}</ButtonLink>
-                      {postTraining ? (
-                        <ButtonLink href={`/trainings/${event.id}/ratings`} className="justify-center">
-                          <Star className="h-4 w-4" />
-                          {messages.dashboard.actions.ratings}
-                        </ButtonLink>
-                      ) : (
-                        <ButtonLink href={`/trainings/${event.id}/check-in`} className="justify-center">{messages.dashboard.actions.checkIn}</ButtonLink>
-                      )}
-                      <ButtonLink href={`/trainings/${event.id}/review`} variant="secondary" className="justify-center">
-                        <ClipboardCheck className="h-4 w-4" />
-                        {reviewSaved ? messages.dashboard.actions.reviewSaved : messages.dashboard.actions.sessionReview}
-                      </ButtonLink>
-                      {postTraining ? (
-                        <ButtonLink href={`/trainings/${event.id}/check-in`} variant="ghost" className="justify-center">{messages.dashboard.actions.checkIn}</ButtonLink>
-                      ) : (
-                        <ButtonLink href={`/trainings/${event.id}/ratings`} variant="ghost" className="justify-center">{messages.dashboard.actions.ratings}</ButtonLink>
-                      )}
-                      <ButtonLink href={planHref} variant="ghost" className="justify-center">{event.linkedTrainingSessionId ? messages.dashboard.actions.reviewPlan : messages.dashboard.actions.planTraining}</ButtonLink>
-                    </div>
+                  <div className="min-w-0">
+                    <h3 translate="no" className="break-words text-lg font-bold text-board-navy [overflow-wrap:anywhere]">{trainingDisplayTitle(event)}</h3>
+                    <p className="mt-1 break-words text-sm text-slate-600 [overflow-wrap:anywhere]">
+                      {formatDate(event.date, locale)} · {trainingTimeRange(event)}{event.location ? ` · ${event.location}` : ""}
+                    </p>
                   </div>
+                  <TrainingWorkflowPanel workflow={workflow} compact openHref={`/trainings/${event.id}`} />
                 </article>
               );
             })}

@@ -35,7 +35,9 @@ const bundle = await build({
     import {ReliabilityValue} from "@/components/squad/reliability-value";
     import {PlayerDevelopmentSection} from "@/components/squad/player-development";
     import {ReviewCarryForward} from "@/components/sessions/review-carry-forward";
+    import {TrainingWorkflowPanel} from "@/components/squad/training-workflow-panel";
     import {applyReviewCarryForward,includesReviewCarryForward} from "@/lib/sessions/review-carry-forward";
+    import {getTrainingWorkflowState} from "@/lib/trainings/workflow";
     import {AnalyticsSectionPanel} from "@/app/(app)/squad/analysis/page";
     import {trainingSectionLabel} from "@/lib/i18n/training-labels";
     import {localizeAttentionItems} from "@/lib/squad/attention";
@@ -59,6 +61,9 @@ const bundle = await build({
     let legacy="Present";
     let populated=false;
     const carryContext={sourceEventId:"training-a",sourceDate:"2026-10-12",sourceLabel:"Stützpunkttraining",nextTrainingNote:"Nach Ballverlust schneller ins Gegenpressing kommen."};
+    const workflowNow={date:"2026-10-16",time:"15:00:00"};
+    const workflowEvent=(overrides={})=>({id:"workflow-training",date:"2026-10-17",startTime:"18:00",endTime:"19:30",status:"prepared",attendance:[{id:"attendance",plannedStatus:"expected"}],...overrides});
+    const workflowFor=(overrides={},context={})=>getTrainingWorkflowState({event:workflowEvent(overrides),hasPlan:context.hasPlan??false,hasReview:context.hasReview??false,now:workflowNow});
     function CarryHarness({initialFocus="",initialNotes=""}){
       const ui=useSystemText();
       const [values,setValues]=React.useState({mainFocus:initialFocus,notes:initialNotes});
@@ -93,6 +98,11 @@ const bundle = await build({
         <section id="carry-notes"><CarryHarness initialFocus="Spielaufbau" initialNotes="Existing notes"/></section>
         <section id="carry-already"><CarryHarness initialFocus="" initialNotes={carryContext.nextTrainingNote}/></section>
         <section id="carry-none"></section>
+        <section id="workflow-future"><TrainingWorkflowPanel workflow={workflowFor()} compact openHref="/trainings/workflow-training"/></section>
+        <section id="workflow-ready"><TrainingWorkflowPanel workflow={workflowFor({}, {hasPlan:true})}/></section>
+        <section id="workflow-live"><TrainingWorkflowPanel workflow={workflowFor({date:workflowNow.date,startTime:"14:00",endTime:"16:00"})}/></section>
+        <section id="workflow-review"><TrainingWorkflowPanel workflow={workflowFor({date:"2026-10-15",attendance:[{id:"attendance",plannedStatus:"expected",finalStatus:"present"}]})}/></section>
+        <section id="workflow-complete"><TrainingWorkflowPanel workflow={workflowFor({date:"2026-10-15",attendance:[{id:"attendance",plannedStatus:"expected",finalStatus:"present"}]},{hasReview:true})}/></section>
       </>);
       root.render(<I18nProvider locale={locale}><GermanLocalizationBoundary locale={locale}>
         <nav><button onClick={()=>window.qa.switch("en")}>EN</button><button onClick={()=>window.qa.switch("de")}>DE</button></nav>
@@ -176,6 +186,18 @@ try {
     assert.ok((await page.locator("#carry-notes").innerText()).includes(de?"In Planungsnotizen übernehmen":"Add to planning notes"));
     assert.ok((await page.locator("#carry-already").innerText()).includes(de?"Bereits übernommen":"Already included"));
     assert.equal((await page.locator("#carry-none").innerText()).trim(),"");
+    assert.ok((await page.locator("#workflow-future").innerText()).includes(de?"Training planen":"Plan Training"));
+    assert.ok((await page.locator("#workflow-ready").innerText()).includes(de?"Training vorbereiten":"Prepare Training"));
+    assert.ok((await page.locator("#workflow-live").innerText()).includes(de?"Check-in öffnen":"Open Check-in"));
+    assert.ok((await page.locator("#workflow-review").innerText()).includes(de?"Training reflektieren":"Review Training"));
+    assert.ok((await page.locator("#workflow-complete").innerText()).includes(de?"Training abgeschlossen":"Training completed"));
+    assert.equal(await page.locator("#workflow-future [data-workflow-primary]").count(),1);
+    assert.equal(await page.locator("#workflow-ready [data-workflow-primary]").count(),1);
+    assert.equal(await page.locator("#workflow-live [data-workflow-primary]").count(),1);
+    assert.equal(await page.locator("#workflow-review [data-workflow-primary]").count(),1);
+    assert.equal(await page.locator("#workflow-complete [data-workflow-primary]").count(),0);
+    assert.equal(await page.locator("#workflow-future a").count(),2,"Dashboard-style workflow has one primary action plus Open Training");
+    assert.ok(!(await page.locator("#workflow-review").innerText()).includes(de?"Bewertungen":"Ratings"),"Untouched Ratings must not become workflow debt");
     assert.ok((await page.locator("#check-in").innerText()).includes(de?"Eingeplant":"Expected"));
     assert.equal(await page.locator("#check-in").getByRole("button",{name:de?"Anwesend":"Present",exact:true}).count(),1);
     assert.ok((await page.locator("#sections").innerText()).includes(de?"Hauptteil 1":"Main part 1"));
@@ -241,6 +263,12 @@ try {
   await page.waitForTimeout(250);
   const cardAfterHover=await analyticsCard.boundingBox();
   assert.deepEqual(cardAfterHover,cardBeforeHover,"Player Analytics KPI cards must not move or resize on hover");
+  const workflowCard=page.locator("#workflow-ready [data-training-workflow]");
+  await workflowCard.scrollIntoViewIfNeeded();
+  const workflowBeforeHover=await workflowCard.boundingBox();
+  await workflowCard.hover();
+  await page.waitForTimeout(150);
+  assert.deepEqual(await workflowCard.boundingBox(),workflowBeforeHover,"Training workflow cards must stay stable on hover");
   for(const locale of ["en","de"]){
     await page.getByRole("button",{name:locale.toUpperCase(),exact:true}).click();
     await page.waitForFunction(language=>window.qa.ready&&document.documentElement.lang===language,locale);

@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { ApplyAsExpectedAttendance, CompleteEventButton, MissingStatusesNotice } from "@/components/squad/attendance-controls";
 import { TrainingEventActions } from "@/components/squad/training-event-actions";
 import { TrainingParticipantsTable } from "@/components/squad/training-participants-table";
+import { TrainingWorkflowPanel, TrainingWorkflowSecondaryActions } from "@/components/squad/training-workflow-panel";
 import { addCustomNameToTrainingGroup, addPlayersToTrainingGroup, createTrainingGroup, deleteTrainingGroup, removeTrainingGroupMember } from "@/lib/squad/training-group-actions";
 import { syncTrainingWithCurrentSquad } from "@/lib/squad/attendance-actions";
 import { applyTrainingPlanTemplate } from "@/lib/squad/training-plan-actions";
@@ -13,8 +14,9 @@ import { attendanceDisplayName, finalStatusLabel, plannedStatusLabel } from "@/l
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
 import { countTrainingObservations, getTrainingSessionReview, objectiveOutcomeLabels } from "@/lib/squad/session-review";
 import { createClient } from "@/lib/supabase/server";
-import { seasonLabelForDate, todayDateString, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
-import type { SquadAttendanceEntry, SquadTrainingEventDetail } from "@/types/domain";
+import { seasonLabelForDate, trainingDisplayTitle, trainingPlanStatus, trainingRatingStats, trainingSummaryCounts, trainingTimeRange } from "@/lib/trainings/utils";
+import { getTrainingWorkflowState } from "@/lib/trainings/workflow";
+import type { SquadAttendanceEntry } from "@/types/domain";
 
 type TrainingPageProps = {
   params: Promise<{ id: string }>;
@@ -42,13 +44,11 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
   const { plannedAttendance, finalAttendance } = trainingSummaryCounts(event);
   const ratings = trainingRatingStats(event);
   const groupLabelsByPlayerId = buildTrainingGroupLabels(trainingGroups);
-  const primaryAction = getPrimaryTrainingAction(event, Boolean(planInstance || planDrills.length), ratings, finalAttendance.unresolved, Boolean(review));
-  const secondaryActions = [
-    { href: `/trainings/${event.id}/plan`, label: planInstance || planDrills.length ? "Open Plan" : "Create Plan" },
-    { href: `/trainings/${event.id}/check-in`, label: "Quick Check-in" },
-    { href: `/trainings/${event.id}/ratings`, label: "Ratings" },
-    { href: `/trainings/${event.id}/review`, label: review ? "View/Edit Review" : "Review Session" }
-  ].filter((action) => !event.deletedAt && action.href !== primaryAction?.href);
+  const workflow = getTrainingWorkflowState({
+    event,
+    hasPlan: Boolean(planInstance || planDrills.length),
+    hasReview: Boolean(review)
+  });
 
   return (
     <div className="space-y-6">
@@ -58,8 +58,7 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
       </Link>
 
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
+        <div>
             <p className="text-sm font-semibold uppercase text-board-green">{event.status.replaceAll("_", " ")} · Season {event.seasonLabel || seasonLabelForDate(event.date)}</p>
             <h1 className="mt-2 text-3xl font-bold tracking-normal text-board-navy">{trainingDisplayTitle(event)}</h1>
             <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-slate-600">
@@ -72,30 +71,25 @@ export default async function TrainingPage({ params }: TrainingPageProps) {
               {event.focus ? <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><Star className="h-4 w-4" />{event.focus}</span> : null}
             </div>
             {event.generalNotes ? <p className="mt-3 whitespace-pre-line text-sm text-slate-600">{event.generalNotes}</p> : null}
-          </div>
-          <div className="flex flex-wrap gap-2 lg:justify-end">
-            {primaryAction ? <ButtonLink href={primaryAction.href} className="h-10 justify-center px-4">{primaryAction.label}</ButtonLink> : null}
-            {secondaryActions.map((action) => (
-              <ButtonLink key={action.href} href={action.href} variant="secondary" className="h-10 justify-center px-4">
-                {action.label}
-              </ButtonLink>
-            ))}
-            {!event.deletedAt ? <CompleteEventButton eventId={event.id} /> : null}
-            {!event.deletedAt && event.participantSourceMode === "current_squad_sync" && !event.participantsLockedAt ? (
-              <form action={syncTrainingWithCurrentSquad} className="flex flex-wrap gap-2">
-                <input type="hidden" name="eventId" value={event.id} />
-                <input type="hidden" name="syncScope" value="single" />
-                <Button type="submit" variant="secondary" className="h-10 px-3 text-xs">Sync Squad</Button>
-              </form>
-            ) : null}
-            <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} isTrash={Boolean(event.deletedAt)} isRecurring={Boolean(event.recurrenceSeriesId)} />
-          </div>
         </div>
-        {primaryAction ? (
-          <div className="mt-5 rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800">
-            Next action: {primaryAction.reason}
-          </div>
-        ) : null}
+      </section>
+
+      <TrainingWorkflowPanel workflow={workflow} />
+      <TrainingWorkflowSecondaryActions workflow={workflow} />
+
+      <section className="rounded-lg border border-board-line bg-white p-4">
+        <h2 className="text-sm font-black uppercase text-slate-500">Event management</h2>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {!event.deletedAt ? <CompleteEventButton eventId={event.id} /> : null}
+          {!event.deletedAt && event.participantSourceMode === "current_squad_sync" && !event.participantsLockedAt ? (
+            <form action={syncTrainingWithCurrentSquad} className="flex">
+              <input type="hidden" name="eventId" value={event.id} />
+              <input type="hidden" name="syncScope" value="single" />
+              <Button type="submit" variant="secondary" className="h-10 w-full px-3 text-xs sm:w-auto">Sync Squad</Button>
+            </form>
+          ) : null}
+          <TrainingEventActions eventId={event.id} attendanceCount={event.attendance.length} isTrash={Boolean(event.deletedAt)} isRecurring={Boolean(event.recurrenceSeriesId)} />
+        </div>
       </section>
 
       <section className="space-y-3">
@@ -269,67 +263,6 @@ function buildTrainingGroupLabels(groups: TrainingGroup[]) {
   return labels;
 }
 
-function getPrimaryTrainingAction(
-  event: SquadTrainingEventDetail,
-  hasPlan: boolean,
-  ratings: ReturnType<typeof trainingRatingStats>,
-  unresolvedFinalStatuses: number,
-  hasReview: boolean
-) {
-  if (event.deletedAt) return null;
-  const today = todayDateString();
-  const isPast = event.date < today || event.status === "completed" || event.status === "rating_open";
-  const isLive = !isPast && (event.date === today || event.status === "in_progress");
-
-  if (isLive) {
-    return {
-      href: `/trainings/${event.id}/check-in`,
-      label: "Quick Check-in",
-      reason: "Training is active today. Record attendance first."
-    };
-  }
-
-  if (isPast && unresolvedFinalStatuses > 0) {
-    return {
-      href: `/trainings/${event.id}/check-in`,
-      label: "Complete Attendance",
-      reason: `${unresolvedFinalStatuses} player${unresolvedFinalStatuses === 1 ? "" : "s"} still need an actual attendance status.`
-    };
-  }
-
-  if (isPast && !hasReview) {
-    return {
-      href: `/trainings/${event.id}/review`,
-      label: "Review Session",
-      reason: ratings.rateable > ratings.rated
-        ? `${ratings.rated} of ${ratings.rateable} present players are rated. You can still review the session now.`
-        : "Attendance is complete. Add the coach reflection for this training."
-    };
-  }
-
-  if (isPast && ratings.rateable > ratings.rated) {
-    return {
-      href: `/trainings/${event.id}/ratings`,
-      label: "Open Ratings",
-      reason: `${ratings.rated} of ${ratings.rateable} present players are rated.`
-    };
-  }
-
-  if (!hasPlan) {
-    return {
-      href: `/trainings/${event.id}/plan`,
-      label: "Create Training Plan",
-      reason: "No Session Plan is prepared yet."
-    };
-  }
-
-  return {
-    href: `/trainings/${event.id}/plan`,
-    label: "Open Training Plan",
-    reason: "Plan is available. Review the session content and groups."
-  };
-}
-
 type TrainingDrillInstance = {
   id: string;
   sourceDrillId?: string;
@@ -390,6 +323,7 @@ async function loadTrainingDrillInstances(supabase: Awaited<ReturnType<typeof cr
     .select("id,source_drill_id,title,block,order_index,planned_duration_minutes")
     .eq("user_id", userId)
     .eq("event_id", eventId)
+    .neq("status", "removed")
     .order("order_index", { ascending: true });
   if (error) throw new Error(error.message);
   return ((data ?? []) as Array<{
