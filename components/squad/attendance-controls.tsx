@@ -50,6 +50,7 @@ const plannedButtons: Array<{ status: SquadPlannedAttendanceStatus; label: strin
 
 const actualAbsenceOptions: Array<{ reason: SquadActualAbsenceReason; label: string }> = [
   { reason: "unexcused", label: "Unexcused" },
+  { reason: "late_cancellation", label: "Late cancellation" },
   { reason: "excused", label: "Excused" },
   { reason: "sick", label: "Sick" },
   { reason: "injured", label: "Injured" },

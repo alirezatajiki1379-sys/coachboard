@@ -54,6 +54,11 @@ test("Late, penalty opt-out and late cancellation follow canonical values", () =
   assert.equal(calculateReliabilityPenalty(entry({ finalStatus: "Z", latePenaltyApplied: true })), -1);
   assert.equal(calculateReliabilityPenalty(entry({ finalStatus: "Z", latePenaltyApplied: false })), 0);
   assert.equal(calculateReliabilityPenalty(entry({ finalStatus: "S", actualAbsenceReason: undefined })), -1);
+  assert.equal(calculateReliabilityPenalty(entry({ finalStatus: "absent", actualAbsenceReason: "late_cancellation" })), -1);
+  assert.deepEqual(calculateReliabilityBreakdown([
+    entry({ finalStatus: "S", actualAbsenceReason: undefined }),
+    entry({ finalStatus: "absent", actualAbsenceReason: "late_cancellation" })
+  ]), { late: 0, lateCancellation: 2, unexcused: 0, legacyNeedsReview: 0 });
 });
 
 test("reliability summary separates genuine and ambiguous Unexcused records", () => {

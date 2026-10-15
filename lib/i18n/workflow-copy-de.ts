@@ -391,7 +391,7 @@ export const workflowCopyDe: Record<string, string> = {
   "Not recorded yet": "Nicht erfasst",
   "Needs decision": "Entscheidung offen",
   "Private reason": "Privat",
-  "Late cancellation": "Kurzfristige Absage",
+  "Late cancellation": "Verspätet abgesagt",
   "Team Attendance": "Mannschaftsanwesenheit",
   "Development Goals": "Entwicklungsziele",
   "Development Goal": "Entwicklungsziel",

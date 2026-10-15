@@ -81,7 +81,7 @@ export function absenceReasonLabel(reason: ReportAbsenceReason, locale: Locale) 
       other: "Sonstiges",
       excused: "Entschuldigt",
       unexcused: "Unentschuldigt",
-      late_cancellation: "Späte Absage",
+      late_cancellation: "Verspätet abgesagt",
       not_recorded: "Grund nicht erfasst"
     }
   };

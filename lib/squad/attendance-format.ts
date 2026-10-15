@@ -55,6 +55,7 @@ export function finalStatusLabel(status?: SquadAttendanceEntry["finalStatus"], l
 export function actualAbsenceReasonLabel(reason?: SquadAttendanceEntry["actualAbsenceReason"], locale: Locale = "en") {
   const labels: Record<NonNullable<SquadAttendanceEntry["actualAbsenceReason"]>, string> = {
     unexcused: "Unexcused",
+    late_cancellation: "Late cancellation",
     excused: "Excused",
     sick: "Sick",
     injured: "Injured",
@@ -69,6 +70,7 @@ export function actualAbsenceReasonLabel(reason?: SquadAttendanceEntry["actualAb
 
 export function effectiveActualAbsenceReason(entry: SquadAttendanceEntry): SquadAttendanceEntry["actualAbsenceReason"] {
   if (entry.actualAbsenceReason) return entry.actualAbsenceReason;
+  if (entry.finalStatus === "S") return "late_cancellation";
   if (entry.finalStatus === "V") return "injured";
   if (entry.finalStatus === "K") return "sick";
   if (entry.finalStatus === "E") return "excused";

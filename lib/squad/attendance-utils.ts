@@ -105,6 +105,7 @@ export function plannedReasonToActualAbsenceReason(reason?: SquadAttendanceReaso
   if (normalized === "injured") return "injured";
   if (normalized === "sick") return "sick";
   if (normalized === "E") return "excused";
+  if (normalized === "S") return "late_cancellation";
   if (normalized === "private") return "private";
   if (normalized === "U") return "unexcused";
   if (normalized === "school" || normalized === "work" || normalized === "holiday" || normalized === "other") return normalized;
@@ -132,9 +133,7 @@ export function applyAsExpectedDecision(entry: ApplyAsExpectedEntry): ApplyAsExp
   }
 
   const actualAbsenceReason = plannedReasonToActualAbsenceReason(entry.plannedReason);
-  const finalStatus = entry.plannedReason === "S"
-    ? "S"
-    : finalStatusForActualAbsenceReason(actualAbsenceReason);
+  const finalStatus = finalStatusForActualAbsenceReason(actualAbsenceReason);
   return {
     action: "absent",
     finalStatus,
@@ -275,6 +274,7 @@ function reliabilityEffect(entry: ReliabilityEntry): { penalty: number; category
   }
 
   if (entry.actualAbsenceReason) {
+    if (entry.actualAbsenceReason === "late_cancellation") return { penalty: -1, category: "lateCancellation" };
     return entry.actualAbsenceReason === "unexcused" ? { penalty: -2, category: "unexcused" } : { penalty: 0 };
   }
 

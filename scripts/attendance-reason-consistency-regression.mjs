@@ -128,7 +128,8 @@ for (const [planned, actual] of [
   ["sick", "sick"],
   ["V", "injured"],
   ["holiday", "holiday"],
-  ["P", "private"]
+  ["P", "private"],
+  ["S", "late_cancellation"]
 ]) {
   assert.equal(plannedReasonToActualAbsenceReason(planned), actual, `${planned} should prefill ${actual}`);
 }

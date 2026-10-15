@@ -34,7 +34,7 @@ test("canonical attendance statuses and absence reasons are language independent
     assert.equal(isExpectedFromPlannedStatus({ plannedStatus: "expected" }), true);
     assert.equal(isExpectedFromPlannedStatus({ plannedStatus: "unavailable" }), false);
   }
-  for (const [code, de] of Object.entries({ unexcused: "Unentschuldigt", excused: "Entschuldigt", sick: "Krank", injured: "Verletzt", school: "Schule", work: "Arbeit", holiday: "Urlaub", private: "Privat", other: "Sonstiges" })) assert.equal(actualAbsenceReasonLabel(code, "de"), de);
+  for (const [code, de] of Object.entries({ unexcused: "Unentschuldigt", late_cancellation: "Verspätet abgesagt", excused: "Entschuldigt", sick: "Krank", injured: "Verletzt", school: "Schule", work: "Arbeit", holiday: "Urlaub", private: "Privat", other: "Sonstiges" })) assert.equal(actualAbsenceReasonLabel(code, "de"), de);
 });
 
 test("built-in sections translate without rewriting IDs or custom content", () => {

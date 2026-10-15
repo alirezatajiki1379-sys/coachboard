@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { asScoutingDb } from "@/lib/scouting/db";
 import { createClient } from "@/lib/supabase/server";
-import { applyAsExpectedDecision, calculateSuggestedOverallRating, isParticipatingAttendanceStatus, normalizePlannedAttendanceReason, plannedReasonToActualAbsenceReason } from "@/lib/squad/attendance-utils";
+import { applyAsExpectedDecision, calculateSuggestedOverallRating, finalStatusForActualAbsenceReason, isParticipatingAttendanceStatus, normalizePlannedAttendanceReason, plannedReasonToActualAbsenceReason } from "@/lib/squad/attendance-utils";
 import { generateRecurringTrainingDates, generateTrainingRecurrenceDates, isTrainingUpcoming, seasonLabelForDate, trainingNowParts, weekdayForDate } from "@/lib/trainings/utils";
 import { ensureActiveSquad } from "@/lib/squad/squads";
 import { currentEligibleSquadPlayerIds } from "@/lib/squad/participant-sync";
@@ -44,7 +44,7 @@ export type TrainingEventActionState = {
 const plannedStatuses = ["expected", "unavailable", "unclear"] as const;
 const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U", "injured", "sick", "school", "work", "holiday", "private", "other"] as const;
 const finalStatuses = ["present", "absent", "left_early", "Z", "V", "K", "E", "P", "S", "U"] as const;
-const actualAbsenceReasons = ["unexcused", "excused", "sick", "injured", "school", "work", "holiday", "private", "other"] as const;
+const actualAbsenceReasons = ["unexcused", "late_cancellation", "excused", "sick", "injured", "school", "work", "holiday", "private", "other"] as const;
 
 export type AttendanceMutationResult =
   | {
@@ -204,17 +204,9 @@ function actualAbsenceReasonFromFinalStatus(status: string): (typeof actualAbsen
   if (status === "K") return "sick";
   if (status === "E") return "excused";
   if (status === "P") return "private";
+  if (status === "S") return "late_cancellation";
   if (status === "U") return "unexcused";
   return null;
-}
-
-function finalStatusForActualAbsence(reason: (typeof actualAbsenceReasons)[number] | null): (typeof finalStatuses)[number] {
-  if (reason === "injured") return "V";
-  if (reason === "sick") return "K";
-  if (reason === "excused") return "E";
-  if (reason === "private") return "P";
-  if (reason === "unexcused") return "U";
-  return "absent";
 }
 
 type AttendanceRecordSnapshot = {
@@ -241,7 +233,7 @@ function resolveActualAttendanceUpdate(
     ? submittedReason ?? currentReason ?? plannedReason
     : actualAbsenceReasonFromFinalStatus(requestedStatus);
   const finalStatus = requestedStatus === "absent"
-    ? finalStatusForActualAbsence(actualAbsenceReason)
+    ? finalStatusForActualAbsenceReason(actualAbsenceReason)
     : requestedStatus;
   const actualAttendanceNote = requestedStatus === "present"
     ? null

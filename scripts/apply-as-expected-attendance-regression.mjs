@@ -32,6 +32,7 @@ for (const [plannedReason, actualAbsenceReason, finalStatus] of [
   ["P", "private", "P"],
   ["other", "other", "absent"],
   ["E", "excused", "E"],
+  ["S", "late_cancellation", "absent"],
   ["U", "unexcused", "U"]
 ]) {
   const result = decision({ plannedStatus: "unavailable", plannedReason });
@@ -45,12 +46,6 @@ assert.equal(plannedReasonToActualAbsenceReason("Z"), null);
 assert.deepEqual(decision({ plannedStatus: "unavailable" }), {
   action: "absent",
   finalStatus: "absent",
-  actualAbsenceReason: null,
-  needsReview: true
-});
-assert.deepEqual(decision({ plannedStatus: "unavailable", plannedReason: "S" }), {
-  action: "absent",
-  finalStatus: "S",
   actualAbsenceReason: null,
   needsReview: true
 });

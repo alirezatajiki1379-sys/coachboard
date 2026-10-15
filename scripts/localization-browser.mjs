@@ -24,6 +24,7 @@ const bundle = await build({
     import {I18nProvider} from "@/components/i18n/i18n-provider";
     import {GermanLocalizationBoundary} from "@/components/i18n/german-localization-boundary";
     import {CheckInRow,RatingRow} from "@/components/squad/attendance-controls";
+    import {ReliabilityValue} from "@/components/squad/reliability-value";
     import {PlayerDevelopmentSection} from "@/components/squad/player-development";
     import {AnalyticsSectionPanel} from "@/app/(app)/squad/analysis/page";
     import {trainingSectionLabel} from "@/lib/i18n/training-labels";
@@ -35,6 +36,8 @@ const bundle = await build({
     window.qa={locale:"en",saves:0,ready:false};
     const root=createRoot(document.getElementById("root"));
     const entry={id:"entry",eventId:"event",playerId:"player",plannedStatus:"expected",finalStatus:"present",latePenaltyApplied:true,player:{firstName:"Quality",lastName:"",playerType:"roster",position:"CM",secondaryPositions:[]}};
+    const lateCancellationEntry={...entry,id:"late-cancellation",finalStatus:"absent",actualAbsenceReason:"late_cancellation",actualAttendanceNote:"Cancelled shortly before Training."};
+    const lateCancellationSummary={reliabilityPenalty:-1,reliabilityBreakdown:{late:0,lateCancellation:1,unexcused:0,legacyNeedsReview:0}};
     const analytics={trainingSessions:2,reviewedSessions:1,reviewCoverage:.5,averageSessionQuality:3.5,averageSessionIntensity:4.5,averagePlayerResponse:4,participantRecordCount:5,attendanceRecordCount:4,planCoverage:{rate:.5},objectiveOutcomes:{achieved:1,partly_achieved:1,not_achieved:0},focusDistribution:[],events:[],present:2,late:1,absent:1,notExpected:1,notRecorded:1,activeDevelopmentGoals:0,playersWithActiveGoals:0,goalsDueForReview:0,goalsAchievedInPeriod:0,activeGoalCategoryDistribution:[],progressUpdatesInPeriod:0,progressPlayersInPeriod:0,latestProgressDistribution:[],drillInstancesUsed:0,uniqueDrillsUsed:0,reviewedDrillInstances:0,averageDrillEffectiveness:null,drillUsage:[]};
     async function resolveServer(node){
       if(Array.isArray(node)) return Promise.all(node.map(resolveServer));
@@ -52,6 +55,7 @@ const bundle = await build({
       const server=await resolveServer(<>
         <section id="analytics">{["training","attendance","development","drills"].map(section=><AnalyticsSectionPanel key={section} section={section} teamAnalytics={analytics} summaries={[]}/>)}</section>
         <section id="history"><AttendanceEntryCard entry={{...entry,finalStatus:"Z",plannedReason:"school",lateMinutes:5,coachNote:"Present",event:{id:"event",date:"2026-09-19",label:"Quality"}}}/></section>
+        <section id="late-cancellation-history"><AttendanceEntryCard entry={{...lateCancellationEntry,event:{id:"event-late-cancellation",date:"2026-09-20",label:"Fictional Training"}}}/></section>
         <section id="development"><PlayerDevelopmentSection playerId="player" development={populated?{
           goals:[{id:"goal",title:"Quality",successCriteria:"Present",coachNotes:"Expected",category:"physical",priority:"high",status:"in_progress",progress:"developing",startDate:"2026-09-01",reviewDate:"2026-09-19",observations:[],actions:[],progressUpdates:[{id:"progress",recordedAt:"2026-09-19",progressLevel:"consistent",note:"Present"}]}],
           timeline:[{id:"timeline",type:"progress",date:"2026-09-19",title:"Progress: consistent",progressLevel:"consistent",detail:"Present"}]
@@ -61,6 +65,8 @@ const bundle = await build({
         <nav><button onClick={()=>window.qa.switch("en")}>EN</button><button onClick={()=>window.qa.switch("de")}>DE</button></nav>
         {server}
         <section id="check-in"><CheckInRow entry={entry} eventId="event" eventDate="2026-09-19"/></section>
+        <section id="late-cancellation-check-in"><CheckInRow entry={lateCancellationEntry} eventId="event" eventDate="2026-09-19"/></section>
+        <section id="late-cancellation-analytics"><ReliabilityValue summary={lateCancellationSummary} locale={locale} showReviewLink={false}/></section>
         <section id="ratings"><RatingRow entry={entry} eventId="event"/></section>
         <section id="sections" translate="no">{["activation","Main part 1","Main part 2","Cool-down"].map(value=><p key={value}>{trainingSectionLabel(value,locale)}</p>)}<p data-user-content>Quality</p></section>
         <section id="actions-runtime" translate="no"><h2>{action.title}</h2><p>{action.playerName}</p><p>{action.explanation}</p><p>{action.thresholdLabel}</p><p>{action.evidence[0].label}: <span data-user-content>{action.evidence[0].value}</span></p><a href={action.suggestedActions[0].href}>{action.suggestedActions[0].label}</a></section>
@@ -98,7 +104,7 @@ const bundle = await build({
     builder.onLoad({filter:/squad\/players\/\[id\]\/page\.tsx$/},args=>{
       const tree=ts.createSourceFile(args.path,readFileSync(args.path,"utf8"),99,true,ts.ScriptKind.TSX);
       const functions=tree.statements.filter(n=>ts.isFunctionDeclaration(n)&&["AttendanceEntryCard","Badge"].includes(n.name?.text)).map(n=>n.getText(tree)).join("\n");
-      return {contents:`import Link from "next/link";import {getActiveLocale} from "@/lib/i18n/server";import {createSystemTranslator} from "@/lib/i18n/system-text";import {formatNumber} from "@/lib/i18n";import {cn} from "@/lib/utils";import {formatEventDate,plannedStatusLabel,finalStatusLabel,plannedReasonLabel,reliabilityMalus,effectiveActualAbsenceReason} from "@/lib/squad/attendance-format";${functions}\nexport {AttendanceEntryCard};`,loader:"tsx",resolveDir:path.dirname(args.path)};
+      return {contents:`import Link from "next/link";import {getActiveLocale} from "@/lib/i18n/server";import {createSystemTranslator} from "@/lib/i18n/system-text";import {formatNumber} from "@/lib/i18n";import {cn} from "@/lib/utils";import {actualAbsenceReasonLabel,formatEventDate,plannedStatusLabel,finalStatusLabel,plannedReasonLabel,reliabilityMalus,effectiveActualAbsenceReason} from "@/lib/squad/attendance-format";${functions}\nexport {AttendanceEntryCard};`,loader:"tsx",resolveDir:path.dirname(args.path)};
     });
   }}]
 });
@@ -142,6 +148,12 @@ try {
     assert.ok((await page.locator("#history").innerText()).includes(de?"Geplant: Eingeplant · Tatsächlich: Verspätet":"Planned: Expected · Actual: Late"));
     assert.ok((await page.locator("#history").innerText()).includes(de?"Geplanter Grund: Schule":"Planned reason: School"));
     assert.ok((await page.locator("#history").innerText()).includes("Quality"));
+    const lateCheckIn=await page.locator("#late-cancellation-check-in").innerText();
+    assert.ok(lateCheckIn.includes(de?"Tatsächlich: Abwesend · Verspätet abgesagt":"Actual: Absent · Late cancellation"));
+    const lateHistory=await page.locator("#late-cancellation-history").innerText();
+    assert.ok(lateHistory.includes(de?"Tatsächlich: Abwesend · Verspätet abgesagt":"Actual: Absent · Late cancellation"));
+    assert.ok(lateHistory.includes("Cancelled shortly before Training."),"Factual attendance note must remain unchanged");
+    assert.ok((await page.locator("#late-cancellation-analytics").innerText()).includes(de?"1× verspätet abgesagt":"1× late cancellation"));
     const forbidden=de?["Training Sessions","Training Focus","Review coverage","Planned sessions","No structured focus has been saved"]:["Trainingseinheiten","Reflexionsabdeckung","Trainingsschwerpunkte"];
     for(const word of forbidden)assert.ok(!(await page.locator("#analytics").innerText()).includes(word),`Wrong-language Analytics copy: ${word}`);
   }

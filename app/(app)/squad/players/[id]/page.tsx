@@ -1415,6 +1415,8 @@ function PeriodControls({ playerId, tab, period, customFrom, customTo }: { playe
 async function AttendanceEntryCard({ entry }: { entry: PlayerAnalyticsRecord }) {
   const locale = await getActiveLocale();
   const ui = createSystemTranslator(locale);
+  const actualReason = effectiveActualAbsenceReason(entry);
+  const actualLabel = `${finalStatusLabel(entry.finalStatus, locale)}${actualReason ? ` · ${actualAbsenceReasonLabel(actualReason, locale)}` : ""}`;
   return (
     <article translate="no" className="rounded-md border border-board-line bg-board-paper p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1423,10 +1425,9 @@ async function AttendanceEntryCard({ entry }: { entry: PlayerAnalyticsRecord }) 
             {entry.event ? <Link href={`/trainings/${entry.event.id}`} className="underline-offset-4 hover:text-board-green hover:underline">{formatEventDate(entry.event.date, locale)} · {entry.event.label || ui("Training")}</Link> : ui("Training")}
           </p>
           <p className="mt-1 text-sm text-slate-600">
-            {ui("Planned: {planned} · Actual: {actual}", { planned: plannedStatusLabel(entry.plannedStatus, locale), actual: finalStatusLabel(entry.finalStatus, locale) })}
+            {ui("Planned: {planned} · Actual: {actual}", { planned: plannedStatusLabel(entry.plannedStatus, locale), actual: actualLabel })}
             {entry.overallRating ? ` · ${ui("Rating: {rating}", { rating: entry.overallRating })}` : ""}
             {entry.plannedReason ? ` · ${ui("Planned reason: {reason}", { reason: plannedReasonLabel(entry.plannedReason, locale) })}` : ""}
-            {effectiveActualAbsenceReason(entry) ? ` · ${ui("Actual reason: {reason}", { reason: actualAbsenceReasonLabel(effectiveActualAbsenceReason(entry), locale) })}` : ""}
             {entry.lateMinutes ? ` · ${ui("Late: {minutes} min", { minutes: entry.lateMinutes })}` : ""}
             {entry.leftEarlyMinute !== undefined ? ` · ${ui("Left after minute")}: ${entry.leftEarlyMinute}` : ""}
             {` · ${ui("Malus: {value}", { value: formatNumber(reliabilityMalus(entry), locale) })}`}
@@ -1622,7 +1623,7 @@ function filterAttendanceRecords(records: PlayerAnalyticsRecord[], filter: Atten
   if (filter === "sick") return records.filter((entry) => entry.finalStatus === "K" || entry.plannedReason === "K");
   if (filter === "excused") return records.filter((entry) => entry.finalStatus === "E" || entry.plannedReason === "E");
   if (filter === "private") return records.filter((entry) => entry.finalStatus === "P" || entry.plannedReason === "P");
-  if (filter === "cancelled") return records.filter((entry) => entry.finalStatus === "S" || entry.plannedReason === "S");
+  if (filter === "cancelled") return records.filter((entry) => entry.finalStatus === "S" || entry.actualAbsenceReason === "late_cancellation" || entry.plannedReason === "S");
   return records.filter((entry) => entry.finalStatus === "U" || entry.plannedReason === "U");
 }
 

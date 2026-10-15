@@ -346,7 +346,7 @@ export function calculateAttendanceDistribution(records: PlayerAnalyticsRecord[]
     sick: records.filter((record) => record.finalStatus === "K").length,
     excused: records.filter((record) => record.finalStatus === "E").length,
     privateReason: records.filter((record) => record.finalStatus === "P").length,
-    lateCancellation: records.filter((record) => record.finalStatus === "S").length,
+    lateCancellation: records.filter((record) => record.finalStatus === "S" || record.actualAbsenceReason === "late_cancellation").length,
     unexcused: records.filter((record) => record.finalStatus === "U").length
   };
 }
