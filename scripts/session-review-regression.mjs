@@ -36,3 +36,10 @@ test("player observation remains optional and separate from review validation", 
   assert.doesNotMatch(source, /if \(!observation/);
   assert.match(source, /players\.find\(\(player\) => player\.id === selectedPlayerId\)/);
 });
+
+test("next Training note explains its optional planning reminder", () => {
+  const source = readFileSync("components/squad/session-review-form.tsx", "utf8");
+  assert.match(source, /Shown again when you plan this Team's next Training\./);
+  assert.match(source, /Wird dir bei der Planung der nächsten Trainingseinheit dieser Mannschaft wieder angezeigt\./);
+  assert.doesNotMatch(source, /send to next Training|an nächstes Training senden/i);
+});

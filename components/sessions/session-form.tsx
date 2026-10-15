@@ -12,6 +12,7 @@ import { drillMatchesAgeFilter } from "@/lib/drills/age-suitability";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { SessionDrillPreview } from "@/components/sessions/session-drill-preview";
 import { MaterialSummaryList } from "@/components/sessions/material-summary-list";
+import { ReviewCarryForward } from "@/components/sessions/review-carry-forward";
 import { useUnsavedChangesProtection } from "@/components/shared/use-unsaved-changes-protection";
 import { useLocalDraft } from "@/components/shared/local-draft";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,8 @@ import {
 } from "@/lib/sessions/utils";
 import type { SessionActionState } from "@/lib/sessions/actions";
 import type { TrainingSessionDetail } from "@/lib/sessions/queries";
+import { applyReviewCarryForward, includesReviewCarryForward } from "@/lib/sessions/review-carry-forward";
+import type { PreviousTrainingPlanningContext } from "@/lib/squad/session-review";
 import { materialSummary } from "@/lib/drills/materials";
 import type { Drill, DrillVisual, SessionPlayerGroup } from "@/types/domain";
 
@@ -51,6 +54,7 @@ type SessionFormProps = {
   initialValues?: SessionFormValues;
   staff?: SessionPlanStaff[];
   cancelHref?: string;
+  carryForwardContext?: PreviousTrainingPlanningContext | null;
 };
 
 type DropTarget = {
@@ -78,7 +82,8 @@ export function SessionForm({
   eventId,
   initialValues: providedInitialValues,
   staff = [],
-  cancelHref
+  cancelHref,
+  carryForwardContext
 }: SessionFormProps) {
   const locale = useOptionalI18n()?.locale ?? "en";
   const ui = useSystemText();
@@ -105,6 +110,8 @@ export function SessionForm({
   const initialSnapshotRef = useRef<string | null>(null);
   if (initialSnapshotRef.current === null) initialSnapshotRef.current = sessionValuesSnapshot(initialFormValues);
   const isDirty = sessionValuesSnapshot(values) !== initialSnapshotRef.current;
+  const carryForwardNote = carryForwardContext?.nextTrainingNote.trim() ?? "";
+  const carryForwardIncluded = includesReviewCarryForward(values.mainFocus, values.notes, carryForwardNote);
   const draftKey = `coachboard:draft:session:${eventId ?? session?.id ?? "new"}`;
   const readDraftData = useCallback(() => values, [values]);
   const {
@@ -201,6 +208,14 @@ export function SessionForm({
 
   function updateField<K extends keyof SessionFormValues>(key: K, value: SessionFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
+  }
+
+  function applyCarryForward() {
+    if (!carryForwardNote || carryForwardIncluded) return;
+    setValues((current) => {
+      const result = applyReviewCarryForward(current.mainFocus, current.notes, carryForwardNote, ui("From last reflection:"));
+      return { ...current, mainFocus: result.mainFocus, notes: result.notes };
+    });
   }
 
   function addDrill(drill: BuilderDrill) {
@@ -524,6 +539,16 @@ export function SessionForm({
         <h2 className="text-lg font-bold text-board-navy">{ui("Training plan details")}</h2>
         {builderMode === "session" ? (
           <p className="mt-1 text-sm text-slate-500">{ui("This plan belongs only to this Training. The reusable Training Plan and Drill Library stay unchanged.")}</p>
+        ) : null}
+        {builderMode === "session" && carryForwardContext ? (
+          <div className="mt-4">
+            <ReviewCarryForward
+              context={carryForwardContext}
+              action={values.mainFocus.trim() ? "notes" : "focus"}
+              alreadyIncluded={carryForwardIncluded}
+              onApply={applyCarryForward}
+            />
+          </div>
         ) : null}
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <TextInput label={ui("Title")} required value={values.title} error={actionState.fieldErrors?.title} onChange={(value) => updateField("title", value)} />
@@ -1258,6 +1283,7 @@ function SelectInput({
       <span className="whitespace-nowrap text-xs font-semibold text-slate-500">{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
         {emptyLabel !== null ? <option value="">{ui(emptyLabel)}</option> : null}
+        {value && !options.includes(value) ? <option value={value} translate="no">{value}</option> : null}
         {options.map((option) => <option key={option} value={option} translate="no">{optionLabel ? optionLabel(option) : ui(option)}</option>)}
       </select>
     </label>

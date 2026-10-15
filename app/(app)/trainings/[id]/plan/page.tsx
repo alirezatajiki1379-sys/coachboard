@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, ClipboardList, Plus } from "lucide-react";
 import { SessionForm } from "@/components/sessions/session-form";
+import { ReviewCarryForward } from "@/components/sessions/review-carry-forward";
 import { Button } from "@/components/ui/button";
 import { createSignedImageUrlMap } from "@/lib/drills/graphics";
 import { parseEditorState } from "@/lib/drills/editor";
@@ -12,6 +13,7 @@ import { createSystemTranslator } from "@/lib/i18n/system-text";
 import { defaultSessionGroups, type SessionFormValues, type SessionPlanSection, type SessionPlanStaff } from "@/lib/sessions/utils";
 import { getDrillsForSessionBuilder } from "@/lib/sessions/queries";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
+import { getPreviousTrainingPlanningContext } from "@/lib/squad/session-review";
 import { addSessionPlanStaff, applyTrainingPlanTemplate, createBlankSessionPlan, updateConcreteSessionPlan } from "@/lib/squad/training-plan-actions";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
@@ -41,9 +43,13 @@ export default async function TrainingPlanPage({ params }: PageProps) {
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event || event.deletedAt) notFound();
   const db = supabase as unknown as SupabaseClient;
-  const { data: planData, error: planError } = await db.from("training_session_plan_instances")
-    .select("id,title,source_training_session_id,plan_json,snapshot_json,updated_at")
-    .eq("user_id", user.id).eq("event_id", id).maybeSingle();
+  const [planResult, carryForwardContext] = await Promise.all([
+    db.from("training_session_plan_instances")
+      .select("id,title,source_training_session_id,plan_json,snapshot_json,updated_at")
+      .eq("user_id", user.id).eq("event_id", id).maybeSingle(),
+    getPreviousTrainingPlanningContext(supabase, user.id, event)
+  ]);
+  const { data: planData, error: planError } = planResult;
   if (planError) throw new Error(planError.message);
 
   if (!planData) {
@@ -54,6 +60,7 @@ export default async function TrainingPlanPage({ params }: PageProps) {
     return <div className="mx-auto max-w-5xl space-y-6">
       <BackLink eventId={id} label={ui("Back to training")} />
       <header><p className="text-sm font-semibold uppercase text-board-green">{ui("Session Plan Builder")}</p><h1 className="mt-2 text-3xl font-bold text-board-navy">{ui("Plan Training")}</h1><p className="mt-2 text-slate-600">{ui("Use a reusable Training Plan or start with an empty plan. The Session copy can be edited independently.")}</p></header>
+      {carryForwardContext ? <ReviewCarryForward context={carryForwardContext} /> : null}
       <section className="grid gap-4 md:grid-cols-2">
         <article className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
           <ClipboardList className="h-6 w-6 text-board-green" /><h2 className="mt-3 text-lg font-bold text-board-navy">{ui("Use Training Plan")}</h2><p className="mt-1 text-sm text-slate-600">{ui("Copy an existing plan into this Training. The original remains unchanged.")}</p>
@@ -111,7 +118,7 @@ export default async function TrainingPlanPage({ params }: PageProps) {
       </form>
       {staff.length ? <div className="mt-3 flex flex-wrap gap-2">{staff.map((member) => <span key={member.id} className="rounded-full bg-board-paper px-3 py-1 text-xs font-semibold text-slate-700"><span translate="no">{member.name}</span>{member.role ? ` · ${staffRoleLabel(member.role, ui)}` : ""}{member.isActive === false ? ` · ${ui("Inactive")}` : ""}</span>)}</div> : <p className="mt-3 text-sm text-slate-500">{ui("Add a coach to assign Training sections.")}</p>}
     </details>
-    <SessionForm action={updateConcreteSessionPlan} mode="edit" builderMode="session" eventId={id} drills={[...libraryDrills, ...snapshotDrills]} initialValues={initialValues} staff={staff} cancelHref={`/trainings/${id}`} />
+    <SessionForm action={updateConcreteSessionPlan} mode="edit" builderMode="session" eventId={id} drills={[...libraryDrills, ...snapshotDrills]} initialValues={initialValues} staff={staff} cancelHref={`/trainings/${id}`} carryForwardContext={carryForwardContext} />
   </div>;
 }
 

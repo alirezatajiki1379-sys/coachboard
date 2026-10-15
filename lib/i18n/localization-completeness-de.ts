@@ -700,4 +700,9 @@ export const localizationCompletenessDe: Record<string, string> = {
   "{count} reviews due": "{count} Überprüfungen fällig",
   "+{count} more goal": "+{count} weiteres Ziel",
   "+{count} more goals": "+{count} weitere Ziele",
+  "From the last reflection": "Aus der letzten Reflexion",
+  "Already included": "Bereits übernommen",
+  "Use as focus": "Als Schwerpunkt übernehmen",
+  "Add to planning notes": "In Planungsnotizen übernehmen",
+  "From last reflection:": "Aus letzter Reflexion:",
 };

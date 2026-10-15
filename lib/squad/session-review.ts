@@ -24,6 +24,14 @@ export const drillFeedbackStatusLabels: Record<TrainingSessionDrillFeedbackStatu
 
 export type SessionReviewRatingKind = "quality" | "intensity" | "playerResponse";
 
+export type PreviousTrainingPlanningContext = {
+  sourceEventId: string;
+  sourceDate: string;
+  sourceLabel: string;
+  nextTrainingNote: string;
+  objectiveOutcome?: TrainingSessionObjectiveOutcome;
+};
+
 export const sessionReviewRatingAnchors: Record<Locale, Record<SessionReviewRatingKind, Record<number, string>>> = {
   en: {
     quality: { 1: "Poor", 2: "Below expectations", 3: "Solid", 4: "Good", 5: "Excellent" },
@@ -150,6 +158,56 @@ export async function countTrainingObservations(supabase: SupabaseServerClient, 
     .eq("event_id", eventId);
   if (error) throw new Error(error.message);
   return count ?? 0;
+}
+
+export async function getPreviousTrainingPlanningContext(
+  supabase: SupabaseServerClient,
+  userId: string,
+  target: { id: string; squadId?: string; date: string; startTime: string }
+): Promise<PreviousTrainingPlanningContext | null> {
+  if (!target.squadId) return null;
+  const db = supabase as unknown as SupabaseClient;
+  const { data: previousData, error: previousError } = await db
+    .from("squad_training_events")
+    .select("id,date,start_time,label,training_sessions(title)")
+    .eq("user_id", userId)
+    .eq("squad_id", target.squadId)
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .or(`date.lt.${target.date},and(date.eq.${target.date},start_time.lt.${target.startTime})`)
+    .order("date", { ascending: false })
+    .order("start_time", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (previousError) throw new Error(previousError.message);
+  if (!previousData) return null;
+
+  const previous = previousData as {
+    id: string;
+    date: string;
+    label: string | null;
+    training_sessions?: { title?: string | null } | Array<{ title?: string | null }> | null;
+  };
+  const { data: reviewData, error: reviewError } = await db
+    .from("training_session_reviews")
+    .select("next_training_note,objective_outcome")
+    .eq("user_id", userId)
+    .eq("squad_id", target.squadId)
+    .eq("event_id", previous.id)
+    .maybeSingle();
+  if (reviewError) throw new Error(reviewError.message);
+
+  const review = reviewData as Pick<ReviewRow, "next_training_note" | "objective_outcome"> | null;
+  const note = review?.next_training_note?.trim();
+  if (!note) return null;
+  const linkedSession = Array.isArray(previous.training_sessions) ? previous.training_sessions[0] : previous.training_sessions;
+  return {
+    sourceEventId: previous.id,
+    sourceDate: previous.date,
+    sourceLabel: previous.label?.trim() || linkedSession?.title?.trim() || "",
+    nextTrainingNote: note,
+    objectiveOutcome: review?.objective_outcome
+  };
 }
 
 function mapReviewRow(row: ReviewRow, drillRows: DrillReviewRow[]): TrainingSessionReview {

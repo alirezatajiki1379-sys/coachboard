@@ -244,6 +244,7 @@ export function SessionReviewForm({
           <TextArea label={copy.workedWell} helper={copy.workedWellHelper} value={values.workedWell} onChange={(value) => setValues((current) => ({ ...current, workedWell: value }))} />
           <TextArea label={copy.needsImprovement} helper={copy.needsImprovementHelper} value={values.needsImprovement} onChange={(value) => setValues((current) => ({ ...current, needsImprovement: value }))} />
           <TextArea label={copy.nextTrainingNote} helper={copy.nextTrainingNoteHelper} value={values.nextTrainingNote} onChange={(value) => setValues((current) => ({ ...current, nextTrainingNote: value }))} />
+          <p className="-mt-2 text-xs font-semibold leading-5 text-slate-500">{copy.nextTrainingCarryForwardHelper}</p>
         </div>
       </section>
 
@@ -620,6 +621,7 @@ const reviewCopy = {
     needsImprovementHelper: "What did not work as intended, and why?",
     nextTrainingNote: "Take into next Training",
     nextTrainingNoteHelper: "One concrete point to continue, change or revisit.",
+    nextTrainingCarryForwardHelper: "Shown again when you plan this Team's next Training.",
     objectiveLabels: {
       achieved: "Achieved",
       partly_achieved: "Partly achieved",
@@ -693,6 +695,7 @@ const reviewCopy = {
     needsImprovementHelper: "Was hat nicht wie geplant funktioniert - und warum?",
     nextTrainingNote: "Für das nächste Training mitnehmen",
     nextTrainingNoteHelper: "Ein konkreter Punkt, den du fortführen, verändern oder erneut aufgreifen möchtest.",
+    nextTrainingCarryForwardHelper: "Wird dir bei der Planung der nächsten Trainingseinheit dieser Mannschaft wieder angezeigt.",
     objectiveLabels: {
       achieved: "Erreicht",
       partly_achieved: "Teilweise erreicht",
@@ -766,6 +769,7 @@ const reviewCopy = {
   needsImprovementHelper: string;
   nextTrainingNote: string;
   nextTrainingNoteHelper: string;
+  nextTrainingCarryForwardHelper: string;
   objectiveLabels: Record<TrainingSessionObjectiveOutcome, string>;
   errors: Record<"objectiveOutcome" | "overallQuality" | "intensity" | "playerResponse", string>;
   summary: {

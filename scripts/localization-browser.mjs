@@ -28,11 +28,14 @@ const bundle = await build({
   stdin: { contents: `
     import React from "react";
     import {createRoot} from "react-dom/client";
+    import {useSystemText} from "@/components/i18n/use-system-text";
     import {I18nProvider} from "@/components/i18n/i18n-provider";
     import {GermanLocalizationBoundary} from "@/components/i18n/german-localization-boundary";
     import {CheckInRow,RatingRow} from "@/components/squad/attendance-controls";
     import {ReliabilityValue} from "@/components/squad/reliability-value";
     import {PlayerDevelopmentSection} from "@/components/squad/player-development";
+    import {ReviewCarryForward} from "@/components/sessions/review-carry-forward";
+    import {applyReviewCarryForward,includesReviewCarryForward} from "@/lib/sessions/review-carry-forward";
     import {AnalyticsSectionPanel} from "@/app/(app)/squad/analysis/page";
     import {trainingSectionLabel} from "@/lib/i18n/training-labels";
     import {localizeAttentionItems} from "@/lib/squad/attention";
@@ -55,6 +58,14 @@ const bundle = await build({
     let count=0;
     let legacy="Present";
     let populated=false;
+    const carryContext={sourceEventId:"training-a",sourceDate:"2026-10-12",sourceLabel:"Stützpunkttraining",nextTrainingNote:"Nach Ballverlust schneller ins Gegenpressing kommen."};
+    function CarryHarness({initialFocus="",initialNotes=""}){
+      const ui=useSystemText();
+      const [values,setValues]=React.useState({mainFocus:initialFocus,notes:initialNotes});
+      const included=includesReviewCarryForward(values.mainFocus,values.notes,carryContext.nextTrainingNote);
+      const action=values.mainFocus.trim()?"notes":"focus";
+      return <><ReviewCarryForward context={carryContext} action={action} alreadyIncluded={included} onApply={()=>setValues(current=>{const result=applyReviewCarryForward(current.mainFocus,current.notes,carryContext.nextTrainingNote,ui("From last reflection:"));return {mainFocus:result.mainFocus,notes:result.notes};})}/><p data-main-focus translate="no">{values.mainFocus}</p><p data-plan-notes translate="no">{values.notes}</p></>;
+    }
     async function render(){
       window.qa.ready=false;
       const locale=window.qa.locale;
@@ -77,6 +88,11 @@ const bundle = await build({
           observations:[{id:"observation",observationDate:"2026-09-19",createdAt:"2026-09-19",note:"Protected observation"}],
           timeline:[{id:"timeline",type:"progress",date:"2026-09-19",title:"Progress: consistent",progressLevel:"consistent",detail:"Present"}]
         }:{goals:[],observations:[],timeline:[]}}/></section>
+        <section id="carry-selection"><ReviewCarryForward context={carryContext}/></section>
+        <section id="carry-focus"><CarryHarness/></section>
+        <section id="carry-notes"><CarryHarness initialFocus="Spielaufbau" initialNotes="Existing notes"/></section>
+        <section id="carry-already"><CarryHarness initialFocus="" initialNotes={carryContext.nextTrainingNote}/></section>
+        <section id="carry-none"></section>
       </>);
       root.render(<I18nProvider locale={locale}><GermanLocalizationBoundary locale={locale}>
         <nav><button onClick={()=>window.qa.switch("en")}>EN</button><button onClick={()=>window.qa.switch("de")}>DE</button></nav>
@@ -153,6 +169,13 @@ try {
     assert.ok((await page.locator("#development").innerText()).includes(de?"Entwicklungsziel hinzufügen":"Add development goal"));
     assert.ok((await page.locator("#development").innerText()).includes(de?"Noch kein Entwicklungsziel":"No development focus yet"));
     assert.ok(!(await page.locator("#development").innerText()).includes(de?"0 aktive Entwicklungsziele":"0 active goals"));
+    assert.ok((await page.locator("#carry-selection").innerText()).toLocaleLowerCase(locale).includes((de?"Aus der letzten Reflexion":"From the last reflection").toLocaleLowerCase(locale)));
+    assert.ok((await page.locator("#carry-selection").innerText()).includes("Nach Ballverlust schneller ins Gegenpressing kommen."));
+    assert.equal(await page.locator("#carry-selection button").count(),0);
+    assert.ok((await page.locator("#carry-focus").innerText()).includes(de?"Als Schwerpunkt übernehmen":"Use as focus"));
+    assert.ok((await page.locator("#carry-notes").innerText()).includes(de?"In Planungsnotizen übernehmen":"Add to planning notes"));
+    assert.ok((await page.locator("#carry-already").innerText()).includes(de?"Bereits übernommen":"Already included"));
+    assert.equal((await page.locator("#carry-none").innerText()).trim(),"");
     assert.ok((await page.locator("#check-in").innerText()).includes(de?"Eingeplant":"Expected"));
     assert.equal(await page.locator("#check-in").getByRole("button",{name:de?"Anwesend":"Present",exact:true}).count(),1);
     assert.ok((await page.locator("#sections").innerText()).includes(de?"Hauptteil 1":"Main part 1"));
@@ -202,6 +225,14 @@ try {
     assert.equal(await page.locator('#development select[name="category"]').first().locator('option[value="physical"]').textContent(),locale==="de"?"Körperlich":"Physical");
   }
   assert.equal(await page.evaluate(()=>window.qa.saves),0,"Opening or switching language must not write data");
+  await page.locator("#carry-focus").getByRole("button",{name:"Als Schwerpunkt übernehmen",exact:true}).click();
+  assert.equal(await page.locator("#carry-focus [data-main-focus]").innerText(),"Nach Ballverlust schneller ins Gegenpressing kommen.");
+  assert.ok((await page.locator("#carry-focus").innerText()).includes("Bereits übernommen"));
+  await page.locator("#carry-notes").getByRole("button",{name:"In Planungsnotizen übernehmen",exact:true}).click();
+  const carriedNotes=await page.locator("#carry-notes [data-plan-notes]").innerText();
+  assert.ok(carriedNotes.includes("Existing notes"));
+  assert.ok(carriedNotes.includes("Aus letzter Reflexion:"));
+  assert.equal(carriedNotes.split("Nach Ballverlust schneller ins Gegenpressing kommen.").length-1,1);
   await page.setViewportSize({width:1440,height:1000});
   const analyticsCard=page.locator("#player-analytics-kpis a").first();
   await analyticsCard.scrollIntoViewIfNeeded();

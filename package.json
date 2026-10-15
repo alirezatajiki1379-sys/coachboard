@@ -48,6 +48,7 @@
     "test:reliability": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/reliability-penalty-regression.mjs",
     "test:late-cancellation": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/late-cancellation-regression.mjs",
     "test:session-plan": "node scripts/session-plan-builder-regression.mjs",
+    "test:review-next-training": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/review-next-training-regression.mjs",
     "test:staff-brief": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/staff-brief-regression.mjs",
     "test:staff-brief-browser": "node scripts/staff-brief-browser.mjs",
     "test:core-stability": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/core-stability-regression.mjs",

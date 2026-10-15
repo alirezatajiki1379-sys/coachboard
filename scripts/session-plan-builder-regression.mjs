@@ -12,6 +12,10 @@ assert.match(page, /<SessionForm[\s\S]*builderMode="session"/, "concrete Trainin
 assert.match(form, /builderMode = "template"/, "template behavior must remain the shared builder default");
 assert.match(page, /Use Training Plan/);
 assert.match(page, /Create from scratch/);
+assert.match(page, /getPreviousTrainingPlanningContext/);
+assert.match(page, /carryForwardContext=\{carryForwardContext\}/);
+assert.match(form, /applyReviewCarryForward/);
+assert.match(form, /value && !options\.includes\(value\)/, "custom carried focus must stay visible in the existing select");
 assert.doesNotMatch(page, /phaseOptions/, "the old simplified fixed-phase planner must be retired");
 
 for (const capability of ["addSection", "moveSection", "deleteSection", "moveDraggedDrill", "SessionOnlyDrillEditor", "ResponsibilityInput"]) {
