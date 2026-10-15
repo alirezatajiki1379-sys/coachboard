@@ -432,7 +432,7 @@ export const workflowCopyDe: Record<string, string> = {
   "Low": "Niedrig",
   "Medium": "Mittel",
   "High": "Hoch",
-  "Needs attention": "Handlungsbedarf",
+  "Needs attention": "Fokus nötig",
   "Achieved": "Erreicht",
   "Not achieved": "Nicht erreicht",
   "Connect observations to long-term player development goals.": "Verknüpfe Beobachtungen mit langfristigen Entwicklungszielen der Spieler.",

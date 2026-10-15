@@ -15,7 +15,7 @@ export async function createDevelopmentGoal(formData: FormData) {
   if (!playerId || !title || !successCriteria) return;
   const player = await assertPlayerOwner(supabase as unknown as SupabaseClient, userId, playerId);
 
-  const category = isGoalCategory(formData.get("category")) ? formData.get("category") : "technical";
+  const category = isGoalCategory(formData.get("category")) ? formData.get("category") : "other";
   const priority = isGoalPriority(formData.get("priority")) ? formData.get("priority") : "medium";
   const status = isGoalStatus(formData.get("status")) ? formData.get("status") : "in_progress";
   const progress = isGoalProgress(formData.get("progress")) ? formData.get("progress") : "developing";
@@ -143,7 +143,7 @@ export async function createPlayerObservation(formData: FormData) {
   const playerId = stringValue(formData.get("playerId"));
   const note = stringValue(formData.get("note"));
   if (!playerId || !note) return;
-  await assertPlayerOwner(supabase as unknown as SupabaseClient, userId, playerId);
+  const player = await assertPlayerOwner(supabase as unknown as SupabaseClient, userId, playerId);
   const goalId = nullableString(formData.get("goalId"));
   if (goalId) {
     const goal = await assertGoalOwner(supabase as unknown as SupabaseClient, userId, goalId);
@@ -152,7 +152,8 @@ export async function createPlayerObservation(formData: FormData) {
 
   const category = isGoalCategory(formData.get("category")) ? formData.get("category") : null;
   const eventId = nullableString(formData.get("eventId"));
-  await (supabase as unknown as SupabaseClient).from("player_observations").insert({
+  if (eventId) await assertTrainingOwner(supabase as unknown as SupabaseClient, userId, eventId, player.squad_id);
+  const { error } = await (supabase as unknown as SupabaseClient).from("player_observations").insert({
     user_id: userId,
     player_id: playerId,
     goal_id: goalId,
@@ -161,8 +162,10 @@ export async function createPlayerObservation(formData: FormData) {
     category,
     note
   });
+  if (error) throw new Error(error.message);
 
   revalidateDevelopment(playerId);
+  if (eventId) revalidatePath(`/trainings/${eventId}/review`);
   const returnTo = stringValue(formData.get("returnTo"));
   if (returnTo) redirect(returnTo);
 }

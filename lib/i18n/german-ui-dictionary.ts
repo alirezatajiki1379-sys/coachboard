@@ -627,7 +627,7 @@ export const germanUiDictionary: Record<string, string> = {
   "Identified": "Erkannt",
   "Paused": "Pausiert",
   "Developing": "In Entwicklung",
-  "Consistent": "Konstant",
+  "Consistent": "Stabil",
   "Injury": "Verletzung",
   "Illness": "Krankheit",
   "Expected return": "Erwartete Rückkehr",

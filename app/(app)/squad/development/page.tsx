@@ -2,7 +2,7 @@ import { getActiveLocale } from "@/lib/i18n/server";
 import { createSystemTranslator } from "@/lib/i18n/system-text";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowDownAZ, ArrowUpAZ, ClipboardCheck, Search, Target } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, Search, Target } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
@@ -11,7 +11,7 @@ import {
   developmentGoalPriorities,
   developmentProgressLabel
 } from "@/config/development";
-import { getDevelopmentOverview, type DevelopmentOverviewPlayer } from "@/lib/squad/development";
+import { getDevelopmentOverview, isDevelopmentReviewDue, latestProgressForGoal, type DevelopmentOverviewPlayer } from "@/lib/squad/development";
 import { formatEventDate } from "@/lib/squad/attendance-format";
 import { createClient } from "@/lib/supabase/server";
 
@@ -63,13 +63,13 @@ export default async function SquadDevelopmentPage({ searchParams }: Development
       <PageHeader eyebrow={ui("Squad")} title={ui("Development")} description={ui("Track player goals, progress updates, observations and review dates for the active Team.")} />
       <SquadNav />
 
-      <section className="flex flex-wrap gap-2 text-sm font-bold">
-        <Metric label={ui("Players")} value={String(stats.playersTotal)} />
-        <Metric label={ui("With active Goals")} value={String(stats.playersWithActiveGoals)} />
-        <Metric label={ui("Without active Goals")} value={String(stats.playersWithoutActiveGoals)} />
-        <Metric label={ui("Goals due for review")} value={String(stats.goalsDueForReview)} tone={stats.goalsDueForReview ? "warning" : "normal"} />
-        <Metric label={ui("High priority Goals")} value={String(stats.activeHighPriorityGoals)} />
-      </section>
+      {stats.playersWithActiveGoals || stats.goalsDueForReview || stats.observationsThisWeek ? (
+        <section className="flex flex-wrap gap-2 text-sm font-bold">
+          {stats.playersWithActiveGoals ? <Metric label={ui("Players with active Goals")} value={String(stats.playersWithActiveGoals)} /> : null}
+          {stats.goalsDueForReview ? <Metric label={ui("Goals due for review")} value={String(stats.goalsDueForReview)} tone="warning" /> : null}
+          {stats.observationsThisWeek ? <Metric label={ui("Observations this week")} value={String(stats.observationsThisWeek)} /> : null}
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
         <form action="/squad/development" className="grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_1fr_auto]">
@@ -98,11 +98,11 @@ export default async function SquadDevelopmentPage({ searchParams }: Development
           <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
             <tr>
               <SortableHead label={ui("Player")} sort="player" filters={filters} />
-              <SortableHead label={ui("Active Goals")} sort="goals" filters={filters} />
-              <SortableHead label={ui("High Priority")} sort="priority" filters={filters} />
-              <th className="px-4 py-3">{ui("Latest Progress")}</th>
+              <th className="px-4 py-3">{ui("Current focus")}</th>
+              <th className="px-4 py-3">{ui("Progress")}</th>
+              <th className="px-4 py-3">{ui("Next step")}</th>
               <SortableHead label={ui("Next Review")} sort="nextReview" filters={filters} />
-              <SortableHead label={ui("Last Update")} sort="lastUpdate" filters={filters} />
+              <th className="px-4 py-3">{ui("Last observation")}</th>
               <th className="px-4 py-3">{ui("Action")}</th>
             </tr>
           </thead>
@@ -133,8 +133,8 @@ export default async function SquadDevelopmentPage({ searchParams }: Development
 async function DevelopmentRow({ item }: { item: DevelopmentOverviewPlayer }) {
   const locale = await getActiveLocale();
   const ui = createSystemTranslator(locale);
-  const latestGoal = item.latestGoal;
-  const latestProgress = item.latestProgress;
+  const goal = item.primaryActiveGoal;
+  const latestProgress = goal ? latestProgressForGoal(goal) : undefined;
   return (
     <tr className="align-top">
       <td className="sticky left-0 bg-white px-4 py-4">
@@ -144,24 +144,14 @@ async function DevelopmentRow({ item }: { item: DevelopmentOverviewPlayer }) {
         <p className="mt-1 text-xs font-semibold text-slate-500">{item.player.position ?? ui("No position")} · {item.player.playerType === "trial" ? ui("Trial") : ui("Roster")}</p>
       </td>
       <td className="px-4 py-4">
-        <p className="font-bold text-board-navy">{item.activeGoals.length}</p>
-        {latestGoal ? <p className="mt-1 line-clamp-2 text-xs text-slate-600">{latestGoal.title}</p> : <p className="mt-1 text-xs text-slate-500">{ui("No active development Goals")}</p>}
+        {goal ? <><p translate="no" className="max-w-60 break-words font-bold text-board-navy [overflow-wrap:anywhere]">{goal.title}</p>{isDevelopmentReviewDue(goal) ? <p className="mt-1 text-xs font-bold text-amber-700">{ui("Review due")}</p> : null}</> : <p className="text-slate-500">{ui("No active goal")}</p>}
       </td>
-      <td className="px-4 py-4 font-bold text-board-navy">{item.highPriorityGoalCount}</td>
       <td className="px-4 py-4">
-        {latestProgress ? (
-          <>
-            <p className="font-bold text-board-navy">{developmentProgressLabel(latestProgress.progressLevel, locale)}</p>
-            <p className="mt-1 line-clamp-2 text-xs text-slate-600">{latestProgress.note}</p>
-          </>
-        ) : latestGoal ? (
-          <p className="font-bold text-board-navy">{developmentProgressLabel(latestGoal.progress, locale)}</p>
-        ) : (
-          <span className="text-slate-500">-</span>
-        )}
+        {goal ? <p className="font-bold text-board-navy">{developmentProgressLabel(latestProgress?.progressLevel ?? goal.progress, locale)}</p> : <span className="text-slate-500">-</span>}
       </td>
+      <td translate="no" className="max-w-64 break-words px-4 py-4 text-slate-600 [overflow-wrap:anywhere]">{item.nextAction?.description ?? "-"}</td>
       <td className="px-4 py-4">{item.nextReviewDate ? formatEventDate(item.nextReviewDate, locale) : ui("Not set")}</td>
-      <td className="px-4 py-4">{item.lastDevelopmentUpdate ? formatEventDate(item.lastDevelopmentUpdate, locale) : ui("No update")}</td>
+      <td className="max-w-64 px-4 py-4">{item.latestObservation ? <><span className="text-xs text-slate-500">{formatEventDate(item.latestObservation.observationDate, locale)}</span><p translate="no" className="mt-1 line-clamp-2 break-words text-slate-600 [overflow-wrap:anywhere]">{item.latestObservation.note}</p></> : <span className="text-slate-500">-</span>}</td>
       <td className="px-4 py-4"><ButtonLink href={`/squad/players/${item.player.id}?tab=development`} variant="secondary" className="h-8 px-2 text-xs">{ui("Open Development")}</ButtonLink></td>
     </tr>
   );
@@ -170,24 +160,21 @@ async function DevelopmentRow({ item }: { item: DevelopmentOverviewPlayer }) {
 async function DevelopmentCard({ item }: { item: DevelopmentOverviewPlayer }) {
   const locale = await getActiveLocale();
   const ui = createSystemTranslator(locale);
-  const latestGoal = item.latestGoal;
-  const latestProgress = item.latestProgress;
+  const goal = item.primaryActiveGoal;
+  const latestProgress = goal ? latestProgressForGoal(goal) : undefined;
   return (
     <article className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <Link href={`/squad/players/${item.player.id}?tab=development`} className="text-lg font-bold text-board-navy underline-offset-4 hover:text-board-green hover:underline">
         {[item.player.firstName, item.player.lastName].filter(Boolean).join(" ")}
       </Link>
       <p className="mt-1 text-sm text-slate-600">{item.player.position ?? ui("No position")}</p>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{ui(item.activeGoals.length === 1 ? "{count} active goal" : "{count} active goals", { count: item.activeGoals.length })}</span>
-        <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{ui("{count} high priority", { count: item.highPriorityGoalCount })}</span>
-      </div>
-      {latestGoal ? (
-        <div className="mt-3 rounded-md bg-board-paper p-3">
-          <p className="text-xs font-bold uppercase text-slate-500">{ui("Latest")}</p>
-          <p className="mt-1 font-bold text-board-navy">{latestGoal.title}</p>
-          <p className="mt-1 text-sm text-slate-600">{latestProgress ? developmentProgressLabel(latestProgress.progressLevel, locale) : developmentProgressLabel(latestGoal.progress, locale)}</p>
-          <p className="mt-1 text-xs text-slate-500">{ui("Next review: ")}{item.nextReviewDate ? formatEventDate(item.nextReviewDate, locale) : ui("Not set")}</p>
+      {goal ? (
+        <div className="mt-3 space-y-3 rounded-md bg-board-paper p-3">
+          <div><p className="text-xs font-bold uppercase text-slate-500">{ui("Current focus")}</p><p translate="no" className="mt-1 break-words font-bold text-board-navy [overflow-wrap:anywhere]">{goal.title}</p></div>
+          <div className="grid gap-3 sm:grid-cols-2"><SmallDetail label={ui("Progress")} value={developmentProgressLabel(latestProgress?.progressLevel ?? goal.progress, locale)} /><SmallDetail label={ui("Next review")} value={item.nextReviewDate ? formatEventDate(item.nextReviewDate, locale) : ui("Not set")} /></div>
+          {item.nextAction ? <SmallDetail label={ui("Next step")} value={item.nextAction.description} userContent /> : null}
+          {item.latestObservation ? <SmallDetail label={ui("Last observation")} value={`${formatEventDate(item.latestObservation.observationDate, locale)} · ${item.latestObservation.note}`} userContent /> : null}
+          {isDevelopmentReviewDue(goal) ? <p className="text-xs font-bold text-amber-700">{ui("Review due")}</p> : null}
         </div>
       ) : (
         <div className="mt-3 rounded-md border border-dashed border-board-line p-3">
@@ -195,8 +182,13 @@ async function DevelopmentCard({ item }: { item: DevelopmentOverviewPlayer }) {
           <p className="mt-1 text-sm text-slate-600">{ui("Open the player profile to add one observable focus area.")}</p>
         </div>
       )}
+      <ButtonLink href={`/squad/players/${item.player.id}?tab=development`} variant="secondary" className="mt-3 h-10 w-full px-3">{ui("Open Development")}</ButtonLink>
     </article>
   );
+}
+
+function SmallDetail({ label, value, userContent = false }: { label: string; value: string; userContent?: boolean }) {
+  return <div className="min-w-0"><p className="text-xs font-bold uppercase text-slate-500">{label}</p><p translate={userContent ? "no" : undefined} className="mt-1 break-words text-sm text-slate-700 [overflow-wrap:anywhere]">{value}</p></div>;
 }
 
 function SortableHead({ label, sort, filters }: { label: string; sort: string; filters: Record<string, string | undefined> }) {
@@ -219,7 +211,7 @@ function SortableHead({ label, sort, filters }: { label: string; sort: string; f
 function Metric({ label, value, tone = "normal" }: { label: string; value: string; tone?: "normal" | "warning" }) {
   return (
     <div className={`rounded-lg border px-4 py-3 shadow-soft ${tone === "warning" ? "border-amber-200 bg-amber-50" : "border-board-line bg-white"}`}>
-      <p className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><ClipboardCheck className="h-4 w-4" />{label}</p>
+      <p className="max-w-48 break-words text-xs font-bold uppercase text-slate-500 [overflow-wrap:anywhere]">{label}</p>
       <p className="mt-1 text-2xl font-bold text-board-navy">{value}</p>
     </div>
   );

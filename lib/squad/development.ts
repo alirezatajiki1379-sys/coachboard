@@ -48,6 +48,9 @@ export type DevelopmentOverviewPlayer = {
   player: Pick<SquadPlayer, "id" | "firstName" | "lastName" | "position" | "playerType">;
   goals: PlayerDevelopmentGoal[];
   activeGoals: PlayerDevelopmentGoal[];
+  primaryActiveGoal?: PlayerDevelopmentGoal;
+  nextAction?: PlayerGoalAction;
+  latestObservation?: PlayerObservation;
   latestGoal?: PlayerDevelopmentGoal;
   latestProgress?: PlayerDevelopmentProgressUpdate;
   nextReviewDate?: string;
@@ -61,6 +64,32 @@ export type DevelopmentOverviewData = {
 };
 
 export const activeGoalStatuses: PlayerDevelopmentGoalStatus[] = ["identified", "in_progress"];
+
+export function activeDevelopmentGoals(goals: PlayerDevelopmentGoal[]) {
+  return goals.filter(isActiveGoal).sort(compareActiveGoals);
+}
+
+export function primaryActiveDevelopmentGoal(goals: PlayerDevelopmentGoal[]) {
+  return activeDevelopmentGoals(goals)[0];
+}
+
+export function latestProgressForGoal(goal: PlayerDevelopmentGoal) {
+  return [...goal.progressUpdates].sort((a, b) => `${b.recordedAt} ${b.createdAt}`.localeCompare(`${a.recordedAt} ${a.createdAt}`))[0];
+}
+
+export function latestObservationForGoal(goal: PlayerDevelopmentGoal) {
+  return [...goal.observations].sort((a, b) => `${b.observationDate} ${b.createdAt}`.localeCompare(`${a.observationDate} ${a.createdAt}`))[0];
+}
+
+export function nextIncompleteGoalAction(goal: PlayerDevelopmentGoal) {
+  return [...goal.actions]
+    .filter((action) => !action.completed)
+    .sort((a, b) => (a.dueDate ?? "9999-12-31").localeCompare(b.dueDate ?? "9999-12-31") || a.createdAt.localeCompare(b.createdAt))[0];
+}
+
+export function isDevelopmentReviewDue(goal: PlayerDevelopmentGoal, today = todayDate()) {
+  return isActiveGoal(goal) && Boolean(goal.reviewDate && goal.reviewDate <= today);
+}
 
 export async function getPlayerDevelopmentProfile(supabase: SupabaseServerClient, userId: string, playerId: string): Promise<PlayerDevelopmentProfile> {
   const db = supabase as unknown as SupabaseClient;
@@ -141,23 +170,36 @@ export async function getDevelopmentOverview(
     }));
 
     const playerIds = players.map((player) => player.id);
-    const [goalsResult, progressResult, observationsResult] = await Promise.all([
+    const [goalsResult, actionsResult, progressResult, observationsResult] = await Promise.all([
       playerIds.length
         ? db.from("player_development_goals").select("*").eq("user_id", userId).eq("squad_id", activeSquad.id).in("player_id", playerIds).order("updated_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
       playerIds.length
+        ? db.from("player_goal_actions").select("*, player_development_goals!inner(player_id,squad_id)").eq("user_id", userId).eq("player_development_goals.squad_id", activeSquad.id).in("player_development_goals.player_id", playerIds).order("created_at", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
+      playerIds.length
         ? db.from("player_development_progress").select("*, squad_training_events(label,date)").eq("user_id", userId).eq("squad_id", activeSquad.id).in("player_id", playerIds).order("recorded_at", { ascending: false }).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
-      db
-        .from("player_observations")
-        .select("id, squad_players!inner(squad_id,archived_at,deleted_at)", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("squad_players.squad_id", activeSquad.id)
-        .is("squad_players.archived_at", null)
-        .is("squad_players.deleted_at", null)
-        .gte("observation_date", startOfWeekDate())
+      playerIds.length
+        ? db.from("player_observations").select("*").eq("user_id", userId).in("player_id", playerIds).order("observation_date", { ascending: false }).order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null })
     ]);
-    if (goalsResult.error || progressResult.error || observationsResult.error) return { players: [], stats: emptyDashboardSummary() };
+    if (goalsResult.error || actionsResult.error || progressResult.error || observationsResult.error) return { players: [], stats: emptyDashboardSummary() };
+
+    const actionsByGoal = new Map<string, PlayerGoalAction[]>();
+    for (const row of (actionsResult.data ?? []) as Array<ActionRow & { player_development_goals?: { player_id: string; squad_id: string } }>) {
+      const action = mapActionRow(row);
+      actionsByGoal.set(action.goalId, [...(actionsByGoal.get(action.goalId) ?? []), action]);
+    }
+
+    const observations = ((observationsResult.data ?? []) as ObservationRow[]).map(mapObservationRow);
+    const observationsByGoal = new Map<string, PlayerObservation[]>();
+    const observationsByPlayer = new Map<string, PlayerObservation[]>();
+    for (const observation of observations) {
+      observationsByPlayer.set(observation.playerId, [...(observationsByPlayer.get(observation.playerId) ?? []), observation]);
+      if (!observation.goalId) continue;
+      observationsByGoal.set(observation.goalId, [...(observationsByGoal.get(observation.goalId) ?? []), observation]);
+    }
 
     const progressByGoal = new Map<string, PlayerDevelopmentProgressUpdate[]>();
     for (const row of (progressResult.data ?? []) as Array<ProgressRow & { squad_training_events?: { label: string | null; date: string | null } | null }>) {
@@ -167,7 +209,7 @@ export async function getDevelopmentOverview(
 
     const goalsByPlayer = new Map<string, PlayerDevelopmentGoal[]>();
     for (const row of (goalsResult.data ?? []) as GoalRow[]) {
-      const goal = { ...mapGoalRow(row), actions: [], observations: [], progressUpdates: progressByGoal.get(row.id) ?? [] };
+      const goal = { ...mapGoalRow(row), actions: actionsByGoal.get(row.id) ?? [], observations: observationsByGoal.get(row.id) ?? [], progressUpdates: progressByGoal.get(row.id) ?? [] };
       goalsByPlayer.set(goal.playerId, [...(goalsByPlayer.get(goal.playerId) ?? []), goal]);
     }
 
@@ -175,7 +217,8 @@ export async function getDevelopmentOverview(
     const overviewPlayers = players
       .map((player) => {
         const goals = goalsByPlayer.get(player.id) ?? [];
-        const activeGoals = goals.filter(isActiveGoal);
+        const activeGoals = activeDevelopmentGoals(goals);
+        const primaryActiveGoal = activeGoals[0];
         const latestGoal = [...goals].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
         const latestProgress = goals.flatMap((goal) => goal.progressUpdates).sort((a, b) => `${b.recordedAt} ${b.createdAt}`.localeCompare(`${a.recordedAt} ${a.createdAt}`))[0];
         const nextReviewDate = activeGoals.map((goal) => goal.reviewDate).filter((date): date is string => Boolean(date)).sort()[0];
@@ -184,6 +227,9 @@ export async function getDevelopmentOverview(
           player,
           goals,
           activeGoals,
+          primaryActiveGoal,
+          nextAction: primaryActiveGoal ? nextIncompleteGoalAction(primaryActiveGoal) : undefined,
+          latestObservation: (primaryActiveGoal ? latestObservationForGoal(primaryActiveGoal) : undefined) ?? observationsByPlayer.get(player.id)?.[0],
           latestGoal,
           latestProgress,
           nextReviewDate,
@@ -217,7 +263,7 @@ export async function getDevelopmentOverview(
         playersWithoutActiveGoals: overviewPlayersFromAll(players, goalsByPlayer).filter((item) => !item.activeGoals.length).length,
         goalsDueForReview: allGoals.filter((goal) => isActiveGoal(goal) && goal.reviewDate && goal.reviewDate <= today).length,
         activeHighPriorityGoals: allGoals.filter((goal) => isActiveGoal(goal) && goal.priority === "high").length,
-        observationsThisWeek: observationsResult.count ?? 0
+        observationsThisWeek: observations.filter((observation) => observation.observationDate >= startOfWeekDate()).length
       }
     };
   } catch {
@@ -379,6 +425,20 @@ function compareOverviewPlayer(a: DevelopmentOverviewPlayer, b: DevelopmentOverv
   if (sort === "priority") return priorityRank(b) - priorityRank(a);
   if (sort === "lastUpdate") return (a.lastDevelopmentUpdate ?? "").localeCompare(b.lastDevelopmentUpdate ?? "");
   return (a.nextReviewDate ?? "9999-12-31").localeCompare(b.nextReviewDate ?? "9999-12-31");
+}
+
+function compareActiveGoals(a: PlayerDevelopmentGoal, b: PlayerDevelopmentGoal) {
+  const priorityDifference = goalPriorityRank(b.priority) - goalPriorityRank(a.priority);
+  if (priorityDifference) return priorityDifference;
+  const reviewDifference = (a.reviewDate ?? "9999-12-31").localeCompare(b.reviewDate ?? "9999-12-31");
+  if (reviewDifference) return reviewDifference;
+  return b.updatedAt.localeCompare(a.updatedAt);
+}
+
+function goalPriorityRank(priority: PlayerDevelopmentGoalPriority) {
+  if (priority === "high") return 3;
+  if (priority === "medium") return 2;
+  return 1;
 }
 
 function priorityRank(player: DevelopmentOverviewPlayer) {

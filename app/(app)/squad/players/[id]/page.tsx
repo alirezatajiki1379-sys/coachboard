@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import { Activity, AlertTriangle, ArrowLeft, BarChart3, CalendarDays, ClipboardList, FileText, Footprints, MessageSquareText, Minus, Phone, Printer, Shirt, ShieldAlert, SlidersHorizontal, Stethoscope, Target, TrendingDown, TrendingUp, UserRound } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { developmentProgressLabel } from "@/config/development";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { PlayerUnavailabilityForm } from "@/components/squad/player-unavailability-form";
 import { PlayerDevelopmentSection } from "@/components/squad/player-development";
@@ -10,6 +11,7 @@ import { ReliabilityValue, reliabilityBreakdownLabels } from "@/components/squad
 import { GeneralPlayerNotes, QuickPlayerNoteCard } from "@/components/squad/player-notes";
 import { permanentlyDeleteSquadPlayer } from "@/lib/squad/actions";
 import { createPlayerCoachAssessment } from "@/lib/squad/analytics-actions";
+import { latestObservationForGoal, latestProgressForGoal, nextIncompleteGoalAction, primaryActiveDevelopmentGoal } from "@/lib/squad/development";
 import {
   analyticsPeriodLabels,
   coachAssessmentLabels,
@@ -336,24 +338,34 @@ function PlayerHubTabs({ playerId, activeTab, period, customFrom, customTo, loca
 
 function OverviewTab({ hub, period, attentionItems, locale }: { hub: PlayerHubData; period: AnalyticsPeriod; attentionItems: AttentionItem[]; locale: "en" | "de" }) {
   const { summary } = hub.analytics;
-  const highestGoal = hub.development.goals.find((goal) => goal.status === "in_progress" && goal.priority === "high") ?? hub.development.goals.find((goal) => goal.status === "in_progress" || goal.status === "identified");
-  const latestObservation = hub.development.observations[0];
+  const primaryGoal = primaryActiveDevelopmentGoal(hub.development.goals);
+  const latestProgress = primaryGoal ? latestProgressForGoal(primaryGoal) : undefined;
+  const latestObservation = primaryGoal ? latestObservationForGoal(primaryGoal) : undefined;
+  const nextAction = primaryGoal ? nextIncompleteGoalAction(primaryGoal) : undefined;
+  const developmentCopy = locale === "de"
+    ? { title: "Entwicklungsfokus", progress: "Fortschritt", next: "Nächster Schritt", observation: "Letzte Beobachtung", review: "Nächste Überprüfung", open: "Entwicklung öffnen", empty: "Noch kein Entwicklungsziel", add: "Ziel hinzufügen" }
+    : { title: "Development focus", progress: "Progress", next: "Next step", observation: "Latest observation", review: "Next review", open: "Open development", empty: "No development goal yet", add: "Add goal" };
   return (
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
       <section className="space-y-6">
         <AttentionSummaryCard playerId={hub.player.id} items={attentionItems} />
         <MedicalOverviewCard hub={hub} locale={locale} />
         <AnalyticsMetricGrid hub={hub} period={period} />
-        <Card title="Development summary" icon={<Target className="h-5 w-5" />}>
-          {highestGoal ? (
-            <div className="space-y-2 text-sm text-slate-600">
-              <p><strong className="text-board-navy">{highestGoal.title}</strong></p>
-              {highestGoal.reviewDate ? <p>Next review: {formatEventDate(highestGoal.reviewDate)}</p> : <p>No review date set.</p>}
-              {latestObservation ? <p>Latest observation: {latestObservation.note}</p> : null}
-              <Link href={tabHref(hub.player.id, "development", period)} className="font-bold text-board-green underline-offset-4 hover:underline">Open development</Link>
+        <Card title={developmentCopy.title} icon={<Target className="h-5 w-5" />}>
+          {primaryGoal ? (
+            <div className="min-w-0 space-y-3 text-sm text-slate-600">
+              <p translate="no" className="break-words font-bold text-board-navy [overflow-wrap:anywhere]">{primaryGoal.title}</p>
+              <p><strong>{developmentCopy.progress}:</strong> {developmentProgressLabel(latestProgress?.progressLevel ?? primaryGoal.progress, locale)}</p>
+              {nextAction ? <p><strong>{developmentCopy.next}:</strong> <span translate="no">{nextAction.description}</span></p> : null}
+              {latestObservation ? <p><strong>{developmentCopy.observation}:</strong> <span translate="no">{latestObservation.note}</span></p> : null}
+              {primaryGoal.reviewDate ? <p><strong>{developmentCopy.review}:</strong> {formatEventDate(primaryGoal.reviewDate, locale)}</p> : null}
+              <Link href={tabHref(hub.player.id, "development", period)} className="inline-flex min-h-10 items-center font-bold text-board-green underline-offset-4 hover:underline">{developmentCopy.open}</Link>
             </div>
           ) : (
-            <p className="text-sm text-slate-600">No active development goal yet.</p>
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-600">{developmentCopy.empty}</p>
+              <Link href={tabHref(hub.player.id, "development", period)} className="inline-flex min-h-10 items-center font-bold text-board-green underline-offset-4 hover:underline">{developmentCopy.add}</Link>
+            </div>
           )}
         </Card>
         <Card title="Recent activity" icon={<ClipboardList className="h-5 w-5" />}>

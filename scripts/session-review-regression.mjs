@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   sessionReviewRatingLabel,
@@ -26,4 +27,12 @@ test("player response rating has English and German anchors", () => {
 test("hover preview overrides selected value without changing it", () => {
   assert.deepEqual(sessionReviewStarFillStates(3, 5), [true, true, true, true, true]);
   assert.deepEqual(sessionReviewStarFillStates("", 4), [true, true, true, true, false]);
+});
+
+test("player observation remains optional and separate from review validation", () => {
+  const source = readFileSync("components/squad/session-review-form.tsx", "utf8");
+  assert.match(source, /observationDialogOpen/);
+  assert.match(source, /createPlayerObservation\(formData\)/);
+  assert.doesNotMatch(source, /if \(!observation/);
+  assert.match(source, /players\.find\(\(player\) => player\.id === selectedPlayerId\)/);
 });

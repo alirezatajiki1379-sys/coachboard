@@ -15,7 +15,14 @@ const stubs = {
   "@/lib/i18n/server": 'export const getActiveLocale=async()=>window.qa.locale; export const getUserLocale=getActiveLocale;',
   "@/lib/supabase/server": 'export const createClient=()=>{throw new Error("No real database access in localization fixtures")};',
   "@/lib/squad/analytics-queries": 'export const getSquadAnalyticsOverview=()=>{}; export const parseAnalyticsFilters=()=>{};',
-  "@/lib/squad/development": 'export const isActiveGoal=g=>g.status==="in_progress"||g.status==="identified";'
+  "@/lib/squad/development": `
+    export const isActiveGoal=g=>g.status==="in_progress"||g.status==="identified";
+    export const activeDevelopmentGoals=goals=>goals.filter(isActiveGoal).sort((a,b)=>(b.priority==="high")-(a.priority==="high")||(a.reviewDate??"9999").localeCompare(b.reviewDate??"9999")||b.updatedAt.localeCompare(a.updatedAt));
+    export const latestProgressForGoal=goal=>[...goal.progressUpdates].sort((a,b)=>b.recordedAt.localeCompare(a.recordedAt))[0];
+    export const latestObservationForGoal=goal=>[...goal.observations].sort((a,b)=>b.observationDate.localeCompare(a.observationDate))[0];
+    export const nextIncompleteGoalAction=goal=>goal.actions.filter(action=>!action.completed).sort((a,b)=>(a.dueDate??"9999").localeCompare(b.dueDate??"9999"))[0];
+    export const isDevelopmentReviewDue=goal=>isActiveGoal(goal)&&Boolean(goal.reviewDate&&goal.reviewDate<=new Date().toISOString().slice(0,10));
+  `
 };
 const bundle = await build({
   stdin: { contents: `
@@ -66,9 +73,10 @@ const bundle = await build({
         <section id="history"><AttendanceEntryCard entry={{...entry,finalStatus:"Z",plannedReason:"school",lateMinutes:5,coachNote:"Present",event:{id:"event",date:"2026-09-19",label:"Quality"}}}/></section>
         <section id="late-cancellation-history"><AttendanceEntryCard entry={{...lateCancellationEntry,event:{id:"event-late-cancellation",date:"2026-09-20",label:"Fictional Training"}}}/></section>
         <section id="development"><PlayerDevelopmentSection playerId="player" development={populated?{
-          goals:[{id:"goal",title:"Quality",successCriteria:"Present",coachNotes:"Expected",category:"physical",priority:"high",status:"in_progress",progress:"developing",startDate:"2026-09-01",reviewDate:"2026-09-19",observations:[],actions:[],progressUpdates:[{id:"progress",recordedAt:"2026-09-19",progressLevel:"consistent",note:"Present"}]}],
+          goals:[{id:"goal",title:"Quality",successCriteria:"Present",coachNotes:"Expected",category:"physical",priority:"high",status:"in_progress",progress:"developing",startDate:"2026-09-01",reviewDate:"2026-09-19",updatedAt:"2026-09-19",observations:[{id:"observation",observationDate:"2026-09-19",createdAt:"2026-09-19",note:"Protected observation"}],actions:[{id:"action",description:"Protected next step",completed:false,createdAt:"2026-09-19"}],progressUpdates:[{id:"progress",recordedAt:"2026-09-19",createdAt:"2026-09-19",progressLevel:"consistent",note:"Present"}]}],
+          observations:[{id:"observation",observationDate:"2026-09-19",createdAt:"2026-09-19",note:"Protected observation"}],
           timeline:[{id:"timeline",type:"progress",date:"2026-09-19",title:"Progress: consistent",progressLevel:"consistent",detail:"Present"}]
-        }:{goals:[],timeline:[]}}/></section>
+        }:{goals:[],observations:[],timeline:[]}}/></section>
       </>);
       root.render(<I18nProvider locale={locale}><GermanLocalizationBoundary locale={locale}>
         <nav><button onClick={()=>window.qa.switch("en")}>EN</button><button onClick={()=>window.qa.switch("de")}>DE</button></nav>
@@ -143,7 +151,8 @@ try {
       assert.ok(renderedPlayerAnalyticsText.includes(phrase.toLocaleUpperCase(locale)),`Missing player Analytics label: ${phrase}; rendered: ${JSON.stringify(playerAnalyticsText)}`);
     }
     assert.ok((await page.locator("#development").innerText()).includes(de?"Entwicklungsziel hinzufügen":"Add development goal"));
-    assert.ok((await page.locator("#development").innerText()).includes(de?"0 aktive Entwicklungsziele":"0 active goals"));
+    assert.ok((await page.locator("#development").innerText()).includes(de?"Noch kein Entwicklungsziel":"No development focus yet"));
+    assert.ok(!(await page.locator("#development").innerText()).includes(de?"0 aktive Entwicklungsziele":"0 active goals"));
     assert.ok((await page.locator("#check-in").innerText()).includes(de?"Eingeplant":"Expected"));
     assert.equal(await page.locator("#check-in").getByRole("button",{name:de?"Anwesend":"Present",exact:true}).count(),1);
     assert.ok((await page.locator("#sections").innerText()).includes(de?"Hauptteil 1":"Main part 1"));
@@ -182,13 +191,14 @@ try {
     await page.getByRole("button",{name:locale.toUpperCase(),exact:true}).click();
     await page.waitForFunction(old=>window.qa.ready&&document.body.dataset.render!==old,previous);
     const text=await page.locator("#development").innerText();
-    assert.ok(text.includes(locale==="de"?"1 aktives Entwicklungsziel":"1 active goal"));
-    assert.ok(text.includes(locale==="de"?"Körperlich":"Physical"));
-    assert.ok(text.includes(locale==="de"?"Fortschritt: Konstant":"Progress: Consistent"));
-    assert.equal(await page.locator("#development h3").innerText(),"Quality");
+    assert.ok(!text.includes(locale==="de"?"1 aktives Entwicklungsziel":"1 active goal"));
+    assert.ok(text.includes(locale==="de"?"Stabil":"Consistent"));
+    assert.equal(await page.locator('#development h3[translate="no"]').innerText(),"Quality");
+    assert.ok(text.includes("Protected next step"));
+    assert.ok(text.includes("Protected observation"));
     assert.ok(text.includes("Present"),"Coach notes must remain unchanged");
-    await page.locator("#development summary").first().click();
-    assert.equal(await page.locator('#development select[name="category"]').first().inputValue(),"technical");
+    await page.locator("#development summary").filter({hasText:locale==="de"?"Entwicklungsziel hinzufügen":"Add development goal"}).first().click();
+    assert.equal(await page.locator('#development select[name="category"]').first().inputValue(),"other");
     assert.equal(await page.locator('#development select[name="category"]').first().locator('option[value="physical"]').textContent(),locale==="de"?"Körperlich":"Physical");
   }
   assert.equal(await page.evaluate(()=>window.qa.saves),0,"Opening or switching language must not write data");

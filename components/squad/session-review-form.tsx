@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
-import { ArrowLeft, CheckCircle2, ClipboardCheck, Star } from "lucide-react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition, type Dispatch, type ReactNode, type RefObject, type SetStateAction } from "react";
+import { ArrowLeft, CheckCircle2, ClipboardCheck, Plus, Star, X } from "lucide-react";
+import { DialogPortal } from "@/components/shared/dialog-portal";
+import { useDialogFocus } from "@/components/shared/use-dialog-focus";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { createPlayerObservation } from "@/lib/squad/development-actions";
 import { saveTrainingSessionReview, type SessionReviewActionState } from "@/lib/squad/session-review-actions";
 import {
   sessionReviewRatingLabel,
@@ -45,6 +48,12 @@ type ReviewFormValues = {
 
 type ClientErrors = Partial<Record<"objectiveOutcome" | "overallQuality" | "intensity" | "playerResponse", string>>;
 
+type ObservationPlayer = {
+  id: string;
+  name: string;
+  goals: Array<{ id: string; title: string }>;
+};
+
 export function SessionReviewForm({
   event,
   review,
@@ -52,6 +61,7 @@ export function SessionReviewForm({
   attendanceSummary,
   ratingsSummary,
   observationCount,
+  observationPlayers,
   planTitle,
   locale = "en"
 }: {
@@ -61,6 +71,7 @@ export function SessionReviewForm({
   attendanceSummary: { present: number; absent: number; late: number; total: number };
   ratingsSummary: { rated: number; rateable: number };
   observationCount: number;
+  observationPlayers: ObservationPlayer[];
   planTitle?: string;
   locale?: Locale;
 }) {
@@ -73,6 +84,8 @@ export function SessionReviewForm({
     }
   }, {});
   const [values, setValues] = useState<ReviewFormValues>(() => initialValues(review, drills));
+  const [observationDialogOpen, setObservationDialogOpen] = useState(false);
+  const [savedObservationCount, setSavedObservationCount] = useState(observationCount);
   const [clientErrors, setClientErrors] = useState<ClientErrors>({});
   const objectiveRef = useRef<HTMLDivElement>(null);
   const qualityRef = useRef<HTMLDivElement>(null);
@@ -137,7 +150,8 @@ export function SessionReviewForm({
   }
 
   return (
-    <form
+    <>
+      <form
       action={formAction}
       onSubmit={(event) => {
         if (isPending || !validate()) event.preventDefault();
@@ -183,7 +197,17 @@ export function SessionReviewForm({
       <section className="grid gap-4 md:grid-cols-3">
         <SummaryCard label={copy.summary.attendance} value={`${attendanceSummary.present}/${attendanceSummary.total}`} helper={copy.summary.attendanceHelper(attendanceSummary.absent, attendanceSummary.late)} />
         <SummaryCard label={copy.summary.ratings} value={`${ratingsSummary.rated}/${ratingsSummary.rateable}`} helper={copy.summary.ratingsHelper} />
-        <SummaryCard label={copy.summary.observations} value={String(observationCount)} helper={copy.summary.observationsHelper} />
+        <SummaryCard
+          label={copy.summary.observations}
+          value={String(savedObservationCount)}
+          helper={copy.summary.observationsHelper}
+          action={observationPlayers.length ? (
+            <button type="button" onClick={() => setObservationDialogOpen(true)} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-board-line px-3 py-2 text-sm font-bold text-board-navy hover:border-board-green hover:text-board-green">
+              <Plus className="h-4 w-4" />
+              {copy.observation.add}
+            </button>
+          ) : undefined}
+        />
       </section>
 
       <section className="rounded-lg border border-board-line bg-white p-3 shadow-soft sm:p-5">
@@ -293,7 +317,20 @@ export function SessionReviewForm({
         <ButtonLink href={`/trainings/${event.id}`} variant="secondary">{copy.cancel}</ButtonLink>
         <Button type="submit" disabled={isPending}>{isPending ? copy.saving : copy.save}</Button>
       </div>
-    </form>
+      </form>
+      {observationDialogOpen ? (
+        <TrainingObservationDialog
+          eventId={event.id}
+          players={observationPlayers}
+          copy={copy.observation}
+          onClose={() => setObservationDialogOpen(false)}
+          onSaved={() => {
+            setSavedObservationCount((count) => count + 1);
+            setObservationDialogOpen(false);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -425,13 +462,82 @@ function TextArea({ label, helper, value, onChange, rows = 4, className = "" }: 
   );
 }
 
-function SummaryCard({ label, value, helper }: { label: string; value: string; helper: string }) {
+function SummaryCard({ label, value, helper, action }: { label: string; value: string; helper: string; action?: ReactNode }) {
   return (
     <div className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-black text-board-navy">{value}</p>
       <p className="mt-1 text-sm text-slate-600">{helper}</p>
+      {action}
     </div>
+  );
+}
+
+function TrainingObservationDialog({ eventId, players, copy, onClose, onSaved }: { eventId: string; players: ObservationPlayer[]; copy: ObservationCopy; onClose: () => void; onSaved: () => void }) {
+  const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? "");
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const dialogRef = useDialogFocus<HTMLFormElement>(true, () => {
+    if (!isPending) onClose();
+  });
+  const selectedPlayer = players.find((player) => player.id === selectedPlayerId);
+
+  return (
+    <DialogPortal>
+      <div className="fixed inset-0 z-[var(--app-modal-z)] flex items-end justify-center bg-board-navy/45 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !isPending) onClose(); }}>
+        <form
+          ref={dialogRef}
+          tabIndex={-1}
+          className="max-h-[92dvh] w-full overflow-y-auto rounded-t-lg bg-white p-4 shadow-xl outline-none sm:max-w-lg sm:rounded-lg sm:p-5"
+          aria-labelledby="training-observation-title"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (isPending) return;
+            setError("");
+            const formData = new FormData(event.currentTarget);
+            startTransition(async () => {
+              try {
+                await createPlayerObservation(formData);
+                onSaved();
+              } catch {
+                setError(copy.error);
+              }
+            });
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 id="training-observation-title" className="text-lg font-bold text-board-navy">{copy.title}</h2>
+              <p className="mt-1 text-sm text-slate-600">{copy.helper}</p>
+            </div>
+            <button type="button" onClick={onClose} disabled={isPending} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100" aria-label={copy.close}><X className="h-5 w-5" /></button>
+          </div>
+          <input type="hidden" name="eventId" value={eventId} />
+          <label className="mt-5 block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{copy.player}</span>
+            <select name="playerId" required value={selectedPlayerId} onChange={(event) => setSelectedPlayerId(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+              {players.map((player) => <option translate="no" key={player.id} value={player.id}>{player.name}</option>)}
+            </select>
+          </label>
+          <label className="mt-4 block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{copy.note}</span>
+            <textarea name="note" required rows={3} placeholder={copy.placeholder} className="mt-1 w-full resize-y rounded-md border border-board-line px-3 py-2 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+          </label>
+          <label className="mt-4 block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{copy.goal}</span>
+            <select name="goalId" key={selectedPlayerId} defaultValue="" className="mt-1 h-11 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+              <option value="">{copy.noGoal}</option>
+              {(selectedPlayer?.goals ?? []).map((goal) => <option translate="no" key={goal.id} value={goal.id}>{goal.title}</option>)}
+            </select>
+          </label>
+          {error ? <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p> : null}
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="ghost" disabled={isPending} onClick={onClose}>{copy.cancel}</Button>
+            <Button type="submit" disabled={isPending || !selectedPlayerId}>{isPending ? copy.saving : copy.save}</Button>
+          </div>
+        </form>
+      </div>
+    </DialogPortal>
   );
 }
 
@@ -458,6 +564,22 @@ function updateDrillValue(
 
 const objectiveOutcomes: TrainingSessionObjectiveOutcome[] = ["achieved", "partly_achieved", "not_achieved"];
 const feedbackStatuses: TrainingSessionDrillFeedbackStatus[] = ["worked_well", "needs_adjustment", "not_effective"];
+
+type ObservationCopy = {
+  add: string;
+  title: string;
+  helper: string;
+  player: string;
+  note: string;
+  placeholder: string;
+  goal: string;
+  noGoal: string;
+  close: string;
+  cancel: string;
+  save: string;
+  saving: string;
+  error: string;
+};
 
 const reviewCopy = {
   en: {
@@ -516,6 +638,21 @@ const reviewCopy = {
       ratingsHelper: "Present players rated",
       observations: "Observations",
       observationsHelper: "Player observations linked to this training"
+    },
+    observation: {
+      add: "Add player observation",
+      title: "Player observation",
+      helper: "Add a short optional observation from this training.",
+      player: "Player",
+      note: "Observation",
+      placeholder: "What did you notice?",
+      goal: "Optional development goal",
+      noGoal: "No linked goal",
+      close: "Close",
+      cancel: "Cancel",
+      save: "Save observation",
+      saving: "Saving...",
+      error: "The observation could not be saved. Please try again."
     }
   },
   de: {
@@ -574,6 +711,21 @@ const reviewCopy = {
       ratingsHelper: "Anwesende Spieler bewertet",
       observations: "Beobachtungen",
       observationsHelper: "Spielerbeobachtungen zu diesem Training"
+    },
+    observation: {
+      add: "Spielerbeobachtung hinzufügen",
+      title: "Spielerbeobachtung",
+      helper: "Halte optional eine kurze Beobachtung aus diesem Training fest.",
+      player: "Spieler",
+      note: "Beobachtung",
+      placeholder: "Was ist dir aufgefallen?",
+      goal: "Optionales Entwicklungsziel",
+      noGoal: "Kein verknüpftes Ziel",
+      close: "Schließen",
+      cancel: "Abbrechen",
+      save: "Beobachtung speichern",
+      saving: "Speichern...",
+      error: "Die Beobachtung konnte nicht gespeichert werden. Bitte versuche es erneut."
     }
   }
 } satisfies Record<Locale, {
@@ -624,4 +776,5 @@ const reviewCopy = {
     observations: string;
     observationsHelper: string;
   };
+  observation: ObservationCopy;
 }>;

@@ -1,7 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SessionReviewForm } from "@/components/squad/session-review-form";
+import { attendanceDisplayName } from "@/lib/squad/attendance-format";
 import { getTrainingEventDetail } from "@/lib/squad/attendance-queries";
+import { getActiveDevelopmentGoalsForPlayers } from "@/lib/squad/development";
 import { countTrainingObservations, getTrainingSessionReview } from "@/lib/squad/session-review";
 import { createClient } from "@/lib/supabase/server";
 import { trainingRatingStats, trainingSummaryCounts } from "@/lib/trainings/utils";
@@ -36,12 +38,15 @@ export default async function TrainingReviewPage({ params }: TrainingReviewPageP
   const event = await getTrainingEventDetail(supabase, user.id, id);
   if (!event) notFound();
 
-  const [locale, review, drills, planInstance, observationCount] = await Promise.all([
+  const participantIds = Array.from(new Set(event.attendance.map((entry) => entry.playerId)));
+
+  const [locale, review, drills, planInstance, observationCount, goalsByPlayer] = await Promise.all([
     getUserLocale(supabase, user.id),
     getTrainingSessionReview(supabase, user.id, event.id),
     loadTrainingDrillInstances(supabase, user.id, event.id),
     loadPlanInstance(supabase, user.id, event.id),
-    countTrainingObservations(supabase, user.id, event.id)
+    countTrainingObservations(supabase, user.id, event.id),
+    getActiveDevelopmentGoalsForPlayers(supabase, user.id, participantIds)
   ]);
   const { finalAttendance } = trainingSummaryCounts(event);
   const ratings = trainingRatingStats(event);
@@ -59,6 +64,14 @@ export default async function TrainingReviewPage({ params }: TrainingReviewPageP
       }}
       ratingsSummary={ratings}
       observationCount={observationCount}
+      observationPlayers={event.attendance
+        .filter((entry, index, entries) => entries.findIndex((candidate) => candidate.playerId === entry.playerId) === index)
+        .map((entry) => ({
+          id: entry.playerId,
+          name: attendanceDisplayName(entry),
+          goals: (goalsByPlayer.get(entry.playerId) ?? []).map((goal) => ({ id: goal.id, title: goal.title }))
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))}
       planTitle={planInstance?.title ?? event.linkedTrainingSessionTitle}
       locale={locale}
     />
