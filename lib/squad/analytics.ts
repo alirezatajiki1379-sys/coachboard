@@ -127,6 +127,8 @@ export type TeamAnalyticsOverview = {
   sessionsWithAttendance: number;
   participantRecordCount: number;
   attendanceRecordCount: number;
+  averageExpectedPerTraining: number | null;
+  averageParticipantsPerTraining: number | null;
   teamParticipationRate: number | null;
   teamAttendanceWhenExpectedRate: number | null;
   teamAttendanceRate: number | null;

@@ -52,6 +52,49 @@ test("actual outcome uses recorded attendance as its denominator", () => {
   assert.equal(analytics.leftEarlyRate, 1 / 85);
 });
 
+test("team averages use the selected event count and canonical participation statuses", () => {
+  const events = Array.from({ length: 5 }, (_, index) => ({ ...event, id: `event-${index + 1}`, date: `2026-10-${String(index + 8).padStart(2, "0")}` }));
+  const records = [
+    ...rows(84, (index) => record(index, "expected", index === 0 ? "Z" : "present")),
+    { ...record(84, "unavailable", "left_early"), eventId: events[0].id },
+    ...rows(5, (index) => record(index + 85, "expected", "U"))
+  ];
+  const analytics = createTeamAnalytics(squad(), events, records, [], [], [], [], [], filters(), { seasonStartMonth: 7, seasonStartDay: 1 });
+
+  assert.equal(analytics.averageParticipantsPerTraining, 17);
+  assert.equal(analytics.averageExpectedPerTraining, 17.8);
+  assert.equal(analytics.present + analytics.late + analytics.leftEarly, 85);
+});
+
+test("team averages use filtered Player records while training count stays event-level", () => {
+  const events = [{ ...event, id: "event-1" }, { ...event, id: "event-2" }];
+  const allRecords = rows(6, (index) => record(index, "expected", "present"));
+  const filteredRecords = allRecords.slice(0, 4);
+  const analytics = createTeamAnalytics(
+    squad(),
+    events,
+    allRecords,
+    [],
+    [],
+    [],
+    [],
+    [],
+    filters(),
+    { seasonStartMonth: 7, seasonStartDay: 1 },
+    filteredRecords
+  );
+
+  assert.equal(analytics.trainingSessions, 2);
+  assert.equal(analytics.averageParticipantsPerTraining, 2);
+  assert.equal(analytics.averageExpectedPerTraining, 2);
+});
+
+test("team averages stay null without selected historical trainings", () => {
+  const analytics = createTeamAnalytics(squad(), [], [], [], [], [], [], [], filters(), { seasonStartMonth: 7, seasonStartDay: 1 });
+  assert.equal(analytics.averageParticipantsPerTraining, null);
+  assert.equal(analytics.averageExpectedPerTraining, null);
+});
+
 test("rating coverage counts only expected Present or Late players", () => {
   const complete = rows(85, (index) => ({ ...record(index, "expected", index % 2 ? "present" : "Z"), overallRating: 4 }));
   const incomplete = complete.map((entry, index) => index < 82 ? entry : { ...entry, overallRating: undefined });

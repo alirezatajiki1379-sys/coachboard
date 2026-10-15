@@ -5,8 +5,9 @@ import { trainingFocusLabel } from "@/lib/i18n/training-labels";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { ArrowUpDown, BarChart3, CalendarCheck, Dumbbell, Filter, Info, Minus, Printer, Star, Target, TrendingDown, TrendingUp, UserCheck, Users } from "lucide-react";
+import { ArrowUpDown, CalendarCheck, Dumbbell, Filter, Info, Minus, Printer, Target, TrendingDown, TrendingUp, UserCheck } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
+import { AnalyticsPrimarySummary, AttendanceAnalyticsSummary } from "@/components/squad/analytics-primary-summary";
 import { STICKY_TABLE_HEADER_CLASS } from "@/components/squad/player-table-layers";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
@@ -386,17 +387,7 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
           </ControlField>
         </div>
         <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-          <p>
-            <span className="font-bold text-board-navy">{copy.showing}:</span> {playerTypeOptions.find((option) => option.id === filters.playerType)?.compact ?? copy.all}
-            {" · "}
-            {filters.position || copy.allPositions}
-            {" · "}
-            {copy.periods[filters.period]}
-            {filters.period === "custom" && filters.customFrom && filters.customTo ? ` (${formatGermanDate(filters.customFrom)} – ${formatGermanDate(filters.customTo)})` : ""}
-            {filters.trainingId ? ` · ${availableEvents.find((event) => event.id === filters.trainingId)?.label || copy.unnamedTraining}` : ""}
-            {" · "}
-            {copy.sortedBy(sortOptions.find((option) => option.id === filters.sort)?.label ?? "Name", filters.direction)}
-          </p>
+          <p>{copy.sortedBy(sortOptions.find((option) => option.id === filters.sort)?.label ?? "Name", filters.direction)}</p>
           {activeFilters ? (
             <Link href="/squad/analysis" className="text-sm font-bold text-board-green underline-offset-4 hover:underline">
               {copy.resetFilters}
@@ -405,15 +396,17 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <SummaryMetric icon={<Users className="h-4 w-4" />} label={copy.metrics.players} value={String(summaries.length)} hint={`${copy.activeTeam}: ${teamAnalytics.activeSquad.name}`} />
-        <SummaryMetric icon={<CalendarCheck className="h-4 w-4" />} label={copy.metrics.trainings} value={String(teamAnalytics.trainingSessions)} hint={`${periodDefinition.shortLabel} · ${copy.availableTrainings(teamAnalytics.trainingSessions)}`} />
-        <SummaryMetric icon={<UserCheck className="h-4 w-4" />} label={copy.metrics.attendanceWhenExpected} value={formatPercent(teamAnalytics.teamAttendanceWhenExpectedRate, locale)} hint={locale === "de" ? `${teamAnalytics.attendedWhenExpectedCount} von ${teamAnalytics.expectedRecordedCount} eingeplanten Teilnahmen` : `${teamAnalytics.attendedWhenExpectedCount} of ${teamAnalytics.expectedRecordedCount} expected attendances`} />
-        <SummaryMetric icon={<Star className="h-4 w-4" />} label={copy.metrics.ratingCoverage} value={formatPercent(teamAnalytics.ratingCoverageRate, locale)} hint={locale === "de" ? `${teamAnalytics.ratingCompletedCount} von ${teamAnalytics.ratingEligibleCount} erwarteten Bewertungen` : `${teamAnalytics.ratingCompletedCount} of ${teamAnalytics.ratingEligibleCount} expected ratings`} />
-        <SummaryMetric icon={<BarChart3 className="h-4 w-4" />} label={copy.metrics.averageRating} value={teamAnalytics.teamAverageOverallRating === null ? formatRating(null, locale) : `${formatRating(teamAnalytics.teamAverageOverallRating, locale)} / 5`} hint={locale === "de" ? `${teamAnalytics.totalRatedPerformances} Bewertungen` : `${teamAnalytics.totalRatedPerformances} ratings`} />
-      </section>
+      <AnalyticsPrimarySummary
+        locale={locale}
+        analytics={teamAnalytics}
+        filteredPlayerCount={summaries.length}
+        playerType={filters.playerType}
+        position={filters.position}
+        periodLabel={periodDefinition.rangeLabel}
+        singleTraining={Boolean(filters.trainingId) && teamAnalytics.trainingSessions === 1}
+      />
 
-      <AnalyticsSectionPanel section={filters.section} teamAnalytics={teamAnalytics} summaries={summaries} />
+      <AnalyticsSectionPanel section={filters.section} teamAnalytics={teamAnalytics} />
 
       {(filters.section === "players" || filters.section === "attendance") && summaries.length ? (
         <>
@@ -448,12 +441,10 @@ export default async function AnalysisPage({ searchParams }: AnalysisPageProps) 
 
 async function AnalyticsSectionPanel({
   section,
-  teamAnalytics,
-  summaries
+  teamAnalytics
 }: {
   section: AnalyticsSection;
   teamAnalytics: TeamAnalyticsOverview;
-  summaries: PlayerAnalyticsSummary[];
 }) {
   const locale = await getActiveLocale();
   const ui = createSystemTranslator(locale);
@@ -495,39 +486,13 @@ async function AnalyticsSectionPanel({
   }
 
   if (section === "attendance") {
-    const coverageComplete = teamAnalytics.notRecorded === 0;
     return (
       <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-lg font-bold text-board-navy">
-            <UserCheck className="h-5 w-5 text-board-green" />
-            {locale === "de" ? "Anwesenheit" : "Attendance"}
-          </div>
-          <div className={cn("rounded-md px-3 py-2 text-sm font-semibold", coverageComplete ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800")}>
-            <p>{coverageComplete
-              ? `${locale === "de" ? "Anwesenheit vollständig erfasst" : "Attendance fully recorded"} · ${formatPercent(teamAnalytics.dataCoverageRate, locale)}`
-              : `${teamAnalytics.notRecorded} ${locale === "de" ? "Anwesenheiten fehlen" : "attendance records missing"} · ${formatPercent(teamAnalytics.dataCoverageRate, locale)}`}</p>
-            <p className="mt-0.5 text-xs font-medium">{teamAnalytics.attendanceRecordCount} {locale === "de" ? "von" : "of"} {teamAnalytics.participantRecordCount} {locale === "de" ? "Spieler-Training-Kombinationen erfasst" : "player-training records captured"}</p>
-          </div>
+        <div className="flex items-center gap-2 text-lg font-bold text-board-navy">
+          <UserCheck className="h-5 w-5 text-board-green" />
+          {locale === "de" ? "Anwesenheit" : "Attendance"}
         </div>
-        <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr_1.1fr]">
-          <AnalyticsMetricGroup title={locale === "de" ? "Anwesenheit bei Einplanung" : "When expected"}>
-            <ProgressMetric label={locale === "de" ? "Anwesenheit bei Einplanung" : "Attendance when expected"} value={teamAnalytics.teamAttendanceWhenExpectedRate} count={`${teamAnalytics.attendedWhenExpectedCount} / ${teamAnalytics.expectedRecordedCount}`} locale={locale} tone="green" />
-            <ProgressMetric label={locale === "de" ? "Fehlquote bei Einplanung" : "Absence when expected"} value={teamAnalytics.absenceWhenExpectedRate} count={`${teamAnalytics.absentWhenExpectedCount} / ${teamAnalytics.expectedRecordedCount}`} locale={locale} tone="amber" />
-          </AnalyticsMetricGroup>
-          <AnalyticsMetricGroup title={locale === "de" ? "Planung" : "Planning"}>
-            <ProgressMetric label={locale === "de" ? "Eingeplant" : "Expected"} value={teamAnalytics.participantRecordCount ? teamAnalytics.plannedExpectedCount / teamAnalytics.participantRecordCount : null} count={`${teamAnalytics.plannedExpectedCount} ${locale === "de" ? "von" : "of"} ${teamAnalytics.participantRecordCount}`} locale={locale} />
-            <ProgressMetric label={locale === "de" ? "Nicht eingeplant" : "Not expected"} value={teamAnalytics.plannedUnavailableRate} count={`${teamAnalytics.notExpected} ${locale === "de" ? "von" : "of"} ${teamAnalytics.participantRecordCount}`} locale={locale} />
-          </AnalyticsMetricGroup>
-          <AnalyticsMetricGroup title={locale === "de" ? "Tatsächliche Teilnahme" : "Actual outcome"}>
-            <ProgressMetric label={locale === "de" ? "Teilgenommen" : "Participated"} value={teamAnalytics.actualParticipationRate} count={`${teamAnalytics.present + teamAnalytics.late + teamAnalytics.leftEarly} ${locale === "de" ? "von" : "of"} ${teamAnalytics.attendanceRecordCount}`} locale={locale} tone="green" />
-            <ProgressMetric label={locale === "de" ? "Abwesend" : "Absent"} value={teamAnalytics.actualAbsenceRate} count={`${teamAnalytics.absent} ${locale === "de" ? "von" : "of"} ${teamAnalytics.attendanceRecordCount}`} locale={locale} tone="amber" />
-            <div className="grid grid-cols-2 gap-2">
-              <MiniStat label={ui("Late")} value={`${formatPercent(teamAnalytics.lateRate, locale)} · ${teamAnalytics.late}`} />
-              <MiniStat label={ui("Left early")} value={`${formatPercent(teamAnalytics.leftEarlyRate, locale)} · ${teamAnalytics.leftEarly}`} />
-            </div>
-          </AnalyticsMetricGroup>
-        </div>
+        <AttendanceAnalyticsSummary analytics={teamAnalytics} locale={locale} />
       </section>
     );
   }
@@ -612,16 +577,7 @@ async function AnalyticsSectionPanel({
     );
   }
 
-  return (
-    <Panel title={ui("Player Analytics")} icon={<BarChart3 className="h-5 w-5" />}>
-      <div className="grid gap-3 sm:grid-cols-4">
-        <MiniStat label={ui("Players shown")} value={summaries.length} />
-        <MiniStat label={ui("Rated players")} value={summaries.filter((summary) => summary.rated > 0).length} />
-        <MiniStat label={ui("Participation data")} value={summaries.filter((summary) => summary.participationRate !== null).length} />
-        <MiniStat label={locale === "de" ? "Offene Trainereinschätzungen" : "Open coach assessments"} value={summaries.filter((summary) => !summary.assessment || summary.assessment.assessment === "decision_open").length} />
-      </div>
-    </Panel>
-  );
+  return null;
 }
 
 async function AttendanceAnalyticsTable({ summaries, filters }: { summaries: PlayerAnalyticsSummary[]; filters: AnalyticsFilters }) {
@@ -756,25 +712,6 @@ function FilterLink({ href, active, children }: { href: string; active: boolean;
       {children}
     </Link>
   );
-}
-
-function SummaryMetric({ icon, label, value, hint }: { icon: ReactNode; label: string; value: string; hint: string }) {
-  return (
-    <div className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
-      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">{icon}{label}</p>
-      <p className="mt-2 text-2xl font-bold text-board-navy">{value}</p>
-      <p className="mt-1 text-xs font-semibold text-slate-500">{hint}</p>
-    </div>
-  );
-}
-
-function AnalyticsMetricGroup({ title, children }: { title: string; children: ReactNode }) {
-  return <div className="rounded-md border border-slate-100 p-4"><h3 className="text-sm font-bold text-board-navy">{title}</h3><div className="mt-3 space-y-4">{children}</div></div>;
-}
-
-function ProgressMetric({ label, value, count, locale, tone = "navy" }: { label: string; value: number | null; count: string; locale: Locale; tone?: "navy" | "green" | "amber" }) {
-  const bar = tone === "green" ? "bg-board-green" : tone === "amber" ? "bg-amber-500" : "bg-board-navy";
-  return <div><div className="flex items-baseline justify-between gap-3"><p className="text-sm font-semibold text-slate-700">{label}</p><p className="text-lg font-bold text-board-navy">{formatPercent(value, locale)}</p></div><div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className={cn("h-full rounded-full", bar)} style={{ width: `${value === null ? 0 : Math.max(2, Math.min(100, value * 100))}%` }} /></div><p className="mt-1 text-xs font-semibold text-slate-500">{count}</p></div>;
 }
 
 function TrainingAnalyticsTable({ events, locale }: { events: TeamAnalyticsEvent[]; locale: Locale }) {

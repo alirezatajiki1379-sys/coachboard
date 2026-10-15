@@ -459,6 +459,8 @@ export function createTeamAnalytics(
     sessionsWithAttendance: events.filter((event) => event.attendance.recorded > 0).length,
     participantRecordCount: filteredPlayerRecords.length,
     attendanceRecordCount: attendance.recorded,
+    averageExpectedPerTraining: periodEvents.length ? attendance.expected / periodEvents.length : null,
+    averageParticipantsPerTraining: periodEvents.length ? attendance.attended / periodEvents.length : null,
     teamParticipationRate: attendance.participationRate,
     teamAttendanceWhenExpectedRate: attendance.attendanceWhenExpectedRate,
     teamAttendanceRate: attendance.attendanceWhenExpectedRate,
