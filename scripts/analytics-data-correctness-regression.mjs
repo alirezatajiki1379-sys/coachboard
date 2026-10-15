@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPlayerAnalyticsSummary, filterEventsByPeriod, formatPercent } from "../lib/squad/analytics.ts";
+import { createPlayerAnalyticsSummary, filterEventsByPeriod, formatPercent, sortPlayerAnalytics } from "../lib/squad/analytics.ts";
 import { createTeamAnalytics, parseAnalyticsFilters } from "../lib/squad/analytics-queries.ts";
 
 const EVENT_ID = "11111111-1111-4111-8111-111111111111";
@@ -90,6 +90,19 @@ test("team participation and attendance when expected remain distinct", () => {
   assert.equal(analytics.teamAttendanceRate, 1);
 });
 
+test("generic Team Attendance follows the canonical opportunity formula", () => {
+  const records = [
+    attendanceRow("present", 0),
+    attendanceRow("present", 1),
+    attendanceRow("present", 2),
+    attendanceRow("absent", 3),
+    { ...attendanceRow("present", 4), plannedStatus: "unavailable" }
+  ];
+  const analytics = createTeamAnalytics(squad(), [event], records, [], [], [], [], [], filters(), { seasonStartMonth: 7, seasonStartDay: 1 });
+  assert.equal(analytics.teamAttendanceWhenExpectedRate, 0.75);
+  assert.equal(analytics.teamAttendanceRate, 0.8);
+});
+
 test("player analytics counts not expected snapshots in trainings and participation", () => {
   const summary = playerSummary([
     playerRecord("training-a", "2026-09-01", "expected", "present"),
@@ -109,6 +122,79 @@ test("player analytics counts not expected snapshots in trainings and participat
   assert.equal(summary.plannedAbsenceDistribution.holiday, 1);
   assert.equal(summary.plannedAbsenceDistribution.private, 1);
   assert.match(formatPercent(summary.participationRate, "en"), /33\.3/);
+});
+
+test("generic Player Attendance includes unexpected participation without penalising planned non-participation", () => {
+  const arda = playerSummary([
+    playerRecord("arda-a", "2026-09-01", "expected", "present"),
+    playerRecord("arda-b", "2026-09-02", "expected", "Z"),
+    playerRecord("arda-c", "2026-09-03", "unavailable", "left_early"),
+    playerRecord("arda-d", "2026-09-04", "unavailable", undefined),
+    playerRecord("arda-e", "2026-09-05", "unavailable", undefined)
+  ]);
+
+  assert.equal(arda.attended, 3);
+  assert.equal(arda.notExpectedTrainings, 3);
+  assert.equal(arda.attendanceCount, 3);
+  assert.equal(arda.attendanceOpportunityCount, 3);
+  assert.equal(arda.attendanceRate, 1);
+  assert.equal(arda.attendedWhenExpected, 2);
+  assert.equal(arda.attendanceWhenExpectedRecorded, 2);
+  assert.equal(arda.attendanceWhenExpectedRate, 1);
+});
+
+test("generic Attendance combines expected outcomes with extra participation", () => {
+  const summary = playerSummary([
+    playerRecord("mixed-a", "2026-09-01", "expected", "present"),
+    playerRecord("mixed-b", "2026-09-02", "expected", "Z"),
+    playerRecord("mixed-c", "2026-09-03", "expected", "left_early"),
+    playerRecord("mixed-d", "2026-09-04", "expected", "absent"),
+    playerRecord("mixed-e", "2026-09-05", "unavailable", "present")
+  ]);
+
+  assert.equal(summary.attendanceCount, 4);
+  assert.equal(summary.attendanceOpportunityCount, 5);
+  assert.equal(summary.attendanceRate, 0.8);
+  assert.equal(summary.attendanceWhenExpectedRate, 0.75);
+});
+
+test("not-expected non-participation and missing expected check-in stay outside Attendance denominator", () => {
+  const plannedNonParticipation = playerSummary([
+    playerRecord("excluded-a", "2026-09-01", "expected", "present"),
+    playerRecord("excluded-b", "2026-09-02", "expected", "present"),
+    playerRecord("excluded-c", "2026-09-03", "unavailable", undefined),
+    playerRecord("excluded-d", "2026-09-04", "unavailable", "absent"),
+    playerRecord("excluded-e", "2026-09-05", "unavailable", undefined)
+  ]);
+  assert.equal(plannedNonParticipation.attendanceCount, 2);
+  assert.equal(plannedNonParticipation.attendanceOpportunityCount, 2);
+  assert.equal(plannedNonParticipation.attendanceRate, 1);
+
+  const missingCheckIn = playerSummary([playerRecord("missing", "2026-09-06", "expected", undefined)]);
+  assert.equal(missingCheckIn.attendanceCount, 0);
+  assert.equal(missingCheckIn.attendanceOpportunityCount, 0);
+  assert.equal(missingCheckIn.attendanceRate, null);
+});
+
+test("one Player-training identity is counted only once in generic Attendance", () => {
+  const record = playerRecord("duplicate", "2026-09-01", "unavailable", "present");
+  const summary = playerSummary([record, { ...record }]);
+  assert.equal(summary.attendanceCount, 1);
+  assert.equal(summary.attendanceOpportunityCount, 1);
+  assert.equal(summary.attendanceRate, 1);
+});
+
+test("Attendance sorting uses the generic metric in both directions", () => {
+  const full = playerSummary([playerRecord("sort-full", "2026-09-01", "unavailable", "present")]);
+  const partial = playerSummary([
+    playerRecord("sort-partial-a", "2026-09-01", "expected", "present"),
+    playerRecord("sort-partial-b", "2026-09-02", "expected", "absent")
+  ]);
+  full.player = { ...full.player, id: "full", firstName: "Full" };
+  partial.player = { ...partial.player, id: "partial", firstName: "Partial" };
+
+  assert.deepEqual(sortPlayerAnalytics([partial, full], "attendance", "desc").map((item) => item.player.id), ["full", "partial"]);
+  assert.deepEqual(sortPlayerAnalytics([partial, full], "attendance", "asc").map((item) => item.player.id), ["partial", "full"]);
 });
 
 test("present, absent and late reconcile to both rates", () => {

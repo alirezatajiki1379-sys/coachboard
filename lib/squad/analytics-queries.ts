@@ -3,6 +3,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type SquadTrainingEventRow } from "@/lib/squad/attendance-mappers";
 import {
   calculateAverageRating,
+  calculateAttendanceMetric,
   calculateRatingCoverage,
   berlinDateKey,
   createPlayerAnalyticsSummary,
@@ -463,7 +464,7 @@ export function createTeamAnalytics(
     averageParticipantsPerTraining: periodEvents.length ? attendance.attended / periodEvents.length : null,
     teamParticipationRate: attendance.participationRate,
     teamAttendanceWhenExpectedRate: attendance.attendanceWhenExpectedRate,
-    teamAttendanceRate: attendance.attendanceWhenExpectedRate,
+    teamAttendanceRate: attendance.attendanceRate,
     dataCoverageRate: attendance.dataCoverageRate,
     plannedExpectedCount: attendance.expected,
     plannedUnavailableRate: attendance.plannedUnavailableRate,
@@ -553,6 +554,7 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
   const rateAttended = rateRecords.filter(hasParticipated).length;
   const participationRate = records.length ? attended / records.length : null;
   const attendanceWhenExpectedRate = rateRecords.length ? rateAttended / rateRecords.length : null;
+  const attendanceMetric = calculateAttendanceMetric(records);
   const ratingCoverage = calculateRatingCoverage(records);
   return {
     present,
@@ -568,6 +570,9 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
     absentWhenExpected: rateRecords.length - rateAttended,
     recorded,
     participationRate,
+    attendanceCount: attendanceMetric.count,
+    attendanceOpportunityCount: attendanceMetric.opportunities,
+    attendanceRate: attendanceMetric.rate,
     attendanceWhenExpectedRate,
     dataCoverageRate: records.length ? recorded / records.length : null,
     plannedUnavailableRate: records.length ? notExpected / records.length : null,
@@ -580,7 +585,7 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
     ratingCoverageRate: ratingCoverage.rate,
     averageOverallRating: ratingCoverage.average,
     totalRated: ratingCoverage.totalRated,
-    rate: attendanceWhenExpectedRate
+    rate: attendanceMetric.rate
   };
 }
 

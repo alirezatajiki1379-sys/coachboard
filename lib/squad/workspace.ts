@@ -686,7 +686,7 @@ function sortWorkspacePlayers(players: WorkspacePlayerSummary[], sort: Workspace
     if (sort === "age") return nullableNumberCompare(ageValue(a), ageValue(b), direction, "last") || fallback;
     if (sort === "availability") return dir * (availabilityRank(a) - availabilityRank(b)) || fallback;
     if (sort === "lastTraining") return nullableStringCompare(a.analytics.latestTraining?.event?.date, b.analytics.latestTraining?.event?.date, direction) || fallback;
-    if (sort === "attendance") return nullableNumberCompare(a.analytics.participationRate, b.analytics.participationRate, direction, "last") || fallback;
+    if (sort === "attendance") return nullableNumberCompare(a.analytics.attendanceRate, b.analytics.attendanceRate, direction, "last") || fallback;
     if (sort === "average") return nullableNumberCompare(a.analytics.averageRating, b.analytics.averageRating, direction, "last") || nullableNumberCompare(a.analytics.rated, b.analytics.rated, "desc", "last") || fallback;
     if (sort === "latestRating") return nullableNumberCompare(a.analytics.latestRating ?? null, b.analytics.latestRating ?? null, direction, "last") || fallback;
     if (sort === "trend") return nullableNumberCompare(a.analytics.trend.value, b.analytics.trend.value, direction, "last") || fallback;

@@ -41,6 +41,8 @@ export type PlayerAnalyticsSummary = {
   records: PlayerAnalyticsRecord[];
   trainings: number;
   attended: number;
+  attendanceCount: number;
+  attendanceOpportunityCount: number;
   expectedTrainings: number;
   notExpectedTrainings: number;
   unclearTrainings: number;
@@ -62,7 +64,6 @@ export type PlayerAnalyticsSummary = {
   trend: PerformanceTrend;
   participationRate: number | null;
   attendanceWhenExpectedRate: number | null;
-  /** Compatibility alias for attendanceWhenExpectedRate. */
   attendanceRate: number | null;
   reliabilityPenalty: number;
   averageReliabilityPenalty: number | null;
@@ -98,6 +99,9 @@ export type TeamAnalyticsEvent = {
     absentWhenExpected: number;
     recorded: number;
     participationRate: number | null;
+    attendanceCount: number;
+    attendanceOpportunityCount: number;
+    attendanceRate: number | null;
     attendanceWhenExpectedRate: number | null;
     dataCoverageRate: number | null;
     plannedUnavailableRate: number | null;
@@ -308,7 +312,29 @@ export function calculatePerformanceTrend(values: number[]): PerformanceTrend {
 }
 
 export function calculateAttendanceRate(records: PlayerAnalyticsRecord[]) {
-  return calculateAttendanceWhenExpectedRate(records);
+  return calculateAttendanceMetric(records).rate;
+}
+
+export function calculateAttendanceMetric(records: PlayerAnalyticsRecord[]) {
+  const seen = new Set<string>();
+  let count = 0;
+  let opportunities = 0;
+
+  for (const record of records) {
+    const participated = hasParticipated(record);
+    if (!participated && !(isExpectedAnalyticsRecord(record) && hasRecordedAttendance(record))) continue;
+    const identity = `${record.eventId}:${record.playerId}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    opportunities += 1;
+    if (participated) count += 1;
+  }
+
+  return {
+    count,
+    opportunities,
+    rate: opportunities ? count / opportunities : null
+  };
 }
 
 export function calculateParticipationRate(records: PlayerAnalyticsRecord[]) {
@@ -501,6 +527,7 @@ export function createPlayerAnalyticsSummary(
   const averageRating = calculateAverageRating(ratings);
   const trend = calculatePerformanceTrend(ratings);
   const attended = records.filter(hasParticipated).length;
+  const attendance = calculateAttendanceMetric(records);
   const attendedWhenExpected = expectedRecordedAttendance.filter(hasParticipated).length;
   const absentWhenExpected = expectedRecordedAttendance.length - attendedWhenExpected;
   const ratingCoverage = calculateRatingCoverage(records);
@@ -514,6 +541,8 @@ export function createPlayerAnalyticsSummary(
     records,
     trainings: records.length,
     attended,
+    attendanceCount: attendance.count,
+    attendanceOpportunityCount: attendance.opportunities,
     expectedTrainings: expectedRecords.length,
     notExpectedTrainings: records.filter((record) => record.plannedStatus === "unavailable").length,
     unclearTrainings: records.filter((record) => record.plannedStatus === "unclear").length,
@@ -535,7 +564,7 @@ export function createPlayerAnalyticsSummary(
     trend,
     participationRate,
     attendanceWhenExpectedRate,
-    attendanceRate: attendanceWhenExpectedRate,
+    attendanceRate: attendance.rate,
     reliabilityPenalty: reliability.total,
     averageReliabilityPenalty: reliability.average,
     reliabilityBreakdown: reliability.breakdown,
@@ -596,7 +625,7 @@ export function sortPlayerAnalytics(summaries: PlayerAnalyticsSummary[], sort: A
     if (sort === "average") return nullableCompare(a.averageRating, b.averageRating, direction) || nameFallback;
     if (sort === "latestFive") return nullableCompare(a.latestFiveAverage, b.latestFiveAverage, direction) || nameFallback;
     if (sort === "trend") return nullableCompare(a.trend.value, b.trend.value, direction) || nameFallback;
-    if (sort === "attendance") return nullableCompare(a.attendanceWhenExpectedRate, b.attendanceWhenExpectedRate, direction) || nameFallback;
+    if (sort === "attendance") return nullableCompare(a.attendanceRate, b.attendanceRate, direction) || nameFallback;
     if (sort === "reliability") return directionMultiplier * (a.reliabilityPenalty - b.reliabilityPenalty) || nameFallback;
     if (sort === "lastTraining") {
       return directionMultiplier * (a.latestTraining?.event?.date ?? "").localeCompare(b.latestTraining?.event?.date ?? "") || nameFallback;

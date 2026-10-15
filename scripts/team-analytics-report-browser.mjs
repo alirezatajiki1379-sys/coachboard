@@ -25,7 +25,7 @@ const bundle = await build({
       const mode=params.get("mode")||"combined";
       const summaries=Array.from({length:24},(_,index)=>({
         player:{id:"player-"+index,firstName:"Player",lastName:String(index+1).padStart(2,"0"),position:index%6===0?"Goalkeeper":"Central Midfielder"},
-        expectedTrainings:5,attended:4,attendedWhenExpected:4,attendanceWhenExpectedRecorded:5,attendanceWhenExpectedRate:0.8,
+        expectedTrainings:4,attended:4,attendanceCount:4,attendanceOpportunityCount:5,attendanceRate:0.8,attendedWhenExpected:3,attendanceWhenExpectedRecorded:4,attendanceWhenExpectedRate:0.75,
         notExpectedTrainings:index%3===0?1:0,absentWhenExpected:1,late:index%5===0?1:0,leftEarly:index%7===0?1:0,
         ratingCompletedExpectedCount:4,ratingEligibleCount:5,ratingCoverageRate:0.8,rated:4,averageRating:3.75,latestFiveAverage:4,
         trend:{label:"Stable",value:0.2},reliabilityPenalty:index===0?-2:0,reliabilityBreakdown:{late:0,lateCancellation:0,unexcused:index===0?1:0,legacyNeedsReview:0}
@@ -80,6 +80,9 @@ try {
     await page.goto(`${base}?locale=de&mode=attendance`);
     await page.locator(".analytics-report-sheet").waitFor();
     assert.equal(await page.locator("[data-analytics-player]").count(), 24, `${width}px renders every Player exactly once`);
+    const firstAttendanceRow = await page.locator("[data-analytics-player]").first().innerText();
+    assert.ok(firstAttendanceRow.includes("80"), `${width}px uses canonical generic Attendance`);
+    assert.ok(firstAttendanceRow.includes("4 / 5"), `${width}px shows the canonical Attendance count`);
     const overflow = await page.evaluate(() => ({
       page: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
       offenders: [...document.querySelectorAll("*")].map((element) => {

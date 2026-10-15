@@ -584,8 +584,8 @@ async function AnalyticsSectionPanel({
 async function AttendanceAnalyticsTable({ summaries, filters }: { summaries: PlayerAnalyticsSummary[]; filters: AnalyticsFilters }) {
   const locale = await getActiveLocale();
   const labels = locale === "de"
-    ? { expected: "Eingeplant", participated: "Teilgenommen", attendance: "Anwesenheit bei Einplanung", unavailable: "Nicht eingeplant", absent: "Abwesend bei Einplanung", late: "Verspätet", leftEarly: "Abgebrochen", reliability: "Zuverlässigkeit" }
-    : { expected: "Expected", participated: "Participated", attendance: "Attendance when expected", unavailable: "Not expected", absent: "Absent when expected", late: "Late", leftEarly: "Left early", reliability: "Reliability" };
+    ? { expected: "Eingeplant", participated: "Teilgenommen", attendance: "Anwesenheit", unavailable: "Nicht eingeplant", absent: "Abwesend bei Einplanung", late: "Verspätet", leftEarly: "Abgebrochen", reliability: "Zuverlässigkeit" }
+    : { expected: "Expected", participated: "Participated", attendance: "Attendance", unavailable: "Not expected", absent: "Absent when expected", late: "Late", leftEarly: "Left early", reliability: "Reliability" };
   return <>
     <section className="hidden overflow-x-auto rounded-lg border border-board-line bg-white shadow-soft lg:block">
       <table className="w-full border-collapse text-left text-sm">
@@ -606,7 +606,7 @@ async function AttendanceAnalyticsTable({ summaries, filters }: { summaries: Pla
           <PositionCell summary={summary} active={filters.sort === "position"} />
           <MetricCell active={filters.sort === "trainings"} align="right">{summary.expectedTrainings}</MetricCell>
           <MetricCell active={false} align="right">{summary.attended}</MetricCell>
-          <MetricCell active={filters.sort === "attendance"} align="right"><MetricStack value={formatPercent(summary.attendanceWhenExpectedRate, locale)} detail={`${summary.attendedWhenExpected} / ${summary.attendanceWhenExpectedRecorded}`} /></MetricCell>
+          <MetricCell active={filters.sort === "attendance"} align="right"><MetricStack value={formatPercent(summary.attendanceRate, locale)} detail={`${summary.attendanceCount} / ${summary.attendanceOpportunityCount}`} /></MetricCell>
           <MetricCell active={false} align="right">{summary.notExpectedTrainings}</MetricCell>
           <MetricCell active={false} align="right">{summary.absentWhenExpected}</MetricCell>
           <MetricCell active={false} align="right">{summary.late}</MetricCell>
@@ -617,8 +617,8 @@ async function AttendanceAnalyticsTable({ summaries, filters }: { summaries: Pla
     </section>
     <section className="space-y-3 lg:hidden">{summaries.map((summary) => <article key={summary.player.id} className="rounded-lg border border-board-line bg-white p-4 shadow-soft">
       <MobilePlayerHeader summary={summary} />
-      <div className="mt-4 rounded-md bg-green-50 p-3"><p className="text-xs font-bold uppercase text-green-800">{labels.attendance}</p><p className="mt-1 text-2xl font-bold text-board-navy">{formatPercent(summary.attendanceWhenExpectedRate, locale)}</p><p className="text-sm text-slate-600">{summary.attendedWhenExpected} / {summary.attendanceWhenExpectedRecorded}</p></div>
-      <div className="mt-3 grid grid-cols-2 gap-2"><CompactMetric label={labels.participated} value={`${summary.attended} / ${summary.expectedTrainings}`} /><CompactMetric label={labels.absent} value={String(summary.absentWhenExpected)} /><CompactMetric label={labels.unavailable} value={String(summary.notExpectedTrainings)} /><CompactMetric label={`${labels.late} / ${labels.leftEarly}`} value={`${summary.late} / ${summary.leftEarly}`} /></div>
+      <div className="mt-4 rounded-md bg-green-50 p-3"><p className="text-xs font-bold uppercase text-green-800">{labels.attendance}</p><p className="mt-1 text-2xl font-bold text-board-navy">{formatPercent(summary.attendanceRate, locale)}</p><p className="text-sm text-slate-600">{summary.attendanceCount} / {summary.attendanceOpportunityCount}</p></div>
+      <div className="mt-3 grid grid-cols-2 gap-2"><CompactMetric label={labels.participated} value={String(summary.attended)} /><CompactMetric label={labels.absent} value={String(summary.absentWhenExpected)} /><CompactMetric label={labels.unavailable} value={String(summary.notExpectedTrainings)} /><CompactMetric label={`${labels.late} / ${labels.leftEarly}`} value={`${summary.late} / ${summary.leftEarly}`} /></div>
       <div className="mt-3 rounded-md bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{labels.reliability}</p><ReliabilityValue summary={summary} locale={locale} align="left" className="mt-1" /></div>
     </article>)}</section>
   </>;
