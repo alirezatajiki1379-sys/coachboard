@@ -11,17 +11,26 @@ import { formatDate } from "@/lib/i18n";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { CheckSquare, RotateCcw, Trash2, X } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { TrainingEventCard } from "@/components/squad/training-event-card";
+import { TrainingCalendarRow } from "@/components/squad/training-calendar-row";
 import {
   bulkMoveTrainingsToTrash,
   bulkPermanentlyDeleteTrainings,
   bulkRestoreTrainings,
   type BulkTrainingOperationResult
 } from "@/lib/squad/attendance-actions";
-import { attendanceCounts } from "@/lib/squad/attendance-format";
 import { trainingTimeRange } from "@/lib/trainings/utils";
+import type { TrainingWorkflowState } from "@/lib/trainings/workflow";
 import type { Locale } from "@/lib/i18n";
-import type { SquadAttendanceEntry, SquadTrainingEventDetail } from "@/types/domain";
+import type { SquadTrainingEventDetail } from "@/types/domain";
+
+export type TrainingCalendarSection = {
+  id: string;
+  label: string;
+  groupLabel?: string;
+  eventIds: string[];
+  moreHref?: string;
+  moreLabel?: string;
+};
 
 type TrainingBulkManagerProps = {
   initialEvents: SquadTrainingEventDetail[];
@@ -29,20 +38,22 @@ type TrainingBulkManagerProps = {
   activeTeamName: string;
   filterLabel: string;
   isTrash: boolean;
-  reviewedEventIds?: string[];
+  sections: TrainingCalendarSection[];
+  workflowByEventId: Record<string, TrainingWorkflowState>;
+  emptyMessage: string;
   locale?: Locale;
 };
 
 type BulkAction = "trash" | "restore" | "permanent";
 
-export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamName, filterLabel, isTrash, reviewedEventIds = [], locale = "en" }: TrainingBulkManagerProps) {
+export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamName, filterLabel, isTrash, sections, workflowByEventId, emptyMessage, locale = "en" }: TrainingBulkManagerProps) {
   const copy = trainingBulkCopy[locale];
   const [events, setEvents] = useState(initialEvents);
   const initialEventsKey = useMemo(
     () => initialEvents.map((event) => `${event.id}:${event.updatedAt}:${event.deletedAt ?? ""}`).join("|"),
     [initialEvents]
   );
-  const reviewedIds = useMemo(() => new Set(reviewedEventIds), [reviewedEventIds]);
+  const eventsById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string>();
@@ -132,18 +143,10 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-bold text-board-navy">{copy.title}</p>
-            <p className="text-xs font-semibold text-slate-500">
-              {copy.count(events.length)} · {copy.team}: {activeTeamName}
-            </p>
+            <p className="text-xs font-semibold text-slate-500">{copy.count(events.length)}</p>
           </div>
           {selectionMode ? (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={selectAllVisible} disabled={!events.length} className="h-9 px-3">
-                {copy.selectAllVisible}
-              </Button>
-              <Button type="button" variant="secondary" onClick={selectAllVisible} disabled={!events.length} className="h-9 px-3">
-                {copy.selectAllFiltered}
-              </Button>
               <Button type="button" variant="ghost" onClick={deselectAll} disabled={!selectedIds.size} className="h-9 px-3">
                 {copy.deselectAll}
               </Button>
@@ -170,13 +173,11 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
                   else deselectAll();
                 }}
                 className="h-5 w-5 rounded border-slate-300 text-board-green focus:ring-board-green"
-                aria-label={copy.selectAllVisible}
+                aria-label={copy.selectAll}
               />
-              {selectionLabel(selectedIds.size, locale)}
+              {copy.selectAll}
             </label>
-            <p className="text-xs font-semibold text-slate-500">
-              {copy.loadedFilterHelp(events.length)}
-            </p>
+            <p className="text-xs font-semibold text-slate-500">{selectionLabel(selectedIds.size, locale)}</p>
           </div>
         ) : null}
       </div>
@@ -185,25 +186,43 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
       {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
 
       {events.length ? (
-        <section className="space-y-4 pb-24">
-          {events.map((event) =>
-            selectionMode ? (
+        selectionMode ? (
+          <section className="space-y-3 pb-24" data-training-selection-list>
+            {events.map((event) => (
               <SelectableTrainingCard
                 key={event.id}
                 event={event}
-                attendance={event.attendance}
                 selected={selectedIds.has(event.id)}
                 onToggle={() => toggle(event.id)}
               />
-            ) : (
-              <TrainingEventCard key={event.id} event={event} attendance={event.attendance} hrefBase="/trainings" hasReview={reviewedIds.has(event.id)} />
-            )
-          )}
-        </section>
+            ))}
+          </section>
+        ) : (
+          <div className="space-y-7" data-training-calendar-sections>
+            {sections.map((section) => {
+              const sectionEvents = section.eventIds.map((id) => eventsById.get(id)).filter((event): event is SquadTrainingEventDetail => Boolean(event));
+              if (!sectionEvents.length) return null;
+              return (
+                <section key={section.id} className="space-y-3" data-training-calendar-section={section.id}>
+                  {section.groupLabel ? <h2 className="text-xl font-bold text-board-navy">{section.groupLabel}</h2> : null}
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                    {section.label ? <h3 className="break-words text-base font-bold text-board-navy">{section.label} <span className="text-sm font-semibold text-slate-500">· {sectionEvents.length}</span></h3> : <p className="text-sm font-semibold text-slate-500">{sectionEvents.length} {copy.sectionCount}</p>}
+                    {section.moreHref && section.moreLabel ? <ButtonLink href={section.moreHref} variant="ghost" className="h-9 px-3">{section.moreLabel}</ButtonLink> : null}
+                  </div>
+                  <div className="space-y-3">
+                    {sectionEvents.map((event) => (
+                      <TrainingCalendarRow key={event.id} event={event} workflow={workflowByEventId[event.id]} locale={locale} isTrash={isTrash} />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )
       ) : (
         <div className="rounded-lg border border-dashed border-board-line bg-white p-8 text-center shadow-soft">
           <h2 className="text-lg font-bold text-board-navy">{copy.emptyTitle}</h2>
-          <p className="mt-2 text-sm text-slate-600">{isTrash ? copy.emptyTrash : copy.emptyActive}</p>
+          <p className="mt-2 text-sm text-slate-600">{emptyMessage}</p>
           {!isTrash ? (
             <ButtonLink href="/trainings/new" className="mt-5">
               {copy.create}
@@ -217,7 +236,6 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
           <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-bold text-board-navy" aria-live="polite">{selectionLabel(selectedIds.size, locale)}</p>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={selectAllVisible} disabled={!events.length || allSelected} className="h-9 px-3">{copy.selectAllFiltered}</Button>
               {isTrash ? (
                 <>
                   <Button type="button" variant="secondary" onClick={() => setPendingAction("restore")} disabled={!selectedIds.size} className="h-9 px-3">
@@ -264,46 +282,37 @@ export function TrainingBulkManager({ initialEvents, activeTeamId, activeTeamNam
 const trainingBulkCopy = {
   en: {
     title: "Training management",
-    team: "Team",
     select: "Select",
-    selectAllVisible: "Select all visible",
-    selectAllFiltered: "Select all filtered",
+    selectAll: "Select all",
     deselectAll: "Deselect all",
     cancel: "Cancel",
     restoreSelected: "Restore selected",
     deletePermanently: "Delete permanently",
     deleteSelected: "Delete selected",
     emptyTitle: "No trainings found",
-    emptyTrash: "Training Trash is empty for this Team.",
-    emptyActive: "No trainings scheduled for this Team. Create the first Training or switch to another Team.",
     create: "Create training",
-    count: (count: number) => `${count} Training${count === 1 ? "" : "s"} in this view`,
-    loadedFilterHelp: (count: number) => `Select all visible and all filtered both mean these ${count} Trainings because the current filtered result is fully loaded.`
+    sectionCount: "Trainings",
+    count: (count: number) => `${count} Training${count === 1 ? "" : "s"} in this view`
   },
   de: {
     title: "Trainingsverwaltung",
-    team: "Mannschaft",
     select: "Auswählen",
-    selectAllVisible: "Alle sichtbaren auswählen",
-    selectAllFiltered: "Alle gefilterten auswählen",
+    selectAll: "Alle auswählen",
     deselectAll: "Auswahl aufheben",
     cancel: "Abbrechen",
     restoreSelected: "Ausgewählte wiederherstellen",
     deletePermanently: "Endgültig löschen",
     deleteSelected: "Ausgewählte löschen",
     emptyTitle: "Keine Trainingseinheiten gefunden",
-    emptyTrash: "Der Papierkorb für Trainingseinheiten ist für diese Mannschaft leer.",
-    emptyActive: "Für diese Mannschaft sind keine Trainingseinheiten geplant. Erstelle das erste Training oder wechsle die Mannschaft.",
     create: "Training erstellen",
-    count: (count: number) => `${count} Trainingseinheit${count === 1 ? "" : "en"} in dieser Ansicht`,
-    loadedFilterHelp: (count: number) => `Alle sichtbaren und alle gefilterten auswählen meint diese ${count} Trainingseinheit${count === 1 ? "" : "en"}, weil das aktuelle Filterergebnis vollständig geladen ist.`
+    sectionCount: "Trainingseinheiten",
+    count: (count: number) => `${count} Trainingseinheit${count === 1 ? "" : "en"} in dieser Ansicht`
   }
 } as const;
 
-function SelectableTrainingCard({ event, attendance, selected, onToggle }: { event: SquadTrainingEventDetail; attendance: SquadAttendanceEntry[]; selected: boolean; onToggle: () => void }) {
+function SelectableTrainingCard({ event, selected, onToggle }: { event: SquadTrainingEventDetail; selected: boolean; onToggle: () => void }) {
   const ui = useSystemText();
   const locale = useOptionalI18n()?.locale ?? "en";
-  const counts = attendanceCounts(attendance);
   const title = event.label || ui("Training on {date}", { date: formatDate(event.date, locale) });
   return (
     <article
@@ -324,16 +333,8 @@ function SelectableTrainingCard({ event, attendance, selected, onToggle }: { eve
           <span className="block text-xs font-bold uppercase tracking-wide text-board-green">
             {formatDate(event.date, locale, { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} · {trainingTimeRange(event)}
           </span>
-          <span className="mt-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{ui({ draft: "Draft", prepared: "Prepared", in_progress: "In progress", rating_open: "Rating open", completed: "Completed" }[event.status])}</span>
-          <span translate="no" className="mt-1 block text-xl font-bold tracking-normal text-board-navy">{title}</span>
-          <span className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-            <span className="rounded-md bg-green-50 px-2 py-1 text-green-700">{counts.present || counts.plannedExpected} {ui(" present/expected")}</span>
-            <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">{counts.absent || counts.unavailable + counts.unclear} {ui(" absence/not expected")}</span>
-            <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">{counts.late} {ui(" late")}</span>
-            <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-700">{attendance.length} {ui(" participant records")}</span>
-            {event.recurrenceSeriesId ? <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-700">{ui("Recurring")}</span> : null}
-            {event.linkedTrainingSessionTitle ? <span className="rounded-md bg-green-50 px-2 py-1 text-board-green">{ui("Plan: ")}{event.linkedTrainingSessionTitle}</span> : null}
-          </span>
+          <span translate="no" className="mt-1 block break-words text-lg font-bold tracking-normal text-board-navy">{title}</span>
+          {event.recurrenceSeriesId ? <span className="mt-2 block text-xs font-semibold text-slate-500">{ui("Recurring")}</span> : null}
         </span>
       </button>
     </article>

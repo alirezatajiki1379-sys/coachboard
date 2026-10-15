@@ -118,9 +118,15 @@ export function TrainingsSkeleton() {
   return (
     <PageContainer width="wide" aria-busy="true">
       <RouteHeaderSkeleton actions={1} />
-      <MetricGridSkeleton />
-      <TabsSkeleton count={7} />
-      <CardListSkeleton count={6} />
+      <TabsSkeleton count={4} />
+      <section className="space-y-3">
+        <Skeleton className="h-7 w-48" />
+        <CardListSkeleton count={2} />
+      </section>
+      <section className="space-y-3">
+        <Skeleton className="h-7 w-56" />
+        <CardListSkeleton count={4} />
+      </section>
     </PageContainer>
   );
 }
