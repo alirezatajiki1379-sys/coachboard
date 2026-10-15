@@ -28,7 +28,7 @@ const bundle = await build({
         expectedTrainings:5,attended:4,attendedWhenExpected:4,attendanceWhenExpectedRecorded:5,attendanceWhenExpectedRate:0.8,
         notExpectedTrainings:index%3===0?1:0,absentWhenExpected:1,late:index%5===0?1:0,leftEarly:index%7===0?1:0,
         ratingCompletedExpectedCount:4,ratingEligibleCount:5,ratingCoverageRate:0.8,rated:4,averageRating:3.75,latestFiveAverage:4,
-        trend:{label:"Stable",value:0.2},reliabilityPenalty:0
+        trend:{label:"Stable",value:0.2},reliabilityPenalty:index===0?-2:0,reliabilityBreakdown:{late:0,lateCancellation:0,unexcused:index===0?1:0,legacyNeedsReview:0}
       }));
       const event=(index)=>({event:{id:"event-"+index,date:"2026-10-"+String(index+1).padStart(2,"0"),label:"Training "+(index+1)},attendance:{attendanceWhenExpectedRate:0.9,attendedWhenExpected:18,expectedRecorded:20,ratingCoverageRate:0.85,ratingCompletedCount:17,ratingEligibleCount:20,averageOverallRating:3.8},review:index%2===0?{overallQuality:4}:undefined});
       const teamAnalytics={activeSquad:{id:"squad",name:"U15 Fictional"},trainingSessions:10,teamAttendanceWhenExpectedRate:0.944,attendedWhenExpectedCount:84,expectedRecordedCount:89,absenceWhenExpectedRate:0.056,absentWhenExpectedCount:5,dataCoverageRate:1,attendanceRecordCount:118,participantRecordCount:118,ratingCoverageRate:0.965,ratingCompletedCount:82,ratingEligibleCount:85,teamAverageOverallRating:3.7,totalRatedPerformances:85,events:Array.from({length:10},(_,index)=>event(index))};
@@ -106,6 +106,10 @@ try {
       assert.equal(geometry.rows, 24, `${locale}/${mode} keeps all Player rows`);
       assert.equal(geometry.overflow, false, `${locale}/${mode} print preview has no horizontal clipping`);
       assert.equal(geometry.pageName, "analytics-report", `${locale}/${mode} uses the named landscape page`);
+      if (mode !== "attendance") {
+        const reliabilityDetail = locale === "de" ? "1× unentschuldigt" : "1× unexcused";
+        assert.ok((await page.locator("body").innerText()).includes(reliabilityDetail), `${locale}/${mode} explains the reliability penalty`);
+      }
       const pdf = await page.pdf({ path: `/private/tmp/coachboard-analytics-${locale}-${mode}.pdf`, printBackground: true, preferCSSPageSize: true });
       const pdfText = pdf.toString("latin1");
       const pageCount = (pdfText.match(/\/Type \/Page(?!s)/g) ?? []).length;

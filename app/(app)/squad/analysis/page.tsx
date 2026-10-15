@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { ArrowUpDown, CalendarCheck, Dumbbell, Filter, Info, Minus, Printer, Target, TrendingDown, TrendingUp, UserCheck } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { AnalyticsPrimarySummary, AttendanceAnalyticsSummary } from "@/components/squad/analytics-primary-summary";
+import { ReliabilityValue } from "@/components/squad/reliability-value";
 import { STICKY_TABLE_HEADER_CLASS } from "@/components/squad/player-table-layers";
 import { ButtonLink } from "@/components/ui/button";
 import { SquadNav } from "@/components/squad/squad-nav";
@@ -610,7 +611,7 @@ async function AttendanceAnalyticsTable({ summaries, filters }: { summaries: Pla
           <MetricCell active={false} align="right">{summary.absentWhenExpected}</MetricCell>
           <MetricCell active={false} align="right">{summary.late}</MetricCell>
           <MetricCell active={false} align="right">{summary.leftEarly}</MetricCell>
-          <MetricCell active={filters.sort === "reliability"} align="right">{formatNumber(summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 })}</MetricCell>
+          <MetricCell active={filters.sort === "reliability"} align="right"><ReliabilityValue summary={summary} locale={locale} /></MetricCell>
         </tr>)}</tbody>
       </table>
     </section>
@@ -618,6 +619,7 @@ async function AttendanceAnalyticsTable({ summaries, filters }: { summaries: Pla
       <MobilePlayerHeader summary={summary} />
       <div className="mt-4 rounded-md bg-green-50 p-3"><p className="text-xs font-bold uppercase text-green-800">{labels.attendance}</p><p className="mt-1 text-2xl font-bold text-board-navy">{formatPercent(summary.attendanceWhenExpectedRate, locale)}</p><p className="text-sm text-slate-600">{summary.attendedWhenExpected} / {summary.attendanceWhenExpectedRecorded}</p></div>
       <div className="mt-3 grid grid-cols-2 gap-2"><CompactMetric label={labels.participated} value={`${summary.attended} / ${summary.expectedTrainings}`} /><CompactMetric label={labels.absent} value={String(summary.absentWhenExpected)} /><CompactMetric label={labels.unavailable} value={String(summary.notExpectedTrainings)} /><CompactMetric label={`${labels.late} / ${labels.leftEarly}`} value={`${summary.late} / ${summary.leftEarly}`} /></div>
+      <div className="mt-3 rounded-md bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{labels.reliability}</p><ReliabilityValue summary={summary} locale={locale} align="left" className="mt-1" /></div>
     </article>)}</section>
   </>;
 }

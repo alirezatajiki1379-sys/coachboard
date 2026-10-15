@@ -1,6 +1,19 @@
 import type { SquadActualAbsenceReason, SquadAttendanceEntry, SquadAttendanceReason, SquadFinalAttendanceStatus, SquadPlannedAttendanceStatus } from "@/types/domain";
 import { formatPositionLabel, getPositionFamily, normalizeCanonicalPosition, type PositionFamily } from "@/lib/squad/positions";
 
+// Commit 4106041 removed the automatic "unexcused" fallback at this exact rollout boundary.
+export const LEGACY_AUTO_UNEXCUSED_CUTOFF = "2026-10-15T00:50:04+02:00";
+
+type ReliabilityEntry = Pick<SquadAttendanceEntry, "finalStatus" | "latePenaltyApplied"> &
+  Partial<Pick<SquadAttendanceEntry, "actualAbsenceReason" | "updatedAt">>;
+
+export type ReliabilityBreakdown = {
+  late: number;
+  lateCancellation: number;
+  unexcused: number;
+  legacyNeedsReview: number;
+};
+
 export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
   V: "Injured",
   K: "Sick",
@@ -186,8 +199,23 @@ export function calculateAttendanceForecast(entries: SquadAttendanceEntry[]) {
   };
 }
 
-export function calculateReliabilityPenalty(entry: Pick<SquadAttendanceEntry, "finalStatus" | "latePenaltyApplied">) {
-  return calculateReliabilityPenaltyFromStatus(entry.finalStatus, entry.latePenaltyApplied);
+export function isLegacyAutoUnexcusedCandidate(entry: ReliabilityEntry) {
+  if (entry.finalStatus !== "U" || entry.actualAbsenceReason !== "unexcused" || !entry.updatedAt) return false;
+  const updatedAt = Date.parse(entry.updatedAt);
+  return Number.isFinite(updatedAt) && updatedAt < Date.parse(LEGACY_AUTO_UNEXCUSED_CUTOFF);
+}
+
+export function calculateReliabilityPenalty(entry: ReliabilityEntry) {
+  return reliabilityEffect(entry).penalty;
+}
+
+export function calculateReliabilityBreakdown(entries: ReliabilityEntry[]): ReliabilityBreakdown {
+  const breakdown: ReliabilityBreakdown = { late: 0, lateCancellation: 0, unexcused: 0, legacyNeedsReview: 0 };
+  for (const entry of entries) {
+    const effect = reliabilityEffect(entry);
+    if (effect.category) breakdown[effect.category] += 1;
+  }
+  return breakdown;
 }
 
 export function effectiveParticipantPosition(entry: SquadAttendanceEntry) {
@@ -233,11 +261,26 @@ export function participantComposition(entries: SquadAttendanceEntry[]) {
 
 export function calculateReliabilityPenaltyFromStatus(status?: SquadFinalAttendanceStatus | null, latePenaltyApplied = true) {
   if (!status || status === "present" || status === "left_early" || status === "absent" || status === "V" || status === "K" || status === "E") return 0;
-  if (status === "Z") return latePenaltyApplied ? -0.5 : 0;
-  if (status === "P") return -0.5;
+  if (status === "Z") return latePenaltyApplied ? -1 : 0;
+  if (status === "P") return 0;
   if (status === "S") return -1;
   if (status === "U") return -2;
   return 0;
+}
+
+function reliabilityEffect(entry: ReliabilityEntry): { penalty: number; category?: keyof ReliabilityBreakdown } {
+  if (isLegacyAutoUnexcusedCandidate(entry)) return { penalty: 0, category: "legacyNeedsReview" };
+  if (entry.finalStatus === "Z") {
+    return entry.latePenaltyApplied ? { penalty: -1, category: "late" } : { penalty: 0 };
+  }
+
+  if (entry.actualAbsenceReason) {
+    return entry.actualAbsenceReason === "unexcused" ? { penalty: -2, category: "unexcused" } : { penalty: 0 };
+  }
+
+  if (entry.finalStatus === "S") return { penalty: -1, category: "lateCancellation" };
+  if (entry.finalStatus === "U") return { penalty: -2, category: "unexcused" };
+  return { penalty: 0 };
 }
 
 export function calculateSuggestedOverallRating(values: Array<number | null | undefined>) {

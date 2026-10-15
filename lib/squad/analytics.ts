@@ -1,4 +1,4 @@
-import { attendanceReasonLabels, calculateReliabilityPenalty, isDefaultRatingCandidate } from "@/lib/squad/attendance-utils";
+import { attendanceReasonLabels, calculateReliabilityBreakdown, calculateReliabilityPenalty, isDefaultRatingCandidate, isLegacyAutoUnexcusedCandidate, type ReliabilityBreakdown } from "@/lib/squad/attendance-utils";
 import { seasonLabelForDate } from "@/lib/trainings/utils";
 import { formatNumber, type Locale } from "@/lib/i18n";
 import { systemText } from "@/lib/i18n/system-text";
@@ -66,6 +66,8 @@ export type PlayerAnalyticsSummary = {
   attendanceRate: number | null;
   reliabilityPenalty: number;
   averageReliabilityPenalty: number | null;
+  reliabilityBreakdown: ReliabilityBreakdown;
+  legacyReliabilityReviewEventId?: string;
   ratingDistribution: RatingDistribution;
   attendanceDistribution: AttendanceDistribution;
   plannedAbsenceDistribution: PlannedAbsenceDistribution;
@@ -363,7 +365,9 @@ export function calculateReliabilitySummary(records: PlayerAnalyticsRecord[]) {
   const total = records.reduce((sum, record) => sum + calculateReliabilityPenalty(record), 0);
   return {
     total,
-    average: records.length ? total / records.length : null
+    average: records.length ? total / records.length : null,
+    breakdown: calculateReliabilityBreakdown(records),
+    legacyReviewEventId: records.find(isLegacyAutoUnexcusedCandidate)?.eventId
   };
 }
 
@@ -534,6 +538,8 @@ export function createPlayerAnalyticsSummary(
     attendanceRate: attendanceWhenExpectedRate,
     reliabilityPenalty: reliability.total,
     averageReliabilityPenalty: reliability.average,
+    reliabilityBreakdown: reliability.breakdown,
+    legacyReliabilityReviewEventId: reliability.legacyReviewEventId,
     ratingDistribution: calculateRatingDistribution(ratings),
     attendanceDistribution,
     plannedAbsenceDistribution: calculatePlannedAbsenceDistribution(records),

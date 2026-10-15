@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { PlayerActions } from "@/components/squad/player-actions";
 import { PlayerUnavailabilityForm } from "@/components/squad/player-unavailability-form";
 import { PlayerDevelopmentSection } from "@/components/squad/player-development";
+import { ReliabilityValue, reliabilityBreakdownLabels } from "@/components/squad/reliability-value";
 import { GeneralPlayerNotes, QuickPlayerNoteCard } from "@/components/squad/player-notes";
 import { permanentlyDeleteSquadPlayer } from "@/lib/squad/actions";
 import { createPlayerCoachAssessment } from "@/lib/squad/analytics-actions";
@@ -586,7 +587,7 @@ async function AnalyticsMetricGrid({ hub, period }: { hub: PlayerHubData; period
           href={tabHref(hub.player.id, "attendance", period)}
           label={ui("Reliability")}
           value={summary.reliabilityPenalty.toFixed(1)}
-          detail={locale === "de" ? `${summary.attendanceDistribution.lateCancellation} späte Absagen` : `${summary.attendanceDistribution.lateCancellation} late cancellation${summary.attendanceDistribution.lateCancellation === 1 ? "" : "s"}`}
+          detail={reliabilityBreakdownLabels(summary, locale).join(" · ") || (locale === "de" ? "Keine Zuverlässigkeitsabzüge" : "No reliability penalties")}
           tone={reliabilityTone(summary.reliabilityPenalty)}
           icon={<ShieldAlert className="h-4 w-4" />}
         />
@@ -636,7 +637,7 @@ async function AnalyticsTab({ hub, period }: { hub: PlayerHubData; period: Analy
           <Stat label={ui("Trend")} value={summary.trend.value === null ? ui(summary.trend.label) : `${summary.trend.value > 0 ? "+" : ""}${summary.trend.value.toFixed(1)} · ${ui(summary.trend.label)}`} />
           <Stat label={ui("Rated trainings")} value={String(summary.rated)} />
           <Stat label={ui("Evidence")} value={ui(summary.evidenceBase.label)} />
-          <Stat label={ui("Reliability")} value={summary.reliabilityPenalty.toFixed(1)} />
+          <Stat label={ui("Reliability")} value={<ReliabilityValue summary={summary} locale={locale} align="left" />} />
           <Stat label={ui("Latest rating")} value={summary.latestRating ? String(summary.latestRating) : ui("No rating")} />
         </div>
         <p className="mt-3 text-sm text-slate-600">{summary.trend.description}</p>
@@ -706,7 +707,7 @@ async function AttendanceTab({ hub, filter, period, customFrom, customTo }: { hu
         <Stat label={ui("Present")} value={String(distribution.present)} />
         <Stat label={ui("Late")} value={String(distribution.late)} />
         <Stat label={ui("Absent")} value={String(hub.analytics.summary.absent)} />
-        <Stat label={ui("Reliability")} value={formatNumber(hub.analytics.summary.reliabilityPenalty, locale, { minimumFractionDigits: 1 })} />
+        <Stat label={ui("Reliability")} value={<ReliabilityValue summary={hub.analytics.summary} locale={locale} align="left" />} />
       </section>
       <Card title={ui("Attendance record")} icon={<CalendarDays className="h-5 w-5" />}>
         {Object.values(hub.analytics.summary.plannedAbsenceDistribution).some(Boolean) ? (
@@ -1501,11 +1502,11 @@ function InfoPill({ label, value, icon }: { label: string; value: string; icon?:
   return <span className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-2 py-1"><span className="font-bold text-slate-500">{icon}{label}:</span> <span className="font-semibold text-board-navy">{value}</span></span>;
 }
 
-function Stat({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
+function Stat({ label, value, icon }: { label: string; value: ReactNode; icon?: ReactNode }) {
   return (
     <div className="rounded-md bg-slate-50 p-3">
       <p className="flex items-center gap-2 text-xs font-bold uppercase text-slate-500">{icon}{label}</p>
-      <p className="mt-1 text-xl font-bold text-board-navy">{value}</p>
+      <div className="mt-1 text-xl font-bold text-board-navy">{value}</div>
     </div>
   );
 }
