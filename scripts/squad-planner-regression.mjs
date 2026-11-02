@@ -6,7 +6,9 @@ import {
   evaluatePlayerSlotFit,
   getPlayerPositionFit,
   isFitVisibleInMode,
-  mapTacticalSlotRow
+  mapTacticalSlotRow,
+  normalizeTacticalAssignments,
+  rankTacticalPositionCandidates
 } from "../lib/squad/tactical-planner.ts";
 import { calculateAnchoredFloatingPosition } from "../lib/squad/planner-floating-position.ts";
 
@@ -84,8 +86,53 @@ const broadAcceptedPositions = {
 };
 assert.equal(evaluatePlayerSlotFit(player("CB"), broadAcceptedPositions, true).fitType, "out_of_position");
 assert.equal(evaluatePlayerSlotFit(player("LW"), broadAcceptedPositions, true).fitType, "out_of_position");
-assert.equal(evaluatePlayerSlotFit(player(undefined), broadAcceptedPositions, true).fitType, "out_of_position");
+assert.equal(evaluatePlayerSlotFit(player(undefined), broadAcceptedPositions, true).fitType, "no_data");
 assert.equal(evaluatePlayerSlotFit(player(undefined), broadAcceptedPositions, true).eligible, true);
+assert.equal(isFitVisibleInMode("no_data", "all"), true);
+
+const candidateDefinition = slot("right-back", "RB", 82, 72, 0);
+const candidateSlot = {
+  id: "rb",
+  userId: "coach",
+  planId: "plan",
+  ...candidateDefinition
+};
+const candidate = (id, firstName, position, secondaryPositions = [], playerType = "roster") => ({ id, firstName, lastName: "Example", position, secondaryPositions, playerType });
+const rankedCandidates = rankTacticalPositionCandidates([
+  candidate("natural", "Natural", "RB"),
+  candidate("secondary", "Secondary", "CM", ["RB"]),
+  candidate("compatible", "Compatible", "RWB"),
+  candidate("foreign", "Foreign", "GK"),
+  candidate("unknown", "Unknown", undefined)
+], candidateSlot);
+assert.deepEqual(rankedCandidates.map((item) => item.player.id), ["natural", "secondary", "compatible", "foreign", "unknown"]);
+assert.equal(rankedCandidates.length, 5, "Manual candidates must include every included Player");
+
+const now = "2026-11-02T12:00:00.000Z";
+const depth = (id, slotId, playerId, depthOrder, isPreferredStarter) => ({
+  id, userId: "coach", planId: "plan", slotId, playerId, depthOrder, isPreferredStarter, fitType: "natural", createdAt: now, updatedAt: now
+});
+const normalized = normalizeTacticalAssignments([
+  depth("rb-a", "rb", "a", 3, true),
+  depth("rb-b", "rb", "b", 3, true),
+  depth("rb-b-duplicate", "rb", "b", 4, false),
+  depth("lb-a", "lb", "a", 1, true),
+  depth("lb-c", "lb", "c", 7, false),
+  depth("cb-a", "cb", "a", 2, false)
+], [
+  { ...candidateSlot, id: "rb", sortOrder: 0 },
+  { ...candidateSlot, id: "lb", sortOrder: 1 },
+  { ...candidateSlot, id: "cb", sortOrder: 2 }
+], { ensureOccupiedStarters: true });
+assert.equal(normalized.filter((item) => item.slotId === "rb" && item.playerId === "b").length, 1, "Duplicate slot/player assignments are removed");
+assert.equal(new Set(normalized.filter((item) => item.isPreferredStarter).map((item) => item.playerId)).size, normalized.filter((item) => item.isPreferredStarter).length, "A Player starts in at most one slot");
+for (const slotId of ["rb", "lb", "cb"]) {
+  const rowsForSlot = normalized.filter((item) => item.slotId === slotId).sort((a, b) => a.depthOrder - b.depthOrder);
+  assert.deepEqual(rowsForSlot.map((item) => item.depthOrder), rowsForSlot.map((_, index) => index + 1));
+  assert.equal(rowsForSlot.filter((item) => item.isPreferredStarter).length, 1);
+  assert.equal(rowsForSlot[0].isPreferredStarter, true, "Rank 1 must be the Starter");
+}
+assert.equal(normalized.filter((item) => item.playerId === "a").length, 3, "Multi-position depth assignments remain valid");
 
 const centeredAnchor = { top: 200, right: 360, bottom: 240, left: 280, width: 80, height: 40 };
 const below = calculateAnchoredFloatingPosition({
@@ -113,8 +160,8 @@ assert.match(plannerSource, /secondaryPosition: "Secondary position"/);
 assert.match(plannerSource, /secondaryPosition: "Nebenposition"/);
 assert.match(plannerSource, /compatiblePosition: "Compatible position"/);
 assert.match(plannerSource, /compatiblePosition: "Kompatible Position"/);
-assert.match(plannerSource, /data-position-detail-popover/);
+assert.match(plannerSource, /data-position-inspector/);
 assert.match(plannerSource, /createPortal/);
 assert.doesNotMatch(plannerSource, /!editingFormation && selectedSlot \? <SlotDepthPanel/);
 
-console.log("PASS: formations, canonical position fit precedence, fit tooltips, anchored detail collision, Fit Mode and custom slot semantics.");
+console.log("PASS: formations, canonical fit, all-player manual candidates, assignment invariants, inspector and custom slot semantics.");

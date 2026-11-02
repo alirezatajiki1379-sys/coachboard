@@ -113,6 +113,12 @@ export type TacticalSlotFitResult = {
   eligible: boolean;
 };
 
+export type TacticalPositionCandidate = {
+  player: SquadPlayer;
+  fit: TacticalSlotFitResult;
+  alreadyAssigned: boolean;
+};
+
 export type PositionCandidateFit = "primary" | "secondary" | "compatible";
 
 export type PositionCandidate = {
@@ -425,8 +431,8 @@ export function evaluatePlayerSlotFit(
 
   if (positions.all.length === 0) {
     return {
-      fitType: "out_of_position",
-      baseScore: allowOutOfPosition ? 25 : 0,
+      fitType: "no_data",
+      baseScore: allowOutOfPosition ? 10 : 0,
       eligible: allowOutOfPosition
     };
   }
@@ -477,10 +483,116 @@ export function isFitAllowedByAutoFillEligibility(fitType: TacticalFitType, elig
 }
 
 export function isFitVisibleInMode(fitType: TacticalFitType, mode: PositionFitMode) {
-  if (mode === "all") return fitType !== "no_data";
+  if (mode === "all") return true;
   if (mode === "natural") return fitType === "natural";
   if (mode === "natural_secondary") return fitType === "natural" || fitType === "secondary";
   return fitType === "natural" || fitType === "secondary" || fitType === "compatible";
+}
+
+const tacticalFitRank: Record<TacticalFitType, number> = {
+  natural: 0,
+  secondary: 1,
+  compatible: 2,
+  out_of_position: 3,
+  no_data: 4
+};
+
+/** Manual planning is deliberately permissive: fit controls order and guidance, never access. */
+export function rankTacticalPositionCandidates(
+  players: SquadPlayer[],
+  slot: TacticalPlanSlot,
+  assignedPlayerIds: ReadonlySet<string> = new Set()
+): TacticalPositionCandidate[] {
+  return players
+    .map((player) => ({
+      player,
+      fit: evaluatePlayerSlotFit(player, slot, true),
+      alreadyAssigned: assignedPlayerIds.has(player.id)
+    }))
+    .sort((left, right) => {
+      const fitDelta = tacticalFitRank[left.fit.fitType] - tacticalFitRank[right.fit.fitType];
+      if (fitDelta !== 0) return fitDelta;
+      const scoreDelta = right.fit.baseScore - left.fit.baseScore;
+      if (scoreDelta !== 0) return scoreDelta;
+      return playerName(left.player).localeCompare(playerName(right.player), undefined, { sensitivity: "base" });
+    });
+}
+
+/**
+ * Repairs the two persisted ordering signals into one canonical truth.
+ * Existing multi-position depth assignments remain valid; only duplicate slot/player rows are removed.
+ */
+export function normalizeTacticalAssignments(
+  assignments: TacticalDepthAssignment[],
+  slots: TacticalPlanSlot[],
+  options: { ensureOccupiedStarters?: boolean } = {}
+): TacticalDepthAssignment[] {
+  const bestBySlotPlayer = new Map<string, TacticalDepthAssignment>();
+  for (const assignment of assignments) {
+    const key = `${assignment.slotId}:${assignment.playerId}`;
+    const existing = bestBySlotPlayer.get(key);
+    if (!existing) {
+      bestBySlotPlayer.set(key, assignment);
+      continue;
+    }
+    const keepAssignment = Number(assignment.isPreferredStarter) - Number(existing.isPreferredStarter)
+      || existing.depthOrder - assignment.depthOrder
+      || existing.id.localeCompare(assignment.id);
+    if (keepAssignment > 0) bestBySlotPlayer.set(key, assignment);
+  }
+
+  const unique = Array.from(bestBySlotPlayer.values());
+  const slotOrder = new Map(slots.map((slot, index) => [slot.id, slot.sortOrder * 100 + index]));
+  const slotIds = Array.from(new Set(unique.map((assignment) => assignment.slotId)))
+    .sort((left, right) => (slotOrder.get(left) ?? Number.MAX_SAFE_INTEGER) - (slotOrder.get(right) ?? Number.MAX_SAFE_INTEGER) || left.localeCompare(right));
+  const bySlot = new Map<string, TacticalDepthAssignment[]>();
+  for (const assignment of unique) {
+    bySlot.set(assignment.slotId, [...(bySlot.get(assignment.slotId) ?? []), assignment]);
+  }
+
+  const hadAnyStarter = unique.some((assignment) => assignment.isPreferredStarter);
+  const ensureOccupiedStarters = options.ensureOccupiedStarters ?? hadAnyStarter;
+  const starterBySlot = new Map<string, string>();
+  const candidatesBySlot = new Map(slotIds.map((slotId) => [
+    slotId,
+    [...(bySlot.get(slotId) ?? [])]
+      .filter((assignment) => ensureOccupiedStarters || assignment.isPreferredStarter)
+      .sort((left, right) => Number(right.isPreferredStarter) - Number(left.isPreferredStarter) || left.depthOrder - right.depthOrder || left.id.localeCompare(right.id))
+  ]));
+  const matchedSlotByPlayer = new Map<string, string>();
+  const matchedAssignmentBySlot = new Map<string, TacticalDepthAssignment>();
+  const matchSlot = (slotId: string, visitedPlayers: Set<string>): boolean => {
+    for (const candidate of candidatesBySlot.get(slotId) ?? []) {
+      if (visitedPlayers.has(candidate.playerId)) continue;
+      visitedPlayers.add(candidate.playerId);
+      const occupiedSlot = matchedSlotByPlayer.get(candidate.playerId);
+      if (occupiedSlot && !matchSlot(occupiedSlot, visitedPlayers)) continue;
+      matchedSlotByPlayer.set(candidate.playerId, slotId);
+      matchedAssignmentBySlot.set(slotId, candidate);
+      return true;
+    }
+    return false;
+  };
+  const matchingOrder = [...slotIds].sort((left, right) => {
+    const candidateDelta = (candidatesBySlot.get(left)?.length ?? 0) - (candidatesBySlot.get(right)?.length ?? 0);
+    return candidateDelta || (slotOrder.get(left) ?? 0) - (slotOrder.get(right) ?? 0) || left.localeCompare(right);
+  });
+  for (const slotId of matchingOrder) matchSlot(slotId, new Set());
+  for (const [slotId, assignment] of matchedAssignmentBySlot) starterBySlot.set(slotId, assignment.id);
+
+  return slotIds.flatMap((slotId) => {
+    const starterId = starterBySlot.get(slotId);
+    return [...(bySlot.get(slotId) ?? [])]
+      .sort((left, right) => {
+        const starterDelta = Number(right.id === starterId) - Number(left.id === starterId);
+        return starterDelta || left.depthOrder - right.depthOrder || left.id.localeCompare(right.id);
+      })
+      .map((assignment, index) => ({
+        ...assignment,
+        depthOrder: index + 1,
+        isPreferredStarter: assignment.id === starterId
+      }));
+  });
 }
 
 export function autoFillEligibilityLabel(eligibility: AutoFillEligibility) {
@@ -655,7 +767,10 @@ export async function getTacticalPlannerData(
   if (statesResult.error) throw new Error(statesResult.error.message);
 
   const slots = ((slotsResult.data ?? []) as SlotRow[]).map(mapTacticalSlotRow);
-  const assignments = ((assignmentsResult.data ?? []) as AssignmentRow[]).map(mapTacticalAssignmentRow);
+  const assignments = normalizeTacticalAssignments(
+    ((assignmentsResult.data ?? []) as AssignmentRow[]).map(mapTacticalAssignmentRow),
+    slots
+  );
   const playerStates = ((statesResult.data ?? []) as PlayerStateRow[]).map(mapTacticalPlayerStateRow);
 
   return {
@@ -681,12 +796,13 @@ function buildPlannerWarnings(
   const playerById = new Map(players.map((player) => [player.id, player]));
   const activeAssignments = assignments.filter((assignment) => playerById.has(assignment.playerId) && !excluded.has(assignment.playerId));
   const starters = activeAssignments.filter((assignment) => assignment.isPreferredStarter);
+  const uniqueStarterPlayers = new Set(starters.map((assignment) => assignment.playerId));
 
-  if (starters.length < 11) {
-    warnings.push({ level: "warning", message: `Starting XI has ${starters.length}/11 players selected.` });
+  if (uniqueStarterPlayers.size < 11) {
+    warnings.push({ level: "warning", message: `Starting XI has ${uniqueStarterPlayers.size}/11 players selected.` });
   }
-  if (starters.length > 11) {
-    warnings.push({ level: "warning", message: `Starting XI has ${starters.length} players. Keep it to 11 for match planning.` });
+  if (uniqueStarterPlayers.size > 11) {
+    warnings.push({ level: "warning", message: `Starting XI has ${uniqueStarterPlayers.size} players. Keep it to 11 for match planning.` });
   }
 
   for (const slot of slots) {
