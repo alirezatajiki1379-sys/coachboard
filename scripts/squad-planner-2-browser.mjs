@@ -124,9 +124,17 @@ try {
 
   await page.evaluate(() => window.qa.reset("en"));
   await page.setViewportSize({ width: 1440, height: 1000 });
+  const previouslyOpenInspector = page.locator("[data-position-inspector]");
+  if (await previouslyOpenInspector.count()) await previouslyOpenInspector.getByRole("button", { name: "Close" }).click();
   await page.locator("[data-pitch-add-player='RB']").click();
   const rbPicker = page.locator("[data-position-picker='RB']");
   await rbPicker.waitFor();
+  assert.equal(await page.locator("[data-position-inspector]").count(), 0, "+ Player keeps the local position manager primary");
+  assert.equal(await rbPicker.getByText("Current depth", { exact: true }).count(), 1, "+ Player opens the complete position manager");
+  assert.equal(await rbPicker.getByText("Add player", { exact: true }).count(), 1, "Position manager separates current depth from candidates");
+  for (const name of ["Anton Example", "Carlo Example"]) {
+    assert.equal(await rbPicker.getByText(name, { exact: true }).count(), 1, `+ Player exposes current assignment ${name}`);
+  }
   const pickerBox = await rbPicker.boundingBox();
   assert.ok(pickerBox && pickerBox.x >= 0 && pickerBox.y >= 0 && pickerBox.x + pickerBox.width <= 1440 && pickerBox.y + pickerBox.height <= 1000, "Local position picker stays within the viewport");
   if (process.env.COACHBOARD_CAPTURE_PLANNER === "1") await page.screenshot({ path: "/private/tmp/coachboard-squad-planner-2-1.png", fullPage: true });
@@ -145,17 +153,70 @@ try {
   const persistedAdds = await page.evaluate(() => window.qaAssignments.filter((row) => row.slotId === "rb").map((row) => row.playerId));
   assert.equal(persistedAdds.includes("d"), true, "First + Position click persists");
   assert.equal(persistedAdds.includes("b"), true, "A visible + Position click must never be silently dropped");
-  assert.equal(await rbPicker.locator("[data-position-candidate='d']").getByText("Already assigned", { exact: true }).count(), 1, "Candidate action updates after add");
+  assert.equal(await rbPicker.locator("[data-position-candidate='d']").count(), 0, "Assigned Player is removed from the add-candidate area");
+  assert.equal(await rbPicker.getByText("Daria Example", { exact: true }).count(), 1, "Assigned Player moves into Current depth without closing the popover");
   assert.equal(await page.locator("[data-planner-slot='rb'] [data-planner-depth-count='4']").count(), 1, "Pitch depth count updates without navigation");
   assert.equal((await page.locator("[data-planner-slot='rb']").innerText()).includes("+1 more"), true, "Pitch summarizes depth beyond three Players");
+  await rbPicker.getByRole("button", { name: "Close" }).click();
+  await page.locator("[data-planner-slot='rb']").click();
+  await page.locator("[data-position-inspector='RB']").getByLabel("Candidate view").selectOption("natural");
+  await page.evaluate(() => window.qa.render("de"));
+  await page.getByRole("button", { name: "+1 weiterer" }).click();
+  const germanPicker = page.locator("[data-position-picker='RB']");
+  await germanPicker.getByText("Aktuelle Besetzung", { exact: true }).waitFor();
+  await germanPicker.getByText("Spieler hinzufügen", { exact: true }).waitFor();
+  for (const name of ["Anton Example", "Carlo Example", "Daria Example", "Bela Example"]) {
+    assert.equal(await germanPicker.getByText(name, { exact: true }).count(), 1, `Current depth ignores restrictive fit mode for ${name}`);
+  }
+  await germanPicker.getByRole("button", { name: "Schließen" }).click();
+  await page.evaluate(() => window.qa.render("en"));
   await page.reload();
   await page.locator("[data-planner-slot='rb']").waitFor();
   assert.equal(await page.locator("[data-planner-slot='rb'] [data-planner-depth-count='4']").count(), 1, "+ Position assignment survives reload");
+  const moreTrigger = page.getByRole("button", { name: "+1 more" });
+  await moreTrigger.click();
+  const morePicker = page.locator("[data-position-picker='RB']");
+  await morePicker.waitFor();
+  assert.equal(await morePicker.getByText("Current depth", { exact: true }).count(), 1, "+1 more opens the complete position manager");
+  for (const name of ["Anton Example", "Carlo Example", "Daria Example", "Bela Example"]) {
+    assert.equal(await morePicker.getByText(name, { exact: true }).count(), 1, `Current depth exposes ${name}`);
+  }
+  await morePicker.getByRole("button", { name: "Close" }).click();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-pitch-more-players") === "RB");
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-pitch-more-players")), "RB", "Closing returns focus to the clicked +N control");
+  await moreTrigger.click();
+  await morePicker.getByRole("button", { name: "Move up: Daria Example" }).click();
+  await page.waitForFunction(() => document.querySelectorAll("[data-position-picker='RB'] [data-position-depth-row]")[1]?.textContent?.includes("Daria Example"));
+  let managedDepth = await morePicker.locator("[data-position-depth-row]").allTextContents();
+  assert.equal(managedDepth[0].includes("Anton Example"), true, "Reordering a backup keeps rank one Starter");
+  assert.equal(managedDepth[1].includes("Daria Example"), true, "Popover moves a hidden Player to rank two");
+  await page.reload();
+  let pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
+  assert.equal(pitchRows[1].includes("Daria Example"), true, "Popover reorder survives reload");
+  await page.getByRole("button", { name: "+1 more" }).click();
+  await morePicker.getByRole("button", { name: "Remove from position: Bela Example" }).click();
+  await page.waitForFunction(() => document.querySelector("[data-planner-slot='rb'] [data-planner-depth-count='3']"));
+  assert.equal(await page.getByRole("button", { name: "+1 more" }).count(), 0, "Hidden-depth summary disappears immediately at depth three");
+  assert.equal(await morePicker.isVisible(), true, "Position manager stays open after removing a hidden Player");
+  assert.equal(await morePicker.locator("[data-position-depth-row]").filter({ hasText: "Bela Example" }).count(), 0, "Removed Player leaves Current depth");
+  await morePicker.getByRole("button", { name: "Set as starter: Carlo Example" }).click();
+  await page.waitForFunction(() => document.querySelector("[data-position-picker='RB'] [data-position-depth-row]")?.textContent?.includes("Carlo Example"));
+  managedDepth = await morePicker.locator("[data-position-depth-row]").allTextContents();
+  assert.equal(managedDepth[0].includes("Carlo Example"), true, "Popover promotes a Player to Starter");
+  pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
+  assert.equal(pitchRows[0].includes("Carlo Example"), true, "Pitch synchronizes with popover Starter change");
+  await morePicker.getByRole("button", { name: "Close" }).click();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-pitch-add-player") === "RB");
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-pitch-add-player")), "RB", "Detached +N trigger falls back to + Player focus");
+  await page.reload();
+  pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
+  assert.equal(pitchRows[0].includes("Carlo Example"), true, "Popover Starter change survives reload");
+  assert.equal(pitchRows.some((row) => row.includes("Bela Example")), false, "Popover removal survives reload");
 
   await page.evaluate(() => window.qa.reset("en"));
   await page.locator("[data-pitch-player-row='rb-c']").getByRole("button", { name: "Set Carlo Example as RB starter" }).click();
   await page.waitForFunction(() => document.querySelector("[data-planner-slot='rb'] [data-pitch-player-row]")?.textContent?.includes("Carlo Example"));
-  let pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
+  pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
   assert.equal(pitchRows[0].includes("Carlo Example"), true, "On-pitch Star promotes the selected backup");
   assert.equal(pitchRows[1].includes("Anton Example"), true, "Previous Starter remains rank two");
   await page.locator("[data-planner-slot='rb']").click();
@@ -171,7 +232,7 @@ try {
   await page.locator("[data-pitch-add-player='RB']").click();
   const reorderPicker = page.locator("[data-position-picker='RB']");
   await reorderPicker.locator("[data-position-candidate='d']").getByRole("button", { name: "Add as option" }).click();
-  await reorderPicker.locator("[data-position-candidate='d']").getByText("Already assigned", { exact: true }).waitFor();
+  await reorderPicker.locator("[data-position-depth-row='depth-d-rb']").waitFor();
   await reorderPicker.getByRole("button", { name: "Close" }).click();
   await page.locator("[data-pitch-player-row='depth-d-rb']").dragTo(page.locator("[data-pitch-player-row='rb-c']"));
   await page.waitForFunction(() => document.querySelectorAll("[data-planner-slot='rb'] [data-pitch-player-row]")[1]?.textContent?.includes("Daria Example"));
@@ -220,7 +281,7 @@ try {
   await page.waitForFunction(() => document.querySelector("[data-planner-slot='rb']")?.textContent?.includes("Carlo Example"));
   assert.equal(await page.locator("[data-planner-slot='rb']").innerText().then((text) => text.includes("Carlo Example")), true, "Drag and Drop uses the same Starter mutation");
   assert.deepEqual(errors, []);
-  console.log("Squad Planner 2.1 browser regression: PASS (+Position persistence, pitch add/promote/reorder/remove, swap, DE/EN, 320/768/1440 px)");
+  console.log("Squad Planner 2.2 browser regression: PASS (+N position manager, add/promote/reorder/remove, focus, reload, swap, DE/EN, 320/768/1440 px)");
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));

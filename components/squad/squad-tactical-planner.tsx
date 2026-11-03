@@ -73,7 +73,7 @@ const plannerCopy = {
     assign: "Assign", selectPlayer: "Select a player, then tap a position.", selectPosition: "Select a position to inspect its depth.", depthOptions: "options", removeFromXi: "Remove from XI", changeFailed: "Could not update formation.",
     name: "Formation name", label: "Display label", position: "Position", eleven: "A formation needs 11 positions before it can be saved.",
     starters: "starters", depthAssignments: "depth assignments", included: "included", excluded: "excluded", plan: "Plan", board: "Formation board", depthBoard: "Depth board", playerPool: "Player pool",
-    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Candidate view", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Recommended", fitAll: "All players", noSuitablePlayer: "+ Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth", primary: "Primary", secondary: "Secondary", compatible: "Compatible", secondaryPosition: "Secondary position", compatiblePosition: "Compatible position", noPositionData: "No position data", starter: "Starter", xi: "XI", close: "Close", addPlayer: "Add player", searchPlayers: "Search players", recommended: "Recommended", morePlayers: "More players", addOption: "Add as option", makeStarter: "Set as starter", alreadyAssigned: "Already assigned", startsElsewhere: "Starts at", removePosition: "Remove from position", moveUp: "Move up", moveDown: "Move down", noAssigned: "No players assigned", showTrials: "Show trial players", trial: "Trial player", changeStarter: "Change starter", defaultPlan: "Default", renameNotes: "Rename / notes", newPlan: "New plan", more: "More actions", clearXi: "Clear XI", plannerChecks: "Planner checks", starterUnavailable: "The current starter is no longer available for this team.", assignmentNotFound: "Assignment not found.", adding: "Adding...", savingChange: "Saving change...", details: "Details", collapseDetails: "Collapse details", playerActions: "Player actions", addFailed: "Player could not be added to this position."
+    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", currentDepth: "Current depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Candidate view", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Recommended", fitAll: "All players", noSuitablePlayer: "+ Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth", primary: "Primary", secondary: "Secondary", compatible: "Compatible", secondaryPosition: "Secondary position", compatiblePosition: "Compatible position", noPositionData: "No position data", starter: "Starter", xi: "XI", close: "Close", addPlayer: "Add player", searchPlayers: "Search players", recommended: "Recommended", morePlayers: "More players", addOption: "Add as option", makeStarter: "Set as starter", alreadyAssigned: "Already assigned", startsElsewhere: "Starts at", removePosition: "Remove from position", moveUp: "Move up", moveDown: "Move down", noAssigned: "No players assigned", noAssignedYet: "No Player assigned yet.", showTrials: "Show trial players", trial: "Trial player", changeStarter: "Change starter", defaultPlan: "Default", renameNotes: "Rename / notes", newPlan: "New plan", more: "More actions", clearXi: "Clear XI", plannerChecks: "Planner checks", starterUnavailable: "The current starter is no longer available for this team.", assignmentNotFound: "Assignment not found.", adding: "Adding...", savingChange: "Saving change...", details: "Details", collapseDetails: "Collapse details", playerActions: "Player actions", addFailed: "Player could not be added to this position."
   },
   de: {
     heading: "Kaderplaner", nameRequired: "Bitte einen Namen für die Formation eingeben.",
@@ -82,7 +82,7 @@ const plannerCopy = {
     assign: "Zuweisen", selectPlayer: "Spieler auswählen und dann eine Position antippen.", selectPosition: "Position auswählen, um die Besetzung zu sehen.", depthOptions: "Optionen", removeFromXi: "Aus Startelf entfernen", changeFailed: "Formation konnte nicht aktualisiert werden.",
     name: "Name der Formation", label: "Anzeigename", position: "Position", eleven: "Eine Formation braucht 11 Positionen, bevor sie gespeichert werden kann.",
     starters: "Startspieler", depthAssignments: "Positionszuordnungen", included: "einbezogen", excluded: "ausgeschlossen", plan: "Plan", board: "Formationstafel", depthBoard: "Positionsbesetzung", playerPool: "Spielerpool",
-    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Kandidatenansicht", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Empfohlen", fitAll: "Alle Spieler", noSuitablePlayer: "+ Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung", primary: "Hauptposition", secondary: "Nebenposition", compatible: "Kompatibel", secondaryPosition: "Nebenposition", compatiblePosition: "Kompatible Position", noPositionData: "Keine Positionsdaten", starter: "Startspieler", xi: "Startelf", close: "Schließen", addPlayer: "Spieler hinzufügen", searchPlayers: "Spieler suchen", recommended: "Empfohlen", morePlayers: "Weitere Spieler", addOption: "Als Option hinzufügen", makeStarter: "Als Startspieler", alreadyAssigned: "Bereits zugeordnet", startsElsewhere: "Startelf", removePosition: "Von Position entfernen", moveUp: "Nach oben", moveDown: "Nach unten", noAssigned: "Keine Spieler zugeordnet", showTrials: "Probespieler anzeigen", trial: "Probespieler", changeStarter: "Startspieler wechseln", defaultPlan: "Standard", renameNotes: "Name / Notizen", newPlan: "Neuer Plan", more: "Weitere Aktionen", clearXi: "Startelf leeren", plannerChecks: "Planer-Prüfung", starterUnavailable: "Der aktuelle Startspieler ist für dieses Team nicht mehr verfügbar.", assignmentNotFound: "Zuordnung nicht gefunden.", adding: "Hinzufügen...", savingChange: "Änderung wird gespeichert...", details: "Details", collapseDetails: "Details einklappen", playerActions: "Spieleraktionen", addFailed: "Spieler konnte dieser Position nicht hinzugefügt werden."
+    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", currentDepth: "Aktuelle Besetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Kandidatenansicht", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Empfohlen", fitAll: "Alle Spieler", noSuitablePlayer: "+ Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung", primary: "Hauptposition", secondary: "Nebenposition", compatible: "Kompatibel", secondaryPosition: "Nebenposition", compatiblePosition: "Kompatible Position", noPositionData: "Keine Positionsdaten", starter: "Startspieler", xi: "Startelf", close: "Schließen", addPlayer: "Spieler hinzufügen", searchPlayers: "Spieler suchen", recommended: "Empfohlen", morePlayers: "Weitere Spieler", addOption: "Als Option hinzufügen", makeStarter: "Als Startspieler", alreadyAssigned: "Bereits zugeordnet", startsElsewhere: "Startelf", removePosition: "Von Position entfernen", moveUp: "Nach oben", moveDown: "Nach unten", noAssigned: "Keine Spieler zugeordnet", noAssignedYet: "Noch kein Spieler zugeordnet.", showTrials: "Probespieler anzeigen", trial: "Probespieler", changeStarter: "Startspieler wechseln", defaultPlan: "Standard", renameNotes: "Name / Notizen", newPlan: "Neuer Plan", more: "Weitere Aktionen", clearXi: "Startelf leeren", plannerChecks: "Planer-Prüfung", starterUnavailable: "Der aktuelle Startspieler ist für dieses Team nicht mehr verfügbar.", assignmentNotFound: "Zuordnung nicht gefunden.", adding: "Hinzufügen...", savingChange: "Änderung wird gespeichert...", details: "Details", collapseDetails: "Details einklappen", playerActions: "Spieleraktionen", addFailed: "Spieler konnte dieser Position nicht hinzugefügt werden."
   }
 } as const;
 
@@ -1244,7 +1244,6 @@ function FormationSlotRows({
             starterSlotByPlayerId={starterSlotByPlayerId}
             eligibleCount={countEligiblePlayers(includedPlayers, slot, fitMode)}
             availablePlayers={includedPlayers}
-            fitMode={fitMode}
             draggingPlayerId={draggingPlayerId}
             hoverSlotId={hoverSlotId}
             pendingMutationKeys={pendingMutationKeys}
@@ -1287,7 +1286,6 @@ function FormationSlotRows({
               starterSlotByPlayerId={starterSlotByPlayerId}
               eligibleCount={countEligiblePlayers(includedPlayers, slot, fitMode)}
               availablePlayers={includedPlayers}
-              fitMode={fitMode}
               draggingPlayerId={draggingPlayerId}
               hoverSlotId={hoverSlotId}
               pendingMutationKeys={pendingMutationKeys}
@@ -1476,7 +1474,6 @@ function SlotButton({
   starterSlotByPlayerId,
   eligibleCount,
   availablePlayers,
-  fitMode,
   draggingPlayerId,
   hoverSlotId,
   pendingMutationKeys,
@@ -1500,7 +1497,6 @@ function SlotButton({
   starterSlotByPlayerId: Map<string, string>;
   eligibleCount: number;
   availablePlayers: SquadPlayer[];
-  fitMode: DepthOverviewFitMode;
   draggingPlayerId: string | null;
   hoverSlotId: string | null;
   pendingMutationKeys: ReadonlySet<string>;
@@ -1519,8 +1515,10 @@ function SlotButton({
 }) {
   const locale = useOptionalI18n()?.locale ?? "en";
   const copy = plannerCopy[locale];
+  const slotRef = useRef<HTMLDivElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerAnchor, setPickerAnchor] = useState<HTMLButtonElement | null>(null);
   const orderedAssignments = rankedDepthAssignments(assignments);
   const starter = orderedAssignments.find((assignment) => assignment.isPreferredStarter) ?? orderedAssignments[0];
   const starterPlayer = starter ? playersById.get(starter.playerId) : undefined;
@@ -1540,9 +1538,14 @@ function SlotButton({
       : depthCount === 2
         ? "Two Players ranked for this position"
         : `${numberWord(depthCount)} Players ranked for this position`;
+  const openPositionManager = (anchor: HTMLButtonElement) => {
+    setPickerAnchor(anchor);
+    setPickerOpen(true);
+  };
 
   return (
     <div
+      ref={slotRef}
       data-planner-slot={slot.id}
       draggable={Boolean(starterPlayer)}
       onDragStart={(event) => { if (starterPlayer) onDragStart(event, starterPlayer.id); }}
@@ -1682,15 +1685,22 @@ function SlotButton({
           data-pitch-add-player={slot.code}
           onClick={(event) => {
             event.stopPropagation();
-            onSelect(event.currentTarget);
-            setPickerOpen(true);
+            openPositionManager(event.currentTarget);
           }}
           className="min-w-0 flex-1 truncate rounded px-1 text-left text-[9px] font-bold text-board-green hover:bg-emerald-50 focus:bg-emerald-50"
         >
           <Plus className="mr-0.5 inline h-3 w-3" aria-hidden="true" />{copy.addPlayer}
         </button>
         {hiddenDepthCount > 0 ? (
-          <button type="button" onClick={(event) => { event.stopPropagation(); onSelect(event.currentTarget); setPickerOpen(true); }} className="shrink-0 text-[9px] font-bold text-slate-500 hover:text-board-navy">
+          <button
+            type="button"
+            data-pitch-more-players={slot.code}
+            onClick={(event) => {
+              event.stopPropagation();
+              openPositionManager(event.currentTarget);
+            }}
+            className="shrink-0 rounded px-1 text-[9px] font-bold text-slate-500 hover:bg-slate-50 hover:text-board-navy focus:bg-slate-50"
+          >
             +{hiddenDepthCount} {locale === "de" ? (hiddenDepthCount === 1 ? "weiterer" : "weitere") : "more"}
           </button>
         ) : null}
@@ -1700,29 +1710,40 @@ function SlotButton({
           {slotError || copy.savingChange}
         </p>
       ) : null}
-      <PositionCandidatePopover
+      <PositionManagementPopover
         open={pickerOpen}
-        anchorRef={addButtonRef}
+        anchor={pickerAnchor}
+        fallbackFocusRef={addButtonRef}
+        slotFocusRef={slotRef}
         slot={slot}
         depth={orderedAssignments}
+        playersById={playersById}
         availablePlayers={availablePlayers}
-        fitMode={fitMode}
+        fitMode="all"
         starterSlotByPlayerId={starterSlotByPlayerId}
         pendingMutationKeys={pendingMutationKeys}
         slotError={slotError}
         onSetStarter={(playerId) => onAssign(playerId, slot.id)}
         onAddDepth={(player) => onAddDepth(slot, player)}
-        onClose={() => setPickerOpen(false)}
+        onRemoveDepth={onRemoveDepth}
+        onMoveToRank={onMoveToRank}
+        onClose={() => {
+          setPickerOpen(false);
+          setPickerAnchor(null);
+        }}
       />
     </div>
   );
 }
 
-function PositionCandidatePopover({
+function PositionManagementPopover({
   open,
-  anchorRef,
+  anchor,
+  fallbackFocusRef,
+  slotFocusRef,
   slot,
   depth,
+  playersById,
   availablePlayers,
   fitMode,
   starterSlotByPlayerId,
@@ -1730,12 +1751,17 @@ function PositionCandidatePopover({
   slotError,
   onSetStarter,
   onAddDepth,
+  onRemoveDepth,
+  onMoveToRank,
   onClose
 }: {
   open: boolean;
-  anchorRef: { current: HTMLButtonElement | null };
+  anchor: HTMLButtonElement | null;
+  fallbackFocusRef: { current: HTMLButtonElement | null };
+  slotFocusRef: { current: HTMLDivElement | null };
   slot: TacticalPlanSlot;
   depth: TacticalPlannerData["assignments"];
+  playersById: Map<string, SquadPlayer>;
   availablePlayers: SquadPlayer[];
   fitMode: DepthOverviewFitMode;
   starterSlotByPlayerId: Map<string, string>;
@@ -1743,6 +1769,8 @@ function PositionCandidatePopover({
   slotError?: string;
   onSetStarter: (playerId: string) => Promise<void>;
   onAddDepth: (player: SquadPlayer) => Promise<void>;
+  onRemoveDepth: (assignmentId: string) => Promise<void>;
+  onMoveToRank: (assignmentId: string, targetRank: number) => Promise<void>;
   onClose: () => void;
 }) {
   const locale = useOptionalI18n()?.locale ?? "en";
@@ -1751,14 +1779,18 @@ function PositionCandidatePopover({
   const [position, setPosition] = useState({ left: 0, top: 0, maxHeight: 480, ready: false });
   const close = useCallback(() => {
     onClose();
-    window.requestAnimationFrame(() => anchorRef.current?.focus());
-  }, [anchorRef, onClose]);
+    window.requestAnimationFrame(() => {
+      if (anchor?.isConnected) anchor.focus();
+      else if (fallbackFocusRef.current?.isConnected) fallbackFocusRef.current.focus();
+      else slotFocusRef.current?.focus();
+    });
+  }, [anchor, fallbackFocusRef, onClose, slotFocusRef]);
   useLayoutEffect(() => {
-    if (!open || !anchorRef.current || !panelRef.current) return;
+    if (!open || !anchor || !panelRef.current) return;
     const update = () => {
-      if (!anchorRef.current || !panelRef.current) return;
+      if (!anchor.isConnected || !panelRef.current) return;
       const next = calculateAnchoredFloatingPosition({
-        anchor: anchorRef.current.getBoundingClientRect(),
+        anchor: anchor.getBoundingClientRect(),
         floatingWidth: panelRef.current.offsetWidth,
         floatingHeight: panelRef.current.offsetHeight,
         viewportWidth: window.innerWidth,
@@ -1772,11 +1804,14 @@ function PositionCandidatePopover({
     update();
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(panelRef.current);
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      resizeObserver.disconnect();
     };
-  }, [anchorRef, open]);
+  }, [anchor, open]);
   useEffect(() => {
     if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -1792,7 +1827,7 @@ function PositionCandidatePopover({
       <div
         ref={panelRef}
         role="dialog"
-        aria-label={`${slot.code} ${copy.addPlayer}`}
+        aria-label={`${slot.code} ${copy.depthOverview}`}
         data-position-picker={slot.code}
         className="fixed z-[120] w-[min(24rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-board-green/30 bg-white p-3 shadow-2xl"
         style={{ left: position.left, top: position.top, maxHeight: position.maxHeight, visibility: position.ready ? "visible" : "hidden" }}
@@ -1806,17 +1841,21 @@ function PositionCandidatePopover({
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        {slotError ? <p role="alert" className="mt-2 rounded bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700">{slotError}</p> : null}
-        <PositionCandidateList
+        <InlineDepthControls
           slot={slot}
           depth={depth}
+          playersById={playersById}
           availablePlayers={availablePlayers}
           fitMode={fitMode}
           starterSlotByPlayerId={starterSlotByPlayerId}
           pendingMutationKeys={pendingMutationKeys}
+          slotError={slotError}
           onSetStarter={onSetStarter}
           onAddDepth={onAddDepth}
-          autoFocus
+          onRemoveDepth={onRemoveDepth}
+          onMoveToRank={onMoveToRank}
+          compact
+          autoFocusCandidates
         />
       </div>
     </>,
@@ -1850,7 +1889,7 @@ function PositionCandidateList({
   const [candidateSearch, setCandidateSearch] = useState("");
   const assignedPlayerIds = new Set(depth.map((assignment) => assignment.playerId));
   const candidates = rankTacticalPositionCandidates(availablePlayers, slot, assignedPlayerIds)
-    .filter(({ player, fit }) => matchesSearch(player, candidateSearch) && isFitVisibleInMode(fit.fitType, fitMode));
+    .filter(({ player, fit, alreadyAssigned }) => !alreadyAssigned && matchesSearch(player, candidateSearch) && isFitVisibleInMode(fit.fitType, fitMode));
   const firstMorePlayerIndex = candidates.findIndex(({ fit }) => fit.fitType === "out_of_position" || fit.fitType === "no_data");
   return (
     <div className="border-t border-board-line pt-3">
@@ -1861,7 +1900,7 @@ function PositionCandidateList({
       <input autoFocus={autoFocus} value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} placeholder={copy.searchPlayers} className="mt-2 h-10 w-full rounded-md border border-board-line px-3 text-sm" />
       <div className="mt-2 max-h-72 space-y-1 overflow-y-auto pr-1">
         {candidates.length === 0 ? <p className="rounded bg-slate-50 p-3 text-xs font-semibold text-slate-500">{copy.noSuitablePlayer}</p> : null}
-        {candidates.map(({ player, fit, alreadyAssigned }, index) => {
+        {candidates.map(({ player, fit }, index) => {
           const startingSlot = starterSlotByPlayerId.get(player.id);
           const isStarterHere = depth.some((assignment) => assignment.playerId === player.id && assignment.isPreferredStarter);
           const addKey = `add:${slot.id}:${player.id}`;
@@ -1879,11 +1918,9 @@ function PositionCandidateList({
                   {player.playerType === "trial" ? <span className="text-amber-700">· {copy.trial}</span> : null}
                 </span>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {alreadyAssigned ? <span className="inline-flex min-h-9 items-center rounded bg-slate-100 px-2 text-[10px] font-bold text-slate-600">{copy.alreadyAssigned}</span> : (
-                    <button type="button" disabled={pendingMutationKeys.has(addKey)} onClick={() => void onAddDepth(player)} className="min-h-9 rounded border border-board-line px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
-                      {pendingMutationKeys.has(addKey) ? copy.adding : copy.addOption}
-                    </button>
-                  )}
+                  <button type="button" disabled={pendingMutationKeys.has(addKey)} onClick={() => void onAddDepth(player)} className="min-h-9 rounded border border-board-line px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                    {pendingMutationKeys.has(addKey) ? copy.adding : copy.addOption}
+                  </button>
                   {!isStarterHere ? <button type="button" disabled={pendingMutationKeys.has(starterKey)} onClick={() => void onSetStarter(player.id)} className="min-h-9 rounded bg-board-navy px-2 text-[10px] font-bold text-white hover:bg-slate-800 disabled:opacity-60" aria-label={`${copy.makeStarter}: ${playerName(player)}`}>
                     {pendingMutationKeys.has(starterKey) ? copy.savingChange : startingSlot ? `${copy.makeStarter} · ${copy.startsElsewhere} ${startingSlot}` : copy.makeStarter}
                   </button> : null}
@@ -2013,7 +2050,8 @@ function InlineDepthControls({
   onAddDepth,
   onRemoveDepth,
   onMoveToRank,
-  compact = false
+  compact = false,
+  autoFocusCandidates = false
 }: {
   slot: TacticalPlanSlot;
   depth: TacticalPlannerData["assignments"];
@@ -2028,6 +2066,7 @@ function InlineDepthControls({
   onRemoveDepth: (assignmentId: string) => Promise<void>;
   onMoveToRank: (assignmentId: string, targetRank: number) => Promise<void>;
   compact?: boolean;
+  autoFocusCandidates?: boolean;
 }) {
   const locale = useOptionalI18n()?.locale ?? "en";
   const copy = plannerCopy[locale];
@@ -2037,9 +2076,9 @@ function InlineDepthControls({
 
   return (
     <div className={cn("mt-3 space-y-2", compact ? "text-[11px]" : "text-xs")} onClick={(event) => event.stopPropagation()} data-position-depth-list={slot.code}>
-      <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{copy.xi} · {copy.depthOverview}</p>
+      <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{copy.currentDepth}</p>
       {sortedDepth.length === 0 ? (
-        <p className="rounded bg-slate-50 px-3 py-2 font-semibold text-slate-500">{copy.noAssigned}</p>
+        <p className="rounded bg-slate-50 px-3 py-2 font-semibold text-slate-500">{copy.noAssignedYet}</p>
       ) : sortedDepth.map((assignment, index) => {
         const player = playersById.get(assignment.playerId);
         if (!player) return null;
@@ -2049,6 +2088,7 @@ function InlineDepthControls({
         return (
           <div
             key={assignment.id}
+            data-position-depth-row={assignment.id}
             draggable
             onDragStart={(event) => {
               setDraggedAssignmentId(assignment.id);
@@ -2097,6 +2137,7 @@ function InlineDepthControls({
         pendingMutationKeys={pendingMutationKeys}
         onSetStarter={onSetStarter}
         onAddDepth={onAddDepth}
+        autoFocus={autoFocusCandidates}
       /> : null}
     </div>
   );
