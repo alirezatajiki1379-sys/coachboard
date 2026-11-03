@@ -45,6 +45,10 @@ function fakeDb(initial = {}) {
         gte(key, value) { filters.push((row) => row[key] >= value); return query; },
         order() { return query; },
         or(expression) {
+          if (expression === "planned_status.is.null,planned_status.eq.expected") {
+            filters.push((row) => row.planned_status == null || row.planned_status === "expected");
+            return query;
+          }
           assert.equal(expression, "planned_status_source.is.null,planned_status_source.neq.manual");
           filters.push((row) => row.planned_status_source !== "manual");
           return query;
@@ -157,6 +161,46 @@ for (const method of ["updateAttendanceRating", "updateAttendanceRatingInline"])
     assert.equal(db.tables.squad_attendance_records.length, 1);
   });
 }
+
+test("bulk expected attendance does not invent ratings or overwrite known absence", async () => {
+  const db = attendanceDb(null);
+  const row = db.tables.squad_attendance_records[0];
+  row.overall_rating = null;
+  db.tables.squad_attendance_records.push({ ...row, id: "absent", planned_status: "unavailable", final_status: "absent", actual_absence_reason: "sick" });
+  const actions = loadModule("lib/squad/attendance-actions.ts", actionMocks(db));
+  await assert.rejects(actions.markAllExpectedPresent(ratingForm()), /Redirect:/);
+  assert.equal(row.final_status, "present");
+  assert.equal(row.overall_rating, null);
+  assert.equal(db.tables.squad_attendance_records[1].actual_absence_reason, "sick");
+  assert.equal(db.tables.squad_attendance_records[1].final_status, "absent");
+});
+
+test("check-in details preserve overall, exact note text, privacy and optional suggestions", async () => {
+  for (const status of ["present", "Z", "left_early"]) {
+    const db = attendanceDb(status, "completed");
+    const actions = loadModule("lib/squad/attendance-actions.ts", actionMocks(db));
+    const note = "  Private coaching note\nSecond line  ";
+    const form = ratingForm({ ratingTechnique: "3", ratingGameUnderstanding: "4", ratingIntensity: "5", ratingBehavior: "4", coachNote: note, sensitiveNote: "on" });
+    form.delete("overallRating");
+    assert.equal((await actions.updateAttendanceRating(form)).overallRating, 4);
+    const row = db.tables.squad_attendance_records[0];
+    assert.equal(row.rating_auto_suggestion, 4);
+    assert.equal(row.coach_note, note);
+    assert.equal(row.sensitive_note, true);
+    assert.equal(db.tables.squad_training_events[0].status, "completed");
+    assert.equal(db.tables.squad_training_events[0].completed_at, "2026-09-18");
+    assert.equal((await actions.updateAttendanceRatingInline(ratingForm({ overallRating: "" }))).overallRating, null);
+    assert.equal(row.rating_technique, 3, "inline clear preserves category ratings");
+    assert.equal((await actions.updateAttendanceRating(form)).overallRating, null, "suggestion must never become overall");
+    for (const field of ["ratingTechnique", "ratingGameUnderstanding", "ratingIntensity", "ratingBehavior"]) form.set(field, "");
+    assert.equal((await actions.updateAttendanceRating(form)).ok, true);
+    assert.equal(row.rating_auto_suggestion, null);
+    db.fail = (table, mode) => table === "squad_attendance_records" && mode === "update";
+    form.set("coachNote", "Do not lose saved note");
+    assert.equal((await actions.updateAttendanceRating(form)).ok, false);
+    assert.equal(row.coach_note, note);
+  }
+});
 
 test("check-in clears every rating on absence, keeps plans, and does not regress workflow", async () => {
   const db = attendanceDb("present", "rating_open");

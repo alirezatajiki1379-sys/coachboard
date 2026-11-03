@@ -1,5 +1,13 @@
 // English source messages identify system copy only; stored domain values are unchanged.
 export const workflowCopyDe: Record<string, string> = {
+  "Overall rating": "Gesamtbewertung",
+  "Rating details": "Bewertungsdetails",
+  "Game understanding": "Spielverständnis",
+  "Rating saved.": "Bewertung gespeichert.",
+  "Save details": "Details speichern",
+  "Suggestion from detailed ratings: {rating}": "Vorschlag aus Detailbewertungen: {rating}",
+  "Rating could not be saved. Please try again.": "Die Bewertung konnte nicht gespeichert werden. Bitte versuche es erneut.",
+  "Rating details could not be saved. Your entries have been kept.": "Die Bewertungsdetails konnten nicht gespeichert werden. Deine Eingaben bleiben erhalten.",
   "Next up": "Als Nächstes",
   "Preparation": "Vorbereitung",
   "Training live": "Training läuft",

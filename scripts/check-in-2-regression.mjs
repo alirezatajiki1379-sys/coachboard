@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { createServer } from "node:http";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { checkInlineRatings } from "./check-in-inline-rating-regression.mjs";
 
 const root = process.cwd();
 const qaRequire = createRequire(path.join(process.env.COACHBOARD_QA_DEPS ?? "/private/tmp/coachboard-stability-tests", "package.json"));
@@ -10,7 +11,7 @@ const { build } = qaRequire("esbuild");
 const { chromium } = qaRequire("playwright");
 const attendanceSource = readFileSync(path.join(root, "components/squad/attendance-controls.tsx"), "utf8");
 
-assert.doesNotMatch(attendanceSource, /function InlineRatingControl/);
+assert.match(attendanceSource, /function CheckInRating/);
 assert.match(attendanceSource, /type CheckInFilter = "open" \| "all"/);
 assert.match(attendanceSource, /MarkAllPresentDialog/);
 assert.match(attendanceSource, /Count as late arrival/);
@@ -19,13 +20,17 @@ const stubs = {
   "next/link": 'import React from "react"; export default function Link({href,children,...props}){return <a href={href} {...props}>{children}</a>}',
   "@/lib/squad/attendance-actions": `
     const ok=(fd)=>({ok:true,attendanceId:String(fd.get("attendanceId")),playerId:"player",status:String(fd.get("finalStatus")),actualAbsenceReason:fd.get("actualAbsenceReason")||null,actualAttendanceNote:fd.get("actualAttendanceNote")||null,lateMinutes:fd.get("lateMinutes")?Number(fd.get("lateMinutes")):null,leftEarlyMinute:fd.get("leftEarlyMinute")?Number(fd.get("leftEarlyMinute")):null,latePenaltyApplied:fd.get("latePenaltyApplied")==="on",overallRating:null,updatedAt:new Date().toISOString()});
-    export async function updateFinalAttendanceInline(fd){await new Promise(r=>setTimeout(r,250));return window.qaFail?{ok:false,code:"network_error",message:"Changes could not be saved. Please try again."}:ok(fd)}
+    const save=()=>localStorage.setItem("check-in-test-rows",JSON.stringify(window.qaRows));
+    const wait=()=>new Promise(r=>setTimeout(r,250));
+    export async function updateFinalAttendanceInline(fd){await wait();if(window.qaFail)return {ok:false,code:"network_error",message:"Changes could not be saved. Please try again."};const result=ok(fd);const row=window.qaRows.find(r=>r.id===fd.get("attendanceId"));Object.assign(row,{finalStatus:result.status,actualAbsenceReason:result.actualAbsenceReason,actualAttendanceNote:result.actualAttendanceNote,lateMinutes:result.lateMinutes,leftEarlyMinute:result.leftEarlyMinute,latePenaltyApplied:result.latePenaltyApplied});if(result.status==="absent")for(const key of ["overallRating","ratingTechnique","ratingGameUnderstanding","ratingIntensity","ratingBehavior","ratingAutoSuggestion"])row[key]=null;result.overallRating=row.overallRating??null;save();return result;}
     export async function applyAttendanceAsExpected(){return {ok:true,updatedCount:0,reviewCount:0,updates:[]}}
     export async function completeTrainingEvent(){}
     export async function markAllExpectedPresent(){}
     export async function markAllPresent(){}
     export async function markAllExpected(){}
-    export async function updateAttendanceRating(){return {ok:true,attendanceId:"a",playerId:"p",overallRating:null,updatedAt:"2026-10-16"}}
+    async function rate(fd,details){await wait();if(window.qaFail)return {ok:false,message:"Simulated write failure"};const row=window.qaRows.find(r=>r.id===fd.get("attendanceId"));if(!["present","Z","left_early"].includes(row.finalStatus))return {ok:false,message:"Invalid attendance"};if(fd.has("overallRating"))row.overallRating=fd.get("overallRating")?Number(fd.get("overallRating")):null;if(details){for(const key of ["ratingTechnique","ratingGameUnderstanding","ratingIntensity","ratingBehavior"])row[key]=fd.get(key)?Number(fd.get(key)):null;row.coachNote=fd.get("coachNote");row.sensitiveNote=fd.get("sensitiveNote")==="on";}save();return {ok:true,attendanceId:row.id,playerId:row.playerId,overallRating:row.overallRating??null,updatedAt:"2026-10-16"};}
+    export async function updateAttendanceRating(fd){return rate(fd,true)}
+    export async function updateAttendanceRatingInline(fd){return rate(fd,false)}
     export async function updatePlannedAttendanceInline(){return {ok:true,plannedStatus:"expected",plannedReason:null,plannedReasonNote:null}}
     export async function updatePlannedAttendance(){}
   `,
@@ -39,7 +44,7 @@ const bundle = await build({
       import React from "react";
       import {createRoot} from "react-dom/client";
       import {I18nProvider} from "@/components/i18n/i18n-provider";
-      import {CheckInPanel} from "@/components/squad/attendance-controls";
+      import {CheckInPanel,RatingRow} from "@/components/squad/attendance-controls";
       const root=createRoot(document.getElementById("root"));
       const player=(id,firstName,playerType="roster",extra={})=>({id,userId:"coach",firstName,lastName:"Example",position:id==="gk"?"GK":"CM",secondaryPositions:[],positionFamilies:[],strongFoot:undefined,club:undefined,playerType,archivedAt:undefined,createdAt:"2026-01-01",updatedAt:"2026-01-01",...extra});
       const entry=(id,firstName,extra={})=>({id,userId:"coach",eventId:"event",playerId:id,plannedStatus:"expected",latePenaltyApplied:true,sensitiveNote:false,player:player(id,firstName),createdAt:"2026-01-01",updatedAt:"2026-01-01",...extra});
@@ -53,10 +58,11 @@ const bundle = await build({
       window.qaFail=false;
       window.qa={render(locale="en",mode="open"){
         window.qaFail=mode==="failure";
-        const fresh=unresolved.map((row)=>({...row,player:{...row.player},medicalAvailability:row.medicalAvailability?{...row.medicalAvailability}:undefined,...(mode==="complete"?{finalStatus:"present"}:{finalStatus:undefined})}));
-        root.render(<I18nProvider locale={locale}><CheckInPanel event={event(fresh)} initialFilter={mode==="complete"?"all":"open"}/></I18nProvider>);
+        const fresh=mode==="resume"||mode==="ratings"?JSON.parse(localStorage.getItem("check-in-test-rows")):unresolved.map((row)=>({...row,player:{...row.player},medicalAvailability:row.medicalAvailability?{...row.medicalAvailability}:undefined,...(mode==="complete"?{finalStatus:"present"}:{finalStatus:undefined})}));
+        window.qaRows=structuredClone(fresh);
+        root.render(<I18nProvider locale={locale}>{mode==="ratings"?<RatingRow entry={fresh[0]} eventId="event"/>:<CheckInPanel key={locale+mode} event={event(fresh)} initialFilter={mode==="complete"||mode==="resume"?"all":"open"}/>}</I18nProvider>);
       }};
-      window.qa.render("en");
+      window.qa.render("en",localStorage.getItem("check-in-test-rows")?"resume":"open");
     `,
     resolveDir: root,
     loader: "tsx"
@@ -96,9 +102,10 @@ const server = createServer((request, response) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 
 let browser;
+let page;
 try {
   browser = await chromium.launch({ headless: true, executablePath: process.env.COACHBOARD_QA_CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" });
-  const page = await browser.newPage();
+  page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}`);
@@ -111,10 +118,11 @@ try {
   await anna.getByRole("button", { name: "Present" }).click();
   assert.equal(await anna.count(), 1, "Present row stays visible while save is pending");
   await page.getByText("1 of 4 recorded", { exact: true }).waitFor();
-  assert.equal(await anna.count(), 0, "Present row leaves Open after successful save");
+  assert.equal(await anna.count(), 1, "Focused Present row stays available for optional rating without counting as open");
 
   const bela = page.locator("article").filter({ hasText: "Bela Example" });
   await bela.getByRole("button", { name: "Absent" }).click();
+  assert.equal(await anna.count(), 0, "Recorded row leaves Open when coach moves to another player");
   assert.equal(await bela.count(), 1, "Exception row remains visible before details save");
   assert.equal(await bela.getByLabel(/Reason/).inputValue(), "sick");
   await bela.getByRole("button", { name: "Save attendance details" }).click();
@@ -156,8 +164,13 @@ try {
   await page.evaluate(() => window.qa.render("de", "complete"));
   await page.getByText("Anwesenheit vollständig erfasst", { exact: true }).first().waitFor();
   assert.equal(await page.getByRole("link", { name: "Zurück zum Training" }).count(), 1);
+  await checkInlineRatings(page);
   assert.deepEqual(errors, []);
   console.log("Check-in 2.0 regression: PASS (queue, exceptions, rollback, DE/EN, 320/768/1440 px)");
+} catch (error) {
+  await page?.screenshot({ path: "/private/tmp/check-in-regression-failure.png", fullPage: true });
+  console.error(await page?.locator("article").first().innerHTML());
+  throw error;
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));

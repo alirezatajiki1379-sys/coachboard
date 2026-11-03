@@ -5,7 +5,7 @@ import { useSystemText } from "@/components/i18n/use-system-text";
 
 import { Check, ChevronDown, ClipboardCheck, Clock3, HelpCircle, LogOut, ShieldAlert, Stethoscope, UserMinus } from "lucide-react";
 import type { ReactNode } from "react";
-import { createContext, useActionState, useContext, useEffect, useState, useTransition } from "react";
+import { createContext, useActionState, useContext, useEffect, useRef, useState, useTransition } from "react";
 import { DialogPortal } from "@/components/shared/dialog-portal";
 import { useDialogFocus } from "@/components/shared/use-dialog-focus";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   markAllPresent,
   markAllExpected,
   updateAttendanceRating,
+  updateAttendanceRatingInline,
   updateFinalAttendanceInline,
   updatePlannedAttendanceInline,
   updatePlannedAttendance
@@ -29,6 +30,7 @@ import { actualAbsenceReasonLabel, attendanceDisplayName, checkInOpenLabel, effe
 import { attendanceCounts } from "@/lib/squad/attendance-format";
 import {
   attendanceReasonLabels,
+  calculateSuggestedOverallRating,
   getApplyAsExpectedSummary,
   isAbsentAttendanceStatus,
   isParticipatingAttendanceStatus,
@@ -88,6 +90,9 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
   const [entries, setEntries] = useState(event.attendance);
   const [filter, setFilter] = useState<CheckInFilter>(initialFilter);
   const [editingExceptions, setEditingExceptions] = useState<Set<string>>(new Set());
+  // Keep the focused card available for optional rating after recording attendance.
+  // This interaction grace never changes the attendance-only open count.
+  const [interactingId, setInteractingId] = useState<string>();
   useEffect(() => setEntries(event.attendance), [event.attendance]);
   const counts = attendanceCounts(entries);
   const openCount = entries.filter((entry) => !entry.finalStatus || editingExceptions.has(entry.id)).length;
@@ -96,7 +101,7 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
     if (openCount === 0 && filter === "open") setFilter("all");
   }, [filter, openCount]);
   const visibleEntries = entries.filter((entry) => {
-    if (filter === "open") return !entry.finalStatus || editingExceptions.has(entry.id);
+    if (filter === "open") return !entry.finalStatus || editingExceptions.has(entry.id) || entry.id === interactingId;
     if (filter === "present") return entry.finalStatus === "present";
     if (filter === "late") return entry.finalStatus === "Z";
     if (filter === "leftEarly") return entry.finalStatus === "left_early";
@@ -166,7 +171,7 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
               <button
                 key={item}
                 type="button"
-                onClick={() => setFilter(item)}
+                onClick={() => { setInteractingId(undefined); setFilter(item); }}
                 className={cn(
                   "inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-bold transition",
                   filter === item ? "bg-board-green text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -197,7 +202,7 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
                 <button
                   key={item}
                   type="button"
-                  onClick={() => setFilter(item)}
+                  onClick={() => { setInteractingId(undefined); setFilter(item); }}
                   className={cn(
                     "min-h-10 rounded-md px-3 py-2 text-sm font-semibold transition",
                     filter === item ? "bg-board-green text-white" : "text-slate-600 hover:bg-slate-100 hover:text-board-navy"
@@ -221,7 +226,9 @@ export function CheckInPanel({ event, initialFilter = "all" }: { event: SquadTra
       <section className="mt-5 space-y-3">
         {entries.length ? (
           visibleEntries.length ? (
-            visibleEntries.map((entry) => <CheckInRow key={entry.id} entry={entry} eventId={event.id} eventDate={event.date} onEntryChange={updateEntry} onExceptionEditingChange={setExceptionEditing} />)
+            visibleEntries.map((entry) => <div key={entry.id} onClickCapture={() => setInteractingId(entry.id)}>
+              <CheckInRow entry={entry} eventId={event.id} eventDate={event.date} onEntryChange={updateEntry} onExceptionEditingChange={setExceptionEditing} />
+            </div>)
           ) : (
             <p className="rounded-lg border border-dashed border-board-line bg-white p-5 text-center text-sm font-semibold text-slate-500 shadow-soft">
               {ui("No players match this filter.")}</p>
@@ -576,7 +583,7 @@ export function CheckInRow({
                 {entryWithState.medicalAvailability.needsReview ? <span>· {ui("Return needs review")}</span> : null}
               </div>
             ) : null}
-            {entryWithState.coachNote ? <p className="mt-2 text-sm text-slate-600">{entryWithState.coachNote}</p> : null}
+            {entryWithState.coachNote ? <p translate="no" className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{entryWithState.coachNote}</p> : null}
             {error ? <p className="mt-2 text-sm font-semibold text-red-700" role="alert">{ui(error)}</p> : null}
           </div>
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
@@ -589,6 +596,9 @@ export function CheckInRow({
         {showsActualAttendanceDetails && detailsOpen ? (
           <ActualAttendanceDetails key={`${entryWithState.id}-${entryWithState.finalStatus}`} entry={entryWithState} eventId={eventId} onEntryChange={handleCommittedEntry} onDetailsSaved={() => { setDetailsOpen(false); onExceptionEditingChange?.(entryWithState.id, false); }} onError={setError} />
         ) : null}
+        {isParticipating ? <CheckInRating entry={entryWithState} eventId={eventId}
+          attendanceReady={entry.finalStatus === entryWithState.finalStatus}
+          onOptimisticEntry={handleOptimisticEntry} onEntryChange={handleCommittedEntry} /> : null}
         {entryWithState.medicalAvailability?.periodId && isParticipating ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
             <p className="text-sm font-bold text-amber-900">{ui("This player still has an active medical absence.")}</p>
@@ -711,6 +721,141 @@ export function CompleteEventButton({ eventId }: { eventId: string }) {
   );
 }
 
+const ratingDimensions = [
+  { name: "ratingTechnique", label: "Technique" },
+  { name: "ratingGameUnderstanding", label: "Game understanding" },
+  { name: "ratingIntensity", label: "Intensity" },
+  { name: "ratingBehavior", label: "Behavior" }
+] as const;
+
+function CheckInRating({ entry, eventId, attendanceReady, onOptimisticEntry, onEntryChange }: {
+  entry: SquadAttendanceEntry;
+  eventId: string;
+  attendanceReady: boolean;
+  onOptimisticEntry: (entry: SquadAttendanceEntry) => void;
+  onEntryChange: (entry: SquadAttendanceEntry) => void;
+}) {
+  const ui = useSystemText();
+  const [isPending, startTransition] = useCheckInTransition();
+  const [message, setMessage] = useState("");
+  const ratingFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!isPending) {
+      if (ratingFocus.current?.isConnected && document.activeElement === document.body) ratingFocus.current.focus({ preventScroll: true });
+      ratingFocus.current = null;
+      return;
+    }
+    // Disabled fieldsets blur buttons. Restore only if the coach has not moved on.
+    const movedFocus = (event: Event) => {
+      if (event.target !== ratingFocus.current) ratingFocus.current = null;
+    };
+    const tabbedAway = (event: KeyboardEvent) => {
+      if (event.key === "Tab") ratingFocus.current = null;
+    };
+    document.addEventListener("pointerdown", movedFocus);
+    document.addEventListener("focusin", movedFocus);
+    document.addEventListener("keydown", tabbedAway);
+    return () => {
+      document.removeEventListener("pointerdown", movedFocus);
+      document.removeEventListener("focusin", movedFocus);
+      document.removeEventListener("keydown", tabbedAway);
+    };
+  }, [isPending]);
+  const [failed, setFailed] = useState(false);
+  const [technique, setTechnique] = useState(entry.ratingTechnique);
+  const [understanding, setUnderstanding] = useState(entry.ratingGameUnderstanding);
+  const [intensity, setIntensity] = useState(entry.ratingIntensity);
+  const [behavior, setBehavior] = useState(entry.ratingBehavior);
+  const [note, setNote] = useState(entry.coachNote ?? "");
+  const [sensitive, setSensitive] = useState(entry.sensitiveNote);
+  useEffect(() => {
+    setTechnique(entry.ratingTechnique);
+    setUnderstanding(entry.ratingGameUnderstanding);
+    setIntensity(entry.ratingIntensity);
+    setBehavior(entry.ratingBehavior);
+    setNote(entry.coachNote ?? "");
+    setSensitive(entry.sensitiveNote);
+  }, [entry.ratingTechnique, entry.ratingGameUnderstanding, entry.ratingIntensity, entry.ratingBehavior, entry.coachNote, entry.sensitiveNote]);
+  const dimensions = [technique, understanding, intensity, behavior];
+  const setters = [setTechnique, setUnderstanding, setIntensity, setBehavior];
+  const suggestion = calculateSuggestedOverallRating(dimensions);
+
+  function saveOverall(value: number | null) {
+    if (isPending || !attendanceReady) return;
+    ratingFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previous = entry;
+    onOptimisticEntry({ ...entry, overallRating: value ?? undefined });
+    setMessage("");
+    setFailed(false);
+    startTransition(async () => {
+      const data = new FormData();
+      data.set("eventId", eventId);
+      data.set("attendanceId", entry.id);
+      data.set("overallRating", value === null ? "" : String(value));
+      const result = await safeAttendanceMutation(() => updateAttendanceRatingInline(data));
+      if (!result.ok) {
+        onOptimisticEntry(previous);
+        setFailed(true);
+        setMessage("Rating could not be saved. Please try again.");
+        return;
+      }
+      onEntryChange({ ...entry, overallRating: result.overallRating ?? undefined, ratingAutoSuggestion: undefined });
+      setMessage(result.warning ?? "Rating saved.");
+    });
+  }
+
+  function saveDetails(data: FormData) {
+    if (isPending || !attendanceReady) return;
+    data.set("eventId", eventId);
+    data.set("attendanceId", entry.id);
+    // Omit overallRating: the action preserves the latest persisted overall value.
+    setMessage("");
+    setFailed(false);
+    startTransition(async () => {
+      const result = await safeAttendanceMutation(() => updateAttendanceRating(data));
+      if (!result.ok) {
+        setFailed(true);
+        setMessage("Rating details could not be saved. Your entries have been kept.");
+        return;
+      }
+      onEntryChange({ ...entry, overallRating: result.overallRating ?? undefined,
+        ratingTechnique: technique, ratingGameUnderstanding: understanding,
+        ratingIntensity: intensity, ratingBehavior: behavior,
+        ratingAutoSuggestion: suggestion ?? undefined, coachNote: note.trim() ? note : undefined, sensitiveNote: sensitive });
+      setMessage(result.warning ?? "Rating saved.");
+    });
+  }
+
+  return (
+    <fieldset disabled={isPending || !attendanceReady} aria-busy={isPending} className="min-w-0 border-t border-board-line pt-3">
+      <div className="max-w-sm">
+        <RatingSelect name="overallRating" label={ui("Overall rating")} defaultValue={entry.overallRating} onValueChange={saveOverall} />
+      </div>
+      <details className="mt-2 min-w-0">
+        <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-bold text-board-navy">{ui("Rating details")}</summary>
+        <form onSubmit={(event) => { event.preventDefault(); saveDetails(new FormData(event.currentTarget)); }} className="mt-2 min-w-0 space-y-3">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {ratingDimensions.map((dimension, index) => <RatingSelect key={dimension.name} name={dimension.name} label={ui(dimension.label)} defaultValue={dimensions[index]} onValueChange={(value) => setters[index](value ?? undefined)} />)}
+          </div>
+          {suggestion != null ? <p className="text-xs text-slate-500">{ui("Suggestion from detailed ratings: {rating}", { rating: suggestion })}</p> : null}
+          <label className="block min-w-0 text-sm font-semibold text-slate-600">
+            <span id={`check-in-note-label-${entry.id}`}>{ui("Coach note")}</span>
+            <textarea aria-labelledby={`check-in-note-label-${entry.id}`} translate="no" name="coachNote" value={note} onChange={(event) => setNote(event.target.value)} rows={2} className="mt-1 block w-full min-w-0 rounded-md border border-board-line px-3 py-2 font-normal focus:border-board-green" />
+          </label>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-600">
+              <input type="checkbox" name="sensitiveNote" checked={sensitive} onChange={(event) => setSensitive(event.target.checked)} className="h-4 w-4" />
+              {ui("Sensitive note")}
+            </label>
+            <Button type="submit" variant="secondary" className="min-h-11 w-full justify-center sm:w-auto">{ui(isPending ? "Saving..." : "Save details")}</Button>
+          </div>
+        </form>
+      </details>
+      {message || isPending ? <p role={failed ? "alert" : "status"} className={cn("mt-2 text-sm", failed ? "text-red-700" : "text-slate-600")}>{ui(isPending ? "Saving..." : message)}</p> : null}
+    </fieldset>
+  );
+}
+
 export function ActualAttendanceDetails({
   entry,
   eventId,
@@ -725,7 +870,9 @@ export function ActualAttendanceDetails({
   onError?: (message: string) => void;
 }) {
   const ui = useSystemText();
-  const [isPending, startTransition] = useTransition();
+  const localTransition = useTransition();
+  const rowTransition = useContext(CheckInTransitionContext);
+  const [isPending, startTransition] = rowTransition ?? localTransition;
   const [savedEntry, setSavedEntry] = useState(entry);
   useEffect(() => setSavedEntry(entry), [entry]);
   const status = savedEntry.finalStatus;
@@ -963,7 +1110,7 @@ function defaultActualAbsenceReason(entry: SquadAttendanceEntry): SquadActualAbs
   return plannedReasonToActualAbsenceReason(entry.plannedReason) ?? undefined;
 }
 
-function RatingSelect({ name, label, defaultValue }: { name: string; label: string; defaultValue?: number }) {
+function RatingSelect({ name, label, defaultValue, onValueChange }: { name: string; label: string; defaultValue?: number; onValueChange?: (value: number | null) => void }) {
   const ui = useSystemText();
   const [value, setValue] = useState<number | null>(defaultValue ?? null);
 
@@ -972,10 +1119,10 @@ function RatingSelect({ name, label, defaultValue }: { name: string; label: stri
   }, [defaultValue]);
 
   return (
-    <fieldset className="block">
+    <fieldset className="block min-w-0">
       <legend className="text-xs font-bold uppercase text-slate-500">{label}</legend>
       <input type="hidden" name={name} value={value ?? ""} />
-      <div className="mt-1 flex flex-wrap gap-1.5" role="group" aria-label={label}>
+      <div className="mt-1 grid max-w-sm grid-cols-5 gap-1.5">
         {[1, 2, 3, 4, 5].map((rating) => {
           const active = value === rating;
           return (
@@ -984,9 +1131,9 @@ function RatingSelect({ name, label, defaultValue }: { name: string; label: stri
               type="button"
               aria-pressed={active}
               aria-label={ui(active ? "{label} {rating}, selected. Press again to remove rating." : "{label} {rating}", { label, rating })}
-              onClick={() => setValue(toggleRatingValue(value, rating))}
+              onClick={() => { const next = toggleRatingValue(value, rating); setValue(next); onValueChange?.(next); }}
               className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-green-100",
+                "flex h-11 min-w-0 items-center justify-center rounded-md text-sm font-black transition-colors focus:outline-none focus:ring-4 focus:ring-green-100 disabled:cursor-wait",
                 active ? "bg-board-green text-white" : "bg-white text-board-navy ring-1 ring-board-line hover:bg-green-50 hover:ring-board-green"
               )}
             >

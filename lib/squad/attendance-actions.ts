@@ -1288,6 +1288,7 @@ export async function updateAttendanceRating(formData: FormData): Promise<Rating
   const ratingBehavior = boundedRating(formString(formData, "ratingBehavior"));
   const suggestion = calculateSuggestedOverallRating([ratingTechnique, ratingGameUnderstanding, ratingIntensity, ratingBehavior]);
   const overallRating = boundedRating(formString(formData, "overallRating"));
+  const coachNote = formData.get("coachNote");
 
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
@@ -1296,13 +1297,13 @@ export async function updateAttendanceRating(formData: FormData): Promise<Rating
   const { data, error } = await db
     .from("squad_attendance_records")
     .update({
-      overall_rating: overallRating,
+      ...(formData.has("overallRating") ? { overall_rating: overallRating } : {}),
       rating_technique: ratingTechnique,
       rating_game_understanding: ratingGameUnderstanding,
       rating_intensity: ratingIntensity,
       rating_behavior: ratingBehavior,
       rating_auto_suggestion: suggestion,
-      coach_note: optional(formString(formData, "coachNote")),
+      coach_note: typeof coachNote === "string" && coachNote.trim() ? coachNote : null,
       sensitive_note: formData.get("sensitiveNote") === "on"
     })
     .eq("id", attendanceId)
