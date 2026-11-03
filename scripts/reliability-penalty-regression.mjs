@@ -82,7 +82,9 @@ test("current Absent flow never silently defaults to Unexcused", () => {
 
 test("Analytics and report surfaces use the canonical explainable reliability value", () => {
   const analyticsPage = fs.readFileSync(new URL("../app/(app)/squad/analysis/page.tsx", import.meta.url), "utf8");
+  const analyticsPlayers = fs.readFileSync(new URL("../components/squad/analytics/analytics-players.tsx", import.meta.url), "utf8");
   const playerPage = fs.readFileSync(new URL("../app/(app)/squad/players/[id]/page.tsx", import.meta.url), "utf8");
   const report = fs.readFileSync(new URL("../components/squad/team-analytics-report.tsx", import.meta.url), "utf8");
-  for (const source of [analyticsPage, playerPage, report]) assert.match(source, /ReliabilityValue/);
+  assert.match(analyticsPage, /from "@\/components\/squad\/analytics\/analytics-players"/);
+  for (const source of [analyticsPlayers, playerPage, report]) assert.match(source, /ReliabilityValue/);
 });

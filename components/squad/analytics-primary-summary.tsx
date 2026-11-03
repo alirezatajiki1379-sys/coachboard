@@ -1,6 +1,6 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { AlertTriangle, BarChart3, CheckCircle2, UserCheck, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarDays, CheckCircle2, UserCheck, Users } from "lucide-react";
+import { AnalyticsMetricHelp } from "@/components/squad/analytics/analytics-methodology";
 import { formatNumber, type Locale } from "@/lib/i18n";
 import { formatPercent, formatRating, type AnalyticsPlayerTypeFilter, type TeamAnalyticsOverview } from "@/lib/squad/analytics";
 
@@ -12,6 +12,7 @@ type AnalyticsPrimarySummaryProps = {
   position?: string;
   periodLabel: string;
   singleTraining: boolean;
+  showMetrics?: boolean;
 };
 
 export function AnalyticsPrimarySummary({
@@ -21,15 +22,13 @@ export function AnalyticsPrimarySummary({
   playerType,
   position,
   periodLabel,
-  singleTraining
+  singleTraining,
+  showMetrics = true
 }: AnalyticsPrimarySummaryProps) {
   const participated = analytics.present + analytics.late + analytics.leftEarly;
-  const missingRatings = Math.max(0, analytics.ratingEligibleCount - analytics.ratingCompletedCount);
   const missingAttendance = analytics.notRecorded;
   const hasParticipantData = analytics.participantRecordCount > 0;
   const attendanceComplete = hasParticipantData && missingAttendance === 0;
-  const ratingsComplete = analytics.ratingEligibleCount === 0 || missingRatings === 0;
-  const complete = attendanceComplete && ratingsComplete;
 
   return (
     <div className="space-y-3">
@@ -44,16 +43,18 @@ export function AnalyticsPrimarySummary({
         </p>
         <DataCompletenessStatus
           locale={locale}
-          complete={complete}
+          complete={attendanceComplete}
           hasData={hasParticipantData}
           missingAttendance={missingAttendance}
-          missingRatings={missingRatings}
           attendanceCoverage={analytics.dataCoverageRate}
-          ratingCoverage={analytics.ratingCoverageRate}
         />
       </section>
 
-      <section className="grid min-w-0 items-stretch gap-3 md:grid-cols-3" data-primary-kpis>
+      {showMetrics ? <section className={`grid min-w-0 items-stretch gap-3 md:grid-cols-2 ${analytics.totalRatedPerformances > 0 ? "xl:grid-cols-4" : "xl:grid-cols-3"}`} data-primary-kpis>
+        <PrimaryMetric icon={<CalendarDays className="h-4 w-4" />}
+          label={locale === "de" ? "Trainingseinheiten" : "Training sessions"}
+          value={String(analytics.trainingSessions)}
+          hint={analytics.totalTrainingMinutes == null ? periodLabel : `${formatNumber(analytics.totalTrainingMinutes, locale)} min`} />
         <PrimaryMetric
           icon={<Users className="h-4 w-4" />}
           label={singleTraining ? (locale === "de" ? "Teilnehmer" : "Participants") : (locale === "de" ? "Ø Teilnehmer / Training" : "Avg. participants / Training")}
@@ -77,8 +78,9 @@ export function AnalyticsPrimarySummary({
               ? `${analytics.attendedWhenExpectedCount} von ${analytics.expectedRecordedCount} eingeplanten Teilnahmen`
               : `${analytics.attendedWhenExpectedCount} of ${analytics.expectedRecordedCount} expected attendances`
             : noData(locale)}
+          help={<AnalyticsMetricHelp metric="expected" locale={locale} />}
         />
-        <PrimaryMetric
+        {analytics.totalRatedPerformances > 0 ? <PrimaryMetric
           icon={<BarChart3 className="h-4 w-4" />}
           label={locale === "de" ? "Ø Leistungsbewertung" : "Avg. performance rating"}
           value={analytics.teamAverageOverallRating === null ? noRatings(locale) : `${formatRating(analytics.teamAverageOverallRating, locale)} / 5`}
@@ -87,17 +89,19 @@ export function AnalyticsPrimarySummary({
               ? `${analytics.totalRatedPerformances} Bewertungen`
               : `${analytics.totalRatedPerformances} ratings`
             : noRatings(locale)}
-        />
-      </section>
+          help={<AnalyticsMetricHelp metric="rating" locale={locale} />}
+        /> : null}
+      </section> : null}
     </div>
   );
 }
 
 export function AttendanceAnalyticsSummary({ analytics, locale }: { analytics: TeamAnalyticsOverview; locale: Locale }) {
+  const single = analytics.trainingSessions === 1;
   return (
     <div className="mt-4 grid border-y border-slate-100 md:grid-cols-3" data-attendance-summary>
-      <AttendanceMetric label={locale === "de" ? "Ø Eingeplant / Training" : "Avg. expected / Training"} value={formatAverage(analytics.averageExpectedPerTraining, locale)} />
-      <AttendanceMetric label={locale === "de" ? "Ø Teilgenommen / Training" : "Avg. participated / Training"} value={formatAverage(analytics.averageParticipantsPerTraining, locale)} />
+      <AttendanceMetric label={single ? locale === "de" ? "Eingeplant" : "Expected" : locale === "de" ? "Ø Eingeplant / Training" : "Avg. expected / Training"} value={single ? String(analytics.plannedExpectedCount) : formatAverage(analytics.averageExpectedPerTraining, locale)} />
+      <AttendanceMetric label={single ? locale === "de" ? "Teilgenommen" : "Participated" : locale === "de" ? "Ø Teilgenommen / Training" : "Avg. participated / Training"} value={single ? String(analytics.present + analytics.late + analytics.leftEarly) : formatAverage(analytics.averageParticipantsPerTraining, locale)} />
       <AttendanceMetric
         label={locale === "de" ? "Anwesenheit bei Einplanung" : "Attendance when expected"}
         value={analytics.teamAttendanceWhenExpectedRate === null ? noData(locale) : formatPercent(analytics.teamAttendanceWhenExpectedRate, locale)}
@@ -111,17 +115,13 @@ function DataCompletenessStatus({
   complete,
   hasData,
   missingAttendance,
-  missingRatings,
-  attendanceCoverage,
-  ratingCoverage
+  attendanceCoverage
 }: {
   locale: Locale;
   complete: boolean;
   hasData: boolean;
   missingAttendance: number;
-  missingRatings: number;
   attendanceCoverage: number | null;
-  ratingCoverage: number | null;
 }) {
   if (!hasData) {
     return <span className="text-xs font-semibold text-slate-500">{noData(locale)}</span>;
@@ -129,35 +129,31 @@ function DataCompletenessStatus({
 
   if (complete) {
     const details = locale === "de"
-      ? `Anwesenheit ${formatPercent(attendanceCoverage, locale)} · Bewertungen ${formatPercent(ratingCoverage ?? 1, locale)}`
-      : `Attendance ${formatPercent(attendanceCoverage, locale)} · Ratings ${formatPercent(ratingCoverage ?? 1, locale)}`;
+      ? `Anwesenheit ${formatPercent(attendanceCoverage, locale)}`
+      : `Attendance ${formatPercent(attendanceCoverage, locale)}`;
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-green-700" title={details} data-data-status="complete">
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600" title={details} data-data-status="complete">
         <CheckCircle2 className="h-4 w-4" />
-        {locale === "de" ? "Daten vollständig" : "Data complete"}
+        {locale === "de" ? "Anwesenheit vollständig erfasst" : "Attendance fully recorded"}
       </span>
     );
   }
 
-  const messages = [
-    missingAttendance > 0 ? locale === "de" ? `${missingAttendance} Anwesenheiten fehlen` : `${missingAttendance} attendance records missing` : null,
-    missingRatings > 0 ? locale === "de" ? `${missingRatings} Bewertungen offen` : `${missingRatings} ratings missing` : null
-  ].filter((message): message is string => Boolean(message));
-
   return (
-    <Link href="/actions" className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 underline-offset-4 hover:underline" data-data-status="incomplete">
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700" data-data-status="incomplete">
       <AlertTriangle className="h-4 w-4 shrink-0" />
-      <span>{messages.join(" · ")}</span>
-    </Link>
+      <span>{locale === "de" ? `${missingAttendance} Anwesenheiten nicht erfasst` : `${missingAttendance} attendance outcomes not recorded`}</span>
+    </span>
   );
 }
 
-function PrimaryMetric({ icon, label, value, hint }: { icon: ReactNode; label: string; value: string; hint: string }) {
+function PrimaryMetric({ icon, label, value, hint, help }: { icon: ReactNode; label: string; value: string; hint: string; help?: ReactNode }) {
   return (
     <article className="h-full min-w-0 overflow-hidden rounded-lg border border-board-line bg-white p-4 shadow-soft" data-primary-kpi>
       <p className="flex min-w-0 items-start gap-2 text-xs font-bold uppercase leading-4 tracking-wide text-slate-500"><span className="mt-px shrink-0">{icon}</span><span className="min-w-0 break-words [overflow-wrap:anywhere]">{label}</span></p>
       <p className="mt-2 min-w-0 break-words text-2xl font-bold leading-tight text-board-navy tabular-nums [overflow-wrap:anywhere]">{value}</p>
       <p className="mt-1 min-w-0 break-words text-xs font-semibold leading-4 text-slate-500 [overflow-wrap:anywhere]">{hint}</p>
+      {help}
     </article>
   );
 }

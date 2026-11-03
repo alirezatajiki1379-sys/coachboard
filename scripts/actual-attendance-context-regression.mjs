@@ -80,7 +80,9 @@ assert.doesNotMatch(controls, /name="actualAttendanceNote" rows=\{3\}/);
 assert.match(controls, /name="actualAttendanceNote" type="text"/);
 assert.match(controls, /savedEntry\.actualAttendanceNote \?\? savedEntry\.plannedReasonNote \?\? ""/);
 assert.match(controls, /savedEntry\.actualAttendanceNote \?\? ""/);
-assert.match(controls, /plannedReasonNote && !showsActualAttendanceDetails/);
-assert.match(controls, /actualAttendanceNote && !showsActualAttendanceDetails/);
+// Check-in 2.0 collapses details after save; saved notes stay visible while closed.
+assert.match(controls, /plannedReasonNote && !detailsOpen/);
+assert.match(controls, /actualAttendanceNote && !detailsOpen/);
+assert.match(controls, /showsActualAttendanceDetails && detailsOpen/);
 
 console.log("Actual attendance context regression passed.");

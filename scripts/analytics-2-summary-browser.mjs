@@ -21,7 +21,7 @@ const bundle = await build({
       const incomplete=params.get("incomplete")==="1";
       const single=params.get("single")==="1";
       const analytics={
-        trainingSessions:single?1:5,participantRecordCount:118,averageParticipantsPerTraining:17,
+        trainingSessions:single?1:5,participantRecordCount:118,averageParticipantsPerTraining:17,plannedExpectedCount:89,
         teamAttendanceWhenExpectedRate:84/89,attendedWhenExpectedCount:84,expectedRecordedCount:89,
         teamAverageOverallRating:3.8,totalRatedPerformances:85,present:80,late:4,leftEarly:1,
         ratingEligibleCount:85,ratingCompletedCount:incomplete?82:85,ratingCoverageRate:incomplete?82/85:1,
@@ -82,11 +82,11 @@ try {
       page.on("pageerror", (error) => errors.push(error.message));
       await page.goto(`${base}?locale=${locale}`);
       await page.locator("[data-primary-kpis]").waitFor();
-      assert.equal(await page.locator("[data-primary-kpi]").count(), 3, `${locale}/${width}px renders exactly three primary KPIs`);
+      assert.equal(await page.locator("[data-primary-kpi]").count(), 4, `${locale}/${width}px renders at most four primary KPIs`);
       assert.equal(await page.locator("[data-attendance-metric]").count(), 3, `${locale}/${width}px renders exactly three Attendance metrics`);
       assert.equal(await page.locator("[data-data-status=complete]").count(), 1, `${locale}/${width}px shows compact complete status`);
       const columns = await page.locator("[data-primary-kpis]").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
-      assert.equal(columns, width >= 768 ? 3 : 1, `${locale}/${width}px uses the expected KPI columns`);
+      assert.equal(columns, width >= 1280 ? 4 : width >= 768 ? 2 : 1, `${locale}/${width}px uses the expected KPI columns`);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, `${locale}/${width}px has no page overflow`);
       assert.deepEqual(errors, [], `${locale}/${width}px has no runtime errors`);
       await page.close();
@@ -95,10 +95,10 @@ try {
 
   const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
   await page.goto(`${base}?locale=de&incomplete=1`);
-  assert.equal(await page.locator("[data-data-status=incomplete]").count(), 1, "incomplete data links to Actions");
-  assert.equal(await page.locator("[data-data-status=incomplete]").getAttribute("href"), "/actions");
+  assert.equal(await page.locator("[data-data-status=incomplete]").count(), 1, "unrecorded attendance remains visible");
+  assert.equal(await page.locator("[data-data-status=incomplete]").getAttribute("href"), null, "Analytics creates no rating debt in Actions");
   await page.goto(`${base}?locale=de&single=1`);
-  assert.match(await page.locator("[data-primary-kpi]").first().innerText(), /85 Teilnehmer/, "single Training shows the actual participant count");
+  assert.match(await page.locator("[data-primary-kpi]").nth(1).innerText(), /85 Teilnehmer/, "single Training shows the actual participant count");
   await page.close();
   console.log("Analytics 2.1 summary browser regression: PASS (EN/DE, complete/incomplete/single Training, 320/768/1440px)");
 } finally {

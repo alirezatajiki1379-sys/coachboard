@@ -27,6 +27,8 @@
     "test:workspace-participation": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/workspace-participation-regression.mjs",
     "test:analytics-2": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/analytics-2-regression.mjs",
     "test:analytics-2-browser": "node scripts/analytics-2-summary-browser.mjs",
+    "test:analytics-3": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/analytics-3-regression.mjs",
+    "test:analytics-3-browser": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/analytics-3-browser.mjs",
     "test:analytics-report-browser": "node scripts/team-analytics-report-browser.mjs",
     "test:dashboard-today": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/dashboard-today-regression.mjs",
     "test:dashboard-browser": "node scripts/dashboard-2-browser.mjs",
