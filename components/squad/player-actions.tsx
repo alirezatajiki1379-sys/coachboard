@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ChevronDown, MoreHorizontal, RotateCcw, TimerReset } from "lucide-react";
+import { Archive, ChevronDown, FileText, History, MoreHorizontal, Pencil, RotateCcw, TimerReset } from "lucide-react";
 import { DialogPortal } from "@/components/shared/dialog-portal";
 import { useDialogFocus } from "@/components/shared/use-dialog-focus";
 import { useI18n } from "@/components/i18n/i18n-provider";
@@ -23,11 +24,15 @@ type PlayerActionsProps = {
   playerType?: "roster" | "trial";
   archived?: boolean;
   initialTrialSummary?: TrialPeriodSummary;
+  editHref?: string;
+  reportHref?: string;
+  scoutingHref?: string;
+  locale?: "en" | "de";
 };
 
 const initialExtensionState: TrialExtensionActionState = { ok: false };
 
-export function PlayerActions({ playerId, playerType = "roster", archived, initialTrialSummary }: PlayerActionsProps) {
+export function PlayerActions({ playerId, playerType = "roster", archived, initialTrialSummary, editHref, reportHref, scoutingHref, locale = "en" }: PlayerActionsProps) {
   const { messages } = useI18n();
   const copy = messages.squad.trialExtension;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -78,6 +83,9 @@ export function PlayerActions({ playerId, playerType = "roster", archived, initi
       </Button>
       {menuOpen ? (
         <div role="menu" className="absolute right-0 top-11 z-40 w-56 rounded-lg border border-board-line bg-white p-2 shadow-xl">
+          {editHref ? <Link role="menuitem" href={editHref} onClick={() => setMenuOpen(false)} className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-board-navy hover:bg-green-50 hover:text-board-green"><Pencil className="h-4 w-4" />{locale === "de" ? "Stammdaten bearbeiten" : "Edit details"}</Link> : null}
+          {reportHref ? <Link role="menuitem" href={reportHref} onClick={() => setMenuOpen(false)} className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-board-navy hover:bg-green-50 hover:text-board-green"><FileText className="h-4 w-4" />{locale === "de" ? "Spielerbericht" : "Player report"}</Link> : null}
+          {scoutingHref ? <Link role="menuitem" href={scoutingHref} onClick={() => setMenuOpen(false)} className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-board-navy hover:bg-green-50 hover:text-board-green"><History className="h-4 w-4" />{locale === "de" ? "Scouting-Verlauf" : "Scouting history"}</Link> : null}
           {playerType === "trial" ? (
             <button
               type="button"

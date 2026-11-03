@@ -46,6 +46,8 @@
     "test:player-report-print": "node scripts/player-report-print-regression.mjs",
     "test:player-report-browser": "node scripts/player-report-browser.mjs",
     "test:quick-note-hub": "node scripts/quick-note-hub-regression.mjs",
+    "test:player-hub-2": "node scripts/player-hub-2-regression.mjs",
+    "test:player-hub-2-browser": "node scripts/player-hub-2-browser.mjs",
     "test:server-actions": "node scripts/server-action-exports-regression.mjs",
     "validate:drill-import": "node --experimental-strip-types --experimental-loader ./scripts/ts-alias-loader.mjs scripts/validate-drill-import.mjs",
     "fixture:drill-import": "node scripts/create-drill-import-fixture.mjs",
