@@ -73,7 +73,7 @@ const plannerCopy = {
     assign: "Assign", selectPlayer: "Select a player, then tap a position.", selectPosition: "Select a position to inspect its depth.", depthOptions: "options", removeFromXi: "Remove from XI", changeFailed: "Could not update formation.",
     name: "Formation name", label: "Display label", position: "Position", eleven: "A formation needs 11 positions before it can be saved.",
     starters: "starters", depthAssignments: "depth assignments", included: "included", excluded: "excluded", plan: "Plan", board: "Formation board", depthBoard: "Depth board", playerPool: "Player pool",
-    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", currentDepth: "Current depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Candidate view", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Recommended", fitAll: "All players", noSuitablePlayer: "+ Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth", primary: "Primary", secondary: "Secondary", compatible: "Compatible", secondaryPosition: "Secondary position", compatiblePosition: "Compatible position", noPositionData: "No position data", starter: "Starter", xi: "XI", close: "Close", addPlayer: "Add player", searchPlayers: "Search players", recommended: "Recommended", morePlayers: "More players", addOption: "Add as option", makeStarter: "Set as starter", alreadyAssigned: "Already assigned", startsElsewhere: "Starts at", removePosition: "Remove from position", moveUp: "Move up", moveDown: "Move down", noAssigned: "No players assigned", noAssignedYet: "No Player assigned yet.", showTrials: "Show trial players", trial: "Trial player", changeStarter: "Change starter", defaultPlan: "Default", renameNotes: "Rename / notes", newPlan: "New plan", more: "More actions", clearXi: "Clear XI", plannerChecks: "Planner checks", starterUnavailable: "The current starter is no longer available for this team.", assignmentNotFound: "Assignment not found.", adding: "Adding...", savingChange: "Saving change...", details: "Details", collapseDetails: "Collapse details", playerActions: "Player actions", addFailed: "Player could not be added to this position."
+    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", currentDepth: "Current depth", managePosition: "Manage position", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Candidate view", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Recommended", fitAll: "All players", noSuitablePlayer: "+ Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth", primary: "Primary", secondary: "Secondary", compatible: "Compatible", secondaryPosition: "Secondary position", compatiblePosition: "Compatible position", noPositionData: "No position data", starter: "Starter", xi: "XI", close: "Close", addPlayer: "Add player", searchPlayers: "Search players", recommended: "Recommended", morePlayers: "More players", addOption: "Add as option", makeStarter: "Set as starter", alreadyAssigned: "Already assigned", startsElsewhere: "Starts at", removePosition: "Remove from position", moveUp: "Move up", moveDown: "Move down", noAssigned: "No players assigned", noAssignedYet: "No Player assigned yet.", showTrials: "Show trial players", trial: "Trial player", changeStarter: "Change starter", defaultPlan: "Default", renameNotes: "Rename / notes", newPlan: "New plan", more: "More actions", clearXi: "Clear XI", plannerChecks: "Planner checks", starterUnavailable: "The current starter is no longer available for this team.", assignmentNotFound: "Assignment not found.", adding: "Adding...", savingChange: "Saving change...", details: "Details", collapseDetails: "Collapse details", playerActions: "Player actions", addFailed: "Player could not be added to this position."
   },
   de: {
     heading: "Kaderplaner", nameRequired: "Bitte einen Namen für die Formation eingeben.",
@@ -82,7 +82,7 @@ const plannerCopy = {
     assign: "Zuweisen", selectPlayer: "Spieler auswählen und dann eine Position antippen.", selectPosition: "Position auswählen, um die Besetzung zu sehen.", depthOptions: "Optionen", removeFromXi: "Aus Startelf entfernen", changeFailed: "Formation konnte nicht aktualisiert werden.",
     name: "Name der Formation", label: "Anzeigename", position: "Position", eleven: "Eine Formation braucht 11 Positionen, bevor sie gespeichert werden kann.",
     starters: "Startspieler", depthAssignments: "Positionszuordnungen", included: "einbezogen", excluded: "ausgeschlossen", plan: "Plan", board: "Formationstafel", depthBoard: "Positionsbesetzung", playerPool: "Spielerpool",
-    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", currentDepth: "Aktuelle Besetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Kandidatenansicht", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Empfohlen", fitAll: "Alle Spieler", noSuitablePlayer: "+ Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung", primary: "Hauptposition", secondary: "Nebenposition", compatible: "Kompatibel", secondaryPosition: "Nebenposition", compatiblePosition: "Kompatible Position", noPositionData: "Keine Positionsdaten", starter: "Startspieler", xi: "Startelf", close: "Schließen", addPlayer: "Spieler hinzufügen", searchPlayers: "Spieler suchen", recommended: "Empfohlen", morePlayers: "Weitere Spieler", addOption: "Als Option hinzufügen", makeStarter: "Als Startspieler", alreadyAssigned: "Bereits zugeordnet", startsElsewhere: "Startelf", removePosition: "Von Position entfernen", moveUp: "Nach oben", moveDown: "Nach unten", noAssigned: "Keine Spieler zugeordnet", noAssignedYet: "Noch kein Spieler zugeordnet.", showTrials: "Probespieler anzeigen", trial: "Probespieler", changeStarter: "Startspieler wechseln", defaultPlan: "Standard", renameNotes: "Name / Notizen", newPlan: "Neuer Plan", more: "Weitere Aktionen", clearXi: "Startelf leeren", plannerChecks: "Planer-Prüfung", starterUnavailable: "Der aktuelle Startspieler ist für dieses Team nicht mehr verfügbar.", assignmentNotFound: "Zuordnung nicht gefunden.", adding: "Hinzufügen...", savingChange: "Änderung wird gespeichert...", details: "Details", collapseDetails: "Details einklappen", playerActions: "Spieleraktionen", addFailed: "Spieler konnte dieser Position nicht hinzugefügt werden."
+    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", currentDepth: "Aktuelle Besetzung", managePosition: "Position verwalten", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Kandidatenansicht", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Empfohlen", fitAll: "Alle Spieler", noSuitablePlayer: "+ Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung", primary: "Hauptposition", secondary: "Nebenposition", compatible: "Kompatibel", secondaryPosition: "Nebenposition", compatiblePosition: "Kompatible Position", noPositionData: "Keine Positionsdaten", starter: "Startspieler", xi: "Startelf", close: "Schließen", addPlayer: "Spieler hinzufügen", searchPlayers: "Spieler suchen", recommended: "Empfohlen", morePlayers: "Weitere Spieler", addOption: "Als Option hinzufügen", makeStarter: "Als Startspieler", alreadyAssigned: "Bereits zugeordnet", startsElsewhere: "Startelf", removePosition: "Von Position entfernen", moveUp: "Nach oben", moveDown: "Nach unten", noAssigned: "Keine Spieler zugeordnet", noAssignedYet: "Noch kein Spieler zugeordnet.", showTrials: "Probespieler anzeigen", trial: "Probespieler", changeStarter: "Startspieler wechseln", defaultPlan: "Standard", renameNotes: "Name / Notizen", newPlan: "Neuer Plan", more: "Weitere Aktionen", clearXi: "Startelf leeren", plannerChecks: "Planer-Prüfung", starterUnavailable: "Der aktuelle Startspieler ist für dieses Team nicht mehr verfügbar.", assignmentNotFound: "Zuordnung nicht gefunden.", adding: "Hinzufügen...", savingChange: "Änderung wird gespeichert...", details: "Details", collapseDetails: "Details einklappen", playerActions: "Spieleraktionen", addFailed: "Spieler konnte dieser Position nicht hinzugefügt werden."
   }
 } as const;
 
@@ -712,7 +712,6 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
               playersById={playersById}
               includedPlayers={planIncludedPlayers}
               mode={mode}
-              fitMode={depthFitMode}
               customLayout={data.selectedPlan.formationCode === "Custom"}
               editingFormation={editingFormation}
               draggingPlayerId={dragPlayerId}
@@ -727,9 +726,14 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
               onRemoveDepth={removePlayerFromDepth}
               onMoveToRank={movePlayerToRank}
               onMoveSlot={(slotId, x, y) => setDraftSlots((current) => current.map((slot) => slot.id === slotId ? { ...slot, x, y } : slot))}
-              onSelect={(slotId) => {
-                if (selectedPlayerId && !editingFormation) { void assignPlayer(selectedPlayerId, slotId); return; }
+              onSelect={(slotId, _anchor, presentation = "inspect") => {
+                if (selectedPlayerId && !editingFormation) { void assignPlayer(selectedPlayerId, slotId); return false; }
+                if (presentation === "manage") {
+                  closeSlotDetail();
+                  return true;
+                }
                 selectSlot(slotId);
+                return true;
               }}
             />
           </PlannerPitch>
@@ -1136,7 +1140,6 @@ function FormationSlotRows({
   playersById,
   includedPlayers,
   mode,
-  fitMode,
   customLayout,
   editingFormation,
   draggingPlayerId,
@@ -1159,7 +1162,6 @@ function FormationSlotRows({
   playersById: Map<string, SquadPlayer>;
   includedPlayers: SquadPlayer[];
   mode: PlannerMode;
-  fitMode: DepthOverviewFitMode;
   customLayout: boolean;
   editingFormation: boolean;
   draggingPlayerId: string | null;
@@ -1174,7 +1176,7 @@ function FormationSlotRows({
   onRemoveDepth: (assignmentId: string) => Promise<void>;
   onMoveToRank: (assignmentId: string, targetRank: number) => Promise<void>;
   onMoveSlot: (slotId: string, x: number, y: number) => void;
-  onSelect: (slotId: string, anchor: HTMLElement | null) => void;
+  onSelect: (slotId: string, anchor: HTMLElement | null, presentation?: "inspect" | "manage") => boolean;
 }) {
   const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
   const movingSlot = useRef<string | null>(null);
@@ -1242,7 +1244,6 @@ function FormationSlotRows({
             assignments={assignmentsBySlot.get(slot.id) ?? []}
             playersById={playersById}
             starterSlotByPlayerId={starterSlotByPlayerId}
-            eligibleCount={countEligiblePlayers(includedPlayers, slot, fitMode)}
             availablePlayers={includedPlayers}
             draggingPlayerId={draggingPlayerId}
             hoverSlotId={hoverSlotId}
@@ -1255,7 +1256,7 @@ function FormationSlotRows({
             onAddDepth={onAddDepth}
             onRemoveDepth={onRemoveDepth}
             onMoveToRank={onMoveToRank}
-            onSelect={(anchor) => onSelect(slot.id, anchor)}
+            onSelect={(anchor, presentation) => onSelect(slot.id, anchor, presentation)}
             className="absolute z-20 w-[18%] min-w-[3.5rem] max-w-[8rem] -translate-x-1/2 -translate-y-1/2 sm:w-[22%] sm:min-w-[5rem]"
             style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
             showCustomLabel
@@ -1284,7 +1285,6 @@ function FormationSlotRows({
               assignments={assignmentsBySlot.get(slot.id) ?? []}
               playersById={playersById}
               starterSlotByPlayerId={starterSlotByPlayerId}
-              eligibleCount={countEligiblePlayers(includedPlayers, slot, fitMode)}
               availablePlayers={includedPlayers}
               draggingPlayerId={draggingPlayerId}
               hoverSlotId={hoverSlotId}
@@ -1297,7 +1297,7 @@ function FormationSlotRows({
               onAddDepth={onAddDepth}
               onRemoveDepth={onRemoveDepth}
               onMoveToRank={onMoveToRank}
-              onSelect={(anchor) => onSelect(slot.id, anchor)}
+              onSelect={(anchor, presentation) => onSelect(slot.id, anchor, presentation)}
             />
           ))}
         </div>
@@ -1472,7 +1472,6 @@ function SlotButton({
   assignments,
   playersById,
   starterSlotByPlayerId,
-  eligibleCount,
   availablePlayers,
   draggingPlayerId,
   hoverSlotId,
@@ -1495,7 +1494,6 @@ function SlotButton({
   assignments: TacticalPlannerData["assignments"];
   playersById: Map<string, SquadPlayer>;
   starterSlotByPlayerId: Map<string, string>;
-  eligibleCount: number;
   availablePlayers: SquadPlayer[];
   draggingPlayerId: string | null;
   hoverSlotId: string | null;
@@ -1508,7 +1506,7 @@ function SlotButton({
   onAddDepth: (slot: TacticalPlanSlot, player: SquadPlayer) => Promise<void>;
   onRemoveDepth: (assignmentId: string) => Promise<void>;
   onMoveToRank: (assignmentId: string, targetRank: number) => Promise<void>;
-  onSelect: (anchor: HTMLElement) => void;
+  onSelect: (anchor: HTMLElement, presentation: "inspect" | "manage") => boolean;
   className?: string;
   style?: CSSProperties;
   showCustomLabel?: boolean;
@@ -1518,14 +1516,14 @@ function SlotButton({
   const slotRef = useRef<HTMLDivElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerAnchor, setPickerAnchor] = useState<HTMLButtonElement | null>(null);
+  const [pickerAnchor, setPickerAnchor] = useState<HTMLElement | null>(null);
+  const [pickerIntent, setPickerIntent] = useState<"manage" | "add">("manage");
   const orderedAssignments = rankedDepthAssignments(assignments);
   const starter = orderedAssignments.find((assignment) => assignment.isPreferredStarter) ?? orderedAssignments[0];
   const starterPlayer = starter ? playersById.get(starter.playerId) : undefined;
   const depthCount = orderedAssignments.length;
   const isDropTarget = hoverSlotId === slot.id && Boolean(draggingPlayerId);
   const rankingPreview = orderedAssignments.slice(0, 3);
-  const additionalEligibleCount = Math.max(0, eligibleCount - depthCount);
   const hiddenDepthCount = Math.max(0, depthCount - rankingPreview.length);
   const slotPending = Array.from(pendingMutationKeys).some((key) => (
     key.includes(`:${slot.id}:`) || orderedAssignments.some((assignment) => key.includes(assignment.id))
@@ -1538,9 +1536,18 @@ function SlotButton({
       : depthCount === 2
         ? "Two Players ranked for this position"
         : `${numberWord(depthCount)} Players ranked for this position`;
-  const openPositionManager = (anchor: HTMLButtonElement) => {
+  const manageLabel = locale === "de" ? `${slot.code} verwalten` : `Manage ${slot.code}`;
+  const openPositionManager = (anchor: HTMLElement, intent: "manage" | "add") => {
     setPickerAnchor(anchor);
+    setPickerIntent(intent);
     setPickerOpen(true);
+  };
+  const activatePositionCard = (anchor: HTMLElement) => {
+    if (window.matchMedia("(min-width: 1024px)").matches) {
+      if (onSelect(anchor, "manage")) openPositionManager(anchor, "manage");
+      return;
+    }
+    onSelect(anchor, "inspect");
   };
 
   return (
@@ -1572,11 +1579,11 @@ function SlotButton({
       }}
       onClick={(event) => {
         event.stopPropagation();
-        onSelect(event.currentTarget);
+        activatePositionCard(event.currentTarget);
       }}
       className={cn(
         "relative min-h-12 w-full rounded border p-1.5 text-left shadow-sm transition-[border-color,background-color,box-shadow,opacity] duration-150 sm:min-h-[6.25rem] sm:p-2",
-        selected ? "border-board-green bg-white text-board-navy ring-2 ring-board-green/25" : "border-white/80 bg-white text-slate-800 hover:border-emerald-200",
+        selected || pickerOpen ? "border-board-green bg-white text-board-navy ring-2 ring-board-green/25" : "border-white/80 bg-white text-slate-800 hover:border-emerald-300 focus:border-emerald-300",
         draggingPlayerId && !isDropTarget && "border-emerald-200",
         isDropTarget && "border-board-green bg-emerald-50 ring-4 ring-emerald-200",
         draggingPlayerId === starterPlayer?.id && "opacity-40",
@@ -1585,13 +1592,13 @@ function SlotButton({
       style={style}
       role="button"
       tabIndex={0}
-      aria-label={`${slot.code} · ${slot.label} · ${depthCount} ${copy.depthOptions}`}
-      title={`${depthCount} Players currently ranked. ${additionalEligibleCount} additional eligible Players available.`}
+      aria-label={`${manageLabel} · ${depthCount} ${copy.depthOptions}`}
+      title={manageLabel}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           event.stopPropagation();
-          onSelect(event.currentTarget);
+          activatePositionCard(event.currentTarget);
         }
       }}
     >
@@ -1641,7 +1648,10 @@ function SlotButton({
                 const assignmentId = event.dataTransfer.getData("application/x-coachboard-assignment");
                 if (assignmentId) void onMoveToRank(assignmentId, index + 1);
               }}
-              onClick={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                activatePositionCard(event.currentTarget);
+              }}
               className={cn(
                 "group/row relative min-w-0 items-center gap-1 leading-tight",
                 index === 0 ? "flex text-[10px] font-black text-board-navy sm:text-xs" : "hidden text-[10px] font-semibold text-slate-600 sm:flex"
@@ -1655,7 +1665,10 @@ function SlotButton({
                 <button
                   type="button"
                   disabled={pendingMutationKeys.has(`starter:${slot.id}:${player.id}`)}
-                  onClick={() => void onAssign(player.id, slot.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void onAssign(player.id, slot.id);
+                  }}
                   className="absolute right-4 inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 opacity-0 hover:bg-emerald-50 hover:text-board-green focus:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100 disabled:opacity-40"
                   aria-label={locale === "de" ? `${playerName(player)} als ${slot.code}-Startspieler festlegen` : `Set ${playerName(player)} as ${slot.code} starter`}
                   title={copy.makeStarter}
@@ -1685,7 +1698,7 @@ function SlotButton({
           data-pitch-add-player={slot.code}
           onClick={(event) => {
             event.stopPropagation();
-            openPositionManager(event.currentTarget);
+            openPositionManager(event.currentTarget, "add");
           }}
           className="min-w-0 flex-1 truncate rounded px-1 text-left text-[9px] font-bold text-board-green hover:bg-emerald-50 focus:bg-emerald-50"
         >
@@ -1697,7 +1710,7 @@ function SlotButton({
             data-pitch-more-players={slot.code}
             onClick={(event) => {
               event.stopPropagation();
-              openPositionManager(event.currentTarget);
+              openPositionManager(event.currentTarget, "manage");
             }}
             className="shrink-0 rounded px-1 text-[9px] font-bold text-slate-500 hover:bg-slate-50 hover:text-board-navy focus:bg-slate-50"
           >
@@ -1713,6 +1726,7 @@ function SlotButton({
       <PositionManagementPopover
         open={pickerOpen}
         anchor={pickerAnchor}
+        intent={pickerIntent}
         fallbackFocusRef={addButtonRef}
         slotFocusRef={slotRef}
         slot={slot}
@@ -1739,6 +1753,7 @@ function SlotButton({
 function PositionManagementPopover({
   open,
   anchor,
+  intent,
   fallbackFocusRef,
   slotFocusRef,
   slot,
@@ -1756,7 +1771,8 @@ function PositionManagementPopover({
   onClose
 }: {
   open: boolean;
-  anchor: HTMLButtonElement | null;
+  anchor: HTMLElement | null;
+  intent: "manage" | "add";
   fallbackFocusRef: { current: HTMLButtonElement | null };
   slotFocusRef: { current: HTMLDivElement | null };
   slot: TacticalPlanSlot;
@@ -1820,13 +1836,20 @@ function PositionManagementPopover({
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [close, open]);
+  useEffect(() => {
+    if (!open || intent !== "manage") return;
+    const frame = window.requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [intent, open]);
   if (!open || typeof document === "undefined") return null;
   return createPortal(
     <>
-      <button type="button" aria-label={copy.close} className="fixed inset-0 z-[115] cursor-default bg-transparent" onClick={close} />
+      <button type="button" aria-label={copy.close} className="fixed inset-0 z-[115] cursor-default bg-transparent" onClick={(event) => { event.stopPropagation(); close(); }} />
       <div
         ref={panelRef}
         role="dialog"
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
         aria-label={`${slot.code} ${copy.depthOverview}`}
         data-position-picker={slot.code}
         className="fixed z-[120] w-[min(24rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-board-green/30 bg-white p-3 shadow-2xl"
@@ -1837,7 +1860,7 @@ function PositionManagementPopover({
             <p className="text-xs font-black uppercase tracking-wide text-board-green">{slot.code}</p>
             <h4 className="truncate font-bold text-board-navy">{slot.label}</h4>
           </div>
-          <button type="button" onClick={close} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-slate-100" aria-label={copy.close}>
+          <button type="button" onClick={(event) => { event.stopPropagation(); close(); }} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-slate-100" aria-label={copy.close}>
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
@@ -1855,7 +1878,7 @@ function PositionManagementPopover({
           onRemoveDepth={onRemoveDepth}
           onMoveToRank={onMoveToRank}
           compact
-          autoFocusCandidates
+          autoFocusCandidates={intent === "add"}
         />
       </div>
     </>,
@@ -1887,6 +1910,12 @@ function PositionCandidateList({
   const locale = useOptionalI18n()?.locale ?? "en";
   const copy = plannerCopy[locale];
   const [candidateSearch, setCandidateSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!autoFocus) return;
+    const frame = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [autoFocus, slot.id]);
   const assignedPlayerIds = new Set(depth.map((assignment) => assignment.playerId));
   const candidates = rankTacticalPositionCandidates(availablePlayers, slot, assignedPlayerIds)
     .filter(({ player, fit, alreadyAssigned }) => !alreadyAssigned && matchesSearch(player, candidateSearch) && isFitVisibleInMode(fit.fitType, fitMode));
@@ -1897,7 +1926,7 @@ function PositionCandidateList({
         <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{copy.addPlayer}</p>
         <span className="text-[10px] font-semibold text-slate-400">{candidates.length}</span>
       </div>
-      <input autoFocus={autoFocus} value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} placeholder={copy.searchPlayers} className="mt-2 h-10 w-full rounded-md border border-board-line px-3 text-sm" />
+      <input ref={searchRef} value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} placeholder={copy.searchPlayers} className="mt-2 h-10 w-full rounded-md border border-board-line px-3 text-sm" />
       <div className="mt-2 max-h-72 space-y-1 overflow-y-auto pr-1">
         {candidates.length === 0 ? <p className="rounded bg-slate-50 p-3 text-xs font-semibold text-slate-500">{copy.noSuitablePlayer}</p> : null}
         {candidates.map(({ player, fit }, index) => {
@@ -2217,17 +2246,6 @@ function depthHealthClass(count: number) {
   if (count <= 1) return "bg-red-100 text-red-800 ring-red-200";
   if (count === 2) return "bg-amber-100 text-amber-800 ring-amber-200";
   return "bg-emerald-100 text-emerald-800 ring-emerald-200";
-}
-
-function countEligiblePlayers(players: SquadPlayer[], slot: TacticalPlanSlot, fitMode: DepthOverviewFitMode) {
-  return players.filter((player) => {
-    const fit = evaluatePlayerSlotFit(player, slot, fitMode === "all");
-    return fit.eligible && depthAssignmentMatchesFitMode(fit.fitType, fitMode);
-  }).length;
-}
-
-function depthAssignmentMatchesFitMode(fitType: TacticalFitType, mode: DepthOverviewFitMode) {
-  return isFitVisibleInMode(fitType, mode);
 }
 
 function PlayerPoolPanel({

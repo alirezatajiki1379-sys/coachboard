@@ -107,20 +107,84 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
 
   for (const locale of ["en", "de"]) {
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate((value) => window.qa.render(value), locale);
+    await page.locator("[data-planner-slot='rb']").click();
+    const manager = page.locator("[data-position-picker='RB']");
+    await manager.waitFor();
+    assert.equal(await manager.getByText(locale === "de" ? "Aktuelle Besetzung" : "Current depth", { exact: true }).count(), 1, `${locale}: card opens universal manager`);
+    assert.equal(await manager.getByText(locale === "de" ? "Positionsfremd" : "Out of position", { exact: true }).count() > 0, true);
+    assert.equal(await manager.getByText(locale === "de" ? "Keine Positionsdaten" : "No position data", { exact: true }).count() > 0, true);
+    assert.equal(await manager.getByText("Bela Example", { exact: true }).count() > 0, true, "Out-of-position Player remains discoverable");
+    assert.equal(await manager.getByText("Daria Example", { exact: true }).count() > 0, true, "Player without position data remains discoverable");
+    await manager.getByRole("button", { name: locale === "de" ? "Schließen" : "Close" }).click();
+    await manager.waitFor({ state: "detached" });
+
+    await page.setViewportSize({ width: 320, height: 900 });
     await page.locator("[data-planner-slot='rb']").click();
     const inspector = page.locator("[data-position-inspector='RB']");
     await inspector.waitFor();
-    assert.equal(await inspector.getByText(locale === "de" ? "Positionsfremd" : "Out of position", { exact: true }).count() > 0, true);
-    assert.equal(await inspector.getByText(locale === "de" ? "Keine Positionsdaten" : "No position data", { exact: true }).count() > 0, true);
-    assert.equal(await inspector.getByText("Bela Example", { exact: true }).count() > 0, true, "Out-of-position Player remains discoverable");
-    assert.equal(await inspector.getByText("Daria Example", { exact: true }).count() > 0, true, "Player without position data remains discoverable");
+    assert.equal(await inspector.getByText(locale === "de" ? "Aktuelle Besetzung" : "Current depth", { exact: true }).count(), 1, `${locale}: mobile uses the same management content`);
+    assert.equal(await inspector.getByText(locale === "de" ? "Spieler hinzufügen" : "Add player", { exact: true }).count(), 1, `${locale}: mobile exposes add section`);
+    await inspector.getByRole("button", { name: locale === "de" ? "Schließen" : "Close" }).click();
 
     for (const width of [320, 768, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${locale}/${width}: horizontal overflow`);
     }
   }
+
+  await page.evaluate(() => window.qa.reset("en"));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator("[data-planner-slot='cm']").click();
+  const onePlayerManager = page.locator("[data-position-picker='CM']");
+  await onePlayerManager.waitFor();
+  assert.equal(await onePlayerManager.locator("[data-position-depth-row]").count(), 1, "One-player card opens complete manager");
+  assert.equal(await onePlayerManager.getByText("Bela Example", { exact: true }).count(), 1, "One-player manager shows its Starter");
+  await onePlayerManager.getByRole("button", { name: "Close" }).click();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-planner-slot") === "cm");
+
+  await page.locator("[data-planner-slot='rb']").focus();
+  await page.locator("[data-planner-slot='rb']").press("Enter");
+  const twoPlayerManager = page.locator("[data-position-picker='RB']");
+  await twoPlayerManager.waitFor();
+  assert.equal(await twoPlayerManager.locator("[data-position-depth-row]").count(), 2, "Keyboard opens two-player manager");
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-position-picker") === "RB");
+  await twoPlayerManager.getByRole("button", { name: "Set as starter: Carlo Example" }).click();
+  assert.equal(await twoPlayerManager.isVisible(), true, "Starter mutation does not close or reopen the manager");
+  await page.waitForFunction(() => document.querySelector("[data-position-picker='RB'] [data-position-depth-row]")?.textContent?.includes("Carlo Example"));
+  let universalDepth = await twoPlayerManager.locator("[data-position-depth-row]").allTextContents();
+  assert.equal(universalDepth[0].includes("Carlo Example"), true, "Two-player manager promotes rank two");
+  await twoPlayerManager.getByRole("button", { name: "Close" }).click();
+  await page.reload();
+  let pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
+  assert.equal(pitchRows[0].includes("Carlo Example"), true, "Card-manager Starter change survives reload");
+
+  await page.evaluate(() => {
+    window.qaAssignments = window.qaAssignments.filter((row) => row.slotId !== "cm");
+    localStorage.setItem("qa-squad-planner-assignments", JSON.stringify(window.qaAssignments));
+    window.qa.render("en");
+  });
+  await page.locator("[data-planner-slot='cm']").click();
+  const emptyManager = page.locator("[data-position-picker='CM']");
+  await emptyManager.getByText("No Player assigned yet.", { exact: true }).waitFor();
+  assert.equal(await emptyManager.getByText("Add player", { exact: true }).count(), 1, "Empty position opens add-capable manager");
+  await emptyManager.getByRole("button", { name: "Close" }).click();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-planner-slot") === "cm");
+
+  await page.evaluate(() => window.qa.reset("en"));
+  await page.locator("[data-pitch-add-player='RB']").click();
+  const threePlayerSetup = page.locator("[data-position-picker='RB']");
+  await page.waitForFunction(() => document.activeElement?.getAttribute("placeholder") === "Search players");
+  await threePlayerSetup.locator("[data-position-candidate='d']").getByRole("button", { name: "Add as option" }).click();
+  await threePlayerSetup.locator("[data-position-depth-row='depth-d-rb']").waitFor();
+  await threePlayerSetup.getByRole("button", { name: "Close" }).click();
+  assert.equal(await page.locator("[data-pitch-more-players='RB']").count(), 0, "Three-player position has no +N control");
+  await page.locator("[data-planner-slot='rb']").click();
+  const threePlayerManager = page.locator("[data-position-picker='RB']");
+  await threePlayerManager.waitFor();
+  assert.equal(await threePlayerManager.locator("[data-position-depth-row]").count(), 3, "Three-player card opens complete manager without +N");
+  await threePlayerManager.getByRole("button", { name: "Close" }).click();
 
   await page.evaluate(() => window.qa.reset("en"));
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -158,7 +222,7 @@ try {
   assert.equal(await page.locator("[data-planner-slot='rb'] [data-planner-depth-count='4']").count(), 1, "Pitch depth count updates without navigation");
   assert.equal((await page.locator("[data-planner-slot='rb']").innerText()).includes("+1 more"), true, "Pitch summarizes depth beyond three Players");
   await rbPicker.getByRole("button", { name: "Close" }).click();
-  await page.locator("[data-planner-slot='rb']").click();
+  await page.locator("[data-position-depth-card='RB']").click();
   await page.locator("[data-position-inspector='RB']").getByLabel("Candidate view").selectOption("natural");
   await page.evaluate(() => window.qa.render("de"));
   await page.getByRole("button", { name: "+1 weiterer" }).click();
@@ -177,6 +241,7 @@ try {
   await moreTrigger.click();
   const morePicker = page.locator("[data-position-picker='RB']");
   await morePicker.waitFor();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-position-picker") === "RB");
   assert.equal(await morePicker.getByText("Current depth", { exact: true }).count(), 1, "+1 more opens the complete position manager");
   for (const name of ["Anton Example", "Carlo Example", "Daria Example", "Bela Example"]) {
     assert.equal(await morePicker.getByText(name, { exact: true }).count(), 1, `Current depth exposes ${name}`);
@@ -191,7 +256,7 @@ try {
   assert.equal(managedDepth[0].includes("Anton Example"), true, "Reordering a backup keeps rank one Starter");
   assert.equal(managedDepth[1].includes("Daria Example"), true, "Popover moves a hidden Player to rank two");
   await page.reload();
-  let pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
+  pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
   assert.equal(pitchRows[1].includes("Daria Example"), true, "Popover reorder survives reload");
   await page.getByRole("button", { name: "+1 more" }).click();
   await morePicker.getByRole("button", { name: "Remove from position: Bela Example" }).click();
@@ -216,14 +281,16 @@ try {
   await page.evaluate(() => window.qa.reset("en"));
   await page.locator("[data-pitch-player-row='rb-c']").getByRole("button", { name: "Set Carlo Example as RB starter" }).click();
   await page.waitForFunction(() => document.querySelector("[data-planner-slot='rb'] [data-pitch-player-row]")?.textContent?.includes("Carlo Example"));
+  assert.equal(await page.locator("[data-position-picker]").count(), 0, "Direct pitch Star does not bubble into card management");
   pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
   assert.equal(pitchRows[0].includes("Carlo Example"), true, "On-pitch Star promotes the selected backup");
   assert.equal(pitchRows[1].includes("Anton Example"), true, "Previous Starter remains rank two");
-  await page.locator("[data-planner-slot='rb']").click();
-  const synchronizedInspector = page.locator("[data-position-inspector='RB']");
-  await synchronizedInspector.waitFor();
-  const inspectorRows = await synchronizedInspector.locator("[data-position-depth-list='RB'] > div").allTextContents();
-  assert.equal(inspectorRows[0].includes("Carlo Example"), true, "Inspector immediately reflects pitch Starter mutation");
+  await page.locator("[data-pitch-player-row='rb-c']").click();
+  const synchronizedManager = page.locator("[data-position-picker='RB']");
+  await synchronizedManager.waitFor();
+  const managerRows = await synchronizedManager.locator("[data-position-depth-row]").allTextContents();
+  assert.equal(managerRows[0].includes("Carlo Example"), true, "Player-row click opens the synchronized universal manager");
+  await synchronizedManager.getByRole("button", { name: "Close" }).click();
   await page.reload();
   pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
   assert.equal(pitchRows[0].includes("Carlo Example"), true, "On-pitch Starter survives reload");
@@ -246,6 +313,7 @@ try {
   await page.evaluate(() => window.qa.reset("en"));
   const starterActions = page.locator("[data-pitch-player-row='rb-a']").getByLabel("Player actions: Anton Example");
   await starterActions.click();
+  assert.equal(await page.locator("[data-position-picker]").count(), 0, "Player action menu does not bubble into card management");
   await page.locator("[data-pitch-player-row='rb-a']").getByRole("button", { name: "× Remove from position" }).click();
   await page.waitForFunction(() => !document.querySelector("[data-pitch-player-row='rb-a']"));
   pitchRows = await page.locator("[data-planner-slot='rb'] [data-pitch-player-row]").allTextContents();
@@ -281,7 +349,7 @@ try {
   await page.waitForFunction(() => document.querySelector("[data-planner-slot='rb']")?.textContent?.includes("Carlo Example"));
   assert.equal(await page.locator("[data-planner-slot='rb']").innerText().then((text) => text.includes("Carlo Example")), true, "Drag and Drop uses the same Starter mutation");
   assert.deepEqual(errors, []);
-  console.log("Squad Planner 2.2 browser regression: PASS (+N position manager, add/promote/reorder/remove, focus, reload, swap, DE/EN, 320/768/1440 px)");
+  console.log("Squad Planner 2.3 browser regression: PASS (universal 0/1/2/3/4+ position manager, intents, add/promote/reorder/remove, focus, reload, mobile, DE/EN)");
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));

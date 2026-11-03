@@ -169,11 +169,16 @@ assert.match(plannerSource, /function PositionManagementPopover/);
 assert.match(plannerSource, /function PositionCandidateList/);
 assert.match(plannerSource, /currentDepth: "Current depth"/);
 assert.match(plannerSource, /currentDepth: "Aktuelle Besetzung"/);
+assert.match(plannerSource, /managePosition: "Manage position"/);
+assert.match(plannerSource, /managePosition: "Position verwalten"/);
 assert.match(plannerSource, /anchor=\{pickerAnchor\}/);
+assert.match(plannerSource, /intent=\{pickerIntent\}/);
+assert.match(plannerSource, /activatePositionCard/);
+assert.match(plannerSource, /window\.matchMedia\("\(min-width: 1024px\)"\)/);
 assert.match(plannerSource, /!alreadyAssigned && matchesSearch/);
 assert.match(plannerSource, /assignmentMutationQueue/);
 assert.doesNotMatch(plannerSource, /const \[assigning, setAssigning\]/);
 assert.match(plannerSource, /createPortal/);
 assert.doesNotMatch(plannerSource, /!editingFormation && selectedSlot \? <SlotDepthPanel/);
 
-console.log("PASS: formations, canonical fit, assignment invariants, queued mutations, complete position manager, inspector and custom slot semantics.");
+console.log("PASS: formations, canonical fit, assignment invariants, queued mutations, universal position manager, inspector and custom slot semantics.");
