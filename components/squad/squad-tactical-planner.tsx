@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Archive, Copy, GripVertical, Plus, RotateCcw, Shield, Star, Trash2, Users, X } from "lucide-react";
+import { Archive, Copy, GripVertical, MoreHorizontal, Plus, RotateCcw, Shield, Star, Trash2, Users, X } from "lucide-react";
 import {
   addDepthAssignmentInline,
   assignStartingPlayer,
@@ -73,7 +73,7 @@ const plannerCopy = {
     assign: "Assign", selectPlayer: "Select a player, then tap a position.", selectPosition: "Select a position to inspect its depth.", depthOptions: "options", removeFromXi: "Remove from XI", changeFailed: "Could not update formation.",
     name: "Formation name", label: "Display label", position: "Position", eleven: "A formation needs 11 positions before it can be saved.",
     starters: "starters", depthAssignments: "depth assignments", included: "included", excluded: "excluded", plan: "Plan", board: "Formation board", depthBoard: "Depth board", playerPool: "Player pool",
-    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Candidate view", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Recommended", fitAll: "All players", noSuitablePlayer: "+ Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth", primary: "Primary", secondary: "Secondary", compatible: "Compatible", secondaryPosition: "Secondary position", compatiblePosition: "Compatible position", noPositionData: "No position data", starter: "Starter", xi: "XI", close: "Close", addPlayer: "Add player", searchPlayers: "Search players", recommended: "Recommended", morePlayers: "More players", addOption: "Add as option", makeStarter: "Set as starter", alreadyAssigned: "Already assigned", startsElsewhere: "Starts at", removePosition: "Remove from position", moveUp: "Move up", moveDown: "Move down", noAssigned: "No players assigned", showTrials: "Show trial players", trial: "Trial player", changeStarter: "Change starter", defaultPlan: "Default", renameNotes: "Rename / notes", newPlan: "New plan", more: "More actions", clearXi: "Clear XI", plannerChecks: "Planner checks", starterUnavailable: "The current starter is no longer available for this team.", assignmentNotFound: "Assignment not found."
+    removeWarning: "Removing this position returns its player to the available pool. Continue?", saving: "Saving...", saved: "Saved", unsaved: "Unsaved changes", editHint: "Drag positions to change the layout.", dropInvalid: "Drop the player on a position or Unassigned.", outOfPosition: "Out of position", depthOverview: "Position depth", playersShort: "players", positions: "positions", filters: "Filters", addDepth: "Add depth options", availableOptions: "Available options", fitMode: "Candidate view", fitNatural: "Natural only", fitSecondary: "Natural + Secondary", fitCompatible: "Recommended", fitAll: "All players", noSuitablePlayer: "+ Player", insufficientDepth: "insufficient depth", limitedDepth: "limited depth", healthyDepth: "healthy depth", primary: "Primary", secondary: "Secondary", compatible: "Compatible", secondaryPosition: "Secondary position", compatiblePosition: "Compatible position", noPositionData: "No position data", starter: "Starter", xi: "XI", close: "Close", addPlayer: "Add player", searchPlayers: "Search players", recommended: "Recommended", morePlayers: "More players", addOption: "Add as option", makeStarter: "Set as starter", alreadyAssigned: "Already assigned", startsElsewhere: "Starts at", removePosition: "Remove from position", moveUp: "Move up", moveDown: "Move down", noAssigned: "No players assigned", showTrials: "Show trial players", trial: "Trial player", changeStarter: "Change starter", defaultPlan: "Default", renameNotes: "Rename / notes", newPlan: "New plan", more: "More actions", clearXi: "Clear XI", plannerChecks: "Planner checks", starterUnavailable: "The current starter is no longer available for this team.", assignmentNotFound: "Assignment not found.", adding: "Adding...", savingChange: "Saving change...", details: "Details", collapseDetails: "Collapse details", playerActions: "Player actions", addFailed: "Player could not be added to this position."
   },
   de: {
     heading: "Kaderplaner", nameRequired: "Bitte einen Namen für die Formation eingeben.",
@@ -82,7 +82,7 @@ const plannerCopy = {
     assign: "Zuweisen", selectPlayer: "Spieler auswählen und dann eine Position antippen.", selectPosition: "Position auswählen, um die Besetzung zu sehen.", depthOptions: "Optionen", removeFromXi: "Aus Startelf entfernen", changeFailed: "Formation konnte nicht aktualisiert werden.",
     name: "Name der Formation", label: "Anzeigename", position: "Position", eleven: "Eine Formation braucht 11 Positionen, bevor sie gespeichert werden kann.",
     starters: "Startspieler", depthAssignments: "Positionszuordnungen", included: "einbezogen", excluded: "ausgeschlossen", plan: "Plan", board: "Formationstafel", depthBoard: "Positionsbesetzung", playerPool: "Spielerpool",
-    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Kandidatenansicht", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Empfohlen", fitAll: "Alle Spieler", noSuitablePlayer: "+ Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung", primary: "Hauptposition", secondary: "Nebenposition", compatible: "Kompatibel", secondaryPosition: "Nebenposition", compatiblePosition: "Kompatible Position", noPositionData: "Keine Positionsdaten", starter: "Startspieler", xi: "Startelf", close: "Schließen", addPlayer: "Spieler hinzufügen", searchPlayers: "Spieler suchen", recommended: "Empfohlen", morePlayers: "Weitere Spieler", addOption: "Als Option hinzufügen", makeStarter: "Als Startspieler", alreadyAssigned: "Bereits zugeordnet", startsElsewhere: "Startelf", removePosition: "Von Position entfernen", moveUp: "Nach oben", moveDown: "Nach unten", noAssigned: "Keine Spieler zugeordnet", showTrials: "Probespieler anzeigen", trial: "Probespieler", changeStarter: "Startspieler wechseln", defaultPlan: "Standard", renameNotes: "Name / Notizen", newPlan: "Neuer Plan", more: "Weitere Aktionen", clearXi: "Startelf leeren", plannerChecks: "Planer-Prüfung", starterUnavailable: "Der aktuelle Startspieler ist für dieses Team nicht mehr verfügbar.", assignmentNotFound: "Zuordnung nicht gefunden."
+    removeWarning: "Beim Entfernen dieser Position wird ihr Spieler wieder verfügbar. Fortfahren?", saving: "Wird gespeichert...", saved: "Gespeichert", unsaved: "Ungespeicherte Änderungen", editHint: "Positionen ziehen, um die Anordnung zu ändern.", dropInvalid: "Spieler auf eine Position oder Nicht zugeordnet ziehen.", outOfPosition: "Positionsfremd", depthOverview: "Positionsbesetzung", playersShort: "Spieler", positions: "Positionen", filters: "Filter", addDepth: "Besetzungsoptionen hinzufügen", availableOptions: "Verfügbare Optionen", fitMode: "Kandidatenansicht", fitNatural: "Nur Hauptposition", fitSecondary: "Haupt- + Nebenposition", fitCompatible: "Empfohlen", fitAll: "Alle Spieler", noSuitablePlayer: "+ Spieler", insufficientDepth: "unzureichende Besetzung", limitedDepth: "knappe Besetzung", healthyDepth: "gute Besetzung", primary: "Hauptposition", secondary: "Nebenposition", compatible: "Kompatibel", secondaryPosition: "Nebenposition", compatiblePosition: "Kompatible Position", noPositionData: "Keine Positionsdaten", starter: "Startspieler", xi: "Startelf", close: "Schließen", addPlayer: "Spieler hinzufügen", searchPlayers: "Spieler suchen", recommended: "Empfohlen", morePlayers: "Weitere Spieler", addOption: "Als Option hinzufügen", makeStarter: "Als Startspieler", alreadyAssigned: "Bereits zugeordnet", startsElsewhere: "Startelf", removePosition: "Von Position entfernen", moveUp: "Nach oben", moveDown: "Nach unten", noAssigned: "Keine Spieler zugeordnet", showTrials: "Probespieler anzeigen", trial: "Probespieler", changeStarter: "Startspieler wechseln", defaultPlan: "Standard", renameNotes: "Name / Notizen", newPlan: "Neuer Plan", more: "Weitere Aktionen", clearXi: "Startelf leeren", plannerChecks: "Planer-Prüfung", starterUnavailable: "Der aktuelle Startspieler ist für dieses Team nicht mehr verfügbar.", assignmentNotFound: "Zuordnung nicht gefunden.", adding: "Hinzufügen...", savingChange: "Änderung wird gespeichert...", details: "Details", collapseDetails: "Details einklappen", playerActions: "Spieleraktionen", addFailed: "Spieler konnte dieser Position nicht hinzugefügt werden."
   }
 } as const;
 
@@ -259,7 +259,8 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
   const [draftSlots, setDraftSlots] = useState(data.slots);
   const [formationName, setFormationName] = useState(data.selectedPlan?.name ?? "");
   const [savingFormation, setSavingFormation] = useState(false);
-  const [assigning, setAssigning] = useState(false);
+  const [pendingMutationKeys, setPendingMutationKeys] = useState<Set<string>>(() => new Set());
+  const [slotMutationErrors, setSlotMutationErrors] = useState<Map<string, string>>(() => new Map());
   const [plannerError, setPlannerError] = useState("");
   const acceptedDrop = useRef(false);
   const [showTrials, setShowTrials] = useState(false);
@@ -287,8 +288,14 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
     [data.assignments, excludedPlayerIds, playersById]
   );
   const [activeAssignments, setActiveAssignments] = useState(serverActiveAssignments);
+  const activeAssignmentsRef = useRef(serverActiveAssignments);
+  const assignmentMutationQueue = useRef<Promise<void>>(Promise.resolve());
+  const updateActiveAssignments = (assignments: TacticalAssignment[]) => {
+    activeAssignmentsRef.current = assignments;
+    setActiveAssignments(assignments);
+  };
   useEffect(() => {
-    setActiveAssignments(serverActiveAssignments);
+    updateActiveAssignments(serverActiveAssignments);
   }, [serverActiveAssignments]);
   const assignmentsBySlot = new Map<string, typeof data.assignments>();
   for (const assignment of activeAssignments) {
@@ -325,68 +332,105 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
     }
     setSelectedSlotId(slotId);
   };
+  const enqueueAssignmentMutation = (
+    key: string,
+    slotId: string | undefined,
+    optimistic: (assignments: TacticalAssignment[]) => TacticalAssignment[],
+    mutation: () => Promise<{ ok: boolean; assignments?: TacticalAssignment[]; error?: string }>
+  ) => {
+    setPendingMutationKeys((current) => new Set(current).add(key));
+    if (slotId) setSlotMutationErrors((current) => {
+      const next = new Map(current);
+      next.delete(slotId);
+      return next;
+    });
+    const execute = async () => {
+      const before = activeAssignmentsRef.current;
+      setPlannerError("");
+      updateActiveAssignments(optimistic(before));
+      try {
+        const result = await mutation();
+        if (!result.ok || !result.assignments) throw new Error(plannerMutationError(result.error, copy));
+        updateActiveAssignments(result.assignments);
+      } catch (error) {
+        updateActiveAssignments(before);
+        const message = key.startsWith("add:") && locale === "de"
+          ? copy.addFailed
+          : error instanceof Error ? error.message : copy.changeFailed;
+        if (slotId) setSlotMutationErrors((current) => new Map(current).set(slotId, message));
+        else setPlannerError(message);
+      } finally {
+        setPendingMutationKeys((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        });
+      }
+    };
+    const operation = assignmentMutationQueue.current.then(execute, execute);
+    assignmentMutationQueue.current = operation.then(() => undefined, () => undefined);
+    return operation;
+  };
   const assignPlayer = async (playerId: string, slotId: string | null) => {
-    if (!data.selectedPlan || assigning || editingFormation || excludedPlayerIds.has(playerId)) return;
+    if (!data.selectedPlan || editingFormation || excludedPlayerIds.has(playerId)) return;
     const player = playersById.get(playerId);
     if (!player) return;
-    const before = activeAssignments;
     acceptedDrop.current = true;
-    setPlannerError("");
     setSelectedPlayerId(null);
     setHoverSlotId(null);
     setDragPlayerId(null);
     setDragPoint(null);
-    setAssigning(true);
-    setActiveAssignments(optimisticStartingXi(before, data.selectedPlan.id, player, slotId, data.slots));
-    try {
-      const result = await assignStartingPlayer(data.selectedPlan.id, playerId, slotId);
-      if (!result.ok || !result.assignments) throw new Error(plannerMutationError(result.error, copy));
-      setActiveAssignments(result.assignments);
-    } catch (error) {
-      setActiveAssignments(before);
-      setPlannerError(locale === "de" ? copy.changeFailed : error instanceof Error ? error.message : copy.changeFailed);
-    } finally {
-      setAssigning(false);
-    }
+    const sourceSlotId = activeAssignmentsRef.current.find((assignment) => assignment.playerId === playerId && assignment.isPreferredStarter)?.slotId;
+    return enqueueAssignmentMutation(
+      `starter:${slotId ?? "none"}:${playerId}`,
+      slotId ?? sourceSlotId,
+      (assignments) => optimisticStartingXi(assignments, data.selectedPlan!.id, player, slotId, data.slots),
+      () => assignStartingPlayer(data.selectedPlan!.id, playerId, slotId)
+    );
   };
   const runAssignmentMutation = async (
+    key: string,
+    slotId: string,
     optimistic: OptimisticSlotUpdate,
     mutation: () => Promise<{ ok: boolean; assignments?: TacticalAssignment[]; error?: string }>
   ) => {
-    if (assigning || !data.selectedPlan) return;
-    const before = activeAssignments;
-    setPlannerError("");
-    setAssigning(true);
-    setActiveAssignments(applyOptimisticSlotUpdate(before, data.selectedPlan.id, optimistic));
-    try {
-      const result = await mutation();
-      if (!result.ok || !result.assignments) throw new Error(plannerMutationError(result.error, copy));
-      setActiveAssignments(result.assignments);
-    } catch (error) {
-      setActiveAssignments(before);
-      setPlannerError(error instanceof Error ? error.message : copy.changeFailed);
-    } finally {
-      setAssigning(false);
-    }
+    if (!data.selectedPlan) return;
+    return enqueueAssignmentMutation(
+      key,
+      slotId,
+      (assignments) => applyOptimisticSlotUpdate(assignments, data.selectedPlan!.id, optimistic),
+      mutation
+    );
   };
   const addPlayerToDepth = (slot: TacticalPlanSlot, player: SquadPlayer) => runAssignmentMutation(
+    `add:${slot.id}:${player.id}`,
+    slot.id,
     { type: "add", slot, player },
     () => addDepthAssignmentInline(data.selectedPlan!.id, slot.id, player.id)
   );
-  const removePlayerFromDepth = (assignmentId: string) => runAssignmentMutation(
-    { type: "remove", assignmentId },
-    () => removeDepthAssignmentInline(data.selectedPlan!.id, assignmentId)
-  );
-  const movePlayerToRank = (assignmentId: string, targetRank: number) => {
-    const assignment = activeAssignments.find((item) => item.id === assignmentId);
-    if (targetRank === 1 && assignment) return assignPlayer(assignment.playerId, assignment.slotId);
+  const removePlayerFromDepth = (assignmentId: string) => {
+    const slotId = activeAssignmentsRef.current.find((assignment) => assignment.id === assignmentId)?.slotId;
+    if (!slotId) return Promise.resolve();
     return runAssignmentMutation(
+      `remove:${assignmentId}`,
+      slotId,
+      { type: "remove", assignmentId },
+      () => removeDepthAssignmentInline(data.selectedPlan!.id, assignmentId)
+    );
+  };
+  const movePlayerToRank = (assignmentId: string, targetRank: number) => {
+    const assignment = activeAssignmentsRef.current.find((item) => item.id === assignmentId);
+    if (targetRank === 1 && assignment) return assignPlayer(assignment.playerId, assignment.slotId);
+    if (!assignment) return Promise.resolve();
+    return runAssignmentMutation(
+      `rank:${assignmentId}:${targetRank}`,
+      assignment.slotId,
       { type: "moveToRank", assignmentId, targetRank },
       () => moveDepthAssignmentToRankInline(data.selectedPlan!.id, assignmentId, targetRank)
     );
   };
   const startPlayerDrag = (event: React.DragEvent<HTMLElement>, playerId: string) => {
-    if (editingFormation || assigning) { event.preventDefault(); return; }
+    if (editingFormation) { event.preventDefault(); return; }
     event.dataTransfer.setData("text/plain", playerId);
     acceptedDrop.current = false;
     event.dataTransfer.effectAllowed = "move";
@@ -514,7 +558,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
               </button>
             ))}
             <span className="self-center rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500" aria-live="polite">
-              {savingFormation || assigning ? copy.saving : editingFormation ? copy.unsaved : copy.saved}
+              {savingFormation || pendingMutationKeys.size > 0 ? copy.saving : editingFormation ? copy.unsaved : copy.saved}
             </span>
           </div>
         </div>
@@ -574,7 +618,7 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
         </div>
       </section>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0 rounded-md border border-board-line bg-white p-3 shadow-soft" onDragOver={(event) => { if (dragPlayerId) event.preventDefault(); }} onDrop={(event) => { if (!dragPlayerId || acceptedDrop.current) return; event.preventDefault(); finishPlayerDrag(); }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -673,10 +717,15 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
               editingFormation={editingFormation}
               draggingPlayerId={dragPlayerId}
               hoverSlotId={hoverSlotId}
+              pendingMutationKeys={pendingMutationKeys}
+              slotMutationErrors={slotMutationErrors}
               onDragStart={startPlayerDrag}
               onDragEnd={finishPlayerDrag}
               onDragOverSlot={setHoverSlotId}
               onAssign={assignPlayer}
+              onAddDepth={addPlayerToDepth}
+              onRemoveDepth={removePlayerFromDepth}
+              onMoveToRank={movePlayerToRank}
               onMoveSlot={(slotId, x, y) => setDraftSlots((current) => current.map((slot) => slot.id === slotId ? { ...slot, x, y } : slot))}
               onSelect={(slotId) => {
                 if (selectedPlayerId && !editingFormation) { void assignPlayer(selectedPlayerId, slotId); return; }
@@ -706,7 +755,8 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
               availablePlayers={planIncludedPlayers}
               fitMode={depthFitMode}
               starterSlotByPlayerId={starterSlotByPlayerId}
-              assigning={assigning}
+              pendingMutationKeys={pendingMutationKeys}
+              slotError={slotMutationErrors.get(selectedSlot.id)}
               onFitModeChange={setDepthFitMode}
               onSetStarter={(playerId) => assignPlayer(playerId, selectedSlot.id)}
               onAddDepth={(player) => addPlayerToDepth(selectedSlot, player)}
@@ -750,7 +800,6 @@ export function SquadTacticalPlanner({ data, startEditing = false }: { data: Tac
             onPlayerDropToPool={(playerId) => assignPlayer(playerId, null)}
             draggingPlayerId={dragPlayerId}
             selectedPlayerId={selectedPlayerId}
-            onAddDepth={(slot, player) => addPlayerToDepth(slot, player)}
             onSelectPlayer={(playerId) => { setSelectedPlayerId((current) => current === playerId ? null : playerId); setMode("formation"); }}
           />
 
@@ -1092,10 +1141,15 @@ function FormationSlotRows({
   editingFormation,
   draggingPlayerId,
   hoverSlotId,
+  pendingMutationKeys,
+  slotMutationErrors,
   onDragStart,
   onDragEnd,
   onDragOverSlot,
   onAssign,
+  onAddDepth,
+  onRemoveDepth,
+  onMoveToRank,
   onMoveSlot,
   onSelect
 }: {
@@ -1110,10 +1164,15 @@ function FormationSlotRows({
   editingFormation: boolean;
   draggingPlayerId: string | null;
   hoverSlotId: string | null;
+  pendingMutationKeys: ReadonlySet<string>;
+  slotMutationErrors: ReadonlyMap<string, string>;
   onDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
   onDragEnd: () => void;
   onDragOverSlot: (slotId: string | null) => void;
   onAssign: (playerId: string, slotId: string | null) => Promise<void>;
+  onAddDepth: (slot: TacticalPlanSlot, player: SquadPlayer) => Promise<void>;
+  onRemoveDepth: (assignmentId: string) => Promise<void>;
+  onMoveToRank: (assignmentId: string, targetRank: number) => Promise<void>;
   onMoveSlot: (slotId: string, x: number, y: number) => void;
   onSelect: (slotId: string, anchor: HTMLElement | null) => void;
 }) {
@@ -1184,12 +1243,19 @@ function FormationSlotRows({
             playersById={playersById}
             starterSlotByPlayerId={starterSlotByPlayerId}
             eligibleCount={countEligiblePlayers(includedPlayers, slot, fitMode)}
+            availablePlayers={includedPlayers}
+            fitMode={fitMode}
             draggingPlayerId={draggingPlayerId}
             hoverSlotId={hoverSlotId}
+            pendingMutationKeys={pendingMutationKeys}
+            slotError={slotMutationErrors.get(slot.id)}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             onDragOverSlot={onDragOverSlot}
             onAssign={onAssign}
+            onAddDepth={onAddDepth}
+            onRemoveDepth={onRemoveDepth}
+            onMoveToRank={onMoveToRank}
             onSelect={(anchor) => onSelect(slot.id, anchor)}
             className="absolute z-20 w-[18%] min-w-[3.5rem] max-w-[8rem] -translate-x-1/2 -translate-y-1/2 sm:w-[22%] sm:min-w-[5rem]"
             style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
@@ -1220,12 +1286,19 @@ function FormationSlotRows({
               playersById={playersById}
               starterSlotByPlayerId={starterSlotByPlayerId}
               eligibleCount={countEligiblePlayers(includedPlayers, slot, fitMode)}
+              availablePlayers={includedPlayers}
+              fitMode={fitMode}
               draggingPlayerId={draggingPlayerId}
               hoverSlotId={hoverSlotId}
+              pendingMutationKeys={pendingMutationKeys}
+              slotError={slotMutationErrors.get(slot.id)}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
               onDragOverSlot={onDragOverSlot}
               onAssign={onAssign}
+              onAddDepth={onAddDepth}
+              onRemoveDepth={onRemoveDepth}
+              onMoveToRank={onMoveToRank}
               onSelect={(anchor) => onSelect(slot.id, anchor)}
             />
           ))}
@@ -1402,12 +1475,19 @@ function SlotButton({
   playersById,
   starterSlotByPlayerId,
   eligibleCount,
+  availablePlayers,
+  fitMode,
   draggingPlayerId,
   hoverSlotId,
+  pendingMutationKeys,
+  slotError,
   onDragStart,
   onDragEnd,
   onDragOverSlot,
   onAssign,
+  onAddDepth,
+  onRemoveDepth,
+  onMoveToRank,
   onSelect,
   className,
   style,
@@ -1419,12 +1499,19 @@ function SlotButton({
   playersById: Map<string, SquadPlayer>;
   starterSlotByPlayerId: Map<string, string>;
   eligibleCount: number;
+  availablePlayers: SquadPlayer[];
+  fitMode: DepthOverviewFitMode;
   draggingPlayerId: string | null;
   hoverSlotId: string | null;
+  pendingMutationKeys: ReadonlySet<string>;
+  slotError?: string;
   onDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
   onDragEnd: () => void;
   onDragOverSlot: (slotId: string | null) => void;
   onAssign: (playerId: string, slotId: string | null) => Promise<void>;
+  onAddDepth: (slot: TacticalPlanSlot, player: SquadPlayer) => Promise<void>;
+  onRemoveDepth: (assignmentId: string) => Promise<void>;
+  onMoveToRank: (assignmentId: string, targetRank: number) => Promise<void>;
   onSelect: (anchor: HTMLElement) => void;
   className?: string;
   style?: CSSProperties;
@@ -1432,6 +1519,8 @@ function SlotButton({
 }) {
   const locale = useOptionalI18n()?.locale ?? "en";
   const copy = plannerCopy[locale];
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const orderedAssignments = rankedDepthAssignments(assignments);
   const starter = orderedAssignments.find((assignment) => assignment.isPreferredStarter) ?? orderedAssignments[0];
   const starterPlayer = starter ? playersById.get(starter.playerId) : undefined;
@@ -1439,6 +1528,10 @@ function SlotButton({
   const isDropTarget = hoverSlotId === slot.id && Boolean(draggingPlayerId);
   const rankingPreview = orderedAssignments.slice(0, 3);
   const additionalEligibleCount = Math.max(0, eligibleCount - depthCount);
+  const hiddenDepthCount = Math.max(0, depthCount - rankingPreview.length);
+  const slotPending = Array.from(pendingMutationKeys).some((key) => (
+    key.includes(`:${slot.id}:`) || orderedAssignments.some((assignment) => key.includes(assignment.id))
+  ));
   const depthTitle =
     depthCount === 0
       ? "No Player ranked for this position"
@@ -1468,14 +1561,18 @@ function SlotButton({
         event.stopPropagation();
         onDragOverSlot(null);
         const playerId = draggedPlayerId(event.dataTransfer);
-        if (playerId) void onAssign(playerId, slot.id);
+        if (!playerId) return;
+        const depthKind = event.dataTransfer.getData("application/x-coachboard-depth-kind");
+        const player = availablePlayers.find((candidate) => candidate.id === playerId);
+        if (depthKind === "depth" && player) void onAddDepth(slot, player);
+        else void onAssign(playerId, slot.id);
       }}
       onClick={(event) => {
         event.stopPropagation();
         onSelect(event.currentTarget);
       }}
       className={cn(
-        "min-h-12 w-full rounded border p-1.5 text-left shadow-sm transition-[border-color,background-color,box-shadow,opacity,transform] duration-200 sm:min-h-[6.25rem] sm:p-2",
+        "relative min-h-12 w-full rounded border p-1.5 text-left shadow-sm transition-[border-color,background-color,box-shadow,opacity] duration-150 sm:min-h-[6.25rem] sm:p-2",
         selected ? "border-board-green bg-white text-board-navy ring-2 ring-board-green/25" : "border-white/80 bg-white text-slate-800 hover:border-emerald-200",
         draggingPlayerId && !isDropTarget && "border-emerald-200",
         isDropTarget && "border-board-green bg-emerald-50 ring-4 ring-emerald-200",
@@ -1485,6 +1582,7 @@ function SlotButton({
       style={style}
       role="button"
       tabIndex={0}
+      aria-label={`${slot.code} · ${slot.label} · ${depthCount} ${copy.depthOptions}`}
       title={`${depthCount} Players currently ranked. ${additionalEligibleCount} additional eligible Players available.`}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1511,7 +1609,7 @@ function SlotButton({
       {showCustomLabel && slot.label !== slot.code && slot.label !== canonicalPositionLabels[slot.code] ? (
         <span className="hidden truncate text-[9px] font-semibold text-slate-500 sm:block" title={slot.label}>{slot.label}</span>
       ) : null}
-      <span className="mt-1 block space-y-0.5">
+      <div className="mt-1 space-y-0.5">
         {rankingPreview.length === 0 ? (
           <span className="block truncate text-[9px] font-semibold text-red-700 sm:text-[10px]" title={copy.noSuitablePlayer}>{copy.noSuitablePlayer}</span>
         ) : rankingPreview.map((assignment, index) => {
@@ -1522,20 +1620,279 @@ function SlotButton({
           const xiElsewhere = startingSlot && startingSlot !== slot.code ? `${copy.xi} · ${startingSlot}` : "";
           const explanation = positionFitExplanation(fit.fitType, slot.code, fit.reason, locale);
           return (
-            <span
+            <div
               key={assignment.id}
+              data-pitch-player-row={assignment.id}
+              draggable
+              onDragStart={(event) => {
+                event.stopPropagation();
+                onDragStart(event, player.id);
+                event.dataTransfer.setData("application/x-coachboard-assignment", assignment.id);
+                event.dataTransfer.setData("application/x-coachboard-depth-kind", assignment.isPreferredStarter ? "starter" : "depth");
+              }}
+              onDragEnd={(event) => { event.stopPropagation(); onDragEnd(); }}
+              onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const assignmentId = event.dataTransfer.getData("application/x-coachboard-assignment");
+                if (assignmentId) void onMoveToRank(assignmentId, index + 1);
+              }}
+              onClick={(event) => event.stopPropagation()}
               className={cn(
-                "min-w-0 items-baseline gap-1 leading-tight",
+                "group/row relative min-w-0 items-center gap-1 leading-tight",
                 index === 0 ? "flex text-[10px] font-black text-board-navy sm:text-xs" : "hidden text-[10px] font-semibold text-slate-600 sm:flex"
               )}
             >
               <span className={cn("w-2.5 shrink-0 text-right tabular-nums", fitRankClass(fit.fitType))} title={explanation}>{index + 1}</span>
-              <span translate="no" className="min-w-0 flex-1 truncate" title={`${playerName(player)} · ${explanation}`}>{playerName(player)}</span>
-              {xiElsewhere ? <span className="hidden shrink-0 text-[8px] font-bold text-slate-500 xl:inline" title={xiElsewhere}>{xiElsewhere}</span> : null}
-            </span>
+              <span translate="no" className="min-w-0 flex-1 truncate pr-8" title={`${playerName(player)} · ${explanation}`}>{playerName(player)}</span>
+              {assignment.isPreferredStarter ? (
+                <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-500" aria-label={copy.starter} />
+              ) : (
+                <button
+                  type="button"
+                  disabled={pendingMutationKeys.has(`starter:${slot.id}:${player.id}`)}
+                  onClick={() => void onAssign(player.id, slot.id)}
+                  className="absolute right-4 inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 opacity-0 hover:bg-emerald-50 hover:text-board-green focus:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100 disabled:opacity-40"
+                  aria-label={locale === "de" ? `${playerName(player)} als ${slot.code}-Startspieler festlegen` : `Set ${playerName(player)} as ${slot.code} starter`}
+                  title={copy.makeStarter}
+                >
+                  <Star className="h-3 w-3" aria-hidden="true" />
+                </button>
+              )}
+              <details className="absolute right-0 top-0 z-30" onClick={(event) => event.stopPropagation()}>
+                <summary className="flex h-5 w-4 cursor-pointer list-none items-center justify-center rounded text-slate-400 opacity-0 hover:bg-slate-100 focus:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100" aria-label={`${copy.playerActions}: ${playerName(player)}`}>
+                  <MoreHorizontal className="h-3 w-3" aria-hidden="true" />
+                </summary>
+                <div className="absolute right-0 top-5 grid w-28 gap-1 rounded border border-board-line bg-white p-1 text-[10px] font-bold text-slate-700 shadow-xl">
+                  <button type="button" disabled={index === 0 || slotPending} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void onMoveToRank(assignment.id, index); }} className="rounded px-2 py-1.5 text-left hover:bg-slate-50 disabled:opacity-40">↑ {copy.moveUp}</button>
+                  <button type="button" disabled={index === orderedAssignments.length - 1 || slotPending} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void onMoveToRank(assignment.id, index + 2); }} className="rounded px-2 py-1.5 text-left hover:bg-slate-50 disabled:opacity-40">↓ {copy.moveDown}</button>
+                  <button type="button" disabled={slotPending} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void onRemoveDepth(assignment.id); }} className="rounded px-2 py-1.5 text-left text-red-700 hover:bg-red-50 disabled:opacity-40">× {copy.removePosition}</button>
+                </div>
+              </details>
+              {xiElsewhere ? <span className="sr-only">{xiElsewhere}</span> : null}
+            </div>
           );
         })}
-      </span>
+      </div>
+      <div className="mt-1 hidden min-h-5 items-center gap-1 border-t border-slate-100 pt-1 lg:flex">
+        <button
+          ref={addButtonRef}
+          type="button"
+          data-pitch-add-player={slot.code}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect(event.currentTarget);
+            setPickerOpen(true);
+          }}
+          className="min-w-0 flex-1 truncate rounded px-1 text-left text-[9px] font-bold text-board-green hover:bg-emerald-50 focus:bg-emerald-50"
+        >
+          <Plus className="mr-0.5 inline h-3 w-3" aria-hidden="true" />{copy.addPlayer}
+        </button>
+        {hiddenDepthCount > 0 ? (
+          <button type="button" onClick={(event) => { event.stopPropagation(); onSelect(event.currentTarget); setPickerOpen(true); }} className="shrink-0 text-[9px] font-bold text-slate-500 hover:text-board-navy">
+            +{hiddenDepthCount} {locale === "de" ? (hiddenDepthCount === 1 ? "weiterer" : "weitere") : "more"}
+          </button>
+        ) : null}
+      </div>
+      {slotPending || slotError ? (
+        <p role={slotError ? "alert" : "status"} className={cn("absolute left-0 top-full z-20 mt-1 hidden w-full rounded bg-white/95 px-1.5 py-1 text-[9px] font-semibold shadow-sm lg:block", slotError ? "text-red-700" : "text-slate-600")}>
+          {slotError || copy.savingChange}
+        </p>
+      ) : null}
+      <PositionCandidatePopover
+        open={pickerOpen}
+        anchorRef={addButtonRef}
+        slot={slot}
+        depth={orderedAssignments}
+        availablePlayers={availablePlayers}
+        fitMode={fitMode}
+        starterSlotByPlayerId={starterSlotByPlayerId}
+        pendingMutationKeys={pendingMutationKeys}
+        slotError={slotError}
+        onSetStarter={(playerId) => onAssign(playerId, slot.id)}
+        onAddDepth={(player) => onAddDepth(slot, player)}
+        onClose={() => setPickerOpen(false)}
+      />
+    </div>
+  );
+}
+
+function PositionCandidatePopover({
+  open,
+  anchorRef,
+  slot,
+  depth,
+  availablePlayers,
+  fitMode,
+  starterSlotByPlayerId,
+  pendingMutationKeys,
+  slotError,
+  onSetStarter,
+  onAddDepth,
+  onClose
+}: {
+  open: boolean;
+  anchorRef: { current: HTMLButtonElement | null };
+  slot: TacticalPlanSlot;
+  depth: TacticalPlannerData["assignments"];
+  availablePlayers: SquadPlayer[];
+  fitMode: DepthOverviewFitMode;
+  starterSlotByPlayerId: Map<string, string>;
+  pendingMutationKeys: ReadonlySet<string>;
+  slotError?: string;
+  onSetStarter: (playerId: string) => Promise<void>;
+  onAddDepth: (player: SquadPlayer) => Promise<void>;
+  onClose: () => void;
+}) {
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const copy = plannerCopy[locale];
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0, maxHeight: 480, ready: false });
+  const close = useCallback(() => {
+    onClose();
+    window.requestAnimationFrame(() => anchorRef.current?.focus());
+  }, [anchorRef, onClose]);
+  useLayoutEffect(() => {
+    if (!open || !anchorRef.current || !panelRef.current) return;
+    const update = () => {
+      if (!anchorRef.current || !panelRef.current) return;
+      const next = calculateAnchoredFloatingPosition({
+        anchor: anchorRef.current.getBoundingClientRect(),
+        floatingWidth: panelRef.current.offsetWidth,
+        floatingHeight: panelRef.current.offsetHeight,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        preferredPlacement: "bottom",
+        gap: 8,
+        viewportPadding: 12
+      });
+      setPosition({ left: next.left, top: next.top, maxHeight: next.maxHeight, ready: true });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anchorRef, open]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [close, open]);
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(
+    <>
+      <button type="button" aria-label={copy.close} className="fixed inset-0 z-[115] cursor-default bg-transparent" onClick={close} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-label={`${slot.code} ${copy.addPlayer}`}
+        data-position-picker={slot.code}
+        className="fixed z-[120] w-[min(24rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-board-green/30 bg-white p-3 shadow-2xl"
+        style={{ left: position.left, top: position.top, maxHeight: position.maxHeight, visibility: position.ready ? "visible" : "hidden" }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-board-green">{slot.code}</p>
+            <h4 className="truncate font-bold text-board-navy">{slot.label}</h4>
+          </div>
+          <button type="button" onClick={close} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-slate-100" aria-label={copy.close}>
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+        {slotError ? <p role="alert" className="mt-2 rounded bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700">{slotError}</p> : null}
+        <PositionCandidateList
+          slot={slot}
+          depth={depth}
+          availablePlayers={availablePlayers}
+          fitMode={fitMode}
+          starterSlotByPlayerId={starterSlotByPlayerId}
+          pendingMutationKeys={pendingMutationKeys}
+          onSetStarter={onSetStarter}
+          onAddDepth={onAddDepth}
+          autoFocus
+        />
+      </div>
+    </>,
+    document.body
+  );
+}
+
+function PositionCandidateList({
+  slot,
+  depth,
+  availablePlayers,
+  fitMode,
+  starterSlotByPlayerId,
+  pendingMutationKeys,
+  onSetStarter,
+  onAddDepth,
+  autoFocus = false
+}: {
+  slot: TacticalPlanSlot;
+  depth: TacticalPlannerData["assignments"];
+  availablePlayers: SquadPlayer[];
+  fitMode: DepthOverviewFitMode;
+  starterSlotByPlayerId: Map<string, string>;
+  pendingMutationKeys: ReadonlySet<string>;
+  onSetStarter: (playerId: string) => Promise<void>;
+  onAddDepth: (player: SquadPlayer) => Promise<void>;
+  autoFocus?: boolean;
+}) {
+  const locale = useOptionalI18n()?.locale ?? "en";
+  const copy = plannerCopy[locale];
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const assignedPlayerIds = new Set(depth.map((assignment) => assignment.playerId));
+  const candidates = rankTacticalPositionCandidates(availablePlayers, slot, assignedPlayerIds)
+    .filter(({ player, fit }) => matchesSearch(player, candidateSearch) && isFitVisibleInMode(fit.fitType, fitMode));
+  const firstMorePlayerIndex = candidates.findIndex(({ fit }) => fit.fitType === "out_of_position" || fit.fitType === "no_data");
+  return (
+    <div className="border-t border-board-line pt-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{copy.addPlayer}</p>
+        <span className="text-[10px] font-semibold text-slate-400">{candidates.length}</span>
+      </div>
+      <input autoFocus={autoFocus} value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} placeholder={copy.searchPlayers} className="mt-2 h-10 w-full rounded-md border border-board-line px-3 text-sm" />
+      <div className="mt-2 max-h-72 space-y-1 overflow-y-auto pr-1">
+        {candidates.length === 0 ? <p className="rounded bg-slate-50 p-3 text-xs font-semibold text-slate-500">{copy.noSuitablePlayer}</p> : null}
+        {candidates.map(({ player, fit, alreadyAssigned }, index) => {
+          const startingSlot = starterSlotByPlayerId.get(player.id);
+          const isStarterHere = depth.some((assignment) => assignment.playerId === player.id && assignment.isPreferredStarter);
+          const addKey = `add:${slot.id}:${player.id}`;
+          const starterKey = `starter:${slot.id}:${player.id}`;
+          return (
+            <div key={player.id} data-position-candidate={player.id}>
+              {index === 0 ? <p className="px-1 py-1 text-[10px] font-black uppercase tracking-wide text-board-green">{copy.recommended}</p> : null}
+              {index === firstMorePlayerIndex && firstMorePlayerIndex > 0 ? <p className="px-1 pb-1 pt-3 text-[10px] font-black uppercase tracking-wide text-slate-500">{copy.morePlayers}</p> : null}
+              <div className="rounded border border-board-line bg-white p-2">
+                <span translate="no" className="block truncate text-xs font-bold text-board-navy">{playerName(player)}</span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] font-semibold text-slate-500">
+                  <span>{playerPositionText(player)}</span><span>·</span>
+                  <span className={fitRankClass(fit.fitType)}>{positionFitLabel(fit.fitType, locale)}</span>
+                  {startingSlot && startingSlot !== slot.code ? <span className="text-board-green">· {copy.startsElsewhere} · {startingSlot}</span> : null}
+                  {player.playerType === "trial" ? <span className="text-amber-700">· {copy.trial}</span> : null}
+                </span>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {alreadyAssigned ? <span className="inline-flex min-h-9 items-center rounded bg-slate-100 px-2 text-[10px] font-bold text-slate-600">{copy.alreadyAssigned}</span> : (
+                    <button type="button" disabled={pendingMutationKeys.has(addKey)} onClick={() => void onAddDepth(player)} className="min-h-9 rounded border border-board-line px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                      {pendingMutationKeys.has(addKey) ? copy.adding : copy.addOption}
+                    </button>
+                  )}
+                  {!isStarterHere ? <button type="button" disabled={pendingMutationKeys.has(starterKey)} onClick={() => void onSetStarter(player.id)} className="min-h-9 rounded bg-board-navy px-2 text-[10px] font-bold text-white hover:bg-slate-800 disabled:opacity-60" aria-label={`${copy.makeStarter}: ${playerName(player)}`}>
+                    {pendingMutationKeys.has(starterKey) ? copy.savingChange : startingSlot ? `${copy.makeStarter} · ${copy.startsElsewhere} ${startingSlot}` : copy.makeStarter}
+                  </button> : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1547,7 +1904,8 @@ function PositionInspector({
   availablePlayers,
   fitMode,
   starterSlotByPlayerId,
-  assigning,
+  pendingMutationKeys,
+  slotError,
   onFitModeChange,
   onSetStarter,
   onAddDepth,
@@ -1561,7 +1919,8 @@ function PositionInspector({
   availablePlayers: SquadPlayer[];
   fitMode: DepthOverviewFitMode;
   starterSlotByPlayerId: Map<string, string>;
-  assigning: boolean;
+  pendingMutationKeys: ReadonlySet<string>;
+  slotError?: string;
   onFitModeChange: (mode: DepthOverviewFitMode) => void;
   onSetStarter: (playerId: string) => Promise<void>;
   onAddDepth: (player: SquadPlayer) => Promise<void>;
@@ -1616,7 +1975,8 @@ function PositionInspector({
           availablePlayers={availablePlayers}
           fitMode={fitMode}
           starterSlotByPlayerId={starterSlotByPlayerId}
-          assigning={assigning}
+          pendingMutationKeys={pendingMutationKeys}
+          slotError={slotError}
           onSetStarter={onSetStarter}
           onAddDepth={onAddDepth}
           onRemoveDepth={onRemoveDepth}
@@ -1647,7 +2007,8 @@ function InlineDepthControls({
   availablePlayers,
   fitMode,
   starterSlotByPlayerId,
-  assigning,
+  pendingMutationKeys,
+  slotError,
   onSetStarter,
   onAddDepth,
   onRemoveDepth,
@@ -1660,7 +2021,8 @@ function InlineDepthControls({
   availablePlayers?: SquadPlayer[];
   fitMode: DepthOverviewFitMode;
   starterSlotByPlayerId: Map<string, string>;
-  assigning: boolean;
+  pendingMutationKeys: ReadonlySet<string>;
+  slotError?: string;
   onSetStarter: (playerId: string) => Promise<void>;
   onAddDepth: (player: SquadPlayer) => Promise<void>;
   onRemoveDepth: (assignmentId: string) => Promise<void>;
@@ -1670,13 +2032,8 @@ function InlineDepthControls({
   const locale = useOptionalI18n()?.locale ?? "en";
   const copy = plannerCopy[locale];
   const [draggedAssignmentId, setDraggedAssignmentId] = useState("");
-  const [candidateSearch, setCandidateSearch] = useState("");
   const allDepth = uniqueDepthAssignments(depth);
   const sortedDepth = [...allDepth].sort((a, b) => Number(b.isPreferredStarter) - Number(a.isPreferredStarter) || a.depthOrder - b.depthOrder);
-  const assignedPlayerIds = new Set(allDepth.map((assignment) => assignment.playerId));
-  const candidates = rankTacticalPositionCandidates(availablePlayers ?? [], slot, assignedPlayerIds)
-    .filter(({ player, fit }) => matchesSearch(player, candidateSearch) && isFitVisibleInMode(fit.fitType, fitMode));
-  const firstMorePlayerIndex = candidates.findIndex(({ fit }) => fit.fitType === "out_of_position" || fit.fitType === "no_data");
 
   return (
     <div className={cn("mt-3 space-y-2", compact ? "text-[11px]" : "text-xs")} onClick={(event) => event.stopPropagation()} data-position-depth-list={slot.code}>
@@ -1721,57 +2078,26 @@ function InlineDepthControls({
             </span>
             <span className="flex shrink-0 items-center gap-1">
               {!assignment.isPreferredStarter ? (
-                <button type="button" disabled={assigning} onClick={() => void onSetStarter(player.id)} className="min-h-9 rounded border border-board-green/30 bg-white px-2 text-[10px] font-bold text-board-green hover:bg-emerald-50 disabled:opacity-50" aria-label={`${copy.makeStarter}: ${playerName(player)}`}>★</button>
+                <button type="button" disabled={pendingMutationKeys.has(`starter:${slot.id}:${player.id}`)} onClick={() => void onSetStarter(player.id)} className="min-h-9 rounded border border-board-green/30 bg-white px-2 text-[10px] font-bold text-board-green hover:bg-emerald-50 disabled:opacity-50" aria-label={`${copy.makeStarter}: ${playerName(player)}`}>★</button>
               ) : null}
-              <button type="button" disabled={assigning || index === 0} onClick={() => void onMoveToRank(assignment.id, index)} className="h-9 w-9 rounded border border-board-line bg-white font-black text-slate-600 disabled:opacity-30" aria-label={`${copy.moveUp}: ${playerName(player)}`}>↑</button>
-              <button type="button" disabled={assigning || index === sortedDepth.length - 1} onClick={() => void onMoveToRank(assignment.id, index + 2)} className="h-9 w-9 rounded border border-board-line bg-white font-black text-slate-600 disabled:opacity-30" aria-label={`${copy.moveDown}: ${playerName(player)}`}>↓</button>
-              <button type="button" disabled={assigning} onClick={() => void onRemoveDepth(assignment.id)} className="h-9 w-9 rounded bg-red-50 font-black text-red-700 hover:bg-red-100 disabled:opacity-50" aria-label={`${copy.removePosition}: ${playerName(player)}`}>×</button>
+              <button type="button" disabled={pendingMutationKeys.has(`rank:${assignment.id}:${index}`) || index === 0} onClick={() => void onMoveToRank(assignment.id, index)} className="h-9 w-9 rounded border border-board-line bg-white font-black text-slate-600 disabled:opacity-30" aria-label={`${copy.moveUp}: ${playerName(player)}`}>↑</button>
+              <button type="button" disabled={pendingMutationKeys.has(`rank:${assignment.id}:${index + 2}`) || index === sortedDepth.length - 1} onClick={() => void onMoveToRank(assignment.id, index + 2)} className="h-9 w-9 rounded border border-board-line bg-white font-black text-slate-600 disabled:opacity-30" aria-label={`${copy.moveDown}: ${playerName(player)}`}>↓</button>
+              <button type="button" disabled={pendingMutationKeys.has(`remove:${assignment.id}`)} onClick={() => void onRemoveDepth(assignment.id)} className="h-9 w-9 rounded bg-red-50 font-black text-red-700 hover:bg-red-100 disabled:opacity-50" aria-label={`${copy.removePosition}: ${playerName(player)}`}>×</button>
             </span>
           </div>
         );
       })}
-      {availablePlayers ? (
-        <div className="border-t border-board-line pt-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{copy.addPlayer}</p>
-            <span className="text-[10px] font-semibold text-slate-400">{candidates.length}</span>
-          </div>
-          <input value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} placeholder={copy.searchPlayers} className="mt-2 h-10 w-full rounded-md border border-board-line px-3 text-sm" />
-          <div className="mt-2 max-h-72 space-y-1 overflow-y-auto pr-1">
-            {candidates.length === 0 ? <p className="rounded bg-slate-50 p-3 text-xs font-semibold text-slate-500">{copy.noSuitablePlayer}</p> : null}
-            {candidates.map(({ player, fit, alreadyAssigned }, index) => {
-              const startingSlot = starterSlotByPlayerId.get(player.id);
-              const isStarterHere = sortedDepth.some((assignment) => assignment.playerId === player.id && assignment.isPreferredStarter);
-              return (
-                <div key={player.id}>
-                  {index === 0 ? <p className="px-1 py-1 text-[10px] font-black uppercase tracking-wide text-board-green">{copy.recommended}</p> : null}
-                  {index === firstMorePlayerIndex && firstMorePlayerIndex > 0 ? <p className="px-1 pb-1 pt-3 text-[10px] font-black uppercase tracking-wide text-slate-500">{copy.morePlayers}</p> : null}
-                  <div className="rounded border border-board-line bg-white p-2">
-                    <div className="flex min-w-0 items-start justify-between gap-2">
-                      <span className="min-w-0">
-                        <span translate="no" className="block truncate text-xs font-bold text-board-navy">{playerName(player)}</span>
-                        <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] font-semibold text-slate-500">
-                          <span>{playerPositionText(player)}</span>
-                          <span>·</span>
-                          <span className={fitRankClass(fit.fitType)}>{positionFitLabel(fit.fitType, locale)}</span>
-                          {startingSlot && startingSlot !== slot.code ? <span className="text-board-green">· {copy.startsElsewhere} · {startingSlot}</span> : null}
-                          {player.playerType === "trial" ? <span className="text-amber-700">· {copy.trial}</span> : null}
-                        </span>
-                      </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {alreadyAssigned ? <span className="inline-flex min-h-9 items-center rounded bg-slate-100 px-2 text-[10px] font-bold text-slate-600">{copy.alreadyAssigned}</span> : (
-                        <button type="button" disabled={assigning} onClick={() => void onAddDepth(player)} className="min-h-9 rounded border border-board-line px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{copy.addOption}</button>
-                      )}
-                      {!isStarterHere ? <button type="button" disabled={assigning} onClick={() => void onSetStarter(player.id)} className="min-h-9 rounded bg-board-navy px-2 text-[10px] font-bold text-white hover:bg-slate-800 disabled:opacity-50" aria-label={`${copy.makeStarter}: ${playerName(player)}`}>{startingSlot ? `${copy.makeStarter} · ${copy.startsElsewhere} ${startingSlot}` : copy.makeStarter}</button> : null}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+      {slotError ? <p role="alert" className="rounded bg-red-50 px-2 py-1.5 text-[11px] font-semibold text-red-700">{slotError}</p> : null}
+      {availablePlayers ? <PositionCandidateList
+        slot={slot}
+        depth={sortedDepth}
+        availablePlayers={availablePlayers}
+        fitMode={fitMode}
+        starterSlotByPlayerId={starterSlotByPlayerId}
+        pendingMutationKeys={pendingMutationKeys}
+        onSetStarter={onSetStarter}
+        onAddDepth={onAddDepth}
+      /> : null}
     </div>
   );
 }
@@ -1888,7 +2214,6 @@ function PlayerPoolPanel({
   onPlayerDropToPool,
   draggingPlayerId,
   selectedPlayerId,
-  onAddDepth,
   onSelectPlayer
 }: {
   planId: string;
@@ -1915,7 +2240,6 @@ function PlayerPoolPanel({
   onPlayerDropToPool: (playerId: string) => Promise<void>;
   draggingPlayerId: string | null;
   selectedPlayerId: string | null;
-  onAddDepth: (slot: TacticalPlanSlot, player: SquadPlayer) => Promise<void>;
   onSelectPlayer: (playerId: string) => void;
 }) {
   const copy = plannerCopy[useOptionalI18n()?.locale ?? "en"];
@@ -1957,7 +2281,7 @@ function PlayerPoolPanel({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-board-navy">{selectedSlot ? `${selectedSlot.code} ${copy.depthOptions}` : copy.playerPool}</h3>
+          <h3 className="text-sm font-bold text-board-navy">{copy.playerPool}</h3>
           <p className="text-xs text-slate-600">{includedPlayers.length} {copy.included} · {unassignedPlayers.length} {copy.unassigned.toLowerCase()} · {excludedPlayers.length} {copy.excluded}</p>
         </div>
         <Shield className="h-5 w-5 text-board-green" />
@@ -2020,12 +2344,10 @@ function PlayerPoolPanel({
             excluded={poolFilter === "excluded"}
             selectedSlot={poolFilter === "excluded" ? undefined : selectedSlot}
             assignmentsSummary={formatAssignmentsSummary(assignmentsByPlayer.get(player.id) ?? [], slotById)}
-            alreadyInSelectedSlot={Boolean(selectedSlot && (assignmentsByPlayer.get(player.id) ?? []).some((assignment) => assignment.slotId === selectedSlot.id))}
             onPlayerDragStart={onPlayerDragStart}
             onPlayerDragEnd={onPlayerDragEnd}
             dragging={draggingPlayerId === player.id}
             selectedForAssignment={selectedPlayerId === player.id}
-            onAddDepth={() => selectedSlot ? onAddDepth(selectedSlot, player) : Promise.resolve()}
             onSelectPlayer={() => onSelectPlayer(player.id)}
           />
         ))}
@@ -2041,12 +2363,10 @@ function PlayerStateCard({
   excluded,
   selectedSlot,
   assignmentsSummary,
-  alreadyInSelectedSlot,
   onPlayerDragStart,
   onPlayerDragEnd,
   dragging,
   selectedForAssignment,
-  onAddDepth,
   onSelectPlayer
 }: {
   planId: string;
@@ -2055,12 +2375,10 @@ function PlayerStateCard({
   excluded: boolean;
   selectedSlot?: TacticalPlanSlot;
   assignmentsSummary?: string;
-  alreadyInSelectedSlot?: boolean;
   onPlayerDragStart: (event: React.DragEvent<HTMLElement>, playerId: string) => void;
   onPlayerDragEnd: () => void;
   dragging: boolean;
   selectedForAssignment: boolean;
-  onAddDepth: () => Promise<void>;
   onSelectPlayer: () => void;
 }) {
   const locale = useOptionalI18n()?.locale ?? "en";
@@ -2111,11 +2429,6 @@ function PlayerStateCard({
           </span>
         </button>
         {player.playerType === "trial" ? <StatusChip label={copy.trial} tone="amber" /> : null}
-        {selectedSlot ? (
-          <Button type="button" variant="secondary" disabled={alreadyInSelectedSlot} onClick={() => void onAddDepth()} className="h-8 shrink-0 px-2 text-[11px]">
-            {alreadyInSelectedSlot ? copy.alreadyAssigned : `+ ${selectedSlot.code}`}
-          </Button>
-        ) : null}
       </div>
       <details className="group mt-1 border-t border-slate-100 pt-1">
         <summary className="cursor-pointer truncate text-[11px] font-semibold text-slate-500">

@@ -161,7 +161,13 @@ assert.match(plannerSource, /secondaryPosition: "Nebenposition"/);
 assert.match(plannerSource, /compatiblePosition: "Compatible position"/);
 assert.match(plannerSource, /compatiblePosition: "Kompatible Position"/);
 assert.match(plannerSource, /data-position-inspector/);
+assert.match(plannerSource, /data-pitch-add-player/);
+assert.match(plannerSource, /data-pitch-player-row/);
+assert.match(plannerSource, /data-position-picker/);
+assert.match(plannerSource, /function PositionCandidateList/);
+assert.match(plannerSource, /assignmentMutationQueue/);
+assert.doesNotMatch(plannerSource, /const \[assigning, setAssigning\]/);
 assert.match(plannerSource, /createPortal/);
 assert.doesNotMatch(plannerSource, /!editingFormation && selectedSlot \? <SlotDepthPanel/);
 
-console.log("PASS: formations, canonical fit, all-player manual candidates, assignment invariants, inspector and custom slot semantics.");
+console.log("PASS: formations, canonical fit, assignment invariants, queued mutations, pitch-first controls, inspector and custom slot semantics.");
