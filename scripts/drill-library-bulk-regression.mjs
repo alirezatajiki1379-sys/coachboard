@@ -38,6 +38,6 @@ assert.match(managerSource, /Select all visible/, "visible result selection is e
 assert.match(managerSource, /Selection stays when filters change/, "filter-selection scope is explained");
 assert.match(managerSource, /bulkMoveDrillsToTrash/, "delete confirmation calls the canonical Trash action");
 assert.match(managerSource, /role="dialog"/, "bulk confirmation uses an accessible dialog");
-assert.match(cardSource, /aria-label=\{selectionLabel \?\? `Select Drill:/, "card selection checkbox has an accessible label");
+assert.match(cardSource, /aria-label=\{selectionLabel \?\? ui\("Select Drill: \{title\}", \{ title: drill\.title \}\)/, "card selection checkbox has a localized accessible label with the unchanged title");
 
 console.log("Drill Library bulk regression checks passed.");

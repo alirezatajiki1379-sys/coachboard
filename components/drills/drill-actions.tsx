@@ -4,6 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import { Archive, Copy, RotateCcw, Star, Trash2 } from "lucide-react";
 import { archiveDrill, deleteDrill, duplicateDrill, permanentlyDeleteDrill, restoreDrill, toggleFavorite } from "@/lib/drills/actions";
 import { Button } from "@/components/ui/button";
+import { useSystemText } from "@/components/i18n/use-system-text";
 
 type DrillActionsProps = {
   drillId: string;
@@ -14,6 +15,7 @@ type DrillActionsProps = {
 };
 
 export function DrillActions({ drillId, isFavorite, view = "active", compact = false, isDraft = false }: DrillActionsProps) {
+  const ui = useSystemText();
   const [deleteState, deleteAction, isDeleting] = useActionState(deleteDrill, {});
   const [permanentDeleteState, permanentDeleteAction, isPermanentlyDeleting] = useActionState(permanentlyDeleteDrill, {});
   const [deleteCancelled, setDeleteCancelled] = useState(false);
@@ -43,30 +45,31 @@ export function DrillActions({ drillId, isFavorite, view = "active", compact = f
         <Button
           type="button"
           variant="secondary"
-          aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+          aria-label={ui(favorite ? "Remove from favorites" : "Add to favorites")}
+          title={ui(favorite ? "Remove from favorites" : "Add to favorites")}
           className={compact ? "h-9 px-3" : undefined}
           disabled={isFavoritePending}
           onClick={handleFavoriteToggle}
         >
           <Star className={favorite ? "h-4 w-4 fill-board-green text-board-green" : "h-4 w-4"} />
-          {compact ? null : favorite ? "Unfavorite" : "Favorite"}
+          {compact ? null : ui(favorite ? "Unfavorite" : "Favorite")}
         </Button>
       ) : null}
 
       {view !== "trash" ? <form action={duplicateDrill}>
         <input type="hidden" name="drillId" value={drillId} />
-        <Button type="submit" variant="secondary" className={compact ? "h-9 px-3" : undefined}>
+        <Button type="submit" variant="secondary" aria-label={ui("Duplicate")} title={ui("Duplicate")} className={compact ? "h-9 px-3" : undefined}>
           <Copy className="h-4 w-4" />
-          {compact ? null : "Duplicate"}
+          {compact ? null : ui("Duplicate")}
         </Button>
       </form> : null}
 
       {view === "active" || view === "published" || view === "drafts" ? (
         <form action={archiveDrill}>
           <input type="hidden" name="drillId" value={drillId} />
-          <Button type="submit" variant="secondary" className={compact ? "h-9 px-3" : undefined}>
+          <Button type="submit" variant="secondary" aria-label={ui("Archive")} title={ui("Archive")} className={compact ? "h-9 px-3" : undefined}>
             <Archive className="h-4 w-4" />
-            {compact ? null : "Archive"}
+            {compact ? null : ui("Archive")}
           </Button>
         </form>
       ) : null}
@@ -74,9 +77,9 @@ export function DrillActions({ drillId, isFavorite, view = "active", compact = f
       {view === "archived" || view === "trash" ? (
         <form action={restoreDrill}>
           <input type="hidden" name="drillId" value={drillId} />
-          <Button type="submit" variant="secondary" className={compact ? "h-9 px-3" : undefined}>
+          <Button type="submit" variant="secondary" aria-label={ui("Restore")} title={ui("Restore")} className={compact ? "h-9 px-3" : undefined}>
             <RotateCcw className="h-4 w-4" />
-            {compact ? null : "Restore"}
+            {compact ? null : ui("Restore")}
           </Button>
         </form>
       ) : null}
@@ -85,16 +88,16 @@ export function DrillActions({ drillId, isFavorite, view = "active", compact = f
         action={deleteAction}
         onSubmit={(event) => {
           setDeleteCancelled(false);
-          if (!window.confirm(isDraft ? "Delete reusable Drill draft? This moves the draft to Trash. Existing Session copies remain unchanged." : "Move this drill to Trash? You can restore it later.")) {
+          if (!window.confirm(ui(isDraft ? "Delete reusable Drill draft? This moves the draft to Trash. Existing Session copies remain unchanged." : "Move this drill to Trash? You can restore it later."))) {
             event.preventDefault();
             setDeleteCancelled(true);
           }
         }}
       >
         <input type="hidden" name="drillId" value={drillId} />
-        <Button type="submit" variant="danger" className={compact ? "h-9 px-3" : undefined} disabled={isDeleting}>
+        <Button type="submit" variant="danger" aria-label={ui(isDraft ? "Delete draft" : "Move to Trash")} title={ui(isDraft ? "Delete draft" : "Move to Trash")} className={compact ? "h-9 px-3" : undefined} disabled={isDeleting}>
           <Trash2 className="h-4 w-4" />
-          {compact ? null : isDraft ? "Delete draft" : "Move to Trash"}
+          {compact ? null : ui(isDraft ? "Delete draft" : "Move to Trash")}
         </Button>
       </form> : null}
       {view === "trash" ? (
@@ -102,32 +105,32 @@ export function DrillActions({ drillId, isFavorite, view = "active", compact = f
           action={permanentDeleteAction}
           onSubmit={(event) => {
             setDeleteCancelled(false);
-            if (!window.confirm("Delete this drill permanently? This cannot be undone.")) {
+            if (!window.confirm(ui("Delete this drill permanently? This cannot be undone."))) {
               event.preventDefault();
               setDeleteCancelled(true);
             }
           }}
         >
           <input type="hidden" name="drillId" value={drillId} />
-          <Button type="submit" variant="danger" className={compact ? "h-9 px-3" : undefined} disabled={isPermanentlyDeleting}>
+          <Button type="submit" variant="danger" aria-label={ui("Delete permanently")} title={ui("Delete permanently")} className={compact ? "h-9 px-3" : undefined} disabled={isPermanentlyDeleting}>
             <Trash2 className="h-4 w-4" />
-            {compact ? null : "Delete permanently"}
+            {compact ? null : ui("Delete permanently")}
           </Button>
         </form>
       ) : null}
       {deleteState.error && !deleteCancelled ? (
         <p className="basis-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-700">
-          {deleteState.error}
+          {ui(deleteState.error)}
         </p>
       ) : null}
       {permanentDeleteState.error && !deleteCancelled ? (
         <p className="basis-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-700">
-          {permanentDeleteState.error}
+          {ui(permanentDeleteState.error)}
         </p>
       ) : null}
       {favoriteError ? (
         <p className="basis-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-700">
-          {favoriteError}
+          {ui(favoriteError)}
         </p>
       ) : null}
     </div>

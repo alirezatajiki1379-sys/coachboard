@@ -1,7 +1,9 @@
 import { workflowCopyDe } from "@/lib/i18n/workflow-copy-de";
+import { drillExperienceDe } from "@/lib/i18n/drill-experience-de";
 import { localizationCompletenessDe } from "@/lib/i18n/localization-completeness-de";
 
 export const germanUiDictionary: Record<string, string> = {
+  ...drillExperienceDe,
   "Action Center": "Aktionen",
   "Coaching actions could not be loaded": "Traineraktionen konnten nicht geladen werden",
   "Try again": "Erneut versuchen",
@@ -714,6 +716,10 @@ export const germanUiDictionary: Record<string, string> = {
 };
 
 export const germanUiPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
+  [/^Ages (\d+)-(\d+)$/, (match) => `Alter ${match[1]}-${match[2]}`],
+  [/^Age (\d+)\+$/, (match) => `Ab ${match[1]} Jahren`],
+  [/^Up to age (\d+)$/, (match) => `Bis ${match[1]} Jahre`],
+  [/^Age (\d+)$/, (match) => `${match[1]} Jahre`],
   [/^The development review was due (\d+) days? ago\.$/i, (match) => `Die Entwicklungsüberprüfung war vor ${match[1]} Tag${match[1] === "1" ? "" : "en"} fällig.`],
   [/^The development review is due in (\d+) days?\.$/i, (match) => `Die Entwicklungsüberprüfung ist in ${match[1]} Tag${match[1] === "1" ? "" : "en"} fällig.`],
   [/^The latest observation was recorded (\d+) days ago\.$/i, (match) => `Die letzte Beobachtung wurde vor ${match[1]} Tagen erfasst.`],

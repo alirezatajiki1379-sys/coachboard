@@ -7,6 +7,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import type { DrillFilters } from "@/lib/drills/queries";
 import { ageFilterOptions } from "@/lib/drills/age-suitability";
 import type { Locale } from "@/lib/i18n";
+import { createSystemTranslator } from "@/lib/i18n/system-text";
 
 type DrillFiltersProps = {
   filters: DrillFilters;
@@ -15,6 +16,7 @@ type DrillFiltersProps = {
 
 export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
   const copy = drillFilterCopy[locale];
+  const ui = createSystemTranslator(locale);
   const [desktop, setDesktop] = useState(false);
   const [expanded, setExpanded] = useState(() => Boolean(filters.ageGroup || filters.mainFocus || filters.trainingBlock || filters.drillType || filters.subFocus || filters.minPlayers || filters.maxPlayers || filters.minDuration || filters.maxDuration || filters.material || filters.source || (filters.usage && filters.usage !== "all") || (filters.sort && filters.sort !== "updated")));
   useEffect(() => {
@@ -62,9 +64,9 @@ export function DrillFilters({ filters, locale = "en" }: DrillFiltersProps) {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Select name="ageGroup" label={copy.anyAge} value={filters.ageGroup} options={localizeAgeOptions(ageFilterOptions(), locale)} />
-        <Select name="mainFocus" label={copy.mainFocus} value={filters.mainFocus} options={mainFocuses} />
-        <Select name="trainingBlock" label={copy.block} value={filters.trainingBlock} options={trainingBlocks} />
-        <Select name="drillType" label={copy.drillType} value={filters.drillType} options={drillTypes} />
+        <Select name="mainFocus" label={copy.mainFocus} value={filters.mainFocus} options={mainFocuses.map((value) => ({ value, label: ui(value) }))} />
+        <Select name="trainingBlock" label={copy.block} value={filters.trainingBlock} options={trainingBlocks.map((value) => ({ value, label: ui(value) }))} />
+        <Select name="drillType" label={copy.drillType} value={filters.drillType} options={drillTypes.map((value) => ({ value, label: ui(value) }))} />
         <Select name="sort" label={copy.sort} value={filters.sort} options={[
           { value: "updated", label: copy.sortOptions.updated },
           { value: "recently_used", label: copy.sortOptions.recentlyUsed },
@@ -156,8 +158,8 @@ const drillFilterCopy = {
 } as const;
 
 function localizeAgeOptions(options: ReturnType<typeof ageFilterOptions>, locale: Locale) {
-  if (locale !== "de") return options;
-  return options.map((option) => option.label === "All ages" ? { ...option, label: "Alle Altersklassen" } : option);
+  const ui = createSystemTranslator(locale);
+  return options.map((option) => ({ ...option, label: ui(option.label) }));
 }
 
 function Select({
