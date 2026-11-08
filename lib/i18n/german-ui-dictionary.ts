@@ -1,8 +1,10 @@
 import { workflowCopyDe } from "@/lib/i18n/workflow-copy-de";
 import { drillExperienceDe } from "@/lib/i18n/drill-experience-de";
+import { trainingPlanBuilderDe } from "@/lib/i18n/training-plan-builder-de";
 import { localizationCompletenessDe } from "@/lib/i18n/localization-completeness-de";
 
 export const germanUiDictionary: Record<string, string> = {
+  ...trainingPlanBuilderDe,
   ...drillExperienceDe,
   "Action Center": "Aktionen",
   "Coaching actions could not be loaded": "Traineraktionen konnten nicht geladen werden",
@@ -716,6 +718,8 @@ export const germanUiDictionary: Record<string, string> = {
 };
 
 export const germanUiPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
+  [/^(\d+) minutes remaining$/, (match) => `${match[1]} Minuten frei`],
+  [/^(\d+) minutes over target$/, (match) => `${match[1]} Minuten über Ziel`],
   [/^Ages (\d+)-(\d+)$/, (match) => `Alter ${match[1]}-${match[2]}`],
   [/^Age (\d+)\+$/, (match) => `Ab ${match[1]} Jahren`],
   [/^Up to age (\d+)$/, (match) => `Bis ${match[1]} Jahre`],

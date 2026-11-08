@@ -96,7 +96,7 @@ export default async function TrainingPlanPage({ params }: PageProps) {
     return typeof path === "string" ? [path] : [];
   });
   const signedUrls = await createSignedImageUrlMap(supabase, snapshotPaths);
-  const snapshotDrills = instanceRows.map((row) => snapshotDrill(row, user.id, signedUrls));
+  const snapshotDrills = instanceRows.map((row) => ({ ...snapshotDrill(row, user.id, signedUrls), sourceDrillId: row.source_drill_id ?? undefined }));
   const referencedStaffIds = new Set([
     ...sectionRows.flatMap((section) => section.staff_id ? [section.staff_id] : []),
     ...instanceRows.flatMap((drill) => drill.responsible_staff_id ? [drill.responsible_staff_id] : [])

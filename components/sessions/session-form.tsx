@@ -3,14 +3,15 @@
 import { useSystemText } from "@/components/i18n/use-system-text";
 import { useOptionalI18n } from "@/components/i18n/i18n-provider";
 import { trainingFocusLabel, trainingSectionLabel } from "@/lib/i18n/training-labels";
+import { formatDate } from "@/lib/i18n";
 
 
 import { useActionState, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, GripVertical, Loader2, Plus, Save, Search, Trash2 } from "lucide-react";
-import { ageGroups, drillTypes, mainFocuses, trainingBlocks } from "@/config/options";
-import { drillMatchesAgeFilter } from "@/lib/drills/age-suitability";
+import { ArrowDown, ArrowUp, ChevronDown, GripVertical, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { ageGroups, mainFocuses, trainingBlocks } from "@/config/options";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { SessionDrillPreview } from "@/components/sessions/session-drill-preview";
+import { SessionDrillPicker } from "@/components/sessions/session-drill-picker";
 import { MaterialSummaryList } from "@/components/sessions/material-summary-list";
 import { ReviewCarryForward } from "@/components/sessions/review-carry-forward";
 import { useUnsavedChangesProtection } from "@/components/shared/use-unsaved-changes-protection";
@@ -39,10 +40,10 @@ import type { SessionActionState } from "@/lib/sessions/actions";
 import type { TrainingSessionDetail } from "@/lib/sessions/queries";
 import { applyReviewCarryForward, includesReviewCarryForward } from "@/lib/sessions/review-carry-forward";
 import type { PreviousTrainingPlanningContext } from "@/lib/squad/session-review";
-import { materialSummary } from "@/lib/drills/materials";
+import { DrillMaterialLabel } from "@/components/drills/drill-material-label";
 import type { Drill, DrillVisual, SessionPlayerGroup } from "@/types/domain";
 
-type BuilderDrill = Drill & { visual?: DrillVisual; isSessionSnapshot?: boolean };
+type BuilderDrill = Drill & { visual?: DrillVisual; isSessionSnapshot?: boolean; sourceDrillId?: string };
 
 type SessionFormProps = {
   action: (state: SessionActionState, formData: FormData) => Promise<SessionActionState>;
@@ -97,11 +98,10 @@ export function SessionForm({
   const [returnTo, setReturnTo] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const returnToInputRef = useRef<HTMLInputElement>(null);
-  const [search, setSearch] = useState("");
-  const [ageGroup, setAgeGroup] = useState("");
-  const [mainFocus, setMainFocus] = useState("");
-  const [trainingBlock, setTrainingBlock] = useState("");
-  const [drillType, setDrillType] = useState("");
+  const [pickerSection, setPickerSection] = useState<string | null>(null);
+  const [expandedDrills, setExpandedDrills] = useState<Set<string>>(() => new Set());
+  const metadataRef = useRef<HTMLDetailsElement>(null);
+  const playerGroupsRef = useRef<HTMLDetailsElement>(null);
   const [draggedDrillId, setDraggedDrillId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const draggedDrillIdRef = useRef<string | null>(null);
@@ -148,8 +148,12 @@ export function SessionForm({
       setIsSubmitting(false);
       setReturnTo("");
       dismissUnsavedChangesDialog();
+      if (actionState.fieldErrors?.title && metadataRef.current) {
+        metadataRef.current.open = true;
+        metadataRef.current.querySelector("input")?.focus();
+      }
     }
-  }, [actionState.error, actionState.submissionId, dismissUnsavedChangesDialog]);
+  }, [actionState.error, actionState.fieldErrors?.title, actionState.submissionId, dismissUnsavedChangesDialog]);
 
   useEffect(
     () => () => {
@@ -173,7 +177,8 @@ export function SessionForm({
   const drillMap = useMemo(() => new Map(drills.map((drill) => [drill.id, drill])), [drills]);
   const sessionSections = builderMode === "session" ? orderedSections(values.sections ?? []) : [];
   const sectionDuration = sessionSections.reduce((sum, section) => sum + Math.max(0, section.durationMinutes), 0);
-  const total = builderMode === "session" && sectionDuration > 0 ? sectionDuration : calculateSessionDuration(values.drills);
+  const drillDuration = calculateSessionDuration(values.drills);
+  const total = builderMode === "session" && sectionDuration > 0 ? sectionDuration : drillDuration;
   const target = Number.parseInt(values.durationTargetMinutes, 10);
   const targetLabel = durationDeltaLabel(total, Number.isFinite(target) ? target : undefined);
   const materials = calculateSessionMaterials(
@@ -190,21 +195,13 @@ export function SessionForm({
     : visibleTrainingBlocks(blockGroups, Boolean(draggedDrillId));
   const selectedCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const item of values.drills) counts.set(item.drillId, (counts.get(item.drillId) ?? 0) + 1);
+    for (const item of values.drills) {
+      // Source identity is only a picker hint; rendering and saving still use the snapshot.
+      const id = drillMap.get(item.drillId)?.sourceDrillId ?? item.drillId;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
     return counts;
-  }, [values.drills]);
-
-  const filteredDrills = drills.filter((drill) => {
-    if (drill.isSessionSnapshot) return false;
-    const matchesSearch = !search || drill.title.toLowerCase().includes(search.toLowerCase());
-    return (
-      matchesSearch &&
-      (!ageGroup || drillMatchesAgeFilter(drill, ageGroup)) &&
-      (!mainFocus || drill.mainFocus === mainFocus) &&
-      (!trainingBlock || drill.trainingBlocks.includes(trainingBlock as Drill["trainingBlocks"][number])) &&
-      (!drillType || drill.drillType === drillType)
-    );
-  });
+  }, [drillMap, values.drills]);
 
   function updateField<K extends keyof SessionFormValues>(key: K, value: SessionFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -218,17 +215,13 @@ export function SessionForm({
     });
   }
 
-  function addDrill(drill: BuilderDrill) {
-    setValues((current) => ({
-      ...current,
-      drills: [
-        ...current.drills,
-        {
+  function addDrill(drill: BuilderDrill, targetSection?: string) {
+    setValues((current) => {
+      const block = targetSection ?? (builderMode === "session" ? orderedSections(current.sections ?? [])[0]?.key ?? "main-part-1" : drill.trainingBlocks[0] ?? "Main part 1");
+      const item: SessionFormDrill = {
           id: crypto.randomUUID(),
           drillId: drill.id,
-          block: builderMode === "session"
-            ? current.sections?.[0]?.key ?? "main-part-1"
-            : drill.trainingBlocks[0] ?? "Main part 1",
+          block,
           plannedDurationMinutes: drill.durationMinutes,
           coachNotes: "",
           orderIndex: current.drills.length,
@@ -236,9 +229,12 @@ export function SessionForm({
           simultaneousGroup: "set-1",
           participatingGroups: [],
           startingGroup: ""
-        }
-      ]
-    }));
+      };
+      const next = [...current.drills];
+      const order = builderMode === "session" ? orderedSections(current.sections ?? []).map((section) => section.key) : trainingBlocks;
+      next.splice(findSectionInsertIndex(next, { block, timingMode: "sequential" }, order), 0, item);
+      return { ...current, drills: next.map((drill, orderIndex) => ({ ...drill, orderIndex })) };
+    });
   }
 
   function addSection() {
@@ -252,7 +248,7 @@ export function SessionForm({
           {
             id: crypto.randomUUID(),
             key: `section-${crypto.randomUUID()}`,
-            title: `Training section ${number}`,
+            title: ui("Training section {count}", { count: number }),
             orderIndex: sections.length,
             durationMinutes: 0,
             notes: "",
@@ -304,7 +300,7 @@ export function SessionForm({
   }
 
   function sectionTitle(key: string) {
-    return sessionSections.find((section) => section.key === key)?.title ?? key;
+    return trainingSectionLabel(sessionSections.find((section) => section.key === key)?.title ?? key, locale);
   }
 
   function responsibilityStaffOptions(currentId?: string) {
@@ -346,7 +342,7 @@ export function SessionForm({
   function deletePlayerGroup(id: string, index: number) {
     const isUsed = values.drills.some((item) => item.participatingGroups.includes(id) || item.startingGroup === id);
     if (isUsed) {
-      window.alert("This player group is used by one or more station drills. Remove it from those drills before deleting the group.");
+      window.alert(ui("This player group is used by one or more station drills. Remove it from those drills before deleting the group."));
       return;
     }
     updatePlayerGroups(values.playerGroups.filter((group, groupIndex) => group.id !== id || groupIndex !== index));
@@ -377,7 +373,7 @@ export function SessionForm({
     const stationSections = stationSetOptions
       .map((set) => ({
         id: set.id,
-        label: set.label,
+        label: ui(set.label),
         target: { block, timingMode: "simultaneous" as const, simultaneousGroup: set.id },
         items: items.filter((item) => item.timingMode === "simultaneous" && normalizeSimultaneousGroup(item.simultaneousGroup) === set.id),
         isDefaultVisible: set.id === "set-1" || set.id === "set-2"
@@ -387,7 +383,7 @@ export function SessionForm({
       stationSections,
       sequentialSection: {
         id: "sequential",
-        label: "Sequential drills",
+        label: ui("Sequential drills"),
         target: { block, timingMode: "sequential" as const },
         items: sequentialItems
       }
@@ -453,7 +449,8 @@ export function SessionForm({
     event.dataTransfer.setData("text/plain", item.id);
     const dragPreview = document.createElement("div");
     dragPreview.className = "w-72 rounded-lg border border-board-line bg-white p-3 shadow-2xl";
-    dragPreview.innerHTML = `<p style="margin:0;color:#0f172a;font-size:14px;font-weight:800;">${escapeHtml(title)}</p><p style="margin:4px 0 0;color:#64748b;font-size:12px;font-weight:700;">${escapeHtml(item.block)} · ${item.plannedDurationMinutes} min</p>`;
+    const blockLabel = builderMode === "session" ? sectionTitle(item.block) : trainingSectionLabel(item.block, locale);
+    dragPreview.innerHTML = `<p style="margin:0;color:#0f172a;font-size:14px;font-weight:800;">${escapeHtml(title)}</p><p style="margin:4px 0 0;color:#64748b;font-size:12px;font-weight:700;">${escapeHtml(blockLabel)} · ${item.plannedDurationMinutes} min</p>`;
     dragPreview.style.position = "fixed";
     dragPreview.style.top = "-1000px";
     dragPreview.style.left = "-1000px";
@@ -521,24 +518,20 @@ export function SessionForm({
   }
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-6" onSubmitCapture={() => setIsSubmitting(true)}>
+    <form ref={formRef} action={formAction} className="min-w-0 space-y-6 [overflow-wrap:anywhere]" onSubmitCapture={() => setIsSubmitting(true)}>
       {session ? <input type="hidden" name="sessionId" value={session.id} /> : null}
       {eventId ? <input type="hidden" name="eventId" value={eventId} /> : null}
       <input ref={returnToInputRef} type="hidden" name="returnTo" value={returnTo} readOnly />
       <input type="hidden" name="sessionPayload" value={JSON.stringify(values)} />
       {unsavedChangesDialog}
       {recoveryDialog}
+      {pickerSection !== null ? <SessionDrillPicker drills={drills} target={pickerSection} sections={builderMode === "session" ? sessionSections.map((section) => ({ key: section.key, label: sectionTitle(section.key) })) : trainingBlocks.map((block) => ({ key: block, label: trainingSectionLabel(block, locale) }))} counts={selectedCounts} onTargetChange={setPickerSection} onAdd={addDrill} onClose={() => setPickerSection(null)} /> : null}
 
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <p className="text-sm text-slate-600">
-          {ui("Fields marked with ")}<span className="font-bold text-red-600">*</span> {ui(" are required.")}</p>
-        {actionState.error ? <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{actionState.error}</p> : null}
-      </section>
+      {actionState.error ? <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{ui(actionState.error)}</p> : null}
 
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-bold text-board-navy">{ui("Training plan details")}</h2>
+      <section className="min-w-0 space-y-3 border-b border-board-line pb-5">
         {builderMode === "session" ? (
-          <p className="mt-1 text-sm text-slate-500">{ui("This plan belongs only to this Training. The reusable Training Plan and Drill Library stay unchanged.")}</p>
+          <header className="space-y-2"><h2 translate="no" className="text-xl font-bold text-board-navy">{values.title}</h2><p className="text-sm text-slate-600">{formatDate(values.sessionDate, locale)}{values.startTime ? ` · ${values.startTime}` : null}</p><p className="text-sm text-slate-600"><span translate="no">{trainingFocusLabel(values.mainFocus, locale)}</span>{values.expectedPlayers ? ` · ${values.expectedPlayers} ${ui("Players")}` : ""}{values.durationTargetMinutes ? ` · ${ui("Target")}: ${values.durationTargetMinutes} ${ui("min")}` : ""}</p></header>
         ) : null}
         {builderMode === "session" && carryForwardContext ? (
           <div className="mt-4">
@@ -550,6 +543,8 @@ export function SessionForm({
             />
           </div>
         ) : null}
+        <details ref={metadataRef} open={builderMode === "template"}>
+        <summary className="cursor-pointer py-2 text-sm font-semibold text-board-navy">{ui(builderMode === "session" ? "Edit Training details" : "Training plan details")}</summary>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <TextInput label={ui("Title")} required value={values.title} error={actionState.fieldErrors?.title} onChange={(value) => updateField("title", value)} />
           <TextInput label={ui("Date")} type="date" value={values.sessionDate} onChange={(value) => updateField("sessionDate", value)} />
@@ -562,10 +557,11 @@ export function SessionForm({
           <TextInput label={ui("Location")} value={values.location} onChange={(value) => updateField("location", value)} />
         </div>
         <TextArea label={ui("Notes")} value={values.notes} onChange={(value) => updateField("notes", value)} />
+        </details>
       </section>
 
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <details>
+      <section className="min-w-0 border-b border-board-line pb-3">
+        <details ref={playerGroupsRef}>
           <summary className="cursor-pointer text-lg font-bold text-board-navy">{ui("Player groups")}</summary>
           <p className="mt-2 text-sm text-slate-500">
             {ui("Player groups can be assigned to stations and rotated during the training plan. Notes can hold player names, levels, or quick coaching reminders.")}</p>
@@ -591,16 +587,16 @@ export function SessionForm({
         </details>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-4 rounded-lg border border-board-line bg-white p-5 shadow-soft">
+      <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="min-w-0 space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <h2 className="text-lg font-bold text-board-navy">{ui("Training plan drills")}</h2>
-            <div className="text-sm font-semibold text-slate-600">
-              {total} {ui(" min ")}{targetLabel ? `- ${targetLabel}` : ""}
+            <div className="text-sm font-semibold text-slate-600" data-plan-duration>
+              {total}{Number.isFinite(target) && target > 0 ? ` / ${target}` : ""} {ui("min")}{targetLabel ? ` · ${ui(targetLabel)}` : ""}
+              {sectionDuration > 0 ? <p className="text-xs font-normal">{ui("Configured sections")}: {sectionDuration} {ui("min")} · {ui("Calculated drills")}: {drillDuration} {ui("min")}</p> : null}
             </div>
           </div>
-          <p className="text-sm leading-6 text-slate-500">
-            {ui("Add saved drills, group station work into sets, then drag cards between blocks or station sets to shape the timeline.")}</p>
+          <Button type="button" variant="secondary" disabled={builderMode === "session" && !sessionSections.length} onClick={() => setPickerSection(builderMode === "session" ? sessionSections[0].key : "Main part 1")}><Plus className="h-4 w-4" />{ui("Add Drill")}</Button>
           {builderMode === "session" ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-board-line bg-board-paper p-3">
               <div>
@@ -623,9 +619,8 @@ export function SessionForm({
                 const sections = blockSections(block, items);
                 const showEmptyDropSections = Boolean(draggedDrillId);
                 const showSequentialSection = sections.sequentialSection.items.length > 0 || showEmptyDropSections || items.length === 0;
-                const hasSimultaneousDrills = sections.stationSections.some((section) => section.items.length > 0);
                 const visibleStationSections = sections.stationSections.filter(
-                  (section) => section.items.length > 0 || (section.isDefaultVisible && (showEmptyDropSections || hasSimultaneousDrills))
+                  (section) => section.items.length > 0 || (section.isDefaultVisible && showEmptyDropSections)
                 );
                 const visibleSections = showEmptyDropSections
                   ? [...visibleStationSections, sections.sequentialSection]
@@ -636,8 +631,9 @@ export function SessionForm({
                 return (
                   <section
                     key={block}
+                    data-plan-section={block}
                     className={cn(
-                      "relative rounded-lg border border-board-line bg-board-paper p-3 transition-colors",
+                      "relative min-w-0 border-t border-board-line py-4 transition-colors",
                       draggedDrillId && dropTarget?.block === block ? "border-board-green bg-green-50/70" : ""
                     )}
                     onDragOver={(event) => updateBlockDropTarget(event, { block })}
@@ -655,12 +651,12 @@ export function SessionForm({
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-slate-500">
-                          {planSection?.durationMinutes || group.duration} {ui(" min")}
+                          {planSection?.durationMinutes ? `${ui("Configured")}: ${planSection.durationMinutes} ${ui("min")} · ` : ""}{ui("Drills")}: {group.duration} {ui("min")}
                         </span>
                         {planSection ? (
                           <>
-                            <Button type="button" variant="secondary" className="h-8 px-2" onClick={() => moveSection(planSection.id, -1)} disabled={planSectionIndex <= 0} aria-label={ui("Move section up")}><ArrowUp className="h-4 w-4" /></Button>
-                            <Button type="button" variant="secondary" className="h-8 px-2" onClick={() => moveSection(planSection.id, 1)} disabled={planSectionIndex === sessionSections.length - 1} aria-label={ui("Move section down")}><ArrowDown className="h-4 w-4" /></Button>
+                            <Button type="button" variant="secondary" className="h-11 px-2" onClick={() => moveSection(planSection.id, -1)} disabled={planSectionIndex <= 0} aria-label={ui("Move section up")}><ArrowUp className="h-4 w-4" /></Button>
+                            <Button type="button" variant="secondary" className="h-11 px-2" onClick={() => moveSection(planSection.id, 1)} disabled={planSectionIndex === sessionSections.length - 1} aria-label={ui("Move section down")}><ArrowDown className="h-4 w-4" /></Button>
                           </>
                         ) : null}
                       </div>
@@ -689,7 +685,7 @@ export function SessionForm({
                         <section
                           key={section.id}
                           className={cn(
-                            "relative rounded-md border border-board-line bg-white/60 p-3",
+                            "relative min-w-0",
                             draggedDrillId &&
                               isSameDropSection(dropTarget, section.target)
                               ? "border-board-green bg-green-50"
@@ -705,12 +701,12 @@ export function SessionForm({
                             finishDrop(section.target);
                           }}
                         >
-                          <div className="mb-3 flex items-center justify-between gap-3">
+                          {section.target.timingMode === "simultaneous" || draggedDrillId ? <div className="mb-3 flex items-center justify-between gap-3">
                             <p className="text-sm font-bold text-board-navy">{section.label}</p>
                             {section.target.timingMode === "simultaneous" ? (
                               <span className="rounded-full bg-board-paper px-2 py-1 text-xs font-semibold text-slate-500">{ui("Station set")}</span>
                             ) : null}
-                          </div>
+                          </div> : null}
                           <div className="space-y-3">
                             {section.items.length ? (
                               section.items.map((item) => {
@@ -739,41 +735,46 @@ export function SessionForm({
                                         event.stopPropagation();
                                         finishDrop({ ...section.target, beforeId: item.id });
                                       }}
-                                      className={cn("cursor-grab select-none rounded-lg border border-board-line bg-white p-3 shadow-sm transition-opacity active:cursor-grabbing sm:p-4", draggedDrillId === item.id ? "opacity-55" : "opacity-100")}
+                                      className={cn("min-w-0 cursor-grab rounded-lg border border-board-line bg-white p-3 shadow-sm transition-opacity active:cursor-grabbing sm:p-4", draggedDrillId === item.id ? "opacity-55" : "opacity-100")}
                                     >
-                                      <div className="flex flex-col gap-4 lg:flex-row">
-                                      <div className="w-full overflow-hidden rounded-md border border-board-line bg-white lg:w-[320px] xl:w-[360px]">
-                                        <SessionDrillPreview visual={drill.visual} title={item.titleOverride || drill.title} />
+                                      <div className="flex items-start gap-3 sm:gap-4">
+                                      <div className="w-24 shrink-0 overflow-hidden rounded-md border border-board-line bg-white sm:w-32 lg:w-40">
+                                        <SessionDrillPreview visual={drill.visual} title={item.titleOverride || drill.title} previewMode="thumbnail" />
                                       </div>
                                       <div className="min-w-0 flex-1 space-y-3">
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                           <div className="min-w-0">
-                                            <p className="text-xs font-bold uppercase text-board-green">#{index + 1} {builderMode === "session" ? sectionTitle(item.block) : item.block}</p>
+                                            <p translate="no" className="text-xs font-bold uppercase text-board-green">#{index + 1} {builderMode === "session" ? sectionTitle(item.block) : trainingSectionLabel(item.block, locale)}</p>
                                             <h3 translate="no" className="text-lg font-bold text-board-navy">{item.titleOverride || drill.title}</h3>
-                                            <p className="text-sm text-slate-600">{drill.minPlayers}-{drill.maxPlayers} {ui(" players - original ")}{drill.durationMinutes} {ui(" min - ")}{materialSummary(drill.materials)}</p>
-                                            <p className="mt-1 text-xs font-semibold text-slate-500">
-                                              {item.timingMode === "simultaneous" ? `${item.plannedDurationMinutes} min × ${Math.max(1, item.participatingGroups.length)} groups = ${effectiveStationDuration(item)} min` : "Runs sequentially"}
-                                            </p>
-                                            {builderMode === "session" && planSection ? <p className="mt-1 text-xs font-semibold text-slate-500">{ui("Responsible coach")}: {item.responsibilityMode ? responsibilityLabel(item.responsibilityMode, staff, item.responsibleStaffId ?? "", ui) : `${responsibilityLabel(planSection.responsibilityMode, staff, planSection.staffId, ui)} · ${ui("Inherited")}`}</p> : null}
+                                            <p className="text-sm text-slate-600">{drill.minPlayers}-{drill.maxPlayers} {ui("Players")}</p>
+                                            {item.timingMode === "simultaneous" ? <p className="mt-1 text-xs font-semibold text-slate-500">{ui("Station")}: {item.plannedDurationMinutes} {ui("min")} × {Math.max(1, item.participatingGroups.length)} {ui("Groups")} = {effectiveStationDuration(item)} {ui("min")}</p> : null}
+                                            {builderMode === "session" && planSection && (item.responsibilityMode ?? planSection.responsibilityMode) !== "unassigned" ? <p translate="no" className="mt-1 text-xs font-semibold text-slate-500">{ui("Responsible coach")}: {item.responsibilityMode ? responsibilityLabel(item.responsibilityMode, staff, item.responsibleStaffId ?? "", ui) : `${responsibilityLabel(planSection.responsibilityMode, staff, planSection.staffId, ui)} · ${ui("Inherited")}`}</p> : null}
+                                            {item.planningStatus === "needs_planning" ? <p className="text-xs text-slate-500">{ui("Needs planning")}</p> : null}
                                           </div>
                                           <div className="flex flex-wrap gap-2">
-                                            <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => moveDrill(index, -1)} disabled={sectionItemIndex === 0}><ArrowUp className="h-4 w-4" /></Button>
-                                            <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => moveDrill(index, 1)} disabled={sectionItemIndex === section.items.length - 1}><ArrowDown className="h-4 w-4" /></Button>
-                                            <Button type="button" variant="danger" className="h-9 px-3" onClick={() => removeDrill(item.id)}><Trash2 className="h-4 w-4" /></Button>
+                                            <Button type="button" variant="secondary" className="h-11 px-3" aria-label={ui("Move drill up")} onClick={() => moveDrill(index, -1)} disabled={sectionItemIndex === 0}><ArrowUp className="h-4 w-4" /></Button>
+                                            <Button type="button" variant="secondary" className="h-11 px-3" aria-label={ui("Move drill down")} onClick={() => moveDrill(index, 1)} disabled={sectionItemIndex === section.items.length - 1}><ArrowDown className="h-4 w-4" /></Button>
+                                            <Button type="button" variant="danger" className="h-11 px-3" aria-label={ui("Remove drill")} onClick={() => removeDrill(item.id)}><Trash2 className="h-4 w-4" /></Button>
                                           </div>
                                         </div>
-                                        <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                                        <div className="max-w-40"><TextInput label={ui("Planned duration")} type="number" value={String(item.plannedDurationMinutes)} onChange={(value) => updateSessionDrill(item.id, { plannedDurationMinutes: Math.max(1, Number.parseInt(value, 10) || 1) })} /></div>
+                                      </div>
+                                      </div>
+                                      <details className="mt-3 min-w-0 border-t border-board-line pt-2" open={expandedDrills.has(item.id)}>
+                                        <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-board-navy" onClick={(event) => { event.preventDefault(); setExpandedDrills((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; }); }}>{ui("Details")}</summary>
+                                        <p className="mb-3 text-xs text-slate-500">{ui("Original duration")}: {drill.durationMinutes} {ui("min")}</p>
+                                        {drill.materials.length ? <ul className="mb-3 flex flex-wrap gap-2 text-xs text-slate-600">{drill.materials.map((material, index) => <li key={index} className="min-w-0 max-w-full"><DrillMaterialLabel material={material} locale={locale} /></li>)}</ul> : null}
+                                        <div className="grid gap-3 sm:grid-cols-2">
                                           <div>
                                             <SelectInput
                                               label={ui("Training block")}
                                               value={item.block}
                                               options={builderMode === "session" ? sessionSections.map((section) => section.key) : trainingBlocks}
                                               onChange={(nextBlock) => updateSessionDrill(item.id, { block: nextBlock })}
-                                              optionLabel={builderMode === "session" ? sectionTitle : undefined}
+                                              optionLabel={builderMode === "session" ? sectionTitle : (block) => trainingSectionLabel(block, locale)}
                                             />
                                             <p className="mt-1 text-xs text-slate-500">{ui("Blocks keep the session readable on detail and print pages.")}</p>
                                           </div>
-                                          <TextInput label={ui("Planned duration")} type="number" value={String(item.plannedDurationMinutes)} onChange={(value) => updateSessionDrill(item.id, { plannedDurationMinutes: Math.max(1, Number.parseInt(value, 10) || 1) })} />
                                           <div>
                                             <SelectInput
                                               label={ui("Run mode")}
@@ -783,18 +784,19 @@ export function SessionForm({
                                                 updateTimingMode(item, timingMode === "simultaneous" ? "simultaneous" : "sequential")
                                               }
                                               emptyLabel={null}
+                                              optionLabel={(mode) => ui(mode === "simultaneous" ? "As station" : "One after another")}
                                             />
                                             <p className="mt-1 text-xs text-slate-500">{ui("Sequential runs one after another. Simultaneous runs as stations.")}</p>
                                           </div>
                                           {item.timingMode === "simultaneous" ? (
                                             <div>
-                                              <SelectInput label={ui("Station set")} value={normalizeSimultaneousGroup(item.simultaneousGroup)} options={stationSetOptions.map((option) => option.id)} onChange={(simultaneousGroup) => updateSessionDrill(item.id, { simultaneousGroup: normalizeSimultaneousGroup(simultaneousGroup) })} emptyLabel={null} optionLabel={stationSetLabel} />
+                                              <SelectInput label={ui("Station set")} value={normalizeSimultaneousGroup(item.simultaneousGroup)} options={stationSetOptions.map((option) => option.id)} onChange={(simultaneousGroup) => updateSessionDrill(item.id, { simultaneousGroup: normalizeSimultaneousGroup(simultaneousGroup) })} emptyLabel={null} optionLabel={(set) => ui(stationSetLabel(set))} />
                                               <p className="mt-1 text-xs text-slate-500">{ui("Drills in the same station set run at the same time.")}</p>
                                             </div>
                                           ) : null}
                                         </div>
                                         {item.timingMode === "simultaneous" ? (
-                                          <div className="grid gap-3 rounded-md border border-board-line bg-board-paper p-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                                          <div className="mt-3 grid min-w-0 gap-3 rounded-md border border-board-line bg-board-paper p-3 sm:grid-cols-2">
                                             <fieldset>
                                               <legend className="text-xs font-semibold text-slate-500">{ui("Participating player groups")}</legend>
                                               <p className="mt-1 text-xs text-slate-500">{ui("Player groups can be assigned to stations and rotated during the session.")}</p>
@@ -807,7 +809,7 @@ export function SessionForm({
                                                       onChange={(event) => updateParticipatingGroup(item, group.id, event.target.checked)}
                                                       className="h-3.5 w-3.5 accent-board-green"
                                                     />
-                                                    {group.name}
+                                                    <span translate="no">{displayGroupName(group.name, ui)}</span>
                                                   </label>
                                                 ))}
                                               </div>
@@ -818,8 +820,9 @@ export function SessionForm({
                                               options={item.participatingGroups}
                                               onChange={(startingGroup) => updateSessionDrill(item.id, { startingGroup })}
                                               emptyLabel="None"
-                                              optionLabel={(groupId) => resolveGroupName(values.playerGroups, groupId)}
+                                              optionLabel={(groupId) => displayGroupName(resolveGroupName(values.playerGroups, groupId), ui)}
                                             />
+                                            {!values.playerGroups.length ? <Button type="button" variant="secondary" onClick={() => { const node = playerGroupsRef.current; if (node) { node.open = true; node.scrollIntoView({ block: "center", behavior: "smooth" }); node.querySelector("button")?.focus({ preventScroll: true }); } }}>{ui("Set up player groups")}</Button> : null}
                                             <p className="text-xs text-slate-500 lg:col-start-2">{ui("Choose which group starts at this station.")}</p>
                                           </div>
                                         ) : null}
@@ -836,15 +839,14 @@ export function SessionForm({
                                             onChange={(patch) => updateSessionDrill(item.id, patch)}
                                           />
                                         ) : null}
-                                      </div>
-                                      </div>
+                                      </details>
                                     </article>
                                   </div>
                                 );
                               })
                             ) : (
                               <div className="rounded-md border border-dashed border-board-line bg-white/70 p-4 text-center text-sm font-medium text-slate-500">
-                                {section.target.timingMode === "simultaneous" ? `Drop drills into ${section.label}` : "Drop drills here"}
+                                {draggedDrillId ? ui("Drop drills here") : ui("No drills added yet.")}
                               </div>
                             )}
                           </div>
@@ -856,6 +858,7 @@ export function SessionForm({
                         </section>
                       ))}
                     </div>
+                    <Button type="button" variant="secondary" className="mt-3" onClick={() => setPickerSection(block)}><Plus className="h-4 w-4" />{ui("Add Drill")}</Button>
                   </section>
                 );
               })}
@@ -868,26 +871,26 @@ export function SessionForm({
           )}
         </div>
 
-        <aside className="space-y-4">
-          <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">{ui("Material summary")}</h2>
+        <aside className="min-w-0 space-y-4">
+          <details open className="border-t border-board-line py-4">
+            <summary className="cursor-pointer text-lg font-bold text-board-navy">{ui("Material summary")}</summary>
             <p className="mt-1 text-xs text-slate-500">{ui("Calculated based on simultaneous and sequential drill usage.")}</p>
             <div className="mt-3 text-sm text-slate-600">
-              <MaterialSummaryList materials={materials} />
+              <MaterialSummaryList materials={materials} locale={locale} />
             </div>
-          </section>
-          <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-bold text-board-navy">{ui("Block structure")}</h2>
+          </details>
+          <details className="border-t border-board-line py-4">
+            <summary className="cursor-pointer text-sm font-bold text-board-navy">{ui("Block structure")}</summary>
             <div className="mt-3 space-y-2">
               {blockGroups.length ? (
                 blockGroups.map((group) => (
                   <div key={group.block} className="rounded-md bg-board-paper px-3 py-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-board-navy" translate="no">{trainingSectionLabel(group.block, locale)}</span>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <span className="font-semibold text-board-navy" translate="no">{builderMode === "session" ? sectionTitle(group.block) : trainingSectionLabel(group.block, locale)}</span>
                       <span className="text-slate-600">{group.items.length} {ui(" drills - ")}{group.duration} {ui(" min")}</span>
                     </div>
                     {group.stationSets.map((set) => (
-                      <p key={`${group.block}-${set.name}`} className="mt-1 text-xs font-semibold text-slate-500">{set.name}: {set.duration} {ui(" min")}</p>
+                      <p key={`${group.block}-${set.name}`} className="mt-1 text-xs font-semibold text-slate-500">{ui(set.name)}: {set.duration} {ui(" min")}</p>
                     ))}
                   </div>
                 ))
@@ -895,49 +898,8 @@ export function SessionForm({
                 <p className="text-sm text-slate-500">{ui("Blocks appear after you add drills.")}</p>
               )}
             </div>
-          </section>
+          </details>
         </aside>
-      </section>
-
-      <section className="rounded-lg border border-board-line bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-bold text-board-navy">{ui("Add drills from library")}</h2>
-        <p className="mt-1 text-sm text-slate-500">{ui("Only saved drills appear here. Create drills first, then add them to this training plan.")}</p>
-        <div className="mt-4 grid gap-3 md:grid-cols-5">
-          <label className="md:col-span-2">
-            <span className="text-xs font-semibold text-slate-500">{ui("Search")}</span>
-            <div className="relative mt-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 w-full rounded-md border border-board-line bg-white pl-9 pr-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
-            </div>
-          </label>
-          <SelectInput label={ui("Age group")} value={ageGroup} options={ageGroups} onChange={setAgeGroup} />
-          <SelectInput label={ui("Focus")} value={mainFocus} options={mainFocuses} onChange={setMainFocus} />
-          <SelectInput label={ui("Block")} value={trainingBlock} options={trainingBlocks} onChange={setTrainingBlock} />
-          <SelectInput label={ui("Drill type")} value={drillType} options={drillTypes} onChange={setDrillType} />
-        </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {filteredDrills.length ? filteredDrills.map((drill) => (
-            <article key={drill.id} className="rounded-lg border border-board-line bg-board-paper p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 translate="no" className="font-bold text-board-navy">{drill.title}</h3>
-                    {selectedCounts.get(drill.id) ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-board-green">{ui("Added")}</span> : null}
-                  </div>
-                  <p translate="no" className="mt-1 text-sm text-slate-600">{drill.durationMinutes} {ui(" min - ")}{trainingFocusLabel(drill.mainFocus, locale)} - {drill.trainingBlocks.map((block) => trainingSectionLabel(block, locale)).join(", ")}</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">{drill.minPlayers}-{drill.maxPlayers} {ui(" players - ")}{materialSummary(drill.materials)}</p>
-                </div>
-                <Button type="button" variant={selectedCounts.get(drill.id) ? "secondary" : "primary"} className="h-9 justify-center px-3 sm:shrink-0" onClick={() => addDrill(drill)}>
-                  <Plus className="h-4 w-4" />
-                  {selectedCounts.get(drill.id) ? "Add again" : "Add"}
-                </Button>
-              </div>
-            </article>
-          )) : (
-            <div className="rounded-lg border border-dashed border-board-line bg-board-paper p-6 text-center text-sm text-slate-500 lg:col-span-2">
-              {ui("No drills match these filters. Clear the filters or create a drill in the library first.")}</div>
-          )}
-        </div>
       </section>
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
@@ -994,7 +956,7 @@ function SessionOnlyDrillEditor({
   return (
     <details className="rounded-md border border-blue-200 bg-blue-50/60 p-3">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-bold text-blue-900">
-        <span>{ui("For this Training only")}</span><ChevronDown className="h-4 w-4" />
+        <span>{ui("Customize for this Training")}</span><ChevronDown className="h-4 w-4" />
       </summary>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <TextInput label={ui("Session title")} value={item.titleOverride ?? drill.title} onChange={(titleOverride) => onChange({ titleOverride })} />
@@ -1012,7 +974,7 @@ function SessionOnlyDrillEditor({
                 const selected = selectedIndex >= 0;
                 return (
                   <div key={point} className="flex items-start gap-2 rounded-md border border-board-line bg-white p-2">
-                    <input type="checkbox" checked={selected} onChange={(event) => togglePoint(point, event.target.checked)} className="mt-1 h-4 w-4 accent-board-green" />
+                    <input type="checkbox" aria-label={point} checked={selected} onChange={(event) => togglePoint(point, event.target.checked)} className="mt-1 h-4 w-4 accent-board-green" />
                     <span translate="no" className="min-w-0 flex-1 text-sm text-slate-700">{point}</span>
                     {selected ? (
                       <div className="flex gap-1">
@@ -1029,7 +991,7 @@ function SessionOnlyDrillEditor({
 
         <label className="block">
           <span className="text-xs font-semibold text-slate-500">{ui("Responsibility")}</span>
-          <select value={responsibilityMode} onChange={(event) => onChange({ responsibilityMode: event.target.value ? event.target.value as SessionFormDrill["responsibilityMode"] : undefined, responsibleStaffId: "" })} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm">
+          <select aria-label={ui("Responsibility")} value={responsibilityMode} onChange={(event) => onChange({ responsibilityMode: event.target.value ? event.target.value as SessionFormDrill["responsibilityMode"] : undefined, responsibleStaffId: "" })} className="mt-1 h-11 w-full min-w-0 rounded-md border border-board-line bg-white px-3 text-sm">
             <option value="">{inheritedLabel}</option>
             <option value="unassigned">{ui("Unassigned")}</option>
             <option value="me">{ui("Me")}</option>
@@ -1086,6 +1048,7 @@ function coachingPointLines(value?: string) {
 }
 
 function DropIndicator({ label = "Drop here", position = "before" }: { label?: string; position?: "before" | "end" }) {
+  const ui = useSystemText();
   return (
     <div
       className={cn(
@@ -1094,7 +1057,7 @@ function DropIndicator({ label = "Drop here", position = "before" }: { label?: s
       )}
     >
       <span className="h-0.5 flex-1 rounded-full bg-board-green" />
-      <span className="rounded-full bg-green-100 px-2 py-1 shadow-sm">{label}</span>
+      <span className="rounded-full bg-green-100 px-2 py-1 shadow-sm">{ui(label)}</span>
       <span className="h-0.5 flex-1 rounded-full bg-board-green" />
     </div>
   );
@@ -1191,7 +1154,7 @@ function slug(value: string) {
 function visibleTrainingBlocks(groups: VisibleBlockGroup[], isDragging: boolean): VisibleBlockGroup[] {
   const groupsByBlock = new Map(groups.map((group) => [group.block, group]));
   const visibleBlocks = new Set(groups.map((group) => group.block));
-  if (isDragging) {
+  if (isDragging || groups.length === 0) {
     visibleBlocks.add("Warm-up");
     visibleBlocks.add("Main part 1");
   }
@@ -1245,9 +1208,9 @@ function initialValues(session?: TrainingSessionDetail): SessionFormValues {
 
 function TextInput({ label, value, onChange, type = "text", required, error }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean; error?: string }) {
   return (
-    <label className="block">
-      <span className="whitespace-nowrap text-sm font-medium text-slate-700">{label}{required ? <span className="ml-1 font-bold text-red-600">*</span> : null}</span>
-      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} className={`mt-1 h-11 w-full rounded-md border bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 ${error ? "border-red-300" : "border-board-line"}`} />
+    <label className="block min-w-0">
+      <span className="text-sm font-medium text-slate-700">{label}{required ? <span className="ml-1 font-bold text-red-600">*</span> : null}</span>
+      <input aria-label={label} aria-required={required || undefined} aria-invalid={Boolean(error)} type={type} value={value} onChange={(event) => onChange(event.target.value)} className={`mt-1 h-11 w-full min-w-0 rounded-md border bg-white px-3 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100 ${error ? "border-red-300" : "border-board-line"}`} />
       {error ? <p className="mt-1 text-sm font-medium text-red-700">{error}</p> : null}
     </label>
   );
@@ -1257,7 +1220,7 @@ function TextArea({ label, value, onChange, compact = false }: { label: string; 
   return (
     <label className="mt-4 block">
       <span className="text-sm font-medium text-slate-700">{label}</span>
-      <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={compact ? 2 : 4} className="mt-1 w-full rounded-md border border-board-line bg-white px-3 py-2 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
+      <textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} rows={compact ? 2 : 4} className="mt-1 w-full min-w-0 rounded-md border border-board-line bg-white px-3 py-2 text-board-navy outline-none focus:border-board-green focus:ring-4 focus:ring-green-100" />
     </label>
   );
 }
@@ -1279,13 +1242,17 @@ function SelectInput({
 }) {
   const ui = useSystemText();
   return (
-    <label className="block">
-      <span className="whitespace-nowrap text-xs font-semibold text-slate-500">{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
+    <label className="block min-w-0">
+      <span className="text-xs font-semibold text-slate-500">{label}</span>
+      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-11 w-full min-w-0 rounded-md border border-board-line bg-white px-3 text-sm outline-none focus:border-board-green focus:ring-4 focus:ring-green-100">
         {emptyLabel !== null ? <option value="">{ui(emptyLabel)}</option> : null}
         {value && !options.includes(value) ? <option value={value} translate="no">{value}</option> : null}
         {options.map((option) => <option key={option} value={option} translate="no">{optionLabel ? optionLabel(option) : ui(option)}</option>)}
       </select>
     </label>
   );
+}
+
+function displayGroupName(name: string, ui: (value: string) => string) {
+  return /^Group [A-Z]$/.test(name) ? ui(name) : name;
 }
