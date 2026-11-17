@@ -80,7 +80,7 @@ try {
     await page.getByRole("button", { name: locale === "de" ? "Aktionen" : "Actions", exact: true }).waitFor();
     assert.equal(await button.count(), 0);
     await page.evaluate((locale) => window.renderQA(locale, "trial", true), locale);
-    await page.getByRole("button", { name: locale === "de" ? "Wiederherstellen" : "Restore", exact: true }).waitFor();
+    await page.getByRole("button", { name: locale === "de" ? "Reaktivieren" : "Reactivate", exact: true }).waitFor();
     assert.equal(await button.count(), 0);
     assert.deepEqual(errors, []);
     await page.close();
