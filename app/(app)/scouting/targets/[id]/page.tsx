@@ -10,23 +10,24 @@ import { scoutingCopy } from "@/lib/scouting/copy";
 import { getScoutingTarget } from "@/lib/scouting/queries";
 import { scoutingContext } from "@/lib/scouting/server";
 import { listSquads } from "@/lib/squad/squads";
+import { ObservationLink, ProspectContext } from "@/components/scouting/evidence";
 
 export default async function ScoutingTargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { db, userId, locale } = await scoutingContext();
   const [detail, teams] = await Promise.all([getScoutingTarget(db, userId, id), listSquads(db, userId)]);
   if (!detail) notFound();
-  const { target, links, players } = detail;
+  const { target, links, players, latestObservations } = detail;
   const c = scoutingCopy(locale);
   const linkedIds = new Set(links.map((link) => link.player_id));
   const linkedPlayers = players.filter((player) => linkedIds.has(player.id));
-  const availablePlayers = players.filter((player) => !linkedIds.has(player.id));
+  const availablePlayers = players.filter((player) => !linkedIds.has(player.id) && player.status !== "archived");
   return <PageContainer width="wide">
     <PageHeader eyebrow={c.scouting} title={target.title} description={`${c[target.status]} · ${c[target.priority]}`}
       actions={<ButtonLink href={`/scouting/targets/${target.id}/edit`} variant="secondary"><Pencil className="h-4 w-4" />{c.editTarget}</ButtonLink>} />
     <ScoutingNav locale={locale} active="targets" />
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
-      <section className="space-y-4">
+      <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
         <h2 className="text-lg font-bold text-board-navy">{c.targetProspects} ({linkedPlayers.length})</h2>
         {linkedPlayers.length ? <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-700">
           {(["identified", "monitoring", "shortlist", "trial"] as const).map((status) => <span key={status} className="rounded bg-slate-100 px-2 py-1">
@@ -35,9 +36,10 @@ export default async function ScoutingTargetDetailPage({ params }: { params: Pro
         </div> : null}
         {linkedPlayers.length ? <div className="divide-y divide-board-line border-y border-board-line">
           {linkedPlayers.map((player) => <div key={player.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-            <div>
+            <div className="min-w-0 space-y-2">
               <Link href={`/scouting/players/${player.id}`} className="font-bold text-board-green hover:underline">{player.first_name} {player.last_name}</Link>
-              <p className="text-xs text-slate-600">{player.primary_position ?? c.unknown} · {c[player.status]}</p>
+              <ProspectContext player={player} latest={latestObservations[player.id]} locale={locale} />
+              <ObservationLink id={player.id} locale={locale} />
             </div>
             <form action={unlinkScoutingTarget}><input type="hidden" name="playerId" value={player.id} /><input type="hidden" name="targetId" value={target.id} />
               <button type="submit" className="min-h-10 rounded border border-board-line px-3 text-xs font-bold">{c.unlink}</button>
@@ -52,7 +54,7 @@ export default async function ScoutingTargetDetailPage({ params }: { params: Pro
           <button type="submit" className="min-h-11 rounded-md bg-board-navy px-4 text-sm font-bold text-white">{c.addToTarget}</button>
         </form> : null}
       </section>
-      <aside className="space-y-3 border-t border-board-line pt-4 text-sm lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+      <aside className="min-w-0 space-y-3 border-t border-board-line pt-4 text-sm [overflow-wrap:anywhere] lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
         <p><strong>{c.targetTeam}:</strong> {teams.find((team) => team.id === target.squad_id)?.name ?? c.none}</p>
         <p><strong>{c.positions}:</strong> {target.positions.join(", ") || c.unknown}</p>
         <p><strong>{c.fromYear} / {c.toYear}:</strong> {target.birth_year_from ?? "–"} / {target.birth_year_to ?? "–"}</p>

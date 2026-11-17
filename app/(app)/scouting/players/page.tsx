@@ -8,8 +8,8 @@ import { scoutingCopy, scoutingPriorities, scoutingStatuses } from "@/lib/scouti
 import { getScoutingListData } from "@/lib/scouting/queries";
 import { scoutingContext } from "@/lib/scouting/server";
 import { calculateAge } from "@/lib/squad/format";
-import { canonicalPositionLabels } from "@/lib/squad/positions";
 import { trainingNowParts } from "@/lib/trainings/utils";
+import { ObservationLink, ProspectContext } from "@/components/scouting/evidence";
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 function param(value: string | string[] | undefined) { return typeof value === "string" ? value : ""; }
@@ -59,7 +59,7 @@ export default async function ScoutingPlayersPage({ searchParams }: Props) {
       actions={<ButtonLink href="/scouting/players/new"><Plus className="h-4 w-4" />{copy.addPlayer}</ButtonLink>} />
     <ScoutingNav locale={locale} active="players" />
     <form method="get" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" aria-label={copy.search}>
-      {due ? <input type="hidden" name="due" value="1" /> : null}
+      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" name="due" value="1" defaultChecked={due} />{copy.followUpsDue}</label>
       <input name="q" type="search" placeholder={copy.search} aria-label={copy.search} defaultValue={param(params.q)} className={input} />
       <select name="status" aria-label={copy.status} defaultValue={status} className={input}>
         <option value="">{copy.allStatuses}</option>
@@ -100,39 +100,30 @@ export default async function ScoutingPlayersPage({ searchParams }: Props) {
     </form>
     {!players.length ? <div className="border-y border-board-line py-8 text-sm text-slate-600">{copy.noPlayers}</div> : <>
       <div className="space-y-3 lg:hidden">
-        {players.map((player) => <Link key={player.id} href={`/scouting/players/${player.id}`} className="block rounded-md border border-board-line bg-white p-4">
-          <div className="flex items-start justify-between gap-2">
-            <strong className="min-w-0 break-words text-board-navy">{player.first_name} {player.last_name}</strong>
-            <span className="shrink-0 rounded bg-slate-100 px-2 py-1 text-xs font-bold">{copy[player.status]}</span>
-          </div>
-          <p className="mt-2 text-sm text-slate-700">{[player.primary_position, ...player.secondary_positions].filter(Boolean).join(" / ") || copy.unknown} · {calculateAge(player.date_of_birth ?? undefined) ?? "?"} {copy.days}</p>
-          <p className="mt-1 break-words text-sm text-slate-600">{player.current_club || copy.unknown}</p>
-          <p className="mt-2 text-xs text-slate-600">{copy.lastObserved}: {data.lastObserved[player.id] ? formatDate(data.lastObserved[player.id], locale) : copy.unknown}</p>
-          {data.observationActions[player.id] ? <p className="mt-1 break-words text-sm">{copy.nextAction}: {data.observationActions[player.id]}</p> : null}
-          {data.followUpDates[player.id] ? <p className="mt-1 text-xs text-slate-600">{copy.followUp}: {formatDate(data.followUpDates[player.id], locale)}</p> : null}
+        {players.map((player) => <article key={player.id} className="min-w-0 space-y-2 rounded-md border border-board-line bg-white p-4 [overflow-wrap:anywhere]">
+          <Link href={`/scouting/players/${player.id}`} className="inline-flex min-h-11 items-center font-bold text-board-green hover:underline">{player.first_name} {player.last_name}</Link>
+          <ProspectContext player={player} latest={data.latestObservations[player.id]} locale={locale} />
           {playerTarget(player.id) ? <p className="mt-1 break-words text-xs text-slate-600">{copy.target}: {playerTarget(player.id)}</p> : null}
-        </Link>)}
+          <ObservationLink id={player.id} locale={locale} />
+        </article>)}
       </div>
       <div className="hidden overflow-x-auto rounded-md border border-board-line bg-white lg:block">
         <table className="w-full min-w-[1000px] text-left text-sm">
           <thead className="bg-slate-50 text-xs text-slate-600"><tr>
-            {[copy.player, copy.age, copy.position, copy.secondaryPositions, copy.foot, copy.club, copy.status, copy.priority, copy.lastObserved, copy.target, copy.nextAction].map((label) => <th key={label} className="px-3 py-3 font-bold">{label}</th>)}
+            {[copy.player, copy.birthYear, copy.position, copy.club, copy.status, copy.priority, copy.lastObserved, copy.followUp, copy.target, copy.addObservation].map((label) => <th key={label} className="px-3 py-3 font-bold">{label}</th>)}
           </tr></thead>
           <tbody className="divide-y divide-board-line">
             {players.map((player) => <tr key={player.id} className="hover:bg-slate-50">
               <td className="px-3 py-3 font-bold"><Link href={`/scouting/players/${player.id}`} className="text-board-green hover:underline">{player.first_name} {player.last_name}</Link></td>
-              <td className="px-3 py-3">{calculateAge(player.date_of_birth ?? undefined) ?? "–"}</td>
-              <td className="px-3 py-3">{player.primary_position ? canonicalPositionLabels[player.primary_position] ?? player.primary_position : "–"}</td>
-              <td className="px-3 py-3">{player.secondary_positions.join(", ") || "–"}</td>
-              <td className="px-3 py-3">{player.strong_foot ? copy[player.strong_foot] : "–"}</td>
-              <td className="max-w-36 truncate px-3 py-3">{player.current_club || "–"}</td>
+              <td className="px-3 py-3">{player.date_of_birth?.slice(0, 4) ?? player.birth_year ?? "–"}</td>
+              <td className="px-3 py-3">{[player.primary_position, ...player.secondary_positions].filter(Boolean).join(" / ") || "–"}</td>
+              <td className="max-w-36 break-words px-3 py-3">{player.current_club || "–"}</td>
               <td className="px-3 py-3">{copy[player.status]}</td>
               <td className="px-3 py-3">{copy[player.priority]}</td>
               <td className="px-3 py-3">{formatDate(data.lastObserved[player.id], locale) || "–"}</td>
-              <td className="max-w-36 truncate px-3 py-3">{playerTarget(player.id) || "–"}</td>
-              <td className="max-w-64 break-words px-3 py-3">{data.observationActions[player.id] || (player.next_action ? copy[player.next_action === "none" ? "no_action" : player.next_action] : "–")}
-                {data.followUpDates[player.id] ? <p className="mt-1 text-xs text-slate-600">{copy.followUp}: {formatDate(data.followUpDates[player.id], locale)}</p> : null}
-              </td>
+              <td className="px-3 py-3">{formatDate(data.followUpDates[player.id], locale) || "–"}</td>
+              <td className="max-w-36 break-words px-3 py-3">{playerTarget(player.id) || "–"}</td>
+              <td className="px-3 py-3"><ObservationLink id={player.id} locale={locale} /></td>
             </tr>)}
           </tbody>
         </table>

@@ -8,7 +8,7 @@ import { asScoutingDb, type ScoutingDb } from "@/lib/scouting/db";
 import { syncFutureAutoSyncTrainingsForPlayer } from "@/lib/squad/attendance-actions";
 import { formText, observationPayload, playerPayload, targetPayload, validDate } from "@/lib/scouting/validation";
 import type { ScoutingHistoryRow, ScoutingPlayerRow } from "@/types/database";
-import { possibleScoutingDuplicate } from "@/lib/scouting/workflow";
+import { pipelineHistoryDetail, possibleScoutingDuplicate } from "@/lib/scouting/workflow";
 
 export type ScoutingFormState = { error?: string; duplicates?: Array<{ id: string; name: string; kind: "scouting" | "squad" }> };
 
@@ -17,6 +17,13 @@ async function requireScoutingUser() {
   const { data: { user } } = await db.auth.getUser();
   if (!user) redirect("/login");
   return { db, userId: user.id };
+}
+
+function revalidateScoutingLists() {
+  revalidatePath("/scouting");
+  revalidatePath("/scouting/players");
+  revalidatePath("/scouting/targets");
+  revalidatePath("/(app)/scouting/targets/[id]", "page");
 }
 
 async function logHistory(db: ScoutingDb, userId: string, playerId: string, eventType: ScoutingHistoryRow["event_type"], detail?: string) {
@@ -48,7 +55,7 @@ export async function createScoutingPlayer(_: ScoutingFormState, form: FormData)
     const { data, error } = await db.from("scouting_players").insert({ user_id: userId, ...payload }).select("id").single();
     if (error) return { error: error.message };
     await logHistory(db, userId, data.id, "created");
-    revalidatePath("/scouting");
+    revalidateScoutingLists();
     redirect(`/scouting/players/${data.id}`);
   } catch (error) {
     if (isRedirect(error)) throw error;
@@ -59,6 +66,7 @@ export async function createScoutingPlayer(_: ScoutingFormState, form: FormData)
 export async function updateScoutingPlayer(playerId: string, _: ScoutingFormState, form: FormData): Promise<ScoutingFormState> {
   try {
     const payload = playerPayload(form);
+    const statusNote = formText(form, "statusNote", 2000);
     const { db, userId } = await requireScoutingUser();
     const { data: current, error: loadError } = await db.from("scouting_players").select("status,linked_squad_player_id").eq("id", playerId).eq("user_id", userId).maybeSingle();
     if (loadError) return { error: loadError.message };
@@ -66,8 +74,8 @@ export async function updateScoutingPlayer(playerId: string, _: ScoutingFormStat
     if (payload.status === "added_to_squad" && !current.linked_squad_player_id) return { error: "This prospect is not linked to a squad player." };
     const { error } = await db.from("scouting_players").update(payload).eq("id", playerId).eq("user_id", userId);
     if (error) return { error: error.message };
-    if (current.status !== payload.status) await logHistory(db, userId, playerId, payload.status === "archived" ? "archived" : payload.status === "added_to_squad" ? "added_to_squad" : "status_changed", payload.status);
-    revalidatePath("/scouting");
+    if (current.status !== payload.status) await logHistory(db, userId, playerId, payload.status === "archived" ? "archived" : payload.status === "added_to_squad" ? "added_to_squad" : "status_changed", pipelineHistoryDetail(current.status, payload.status, statusNote));
+    revalidateScoutingLists();
     revalidatePath(`/scouting/players/${playerId}`);
     redirect(`/scouting/players/${playerId}`);
   } catch (error) {
@@ -99,7 +107,7 @@ async function saveObservation(playerId: string, observationId: string | null, f
       if (error) return { error: error.message };
       await logHistory(db, userId, playerId, "observation_added", payload.observed_on);
     }
-    revalidatePath("/scouting");
+    revalidateScoutingLists();
     revalidatePath(`/scouting/players/${playerId}`);
     redirect(`/scouting/players/${playerId}?tab=observations`);
   } catch (error) {
@@ -133,7 +141,7 @@ async function saveTarget(targetId: string | null, form: FormData): Promise<Scou
       if (error) return { error: error.message };
       id = data.id;
     }
-    revalidatePath("/scouting");
+    revalidateScoutingLists();
     redirect(`/scouting/targets/${id}`);
   } catch (error) {
     if (isRedirect(error)) throw error;
@@ -153,7 +161,7 @@ export async function linkScoutingTarget(form: FormData) {
   const { data, error } = await db.from("scouting_target_players").upsert({ user_id: userId, player_id: playerId, target_id: targetId }, { onConflict: "target_id,player_id", ignoreDuplicates: true }).select("player_id");
   if (error) throw new Error(error.message);
   if (data?.length) await logHistory(db, userId, playerId, "target_linked", target.data.title);
-  revalidatePath("/scouting");
+  revalidateScoutingLists();
   revalidatePath(`/scouting/players/${playerId}`);
   revalidatePath(`/scouting/targets/${targetId}`);
 }
@@ -165,7 +173,7 @@ export async function unlinkScoutingTarget(form: FormData) {
   const { data, error } = await db.from("scouting_target_players").delete().eq("user_id", userId).eq("player_id", playerId).eq("target_id", targetId).select("player_id");
   if (error) throw new Error(error.message);
   if (data?.length) await logHistory(db, userId, playerId, "target_removed");
-  revalidatePath("/scouting");
+  revalidateScoutingLists();
   revalidatePath(`/scouting/players/${playerId}`);
   revalidatePath(`/scouting/targets/${targetId}`);
 }
@@ -211,7 +219,7 @@ export async function inviteScoutingPlayerToTrial(playerId: string, _: ScoutingF
     }
     await logHistory(db, userId, playerId, "invited_to_trial");
     await syncFutureAutoSyncTrainingsForPlayer(db as unknown as SupabaseClient, userId, squadPlayer.id);
-    revalidatePath("/scouting");
+    revalidateScoutingLists();
     revalidatePath("/squad");
     redirect(`/scouting/players/${playerId}`);
   } catch (error) {

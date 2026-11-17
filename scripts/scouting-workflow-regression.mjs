@@ -9,20 +9,22 @@ import * as workflow from "../lib/scouting/workflow.ts";
 import { scoutingCopy } from "../lib/scouting/copy.ts";
 
 const form = (values) => { const result = new FormData(); for (const [key, value] of Object.entries(values)) result.set(key, String(value)); return result; };
-function load(filename, mocks) {
+export function load(filename, mocks) {
   const source = ts.transpileModule(readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loaded = { exports: {} };
   const require = createRequire(import.meta.url);
   vm.runInThisContext(`(function(require,module,exports){${source}\n})`, { filename })((id) => id in mocks ? mocks[id] : require(id), loaded, loaded.exports);
   return loaded.exports;
 }
-function fakeDb() {
+export function fakeDb() {
   const tables = { scouting_players: [], scouting_observations: [], scouting_history: [], squad_players: [] };
   const db = { tables, fail: null, auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) }, from(table) {
     const predicates = [], orders = [];
     let payload, mode = "select", single = false, limit = Infinity;
     const q = {
       select() { return q; }, insert(p) { mode = "insert"; payload = p; return q; }, update(p) { mode = "update"; payload = p; return q; },
+      upsert(p) { mode = "upsert"; payload = p; return q; }, delete() { mode = "delete"; return q; },
+      in(k, values) { predicates.push((r) => values.includes(r[k])); return q; },
       eq(k, v) { predicates.push((r) => r[k] === v); return q; }, neq(k, v) { predicates.push((r) => r[k] !== v); return q; },
       is(k, v) { predicates.push((r) => (r[k] ?? null) === v); return q; },
       limit(n) { limit = n; return q; }, order(k, options) { orders.push([k, options?.ascending !== false]); return q; },
@@ -33,6 +35,11 @@ function fakeDb() {
         let result = rows.filter((r) => predicates.every((p) => p(r)));
         if (mode === "insert") { const row = { id: `${table}-${rows.length}`, created_at: `2026-11-17T12:00:0${rows.length}Z`, ...payload }; rows.push(row); result = [row]; }
         if (mode === "update") result.forEach((r) => Object.assign(r, payload));
+        if (mode === "upsert") {
+          result = rows.some((r) => r.player_id === payload.player_id && r.target_id === payload.target_id) ? [] : [{ ...payload }];
+          rows.push(...result);
+        }
+        if (mode === "delete") tables[table] = rows.filter((r) => !result.includes(r));
         result.sort((a, b) => { for (const [key, ascending] of orders) { const d = String(a[key]).localeCompare(String(b[key])); if (d) return ascending ? d : -d; } return 0; });
         result = result.slice(0, limit);
         return { data: structuredClone(single ? result[0] ?? null : result), error: null };
@@ -42,7 +49,7 @@ function fakeDb() {
   } };
   return db;
 }
-function actions(db) {
+export function actions(db) {
   return load("lib/scouting/actions.ts", {
     "next/cache": { revalidatePath() {} },
     "next/navigation": { redirect(url) { throw Object.assign(new Error(url), { digest: "NEXT_REDIRECT" }); } },
@@ -101,7 +108,7 @@ test("real create/edit actions: ownership, duplicate review, history, observatio
   const oldObservation = structuredClone(db.tables.scouting_observations[0]);
   await assert.rejects(a.updateScoutingPlayer(id, {}, form({ firstName: "Test", status: "shortlist" })), /\/scouting\/players\//);
   assert.deepEqual(db.tables.scouting_observations[0], oldObservation);
-  assert.equal(db.tables.scouting_history.at(-1).detail, "shortlist");
+  assert.deepEqual(workflow.readPipelineHistory(db.tables.scouting_history.at(-1).detail), { from: "identified", to: "shortlist", note: "" });
   await assert.rejects(a.updateScoutingObservation(id, oldObservation.id, {}, form({ ...first, summary: "Corrected", openQuestions: "Consistency?" })), /tab=observations/);
   assert.equal(db.tables.scouting_observations.length, 2); assert.equal(db.tables.scouting_observations[0].open_questions, "Consistency?");
   db.tables.scouting_players.push({ id: "foreign", user_id: "someone-else", first_name: "Other" });

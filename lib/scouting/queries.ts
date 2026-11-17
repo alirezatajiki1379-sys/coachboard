@@ -1,9 +1,10 @@
 import type { createClient } from "@/lib/supabase/server";
 import { asScoutingDb } from "@/lib/scouting/db";
 import type { ScoutingHistoryRow, ScoutingObservationRow, ScoutingPlayerRow, ScoutingTargetPlayerRow, ScoutingTargetRow } from "@/types/database";
-import { scoutingFollowUpDate, type ObservationFollowUp } from "@/lib/scouting/workflow";
+import { scoutingFollowUpDate, type ObservationContext } from "@/lib/scouting/workflow";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
+const observationContextColumns = "player_id,observed_on,next_action,follow_up_date,next_focus,open_questions,recommendation";
 
 export type ScoutingListData = {
   players: ScoutingPlayerRow[];
@@ -13,6 +14,7 @@ export type ScoutingListData = {
   recentlyObservedIds: string[];
   followUpDates: Record<string, string | null>;
   observationActions: Record<string, string | null>;
+  latestObservations: Record<string, ObservationContext>;
 };
 
 export async function getScoutingListData(db: Db, userId: string): Promise<ScoutingListData> {
@@ -21,13 +23,13 @@ export async function getScoutingListData(db: Db, userId: string): Promise<Scout
     scoutingDb.from("scouting_players").select("*").eq("user_id", userId).order("updated_at", { ascending: false }).limit(1000),
     scoutingDb.from("scouting_targets").select("*").eq("user_id", userId).order("updated_at", { ascending: false }).limit(500),
     scoutingDb.from("scouting_target_players").select("*").eq("user_id", userId).limit(5000),
-    scoutingDb.from("scouting_observations").select("player_id,observed_on,next_action,follow_up_date").eq("user_id", userId).order("observed_on", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(5000)
+    scoutingDb.from("scouting_observations").select(observationContextColumns).eq("user_id", userId).order("observed_on", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(5000)
   ]);
   const error = playersResult.error ?? targetsResult.error ?? linksResult.error ?? observationsResult.error;
   if (error) throw new Error(error.message);
   const lastObserved: Record<string, string> = {};
   const recentlyObservedIds = new Set<string>();
-  const latestFollowUps: Record<string, ObservationFollowUp> = {};
+  const latestFollowUps: Record<string, ObservationContext> = {};
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 30);
   const cutoffDate = cutoff.toISOString().slice(0, 10);
@@ -41,6 +43,7 @@ export async function getScoutingListData(db: Db, userId: string): Promise<Scout
     targets: targetsResult.data ?? [],
     links: linksResult.data ?? [],
     lastObserved,
+    latestObservations: latestFollowUps,
     followUpDates: Object.fromEntries((playersResult.data ?? []).map((player) => [player.id, scoutingFollowUpDate(player, latestFollowUps[player.id])])),
     observationActions: Object.fromEntries(Object.entries(latestFollowUps).map(([id, row]) => [id, row.next_action])),
     recentlyObservedIds: [...recentlyObservedIds]
@@ -72,11 +75,20 @@ export async function getScoutingTarget(db: Db, userId: string, targetId: string
   const [targetResult, linksResult, playersResult] = await Promise.all([
     scoutingDb.from("scouting_targets").select("*").eq("user_id", userId).eq("id", targetId).maybeSingle(),
     scoutingDb.from("scouting_target_players").select("*").eq("user_id", userId).eq("target_id", targetId),
-    scoutingDb.from("scouting_players").select("*").eq("user_id", userId).neq("status", "archived").order("first_name").limit(1000)
+    scoutingDb.from("scouting_players").select("*").eq("user_id", userId).order("first_name").limit(1000)
   ]);
   const error = targetResult.error ?? linksResult.error ?? playersResult.error;
   if (error) throw new Error(error.message);
+  const linkedIds = (linksResult.data ?? []).map((link) => link.player_id);
+  const latestObservations: Record<string, ObservationContext> = {};
+  if (targetResult.data && linkedIds.length) {
+    const observations = await scoutingDb.from("scouting_observations").select(observationContextColumns).eq("user_id", userId)
+      .in("player_id", linkedIds).order("observed_on", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(5000);
+    if (observations.error) throw new Error(observations.error.message);
+    for (const row of observations.data ?? []) latestObservations[row.player_id] ??= row;
+  }
   return targetResult.data ? {
+    latestObservations,
     target: targetResult.data as ScoutingTargetRow,
     links: (linksResult.data ?? []) as ScoutingTargetPlayerRow[],
     players: (playersResult.data ?? []) as ScoutingPlayerRow[]

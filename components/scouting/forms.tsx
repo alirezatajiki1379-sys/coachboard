@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useActionState, type FormEvent } from "react";
+import { startTransition, useActionState, useState, type FormEvent } from "react";
 import { useFormStatus } from "react-dom";
 import type { Locale } from "@/lib/i18n";
 import { scoutingActions, scoutingContexts, scoutingCopy, scoutingPriorities, scoutingStatuses, scoutingTargetStatuses } from "@/lib/scouting/copy";
@@ -51,11 +51,14 @@ function Field({ name, text, children }: { name: string; text: string; children:
   return <label className={field} htmlFor={name}><span>{text}</span>{children}</label>;
 }
 
-export function ScoutingPlayerForm({ action, initial, locale }: { action: Action; initial?: ScoutingPlayerRow; locale: Locale }) {
+export function ScoutingPlayerForm({ action, initial, locale, proposedStatus }: { action: Action; initial?: ScoutingPlayerRow; locale: Locale; proposedStatus?: ScoutingPlayerRow["status"] | null }) {
   const { state, submit, pending } = usePreservedForm(action);
+  const [selectedStatus, setSelectedStatus] = useState<string>(proposedStatus ?? initial?.status ?? "identified");
+  const changingStatus = Boolean(initial && selectedStatus !== initial.status);
   const c = scoutingCopy(locale);
   return <form method="post" onSubmit={submit} className="min-w-0 space-y-6 [overflow-wrap:anywhere]">
     <ErrorMessage state={state} locale={locale} />
+    {proposedStatus ? <p role="status" className="border-l-2 border-board-green pl-3 text-sm">{c.proposedStatus}: <strong>{c[proposedStatus]}</strong>. {c.confirmStatus}</p> : null}
     {state.duplicates?.length ? <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm">
       <strong className="text-board-navy">{c.possibleDuplicate}</strong>
       <p className="mt-1 text-slate-700">{c.duplicateHint}</p>
@@ -98,7 +101,7 @@ export function ScoutingPlayerForm({ action, initial, locale }: { action: Action
     <section>
       <h2 className="mb-3 text-lg font-bold text-board-navy">{c.status}</h2>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field name="status" text={c.status}><select id="status" name="status" defaultValue={initial?.status ?? "identified"} className={input}>
+        <Field name="status" text={c.status}><select id="status" name="status" value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} className={input}>
           {scoutingStatuses.filter((value) => value !== "added_to_squad" || initial?.linked_squad_player_id).map((value) => <option key={value} value={value}>{c[value]}</option>)}
         </select></Field>
         <Field name="priority" text={c.priority}><select id="priority" name="priority" defaultValue={initial?.priority ?? "medium"} className={input}>
@@ -109,6 +112,7 @@ export function ScoutingPlayerForm({ action, initial, locale }: { action: Action
         </select></Field>
         <Field name="nextActionDate" text={c.nextActionDate}><input id="nextActionDate" name="nextActionDate" type="date" defaultValue={initial?.next_action_date ?? ""} className={input} /></Field>
       </div>
+      {initial ? <div hidden={!changingStatus} className="mt-4"><Field name="statusNote" text={c.decisionNote}><textarea id="statusNote" name="statusNote" disabled={!changingStatus} rows={2} maxLength={2000} className={input} /></Field></div> : null}
     </section>
     </details>
     <div className="flex flex-wrap gap-2"><Submit text={c.save} saving={pending} /><Link href={initial ? `/scouting/players/${initial.id}` : "/scouting/players"} className="inline-flex min-h-11 items-center px-4 text-sm font-bold text-slate-600">{c.cancel}</Link></div>
@@ -127,15 +131,22 @@ export function ScoutingObservationForm({ action, playerId, initial, locale, pre
         {scoutingContexts.map((value) => <option key={value} value={value}>{c[value]}</option>)}
       </select></Field>
       <Field name="observedPosition" text={c.observedPosition}><input id="observedPosition" name="observedPosition" defaultValue={initial ? initial.observed_position ?? "" : observedPosition ?? ""} className={input} /></Field>
-      <Field name="eventLabel" text={c.event}><input id="eventLabel" name="eventLabel" defaultValue={initial?.event_label ?? ""} className={input} /></Field>
       <Field name="playerTeam" text={c.playerTeam}><input id="playerTeam" name="playerTeam" maxLength={160} defaultValue={initial ? initial.player_team ?? "" : playerTeam ?? ""} className={input} /></Field>
       <Field name="opponent" text={c.opponent}><input id="opponent" name="opponent" maxLength={160} defaultValue={initial?.opponent ?? ""} className={input} /></Field>
+    </div>
+    <Field name="situations" text={c.situations}><textarea id="situations" name="situations" rows={3} maxLength={12000} title={c.situationsHint} defaultValue={initial?.situations ?? ""} className={input} /></Field>
+    <Field name="summary" text={c.summary}><textarea id="summary" name="summary" rows={2} required maxLength={4000} defaultValue={initial?.summary ?? ""} className={input} /></Field>
+    <details className="min-w-0">
+      <summary className="min-h-11 cursor-pointer py-3 font-bold">{c.matchDetails}</summary>
+      <div className="grid gap-4 sm:grid-cols-2">
+      <Field name="eventLabel" text={c.event}><input id="eventLabel" name="eventLabel" defaultValue={initial?.event_label ?? ""} className={input} /></Field>
       <Field name="competition" text={c.competition}><input id="competition" name="competition" maxLength={160} defaultValue={initial?.competition ?? ""} className={input} /></Field>
       <Field name="minutesObserved" text={c.minutes}><input id="minutesObserved" name="minutesObserved" type="number" min="0" max="300" step="1" defaultValue={initial?.minutes_observed ?? ""} className={input} /></Field>
       <Field name="observer" text={c.observer}><input id="observer" name="observer" defaultValue={initial?.observer ?? ""} className={input} /></Field>
     </div>
-    <Field name="summary" text={c.summary}><textarea id="summary" name="summary" rows={3} required maxLength={4000} defaultValue={initial?.summary ?? ""} className={input} /></Field>
-    <Field name="situations" text={c.situations}><textarea id="situations" name="situations" rows={4} maxLength={12000} title={c.situationsHint} defaultValue={initial?.situations ?? ""} className={input} /></Field>
+    </details>
+    <section className="min-w-0 space-y-4 border-t border-board-line pt-4">
+    <h2 className="font-bold text-board-navy">{c.qualitative}</h2>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field name="strengths" text={c.strengths}><textarea id="strengths" name="strengths" rows={3} defaultValue={initial?.strengths ?? ""} className={input} /></Field>
       <Field name="development" text={c.development}><textarea id="development" name="development" rows={3} title={c.developmentHint} defaultValue={initial?.development_considerations ?? ""} className={input} /></Field>
@@ -147,7 +158,8 @@ export function ScoutingObservationForm({ action, playerId, initial, locale, pre
     </select></Field>
     <Field name="nextAction" text={c.nextAction}><input id="nextAction" name="nextAction" defaultValue={initial?.next_action ?? ""} className={input} /></Field>
     <Field name="followUpDate" text={c.followUp}><input id="followUpDate" name="followUpDate" type="date" defaultValue={initial?.follow_up_date ?? ""} className={input} /></Field>
-    <details open={initial ? true : undefined} className="min-w-0"><summary className="min-h-11 cursor-pointer py-3 font-bold">{c.optionalRatings}</summary>
+    </section>
+    <details className="min-w-0"><summary className="min-h-11 cursor-pointer py-3 font-bold">{c.optionalRatings}</summary>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {([
         ["ratingTechnical", c.technical, initial?.rating_technical],

@@ -13,6 +13,8 @@ import { getScoutingPlayer } from "@/lib/scouting/queries";
 import { scoutingContext } from "@/lib/scouting/server";
 import { calculateAge } from "@/lib/squad/format";
 import { listSquads } from "@/lib/squad/squads";
+import { CurrentCase, ObservationEvidence, ProspectContext } from "@/components/scouting/evidence";
+import { readPipelineHistory } from "@/lib/scouting/workflow";
 
 type Tab = "overview" | "observations" | "targets" | "history";
 
@@ -43,11 +45,12 @@ export default async function ScoutingPlayerPage({ params, searchParams }: { par
   ] as const;
   return <PageContainer width="wide">
     <Link href="/scouting/players" className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-board-green"><ArrowLeft className="h-4 w-4" />{c.players}</Link>
-    <PageHeader eyebrow={c.scouting} title={name} description={`${c.currentStatus}: ${c[player.status]} · ${c[player.priority]}`}
+    <PageHeader eyebrow={c.scouting} title={name}
       actions={<div className="flex flex-wrap gap-2">
         <ButtonLink href={`/scouting/players/${id}/observations/new`}><Plus className="h-4 w-4" />{c.addObservation}</ButtonLink>
         <ButtonLink href={`/scouting/players/${id}/edit`} variant="secondary"><Pencil className="h-4 w-4" />{c.editPlayer}</ButtonLink>
       </div>} />
+    <ProspectContext player={player} latest={latest} locale={locale} />
     <ScoutingNav locale={locale} active="players" />
     <nav className="flex flex-wrap gap-1 border-b border-board-line" aria-label={c.profileOverview}>
       {nav.map((item) => <Link key={item.id} href={`/scouting/players/${id}?tab=${item.id}`} aria-current={tab === item.id ? "page" : undefined}
@@ -55,6 +58,8 @@ export default async function ScoutingPlayerPage({ params, searchParams }: { par
     </nav>
     {tab === "overview" ? <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
       <section className="min-w-0 space-y-6 [overflow-wrap:anywhere]">
+        <CurrentCase player={player} latest={latest} locale={locale} />
+        <details><summary className="min-h-11 cursor-pointer py-3 font-bold text-board-navy">{c.facts}</summary>
         <div className="grid gap-3 border-y border-board-line py-4 sm:grid-cols-2">
           <Fact label={c.birthDate} value={formatDate(player.date_of_birth, locale) || c.unknown} />
           <Fact label={c.birthYear} value={player.birth_year?.toString() ?? player.date_of_birth?.slice(0, 4) ?? c.unknown} />
@@ -69,28 +74,10 @@ export default async function ScoutingPlayerPage({ params, searchParams }: { par
           <Fact label={c.height} value={player.height_cm === null ? c.unknown : `${player.height_cm} cm`} />
           <Fact label={c.weight} value={player.weight_kg === null ? c.unknown : `${player.weight_kg} kg`} />
         </div>
+        </details>
         {player.notes ? <div><h2 className="text-lg font-bold text-board-navy">{c.notes}</h2><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{player.notes}</p></div> : null}
-        <div>
-          <h2 className="text-lg font-bold text-board-navy">{c.lastObserved}</h2>
-          {latest ? <Link href={`/scouting/players/${id}?tab=observations`} className="mt-2 block border-t border-board-line pt-3 text-sm text-board-green hover:underline">
-            {formatDate(latest.observed_on, locale)} · {c[latest.context]} · {latest.summary}
-          </Link> : <p className="mt-2 text-sm text-slate-600">{c.noObservations}</p>}
-        </div>
       </section>
       <aside className="min-w-0 space-y-5 [overflow-wrap:anywhere]">
-        {latest ? <div className="space-y-3 border-t border-board-line pt-4">
-          <h2 className="font-bold text-board-navy">{c.lastObserved} · {formatDate(latest.observed_on, locale)}</h2>
-          {latest.open_questions ? <Fact label={c.openQuestions} value={latest.open_questions} /> : null}
-          {latest.next_focus ? <Fact label={c.nextFocus} value={latest.next_focus} /> : null}
-          {latest.recommendation ? <Fact label={c.recommendation} value={latest.recommendation === "archived" ? c.stopFollowing : latest.recommendation === "identified" ? c.internalStep : latest.recommendation === "monitoring" ? c.continueObserving : c[latest.recommendation]} /> : null}
-          {latest.next_action ? <Fact label={c.nextAction} value={latest.next_action} /> : null}
-          {latest.follow_up_date ? <Fact label={c.followUp} value={formatDate(latest.follow_up_date, locale)} /> : null}
-        </div> : null}
-        <div className="border-t border-board-line pt-4">
-          <h2 className="font-bold text-board-navy">{c.nextAction}</h2>
-          <p className="mt-1 text-sm">{player.next_action ? c[player.next_action === "none" ? "no_action" : player.next_action] : c.none}</p>
-          {player.next_action_date ? <p className="text-sm text-slate-600">{formatDate(player.next_action_date, locale)}</p> : null}
-        </div>
         <div className="border-t border-board-line pt-4">
           <h2 className="font-bold text-board-navy">{c.linkedTargets}</h2>
           {linkedTargets.length ? <ul className="mt-2 space-y-2">{linkedTargets.map((target) => <li key={target.id}><Link href={`/scouting/targets/${target.id}`} className="text-sm font-semibold text-board-green hover:underline">{target.title}</Link></li>)}</ul> : <p className="mt-2 text-sm text-slate-600">{c.noLinkedPlayers}</p>}
@@ -106,33 +93,7 @@ export default async function ScoutingPlayerPage({ params, searchParams }: { par
     </div> : null}
     {tab === "observations" ? <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-bold text-board-navy">{c.observations} ({observations.length})</h2><ButtonLink href={`/scouting/players/${id}/observations/new`}><Plus className="h-4 w-4" />{c.addObservation}</ButtonLink></div>
-      {observations.length ? <ol className="divide-y divide-board-line border-y border-board-line">
-        {observations.map((observation) => <li key={observation.id} className="py-5">
-          <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-board-navy">{formatDate(observation.observed_on, locale)} · {c[observation.context]}</strong>
-            <Link href={`/scouting/players/${id}/observations/${observation.id}/edit`} className="inline-flex min-h-11 items-center text-sm font-bold text-board-green hover:underline">{c.editObservation}</Link>
-          </div>
-          <p className="mt-1 text-sm text-slate-600">{[observation.event_label, observation.observed_position, observation.minutes_observed === null ? null : `${observation.minutes_observed} min`, observation.observer].filter(Boolean).join(" · ")}</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {observation.player_team ? <Fact label={c.playerTeam} value={observation.player_team} /> : null}
-            {observation.opponent ? <Fact label={c.opponent} value={observation.opponent} /> : null}
-            {observation.competition ? <Fact label={c.competition} value={observation.competition} /> : null}
-          </div>
-          <p className="mt-3 whitespace-pre-wrap text-sm">{observation.summary}</p>
-          {observation.situations ? <p className="mt-2 whitespace-pre-wrap text-sm"><strong>{c.situations}:</strong> {observation.situations}</p> : null}
-          {observation.strengths ? <p className="mt-2 whitespace-pre-wrap text-sm"><strong>{c.strengths}:</strong> {observation.strengths}</p> : null}
-          {observation.development_considerations ? <p className="mt-2 whitespace-pre-wrap text-sm"><strong>{c.development}:</strong> {observation.development_considerations}</p> : null}
-          {observation.open_questions ? <p className="mt-2 whitespace-pre-wrap text-sm"><strong>{c.openQuestions}:</strong> {observation.open_questions}</p> : null}
-          {observation.next_focus ? <p className="mt-2 whitespace-pre-wrap text-sm"><strong>{c.nextFocus}:</strong> {observation.next_focus}</p> : null}
-          {observation.recommendation ? <p className="mt-2 text-sm"><strong>{c.recommendation}:</strong> {observation.recommendation === "archived" ? c.stopFollowing : observation.recommendation === "identified" ? c.internalStep : observation.recommendation === "monitoring" ? c.continueObserving : c[observation.recommendation]}</p> : null}
-          {observation.next_action ? <p className="mt-2 whitespace-pre-wrap text-sm"><strong>{c.nextAction}:</strong> {observation.next_action}</p> : null}
-          {observation.follow_up_date ? <p className="mt-2 text-sm"><strong>{c.followUp}:</strong> {formatDate(observation.follow_up_date, locale)}</p> : null}
-          {[observation.rating_technical, observation.rating_tactical, observation.rating_physical, observation.rating_mental].some((value) => value !== null) ?
-            <p className="mt-2 text-xs text-slate-600">{[
-              [c.technical, observation.rating_technical], [c.tactical, observation.rating_tactical],
-              [c.physical, observation.rating_physical], [c.mental, observation.rating_mental]
-            ].filter(([, value]) => value !== null).map(([label, value]) => `${label}: ${value}/5`).join(" · ")}</p> : null}
-        </li>)}
-      </ol> : <p className="text-sm text-slate-600">{c.noObservations}</p>}
+      <ObservationEvidence observations={observations} playerId={id} locale={locale} />
     </section> : null}
     {tab === "targets" ? <section className="space-y-4">
       <h2 className="text-lg font-bold text-board-navy">{c.linkedTargets}</h2>
@@ -155,10 +116,13 @@ export default async function ScoutingPlayerPage({ params, searchParams }: { par
     {tab === "history" ? <section className="min-w-0 [overflow-wrap:anywhere]">
       <h2 className="text-lg font-bold text-board-navy">{c.scoutingHistory}</h2>
       {history.length ? <ol className="mt-3 divide-y divide-board-line border-y border-board-line">
-        {history.map((entry) => <li key={entry.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
-          <span className="min-w-0 font-semibold text-board-navy">{c[entry.event_type]}{entry.detail ? ` · ${["status_changed", "archived", "added_to_squad"].includes(entry.event_type) && scoutingStatuses.some((status) => status === entry.detail) ? c[entry.detail as keyof typeof c] : entry.detail}` : ""}</span>
+        {history.map((entry) => {
+          const transition = ["status_changed", "archived", "added_to_squad"].includes(entry.event_type) ? readPipelineHistory(entry.detail) : null;
+          return <li key={entry.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
+          <span className="min-w-0 font-semibold text-board-navy">{c[entry.event_type]}{transition ? <><span> · {c[transition.from]} → {c[transition.to]}</span>{transition.note ? <span className="mt-1 block whitespace-pre-wrap font-normal">{c.statusReason}: {transition.note}</span> : null}</> : entry.detail ? ` · ${["status_changed", "archived", "added_to_squad"].includes(entry.event_type) && scoutingStatuses.some((status) => status === entry.detail) ? c[entry.detail as keyof typeof c] : entry.detail}` : ""}</span>
           <time className="text-slate-600">{new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.created_at))}</time>
-        </li>)}
+        </li>;
+        })}
       </ol> : <p className="mt-3 text-sm text-slate-600">{c.noHistory}</p>}
     </section> : null}
   </PageContainer>;

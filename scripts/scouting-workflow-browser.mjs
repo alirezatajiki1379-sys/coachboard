@@ -16,6 +16,10 @@ const bundle = await build({
     import {createRoot} from "react-dom/client";
     import {ScoutingPlayerForm,ScoutingObservationForm} from "@/components/scouting/forms";
     import Profile from "@/app/(app)/scouting/players/[id]/page";
+    import Overview from "@/app/(app)/scouting/page";
+    import Players from "@/app/(app)/scouting/players/page";
+    import Target from "@/app/(app)/scouting/targets/[id]/page";
+    import {pipelineHistoryDetail,scoutingFollowUpDate,reviewableRecommendation} from "@/lib/scouting/workflow";
     import {playerPayload,observationPayload} from "@/lib/scouting/validation";
     const root=createRoot(document.getElementById("root"));
     window.qa=JSON.parse(sessionStorage.getItem("scouting-fixture")||"null")||{
@@ -27,8 +31,12 @@ const bundle = await build({
     const playerAction=async(_,fd)=>{
       if(location.pathname.endsWith("/new")&&!fd.get("confirmDuplicate")) return {duplicates:[{id:"possible",kind:"scouting",name:"Possible fictional player"}]};
       const patch=playerPayload(fd);
-      if(patch.status!==window.qa.player.status) window.qa.history.unshift({id:crypto.randomUUID(),event_type:"status_changed",detail:patch.status,created_at:new Date().toISOString()});
+      if(patch.status!==window.qa.player.status) window.qa.history.unshift({id:crypto.randomUUID(),event_type:"status_changed",detail:pipelineHistoryDetail(window.qa.player.status,patch.status,fd.get("statusNote")||""),created_at:new Date().toISOString()});
       window.qa.player={...window.qa.player,...patch};persist();await window.renderQA("/scouting/players/p");return {};
+    };
+    window.listData=()=>{
+      const latest=window.qa.observations[0];
+      return {players:[window.qa.player],targets:[{id:"target",title:"Fictional search profile",status:"active",priority:"medium",positions:["CM"],deadline:null}],links:[{target_id:"target",player_id:"p"}],lastObserved:latest?{p:latest.observed_on}:{},recentlyObservedIds:[],followUpDates:{p:scoutingFollowUpDate(window.qa.player,latest)},observationActions:{p:latest?.next_action},latestObservations:latest?{p:latest}:{}};
     };
     const observationAction=async(_,fd)=>{
       if(window.failNext){window.failNext=false;return {error:"Simulated failure"};}
@@ -42,11 +50,14 @@ const bundle = await build({
       history.replaceState(null,"",url);
       const locale=window.qa.locale;
       let tree;
-      if(url.startsWith("/scouting/players/new")||url==="/scouting/players/p/edit") tree=<ScoutingPlayerForm key={url} action={playerAction} initial={url.endsWith("/edit")?window.qa.player:undefined} locale={locale}/>;
+      if(url.startsWith("/scouting/players/new")||url.startsWith("/scouting/players/p/edit")) tree=<ScoutingPlayerForm key={url} action={playerAction} initial={url.includes("/p/edit")?window.qa.player:undefined} proposedStatus={url.includes("recommendation=")?reviewableRecommendation(window.qa.player,window.qa.observations[0]?.recommendation):null} locale={locale}/>;
       else if(url.includes("/observations/")){
         const edit=url.match(/observations\/(o\d+)\/edit/);
         tree=<ScoutingObservationForm key={url} action={observationAction} playerId="p" locale={locale} initial={edit?window.qa.observations.find(o=>o.id===edit[1]):undefined} previousFocus={!edit?window.qa.observations[0]?.next_focus:null} today="2026-11-17"/>;
-      } else tree=await Profile({params:Promise.resolve({id:"p"}),searchParams:Promise.resolve(Object.fromEntries(new URLSearchParams(url.split("?")[1]||"")))});
+      } else if(url==="/scouting") tree=await Overview();
+      else if(url.startsWith("/scouting/players")&&!url.startsWith("/scouting/players/p")) tree=await Players({searchParams:Promise.resolve(Object.fromEntries(new URLSearchParams(url.split("?")[1]||"")))});
+      else if(url==="/scouting/targets/target") tree=await Target({params:Promise.resolve({id:"target"})});
+      else tree=await Profile({params:Promise.resolve({id:"p"}),searchParams:Promise.resolve(Object.fromEntries(new URLSearchParams(url.split("?")[1]||"")))});
       root.render(<div key={url}>{tree}</div>);
     };
     window.renderQA(location.pathname+location.search);
@@ -55,10 +66,11 @@ const bundle = await build({
   define: { "process.env.NODE_ENV": '"development"', "process.env": "{}" },
   plugins: [{ name: "scouting-fixture", setup(builder) {
     const stubs = {
-      "next/link": 'import React from "react"; export default function Link({href,children,...props}){return <a href={href} {...props} onClick={e=>{e.preventDefault();window.renderQA(href)}}>{children}</a>}',
+      "next/link": 'import React from "react"; export default function Link({href,children,...props}){return <a href={href} {...props} onClick={e=>{if(href.startsWith("#"))return;e.preventDefault();window.renderQA(href)}}>{children}</a>}',
       "next/navigation": 'export function notFound(){throw new Error("Not found")}',
       "@/lib/scouting/actions": ["inviteScoutingPlayerToTrial", "linkScoutingTarget", "unlinkScoutingTarget"].map(n=>`export async function ${n}(){return {}}`).join("\n"),
-      "@/lib/scouting/queries": 'export async function getScoutingPlayer(){return {...window.qa,links:[],targets:[]}}',
+      "@/lib/scouting/queries": 'export async function getScoutingPlayer(){return {...window.qa,links:[],targets:[]}} export async function getScoutingListData(){return window.listData()} export async function getScoutingTarget(){const d=window.listData();return {...d,target:d.targets[0]}}',
+      "@/lib/trainings/utils": 'export function trainingNowParts(){return {date:"2026-11-17"}}',
       "@/lib/scouting/server": 'export async function scoutingContext(){return {db:{},userId:"owner",locale:window.qa.locale}}',
       "@/lib/squad/squads": 'export async function listSquads(){return []}'
     };
@@ -82,9 +94,10 @@ await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
 let browser;
 try {
   browser = await chromium.launch({headless:true,executablePath:process.env.COACHBOARD_QA_CHROME??"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"});
-  for(const locale of ["de","en"]) for(const width of [320,768,1440,1920]) {
+  for(const locale of ["de","en"]) for(const width of locale==="de"?[320,390,430,768,1440,1920]:[320,768,1440,1920]) {
     const page = await browser.newPage({viewport:{width,height:1000}});
     const errors=[]; page.on("pageerror",e=>errors.push(e.message));
+    page.on("console",message=>{if(message.type()==="error")errors.push(message.text());});
     const save=()=>page.getByRole("button",{name:locale==="de"?"Speichern":"Save",exact:true}).click();
     const fits=async()=>assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,`${locale}/${width}: overflow`);
     await page.goto(`http://127.0.0.1:${server.address().port}/scouting/players/new?locale=${locale}`);
@@ -106,6 +119,8 @@ try {
     await page.locator("#nextAction").fill("Watch next match");
     await page.locator("#followUpDate").fill("2026-11-24");
     await page.locator("#opponent").fill("Visitors");
+    await page.getByText(locale==="de"?"Optionale Bewertungen":"Optional ratings",{exact:true}).click();
+    await page.locator("#ratingTechnical").selectOption("2");
     await page.evaluate(()=>window.failNext=true); await save();
     await page.getByRole("alert").waitFor();
     assert.equal(await page.locator("#nextFocus").inputValue(),"Back to goal under pressure");
@@ -120,6 +135,11 @@ try {
     await page.getByText("Back to goal under pressure",{exact:true}).waitFor();
     await page.locator("#summary").fill("Second observation");
     await page.locator("#recommendation").selectOption("shortlist");
+    await page.locator("#openQuestions").fill("Consistency in the next match?");
+    await page.locator("#nextFocus").fill("Scan before receiving".repeat(16));
+    await page.locator("#followUpDate").fill("2026-11-17");
+    await page.getByText(locale==="de"?"Optionale Bewertungen":"Optional ratings",{exact:true}).click();
+    await page.locator("#ratingTechnical").selectOption("4");
     await save(); await page.waitForURL("**/p?tab=observations");
     assert.equal(await page.locator("ol > li").count(),2);
     await page.locator('a[href="/scouting/players/p/observations/o0/edit"]').click();
@@ -127,6 +147,35 @@ try {
     assert.equal(await page.locator("#recommendation").inputValue(),"monitoring");
     await page.locator("#openQuestions").fill("Consistency?"); await save();
     await page.waitForURL("**/p?tab=observations");
+    await page.getByRole("heading",{name:locale==="de"?"Einzelbewertungen im Verlauf":"Individual ratings over time"}).waitFor();
+    assert.equal(await page.locator("ol details[open]").count(),0);
+    await page.locator("ol details summary").first().click();
+    await page.getByText("Consistency in the next match?",{exact:true}).waitFor();
+    await page.locator('a[href="/scouting/players/p?tab=overview"]').click();
+    await fits();
+    await page.screenshot({path:`/private/tmp/scouting-phase-2-case-${locale}-${width}.png`,fullPage:true});
+    await page.locator('a[href="/scouting/players/p/edit?recommendation=shortlist"]').click();
+    assert.equal(await page.locator("#status").inputValue(),"shortlist");
+    assert.equal(await page.evaluate(()=>window.qa.player.status),"identified");
+    await page.locator("#statusNote").fill("Explicit coaching decision");
+    await save(); await page.waitForURL("**/scouting/players/p");
+    await page.locator('a[href="/scouting/players/p?tab=history"]').click();
+    await page.getByText(/Explicit coaching decision/).waitFor();
+    await page.evaluate(()=>window.renderQA("/scouting"));
+    await page.getByRole("heading",{name:/Next tasks|Nächste Aufgaben/}).waitFor();
+    await page.getByText("Consistency in the next match?",{exact:true}).waitFor();
+    await fits();
+    await page.screenshot({path:`/private/tmp/scouting-phase-2-overview-${locale}-${width}.png`,fullPage:true});
+    await page.evaluate(()=>window.renderQA("/scouting/players"));
+    await page.getByRole("heading",{name:locale==="de"?"Spieler":"Players",exact:true}).waitFor();
+    await fits();
+    await page.locator('a[href="/scouting/players/p/observations/new"]:visible').first().click();
+    await page.locator("#summary").waitFor();
+    await page.evaluate(()=>window.renderQA("/scouting/targets/target"));
+    await page.getByRole("heading",{name:"Fictional search profile"}).waitFor();
+    await fits();
+    await page.screenshot({path:`/private/tmp/scouting-phase-2-target-${locale}-${width}.png`,fullPage:true});
+    await page.locator('a[href="/scouting/players/p"]').click();
     await page.locator('a[href="/scouting/players/p/edit"]').click();
     await page.locator("#status").selectOption("trial"); await save();
     await page.waitForURL("**/scouting/players/p");
@@ -135,10 +184,12 @@ try {
     await page.locator('a[href="/scouting/players/p?tab=observations"]').click();
     assert.equal(await page.locator("ol > li").count(),2);
     assert.equal(await page.evaluate(()=>window.qa.observations.find(o=>o.id==="o0").recommendation),"monitoring");
+    assert.equal(await page.evaluate(()=>window.qa.observations.find(o=>o.id==="o0").rating_technical),2);
+    assert.equal(await page.evaluate(()=>window.qa.observations.find(o=>o.id==="o0").rating_tactical),null);
     assert.equal(await page.evaluate(()=>window.qa.player.status),"trial");
     await fits();
     await page.screenshot({path:`/private/tmp/scouting-2-profile-${locale}-${width}.png`,fullPage:true});
     assert.deepEqual(errors,[]); await page.close();
   }
-  console.log("Scouting UI PASS: actual forms/profile, duplicate warning, preserved errors, create/edit/reopen, two observations, focus, pipeline/history, DE/EN, 320/768/1440/1920px. Mocked persistence only.");
+  console.log("Scouting Phase 1+2 UI PASS: actual overview/list/target/forms/profile, duplicate warning, preserved errors, create/edit/reopen, two observations, rating history, focus, explicit pipeline/history, direct observation links. DE 320/390/430/768/1440/1920; EN 320/768/1440/1920. Mocked persistence only.");
 } finally { await browser?.close(); await new Promise(resolve=>server.close(resolve)); }

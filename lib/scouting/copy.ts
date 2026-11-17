@@ -2,6 +2,12 @@ import type { Locale } from "@/lib/i18n";
 import type { ScoutingObservationRow, ScoutingPlayerRow, ScoutingTargetRow } from "@/types/database";
 
 const en = {
+  nextTasks: "Next tasks", noTasks: "No follow-ups due, open questions or observation focus recorded.",
+  currentCase: "Current picture", observationDetails: "Observation details", ratingHistory: "Individual ratings over time",
+  qualitative: "Assessment and next observation", matchDetails: "Additional match details",
+  reviewRecommendation: "Review status change", proposedStatus: "Proposed status", decisionNote: "Reason / note (optional)",
+  confirmStatus: "Save to confirm this status change.", lastRecommendation: "Latest recommendation",
+  statusReason: "Reason / note", facts: "Player details",
   identity: "First name / temporary label", identityHint: "Name unknown? Use a temporary label such as No. 7 and complete it later.",
   shirtNumber: "Shirt number", birthYear: "Birth year", moreDetails: "More details", optionalRatings: "Optional ratings",
   playerTeam: "Player's team", opponent: "Opponent", competition: "Competition / match type",
@@ -68,6 +74,12 @@ const en = {
 } as const;
 
 const de: Record<keyof typeof en, string> = {
+  nextTasks: "Nächste Aufgaben", noTasks: "Keine fälligen Wiedervorlagen, offenen Fragen oder Beobachtungsfokusse erfasst.",
+  currentCase: "Aktueller Stand", observationDetails: "Beobachtungsdetails", ratingHistory: "Einzelbewertungen im Verlauf",
+  qualitative: "Einschätzung und nächste Beobachtung", matchDetails: "Weitere Spielangaben",
+  reviewRecommendation: "Statusänderung prüfen", proposedStatus: "Vorgeschlagener Status", decisionNote: "Grund / Notiz (optional)",
+  confirmStatus: "Mit Speichern bestätigst du diese Statusänderung.", lastRecommendation: "Letzte Empfehlung",
+  statusReason: "Grund / Notiz", facts: "Spielerdaten",
   identity: "Vorname / vorläufige Bezeichnung", identityHint: "Name unbekannt? Nutze vorläufig z. B. Nr. 7 und ergänze den Namen später.",
   shirtNumber: "Rückennummer", birthYear: "Jahrgang", moreDetails: "Weitere Angaben", optionalRatings: "Optionale Bewertungen",
   playerTeam: "Mannschaft des Spielers", opponent: "Gegner", competition: "Wettbewerb / Spieltyp",
