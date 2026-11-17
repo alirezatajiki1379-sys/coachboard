@@ -6,6 +6,8 @@ export type ScoutingPlayerRow = {
   first_name: string;
   last_name: string | null;
   date_of_birth: string | null;
+  shirt_number: string | null;
+  birth_year: number | null;
   primary_position: string | null;
   secondary_positions: string[];
   strong_foot: "left" | "right" | "both" | null;
@@ -31,6 +33,14 @@ export type ScoutingObservationRow = {
   observed_on: string;
   context: "match" | "training" | "tournament" | "trial" | "other";
   event_label: string | null;
+  player_team: string | null;
+  opponent: string | null;
+  competition: string | null;
+  situations: string | null;
+  open_questions: string | null;
+  next_focus: string | null;
+  recommendation: "archived" | "monitoring" | "shortlist" | "trial" | "identified" | null;
+  follow_up_date: string | null;
   observed_position: string | null;
   minutes_observed: number | null;
   observer: string | null;
@@ -708,6 +718,8 @@ export type Database = {
           first_name: string;
           last_name?: string | null;
           date_of_birth?: string | null;
+          shirt_number?: string | null;
+          birth_year?: number | null;
           primary_position?: string | null;
           secondary_positions?: string[];
           strong_foot?: "left" | "right" | "both" | null;
@@ -737,6 +749,14 @@ export type Database = {
           observed_on: string;
           context: ScoutingObservationRow["context"];
           event_label?: string | null;
+          player_team?: string | null;
+          opponent?: string | null;
+          competition?: string | null;
+          situations?: string | null;
+          open_questions?: string | null;
+          next_focus?: string | null;
+          recommendation?: ScoutingObservationRow["recommendation"];
+          follow_up_date?: string | null;
           observed_position?: string | null;
           minutes_observed?: number | null;
           observer?: string | null;

@@ -1,6 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { asScoutingDb } from "@/lib/scouting/db";
 import type { ScoutingHistoryRow, ScoutingObservationRow, ScoutingPlayerRow, ScoutingTargetPlayerRow, ScoutingTargetRow } from "@/types/database";
+import { scoutingFollowUpDate, type ObservationFollowUp } from "@/lib/scouting/workflow";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
@@ -10,6 +11,8 @@ export type ScoutingListData = {
   links: ScoutingTargetPlayerRow[];
   lastObserved: Record<string, string>;
   recentlyObservedIds: string[];
+  followUpDates: Record<string, string | null>;
+  observationActions: Record<string, string | null>;
 };
 
 export async function getScoutingListData(db: Db, userId: string): Promise<ScoutingListData> {
@@ -18,17 +21,19 @@ export async function getScoutingListData(db: Db, userId: string): Promise<Scout
     scoutingDb.from("scouting_players").select("*").eq("user_id", userId).order("updated_at", { ascending: false }).limit(1000),
     scoutingDb.from("scouting_targets").select("*").eq("user_id", userId).order("updated_at", { ascending: false }).limit(500),
     scoutingDb.from("scouting_target_players").select("*").eq("user_id", userId).limit(5000),
-    scoutingDb.from("scouting_observations").select("player_id,observed_on").eq("user_id", userId).order("observed_on", { ascending: false }).limit(5000)
+    scoutingDb.from("scouting_observations").select("player_id,observed_on,next_action,follow_up_date").eq("user_id", userId).order("observed_on", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(5000)
   ]);
   const error = playersResult.error ?? targetsResult.error ?? linksResult.error ?? observationsResult.error;
   if (error) throw new Error(error.message);
   const lastObserved: Record<string, string> = {};
   const recentlyObservedIds = new Set<string>();
+  const latestFollowUps: Record<string, ObservationFollowUp> = {};
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 30);
   const cutoffDate = cutoff.toISOString().slice(0, 10);
   for (const row of observationsResult.data ?? []) {
     if (!lastObserved[row.player_id]) lastObserved[row.player_id] = row.observed_on;
+    if (!latestFollowUps[row.player_id]) latestFollowUps[row.player_id] = row;
     if (row.observed_on >= cutoffDate) recentlyObservedIds.add(row.player_id);
   }
   return {
@@ -36,6 +41,8 @@ export async function getScoutingListData(db: Db, userId: string): Promise<Scout
     targets: targetsResult.data ?? [],
     links: linksResult.data ?? [],
     lastObserved,
+    followUpDates: Object.fromEntries((playersResult.data ?? []).map((player) => [player.id, scoutingFollowUpDate(player, latestFollowUps[player.id])])),
+    observationActions: Object.fromEntries(Object.entries(latestFollowUps).map(([id, row]) => [id, row.next_action])),
     recentlyObservedIds: [...recentlyObservedIds]
   };
 }
@@ -44,7 +51,7 @@ export async function getScoutingPlayer(db: Db, userId: string, playerId: string
   const scoutingDb = asScoutingDb(db);
   const [playerResult, observationsResult, linksResult, historyResult, targetsResult] = await Promise.all([
     scoutingDb.from("scouting_players").select("*").eq("user_id", userId).eq("id", playerId).maybeSingle(),
-    scoutingDb.from("scouting_observations").select("*").eq("user_id", userId).eq("player_id", playerId).order("observed_on", { ascending: false }).limit(300),
+    scoutingDb.from("scouting_observations").select("*").eq("user_id", userId).eq("player_id", playerId).order("observed_on", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(300),
     scoutingDb.from("scouting_target_players").select("*").eq("user_id", userId).eq("player_id", playerId),
     scoutingDb.from("scouting_history").select("*").eq("user_id", userId).eq("player_id", playerId).order("created_at", { ascending: false }).limit(200),
     scoutingDb.from("scouting_targets").select("*").eq("user_id", userId).neq("status", "archived").order("title")

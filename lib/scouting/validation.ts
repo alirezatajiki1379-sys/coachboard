@@ -1,9 +1,12 @@
 import { normalizeCanonicalPosition } from "@/lib/squad/positions";
 import type { ScoutingObservationRow, ScoutingPlayerRow, ScoutingTargetRow } from "@/types/database";
+import { observationRecommendations } from "@/lib/scouting/workflow";
 
 export function formText(form: FormData, name: string, max = 4000) {
   const value = form.get(name);
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
+  const text = typeof value === "string" ? value.trim() : "";
+  if (text.length > max) throw new Error("Text is too long.");
+  return text;
 }
 
 export function optional(value: string) { return value || null; }
@@ -40,6 +43,8 @@ export function playerPayload(form: FormData) {
   const birthDate = formText(form, "birthDate", 10);
   const nextActionDate = formText(form, "nextActionDate", 10);
   if (birthDate && !validDate(birthDate)) throw new Error("Check the birthdate.");
+  const birthYear = optionalNumber(form, "birthYear", 1900, 2100);
+  if (birthYear !== null && (!Number.isInteger(birthYear) || (birthDate && Number(birthDate.slice(0, 4)) !== birthYear))) throw new Error("Check the birth year.");
   if (nextActionDate && !validDate(nextActionDate)) throw new Error("Check the next action date.");
   const primary = formText(form, "primaryPosition", 40);
   const primaryPosition = primary ? normalizeCanonicalPosition(primary) : null;
@@ -49,6 +54,8 @@ export function playerPayload(form: FormData) {
     first_name: firstName,
     last_name: optional(formText(form, "lastName", 120)),
     date_of_birth: optional(birthDate),
+    shirt_number: optional(formText(form, "shirtNumber", 12)),
+    birth_year: birthYear,
     primary_position: primaryPosition,
     secondary_positions: secondary,
     strong_foot: foot(formText(form, "strongFoot", 20)),
@@ -74,6 +81,10 @@ export function observationPayload(form: FormData) {
   if (!validDate(date)) throw new Error("Choose a valid observation date.");
   const summary = formText(form, "summary");
   if (!summary) throw new Error("Add a short summary.");
+  const followUpDate = formText(form, "followUpDate", 10);
+  if (followUpDate && !validDate(followUpDate)) throw new Error("Check the next action date.");
+  const recommendation = formText(form, "recommendation", 40);
+  if (recommendation && !observationRecommendations.some((value) => value === recommendation)) throw new Error("Choose a valid recommendation.");
   const minutes = optionalNumber(form, "minutesObserved", 0, 300);
   if (minutes !== null && !Number.isInteger(minutes)) throw new Error("Minutes must be a whole number.");
   const rating = (name: string) => {
@@ -85,6 +96,14 @@ export function observationPayload(form: FormData) {
     observed_on: date,
     context: option<ScoutingObservationRow["context"]>(formText(form, "context"), ["match", "training", "tournament", "trial", "other"], "match"),
     event_label: optional(formText(form, "eventLabel", 160)),
+    player_team: optional(formText(form, "playerTeam", 160)),
+    opponent: optional(formText(form, "opponent", 160)),
+    competition: optional(formText(form, "competition", 160)),
+    situations: optional(formText(form, "situations", 12000)),
+    open_questions: optional(formText(form, "openQuestions")),
+    next_focus: optional(formText(form, "nextFocus")),
+    recommendation: observationRecommendations.find((value) => value === recommendation) ?? null,
+    follow_up_date: optional(followUpDate),
     observed_position: optional(formText(form, "observedPosition", 60)),
     minutes_observed: minutes,
     observer: optional(formText(form, "observer", 120)),

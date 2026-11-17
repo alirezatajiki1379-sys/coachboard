@@ -2,6 +2,17 @@ import type { Locale } from "@/lib/i18n";
 import type { ScoutingObservationRow, ScoutingPlayerRow, ScoutingTargetRow } from "@/types/database";
 
 const en = {
+  identity: "First name / temporary label", identityHint: "Name unknown? Use a temporary label such as No. 7 and complete it later.",
+  shirtNumber: "Shirt number", birthYear: "Birth year", moreDetails: "More details", optionalRatings: "Optional ratings",
+  playerTeam: "Player's team", opponent: "Opponent", competition: "Competition / match type",
+  situations: "Concrete game situations", situationsHint: "Minute, situation, perception / decision, execution and impact. Separate multiple situations with a blank line.",
+  openQuestions: "Open questions", nextFocus: "Check at the next observation", previousFocus: "Focus from the previous observation",
+  recommendation: "Recommendation at this observation", followUp: "Follow-up date", currentStatus: "Current pipeline status",
+  recommendationHint: "This assessment stays with the observation. Change the current pipeline separately in Edit player.",
+  stopFollowing: "Do not pursue for now", continueObserving: "Continue observing", internalStep: "Further internal step", developmentHint: "Consider physical development, experience and the match context.",
+  invalidBirthYear: "Check the birth year; it must match the birthdate when both are entered.",
+  textTooLong: "A text exceeds the allowed length. Shorten it before saving; your input has been kept.",
+  invalidRecommendation: "Choose a valid recommendation.",
   scouting: "Scouting", overview: "Overview", players: "Players", targets: "Targets",
   addPlayer: "Add player", createTarget: "Create scouting target", editPlayer: "Edit player", editTarget: "Edit target",
   back: "Back to Scouting", activeProspects: "Active prospects", shortlisted: "Shortlisted players",
@@ -57,6 +68,17 @@ const en = {
 } as const;
 
 const de: Record<keyof typeof en, string> = {
+  identity: "Vorname / vorläufige Bezeichnung", identityHint: "Name unbekannt? Nutze vorläufig z. B. Nr. 7 und ergänze den Namen später.",
+  shirtNumber: "Rückennummer", birthYear: "Jahrgang", moreDetails: "Weitere Angaben", optionalRatings: "Optionale Bewertungen",
+  playerTeam: "Mannschaft des Spielers", opponent: "Gegner", competition: "Wettbewerb / Spieltyp",
+  situations: "Konkrete Spielsituationen", situationsHint: "Minute, Situation, Wahrnehmung / Entscheidung, Ausführung und Wirkung. Mehrere Situationen durch eine Leerzeile trennen.",
+  openQuestions: "Offene Fragen", nextFocus: "Bei der nächsten Beobachtung prüfen", previousFocus: "Fokus aus der vorherigen Beobachtung",
+  recommendation: "Empfehlung bei dieser Beobachtung", followUp: "Wiedervorlage", currentStatus: "Aktueller Pipeline-Status",
+  recommendationHint: "Diese Einschätzung bleibt bei der Beobachtung. Den aktuellen Status unter Spieler bearbeiten separat ändern.",
+  stopFollowing: "Aktuell nicht weiter verfolgen", continueObserving: "Weiter beobachten", internalStep: "Weiterer interner Schritt", developmentHint: "Körperlichen Entwicklungsstand, Erfahrung und Spielkontext berücksichtigen.",
+  invalidBirthYear: "Prüfe den Jahrgang. Wenn auch ein Geburtsdatum angegeben ist, müssen beide übereinstimmen.",
+  textTooLong: "Ein Text überschreitet die zulässige Länge. Bitte vor dem Speichern kürzen; deine Eingaben bleiben erhalten.",
+  invalidRecommendation: "Wähle eine gültige Empfehlung.",
   scouting: "Scouting", overview: "Übersicht", players: "Spieler", targets: "Suchprofile",
   addPlayer: "Spieler hinzufügen", createTarget: "Suchprofil erstellen", editPlayer: "Spieler bearbeiten", editTarget: "Suchprofil bearbeiten",
   back: "Zurück zu Scouting", activeProspects: "Aktive Talente", shortlisted: "Spieler auf der Shortlist",

@@ -15,7 +15,8 @@ export default async function ScoutingOverviewPage() {
   const data = await getScoutingListData(db, userId);
   const today = trainingNowParts().date;
   const activePlayers = data.players.filter((player) => player.status !== "archived" && player.status !== "added_to_squad");
-  const followUps = activePlayers.filter((player) => player.next_action_date && player.next_action_date <= today && player.next_action && player.next_action !== "none");
+  const followUps = activePlayers.filter((player) => data.followUpDates[player.id] && data.followUpDates[player.id]! <= today)
+    .sort((a, b) => data.followUpDates[a.id]!.localeCompare(data.followUpDates[b.id]!));
   const dueTargets = data.targets.filter((target) => target.status === "active" && target.deadline && target.deadline <= new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10));
   const stats = [
     { label: copy.activeProspects, value: activePlayers.length, href: "/scouting/players" },
@@ -43,8 +44,8 @@ export default async function ScoutingOverviewPage() {
           <h2 className="mb-3 text-lg font-bold text-board-navy">{copy.followUpsDue}</h2>
           {followUps.length ? <div className="divide-y divide-board-line border-y border-board-line">
             {followUps.slice(0, 8).map((player) => <Link key={player.id} href={`/scouting/players/${player.id}`} className="flex items-center justify-between gap-3 py-3 text-sm hover:text-board-green">
-              <span className="min-w-0 font-semibold">{player.first_name} {player.last_name}</span>
-              <span className="shrink-0 text-slate-600">{formatDate(player.next_action_date, locale)}</span>
+              <span className="min-w-0 break-words font-semibold">{player.first_name} {player.last_name}</span>
+              <span className="shrink-0 text-slate-600">{formatDate(data.followUpDates[player.id], locale)}</span>
               <ArrowRight className="h-4 w-4 shrink-0" />
             </Link>)}
           </div> : <p className="text-sm text-slate-600">{copy.none}</p>}

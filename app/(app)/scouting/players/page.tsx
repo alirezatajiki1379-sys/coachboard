@@ -44,7 +44,7 @@ export default async function ScoutingPlayersPage({ searchParams }: Props) {
       && (!club || player.current_club === club)
       && (!priority || player.priority === priority)
       && (!targetId || linkedIds.has(player.id))
-      && (!due || Boolean(player.next_action_date && player.next_action_date <= today && player.next_action !== "none"));
+      && (!due || Boolean(data.followUpDates[player.id] && data.followUpDates[player.id]! <= today));
   }).sort((a, b) => {
     if (sort === "age") return (calculateAge(a.date_of_birth ?? undefined) ?? 999) - (calculateAge(b.date_of_birth ?? undefined) ?? 999);
     if (sort === "recent") return (data.lastObserved[b.id] ?? "").localeCompare(data.lastObserved[a.id] ?? "");
@@ -59,6 +59,7 @@ export default async function ScoutingPlayersPage({ searchParams }: Props) {
       actions={<ButtonLink href="/scouting/players/new"><Plus className="h-4 w-4" />{copy.addPlayer}</ButtonLink>} />
     <ScoutingNav locale={locale} active="players" />
     <form method="get" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" aria-label={copy.search}>
+      {due ? <input type="hidden" name="due" value="1" /> : null}
       <input name="q" type="search" placeholder={copy.search} aria-label={copy.search} defaultValue={param(params.q)} className={input} />
       <select name="status" aria-label={copy.status} defaultValue={status} className={input}>
         <option value="">{copy.allStatuses}</option>
@@ -107,6 +108,8 @@ export default async function ScoutingPlayersPage({ searchParams }: Props) {
           <p className="mt-2 text-sm text-slate-700">{[player.primary_position, ...player.secondary_positions].filter(Boolean).join(" / ") || copy.unknown} · {calculateAge(player.date_of_birth ?? undefined) ?? "?"} {copy.days}</p>
           <p className="mt-1 break-words text-sm text-slate-600">{player.current_club || copy.unknown}</p>
           <p className="mt-2 text-xs text-slate-600">{copy.lastObserved}: {data.lastObserved[player.id] ? formatDate(data.lastObserved[player.id], locale) : copy.unknown}</p>
+          {data.observationActions[player.id] ? <p className="mt-1 break-words text-sm">{copy.nextAction}: {data.observationActions[player.id]}</p> : null}
+          {data.followUpDates[player.id] ? <p className="mt-1 text-xs text-slate-600">{copy.followUp}: {formatDate(data.followUpDates[player.id], locale)}</p> : null}
           {playerTarget(player.id) ? <p className="mt-1 break-words text-xs text-slate-600">{copy.target}: {playerTarget(player.id)}</p> : null}
         </Link>)}
       </div>
@@ -127,7 +130,9 @@ export default async function ScoutingPlayersPage({ searchParams }: Props) {
               <td className="px-3 py-3">{copy[player.priority]}</td>
               <td className="px-3 py-3">{formatDate(data.lastObserved[player.id], locale) || "–"}</td>
               <td className="max-w-36 truncate px-3 py-3">{playerTarget(player.id) || "–"}</td>
-              <td className="px-3 py-3">{player.next_action ? copy[player.next_action === "none" ? "no_action" : player.next_action] : "–"}</td>
+              <td className="max-w-64 break-words px-3 py-3">{data.observationActions[player.id] || (player.next_action ? copy[player.next_action === "none" ? "no_action" : player.next_action] : "–")}
+                {data.followUpDates[player.id] ? <p className="mt-1 text-xs text-slate-600">{copy.followUp}: {formatDate(data.followUpDates[player.id], locale)}</p> : null}
+              </td>
             </tr>)}
           </tbody>
         </table>

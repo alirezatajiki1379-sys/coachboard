@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+const qa = createRequire(path.join(process.env.COACHBOARD_QA_DEPS ?? "/private/tmp/coachboard-archive-qa", "package.json"));
+const { PGlite } = qa("@electric-sql/pglite");
+const db = new PGlite();
+try {
+  await db.exec(`create schema auth;
+    create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.user_id',true),'')::uuid$$;
+    create table public.squad_players(id uuid primary key, user_id uuid not null references auth.users(id));
+    create table public.squads(id uuid primary key, user_id uuid not null references auth.users(id));`);
+  await db.exec(readFileSync("supabase/migrations/20260920_scouting_workspace.sql", "utf8"));
+  const owner = "00000000-0000-0000-0000-000000000001", other = "00000000-0000-0000-0000-000000000002";
+  await db.query("insert into auth.users values ($1),($2)", [owner, other]);
+  const id = (await db.query("insert into scouting_players(user_id,first_name) values ($1,'Fictional') returning id", [owner])).rows[0].id;
+  await db.query("insert into scouting_observations(user_id,player_id,observed_on,context,summary) values ($1,$2,'2026-11-17','match','Historical summary')", [owner, id]);
+  const before = (await db.query("select id,summary,created_at,updated_at from scouting_observations")).rows;
+  const policies = (await db.query("select tablename,policyname,qual,with_check from pg_policies order by tablename")).rows;
+  const sql = readFileSync("supabase/migrations/20261117_scouting_observation_workflow.sql", "utf8");
+  await db.exec(sql); await db.exec(sql);
+  assert.deepEqual((await db.query("select id,summary,created_at,updated_at from scouting_observations")).rows, before);
+  assert.deepEqual((await db.query("select tablename,policyname,qual,with_check from pg_policies order by tablename")).rows, policies);
+  assert.equal((await db.query("select next_focus from scouting_observations")).rows[0].next_focus, null);
+  await db.query("update scouting_observations set next_focus='Pressure', recommendation='shortlist',follow_up_date='2026-11-24'");
+  await assert.rejects(db.query("update scouting_observations set recommendation='talent_score'"), /check constraint/);
+  await assert.rejects(db.query("insert into scouting_observations(user_id,player_id,observed_on,context,summary) values ($1,$2,'2026-11-17','match','Foreign')", [other, id]), /foreign key/);
+  await db.exec("create role scouting_test; grant usage on schema public,auth to scouting_test; grant select,insert,update on all tables in schema public to scouting_test; set role scouting_test;");
+  await db.query("select set_config('app.user_id',$1,false)", [other]);
+  assert.equal((await db.query("select * from scouting_players")).rows.length, 0);
+  assert.equal((await db.query("select * from scouting_observations")).rows.length, 0);
+  await db.query("select set_config('app.user_id',$1,false)", [owner]);
+  assert.equal((await db.query("select * from scouting_players")).rows.length, 1);
+  console.log("Scouting SQL PASS: real SQL execution twice, nullable additions, historical data, constraints, RLS and cross-owner FK. Local PGlite only.");
+} finally { await db.close(); }

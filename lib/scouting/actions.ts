@@ -8,6 +8,7 @@ import { asScoutingDb, type ScoutingDb } from "@/lib/scouting/db";
 import { syncFutureAutoSyncTrainingsForPlayer } from "@/lib/squad/attendance-actions";
 import { formText, observationPayload, playerPayload, targetPayload, validDate } from "@/lib/scouting/validation";
 import type { ScoutingHistoryRow, ScoutingPlayerRow } from "@/types/database";
+import { possibleScoutingDuplicate } from "@/lib/scouting/workflow";
 
 export type ScoutingFormState = { error?: string; duplicates?: Array<{ id: string; name: string; kind: "scouting" | "squad" }> };
 
@@ -22,23 +23,16 @@ async function logHistory(db: ScoutingDb, userId: string, playerId: string, even
   await db.from("scouting_history").insert({ user_id: userId, player_id: playerId, event_type: eventType, detail: detail ?? null });
 }
 
-function samePerson(a: { first_name: string; last_name: string | null; date_of_birth: string | null; current_club?: string | null }, b: { first_name: string; last_name: string | null; date_of_birth: string | null; current_club?: string | null }) {
-  const normalize = (value?: string | null) => (value ?? "").trim().toLocaleLowerCase("de");
-  if (normalize(a.first_name) !== normalize(b.first_name) || normalize(a.last_name) !== normalize(b.last_name)) return false;
-  if (a.date_of_birth && b.date_of_birth) return a.date_of_birth === b.date_of_birth;
-  return Boolean(a.current_club && b.current_club && normalize(a.current_club) === normalize(b.current_club));
-}
-
 async function findDuplicates(db: ScoutingDb, userId: string, candidate: ReturnType<typeof playerPayload>) {
   const [scouting, squad] = await Promise.all([
-    db.from("scouting_players").select("id,first_name,last_name,date_of_birth,current_club").eq("user_id", userId).limit(1000),
+    db.from("scouting_players").select("id,first_name,last_name,date_of_birth,birth_year,current_club").eq("user_id", userId).limit(1000),
     db.from("squad_players").select("id,first_name,last_name,date_of_birth,club").eq("user_id", userId).is("deleted_at", null).limit(1000)
   ]);
   if (scouting.error || squad.error) throw new Error(scouting.error?.message ?? squad.error?.message);
-  const prospectMatches = (scouting.data ?? []).filter((row) => samePerson(row, candidate)).map((row) => ({
+  const prospectMatches = (scouting.data ?? []).filter((row) => possibleScoutingDuplicate(row, candidate)).map((row) => ({
     id: row.id, name: [row.first_name, row.last_name].filter(Boolean).join(" "), kind: "scouting" as const
   }));
-  const squadMatches = (squad.data ?? []).filter((row) => samePerson({ ...row, current_club: row.club }, candidate)).map((row) => ({
+  const squadMatches = (squad.data ?? []).filter((row) => possibleScoutingDuplicate({ ...row, current_club: row.club }, candidate)).map((row) => ({
     id: row.id, name: [row.first_name, row.last_name].filter(Boolean).join(" "), kind: "squad" as const
   }));
   return [...prospectMatches, ...squadMatches];
@@ -94,7 +88,8 @@ async function saveObservation(playerId: string, observationId: string | null, f
   try {
     const payload = observationPayload(form);
     const { db, userId } = await requireScoutingUser();
-    const { data: player } = await db.from("scouting_players").select("id").eq("id", playerId).eq("user_id", userId).maybeSingle();
+    const { data: player, error: playerError } = await db.from("scouting_players").select("id").eq("id", playerId).eq("user_id", userId).maybeSingle();
+    if (playerError) return { error: playerError.message };
     if (!player) return { error: "Prospect not found." };
     if (observationId) {
       const { data, error } = await db.from("scouting_observations").update(payload).eq("id", observationId).eq("player_id", playerId).eq("user_id", userId).select("id").maybeSingle();
