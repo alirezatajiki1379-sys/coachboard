@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ChevronDown, FileText, History, MoreHorizontal, Pencil, RotateCcw, TimerReset } from "lucide-react";
+import { Archive, ChevronDown, FileText, History, MoreHorizontal, Pencil, RotateCcw, TimerReset, UserCheck } from "lucide-react";
 import { DialogPortal } from "@/components/shared/dialog-portal";
 import { useDialogFocus } from "@/components/shared/use-dialog-focus";
 import { useI18n } from "@/components/i18n/i18n-provider";
@@ -17,6 +17,7 @@ import {
   type TrialExtensionContext
 } from "@/lib/squad/actions";
 import { estimatedSessionExtensionEnd, type TrialPeriodSummary } from "@/lib/squad/trials";
+import { convertTrialPlayerToSquadPlayer, type TrialPromotionState } from "@/lib/squad/attendance-actions";
 import { formatDate, formatMessage } from "@/lib/i18n";
 
 type PlayerActionsProps = {
@@ -68,7 +69,8 @@ export function PlayerActions({ playerId, playerType = "roster", archived, initi
   }
 
   return (
-    <div ref={menuRef} className="relative z-20">
+    <div ref={menuRef} className="relative z-20 flex max-w-full flex-wrap items-start gap-2">
+      <TrialPromotionAction key={playerId} playerId={playerId} isTrial={playerType === "trial"} />
       <Button
         type="button"
         variant="secondary"
@@ -82,7 +84,7 @@ export function PlayerActions({ playerId, playerType = "roster", archived, initi
         <ChevronDown className="h-3.5 w-3.5" />
       </Button>
       {menuOpen ? (
-        <div role="menu" className="absolute right-0 top-11 z-40 w-56 rounded-lg border border-board-line bg-white p-2 shadow-xl">
+        <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-56 rounded-lg border border-board-line bg-white p-2 shadow-xl">
           {editHref ? <Link role="menuitem" href={editHref} onClick={() => setMenuOpen(false)} className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-board-navy hover:bg-green-50 hover:text-board-green"><Pencil className="h-4 w-4" />{locale === "de" ? "Stammdaten bearbeiten" : "Edit details"}</Link> : null}
           {reportHref ? <Link role="menuitem" href={reportHref} onClick={() => setMenuOpen(false)} className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-board-navy hover:bg-green-50 hover:text-board-green"><FileText className="h-4 w-4" />{locale === "de" ? "Spielerbericht" : "Player report"}</Link> : null}
           {scoutingHref ? <Link role="menuitem" href={scoutingHref} onClick={() => setMenuOpen(false)} className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-board-navy hover:bg-green-50 hover:text-board-green"><History className="h-4 w-4" />{locale === "de" ? "Scouting-Verlauf" : "Scouting history"}</Link> : null}
@@ -120,6 +122,30 @@ export function PlayerActions({ playerId, playerType = "roster", archived, initi
         <TrialExtensionDialog playerId={playerId} initialSummary={initialTrialSummary} onClose={() => setExtensionOpen(false)} />
       ) : null}
     </div>
+  );
+}
+
+const initialPromotionState: TrialPromotionState = { ok: false };
+
+function TrialPromotionAction({ playerId, isTrial }: { playerId: string; isTrial: boolean }) {
+  const { messages } = useI18n();
+  const copy = messages.squad.trialPromotion;
+  const router = useRouter();
+  const [state, action, pending] = useActionState(convertTrialPlayerToSquadPlayer, initialPromotionState);
+  useEffect(() => {
+    if (state.ok) router.refresh();
+  }, [router, state]);
+  if (!isTrial && !state.ok) return null;
+  return (
+    <form action={action} className="min-w-0 max-w-full">
+      <input type="hidden" name="playerId" value={playerId} />
+      {!state.ok ? <Button type="submit" disabled={pending} className="min-h-9 max-w-full px-3">
+        <UserCheck className="h-4 w-4 shrink-0" />
+        {pending ? copy.saving : copy.action}
+      </Button> : null}
+      {state.error ? <p role="alert" className="mt-2 max-w-xs break-words text-sm text-red-700">{state.error === "invalid_player" ? copy.invalidPlayer : copy.saveFailed}</p> : null}
+      {state.ok ? <p role="status" className="max-w-xs break-words text-sm text-board-green">{state.warning ? copy.syncWarning : copy.success}</p> : null}
+    </form>
   );
 }
 

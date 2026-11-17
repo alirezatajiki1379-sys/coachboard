@@ -390,6 +390,14 @@
       "addPlayerManually": "Add player manually",
       "importPlayers": "Import players"
     },
+    "trialPromotion": {
+      "action": "Add to squad",
+      "saving": "Adding to squad...",
+      "success": "Player added to the squad.",
+      "invalidPlayer": "This player cannot be added to the squad. Please reload the profile.",
+      "saveFailed": "The player could not be added to the squad. Please try again.",
+      "syncWarning": "Player added to the squad. Future training participants or scouting history could not be fully synchronized. Please check them."
+    },
     "trialExtension": {
       "actions": "Actions",
       "extend": "Extend trial",

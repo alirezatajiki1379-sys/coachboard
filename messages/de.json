@@ -390,6 +390,14 @@
       "addPlayerManually": "Spieler manuell hinzufügen",
       "importPlayers": "Spieler importieren"
     },
+    "trialPromotion": {
+      "action": "In Kader übernehmen",
+      "saving": "Wird übernommen...",
+      "success": "Spieler wurde in den Kader übernommen.",
+      "invalidPlayer": "Dieser Spieler kann nicht übernommen werden. Bitte lade das Profil neu.",
+      "saveFailed": "Der Spieler konnte nicht übernommen werden. Bitte versuche es erneut.",
+      "syncWarning": "Spieler wurde übernommen. Zukünftige Trainingsteilnehmer oder der Scouting-Verlauf konnten nicht vollständig synchronisiert werden. Bitte prüfe sie."
+    },
     "trialExtension": {
       "actions": "Aktionen",
       "extend": "Probezeit verlängern",

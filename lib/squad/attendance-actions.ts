@@ -1382,42 +1382,80 @@ export async function completeTrainingEvent(formData: FormData) {
   redirect(eventPath(eventId));
 }
 
-export async function convertTrialPlayerToSquadPlayer(formData: FormData) {
+export type TrialPromotionState = {
+  ok: boolean;
+  error?: "invalid_player" | "save_failed";
+  warning?: boolean;
+};
+
+export async function convertTrialPlayerToSquadPlayer(_: TrialPromotionState, formData: FormData): Promise<TrialPromotionState> {
   const eventId = formString(formData, "eventId");
   const playerId = formString(formData, "playerId");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  const { error } = await db
-    .from("squad_players")
-    .update({ player_type: "roster", converted_at: new Date().toISOString() })
-    .eq("id", playerId)
-    .eq("user_id", user.id)
-    .eq("player_type", "trial");
-  if (error) throw new Error(error.message);
-  const scoutingDb = asScoutingDb(db);
-  const { data: scoutingPlayer, error: scoutingError } = await scoutingDb
-    .from("scouting_players")
-    .update({ status: "added_to_squad" })
-    .eq("user_id", user.id)
-    .eq("linked_squad_player_id", playerId)
-    .select("id")
-    .maybeSingle();
-  if (scoutingError) throw new Error(scoutingError.message);
-  if (scoutingPlayer) {
-    const { error: historyError } = await scoutingDb.from("scouting_history").insert({
-      user_id: user.id,
-      player_id: scoutingPlayer.id,
-      event_type: "added_to_squad"
-    });
-    if (historyError) throw new Error(historyError.message);
-    revalidatePath(`/scouting/players/${scoutingPlayer.id}`);
-    revalidatePath("/scouting");
+  let warning = false;
+  try {
+    const { data: converted, error } = await db
+      .from("squad_players")
+      .update({ player_type: "roster", converted_at: new Date().toISOString() })
+      .eq("id", playerId)
+      .eq("user_id", user.id)
+      .eq("player_type", "trial")
+      .is("archived_at", null)
+      .is("deleted_at", null)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: "save_failed" };
+    if (!converted) {
+      const { data: existing, error: existingError } = await db.from("squad_players")
+        .select("id,player_type,converted_at")
+        .eq("id", playerId).eq("user_id", user.id)
+        .is("archived_at", null).is("deleted_at", null).maybeSingle();
+      if (existingError) return { ok: false, error: "save_failed" };
+      if (!existing || existing.player_type !== "roster" || !existing.converted_at) return { ok: false, error: "invalid_player" };
+    }
+  } catch {
+    return { ok: false, error: "save_failed" };
   }
-  await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
+  // Conversion is already saved. Optional integrations must not report it as
+  // failed; repeated submissions preserve converted_at and skip duplicate history.
+  try {
+    const scoutingDb = asScoutingDb(db);
+    const { data: scoutingPlayer, error: scoutingError } = await scoutingDb
+      .from("scouting_players")
+      .update({ status: "added_to_squad" })
+      .eq("user_id", user.id)
+      .eq("linked_squad_player_id", playerId)
+      .neq("status", "added_to_squad")
+      .select("id")
+      .maybeSingle();
+    if (scoutingError) throw new Error(scoutingError.message);
+    if (scoutingPlayer) {
+      const { error: historyError } = await scoutingDb.from("scouting_history").insert({
+        user_id: user.id,
+        player_id: scoutingPlayer.id,
+        event_type: "added_to_squad"
+      });
+      if (historyError) throw new Error(historyError.message);
+      revalidatePath(`/scouting/players/${scoutingPlayer.id}`);
+      revalidatePath("/scouting");
+    }
+  } catch {
+    warning = true;
+  }
+  try {
+    await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
+  } catch {
+    warning = true;
+  }
 
-  revalidateEvent(eventId);
+  if (eventId) revalidateEvent(eventId);
   revalidatePath("/squad");
-  redirect(eventPath(eventId));
+  revalidatePath(`/squad/players/${playerId}`);
+  revalidatePath("/squad/planner");
+  revalidatePath("/squad/analysis");
+  revalidatePath("/dashboard");
+  return { ok: true, warning };
 }
 
 export async function syncFutureAutoSyncTrainingsForPlayer(db: SupabaseClient, userId: string, playerId: string) {
