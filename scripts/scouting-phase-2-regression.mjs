@@ -100,3 +100,45 @@ test("existing Scouting-to-Trial invitation creates one linked squad identity an
   assert.equal(db.tables.squad_players.length, 1);
   assert.deepEqual(db.tables.scouting_observations, previous);
 });
+
+test("general prospect editing cannot bypass real trial-to-roster promotion, even with a linked identity", async () => {
+  for (const linked of [null, "trial-player"]) {
+    const db = fakeDb(); const a = actions(db);
+    db.tables.scouting_players.push({ ...player, status: "trial", linked_squad_player_id: linked });
+    db.tables.scouting_observations.push({ ...latest });
+    const before = structuredClone(db.tables);
+    const result = await a.updateScoutingPlayer("p", {}, form({ firstName: "Fictional", status: "added_to_squad" }));
+    assert.equal(result.error, "Use the squad profile to promote this player.");
+    assert.deepEqual(db.tables, before);
+  }
+});
+
+test("already promoted prospects remain editable without creating a player or another conversion history entry", async () => {
+  const db = fakeDb(); const a = actions(db);
+  db.tables.scouting_players.push({ ...player, status: "added_to_squad", linked_squad_player_id: "roster-player" });
+  await assert.rejects(a.updateScoutingPlayer("p", {}, form({ firstName: "Corrected name", status: "added_to_squad" })), /\/scouting\/players\/p/);
+  assert.equal(db.tables.scouting_players[0].first_name, "Corrected name");
+  assert.equal(db.tables.scouting_players[0].linked_squad_player_id, "roster-player");
+  assert.equal(db.tables.scouting_players[0].status, "added_to_squad");
+  assert.equal(db.tables.scouting_history.length, 0);
+  assert.equal(db.tables.squad_players.length, 0);
+});
+
+test("a concurrent real promotion cannot be overwritten by a stale prospect edit", async () => {
+  const db = fakeDb(); const originalFrom = db.from.bind(db);
+  db.tables.scouting_players.push({ ...player });
+  db.from = (table) => {
+    const q = originalFrom(table);
+    const originalUpdate = q.update;
+    q.update = (payload) => {
+      if (table === "scouting_players") db.tables.scouting_players[0].status = "added_to_squad";
+      return originalUpdate(payload);
+    };
+    return q;
+  };
+  const result = await actions(db).updateScoutingPlayer("p", {}, form({ firstName: "Stale edit", status: "shortlist" }));
+  assert.match(result.error, /status changed/);
+  assert.equal(db.tables.scouting_players[0].status, "added_to_squad");
+  assert.equal(db.tables.scouting_players[0].first_name, "Fictional");
+  assert.equal(db.tables.scouting_history.length, 0);
+});

@@ -189,6 +189,13 @@ try {
     assert.equal(await page.evaluate(()=>window.qa.player.status),"trial");
     await fits();
     await page.screenshot({path:`/private/tmp/scouting-2-profile-${locale}-${width}.png`,fullPage:true});
+    await page.evaluate(()=>{window.qa.player.linked_squad_player_id="trial-player";return window.renderQA("/scouting/players/p/edit");});
+    await page.locator("#status").waitFor();
+    assert.equal(await page.locator('#status option[value="added_to_squad"]').count(),0);
+    await page.evaluate(()=>{window.qa.player.status="added_to_squad";return window.renderQA("/scouting/players/p/edit?promotion=existing");});
+    await page.waitForFunction(()=>document.querySelector("#status")?.value==="added_to_squad");
+    assert.equal(await page.locator('#status option[value="added_to_squad"]').count(),1);
+    await fits();
     assert.deepEqual(errors,[]); await page.close();
   }
   console.log("Scouting Phase 1+2 UI PASS: actual overview/list/target/forms/profile, duplicate warning, preserved errors, create/edit/reopen, two observations, rating history, focus, explicit pipeline/history, direct observation links. DE 320/390/430/768/1440/1920; EN 320/768/1440/1920. Mocked persistence only.");

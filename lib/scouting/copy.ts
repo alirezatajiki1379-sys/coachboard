@@ -2,6 +2,8 @@ import type { Locale } from "@/lib/i18n";
 import type { ScoutingObservationRow, ScoutingPlayerRow, ScoutingTargetRow } from "@/types/database";
 
 const en = {
+  useSquadPromotion: "Use the squad profile to promote this player.",
+  statusChangedElsewhere: "This player's status changed. Reopen the profile before saving. Your input has been kept.",
   nextTasks: "Next tasks", noTasks: "No follow-ups due, open questions or observation focus recorded.",
   currentCase: "Current picture", observationDetails: "Observation details", ratingHistory: "Individual ratings over time",
   qualitative: "Assessment and next observation", matchDetails: "Additional match details",
@@ -74,6 +76,8 @@ const en = {
 } as const;
 
 const de: Record<keyof typeof en, string> = {
+  useSquadPromotion: "Übernimm diesen Spieler über das Kaderprofil in den regulären Kader.",
+  statusChangedElsewhere: "Der Spielerstatus hat sich geändert. Öffne das Profil vor dem Speichern erneut. Deine Eingaben bleiben erhalten.",
   nextTasks: "Nächste Aufgaben", noTasks: "Keine fälligen Wiedervorlagen, offenen Fragen oder Beobachtungsfokusse erfasst.",
   currentCase: "Aktueller Stand", observationDetails: "Beobachtungsdetails", ratingHistory: "Einzelbewertungen im Verlauf",
   qualitative: "Einschätzung und nächste Beobachtung", matchDetails: "Weitere Spielangaben",

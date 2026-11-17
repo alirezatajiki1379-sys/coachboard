@@ -71,9 +71,10 @@ export async function updateScoutingPlayer(playerId: string, _: ScoutingFormStat
     const { data: current, error: loadError } = await db.from("scouting_players").select("status,linked_squad_player_id").eq("id", playerId).eq("user_id", userId).maybeSingle();
     if (loadError) return { error: loadError.message };
     if (!current) return { error: "Prospect not found." };
-    if (payload.status === "added_to_squad" && !current.linked_squad_player_id) return { error: "This prospect is not linked to a squad player." };
-    const { error } = await db.from("scouting_players").update(payload).eq("id", playerId).eq("user_id", userId);
+    if (payload.status === "added_to_squad" && current.status !== "added_to_squad") return { error: "Use the squad profile to promote this player." };
+    const { data: updated, error } = await db.from("scouting_players").update(payload).eq("id", playerId).eq("user_id", userId).eq("status", current.status).select("id").maybeSingle();
     if (error) return { error: error.message };
+    if (!updated) return { error: "This player's status changed. Reopen the profile before saving." };
     if (current.status !== payload.status) await logHistory(db, userId, playerId, payload.status === "archived" ? "archived" : payload.status === "added_to_squad" ? "added_to_squad" : "status_changed", pipelineHistoryDetail(current.status, payload.status, statusNote));
     revalidateScoutingLists();
     revalidatePath(`/scouting/players/${playerId}`);

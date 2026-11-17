@@ -42,7 +42,9 @@ function ErrorMessage({ state, locale }: { state: ScoutingFormState; locale: Loc
     "Text is too long.": c.textTooLong,
     "Choose a valid recommendation.": c.invalidRecommendation,
     "Choose a valid observation date.": c.invalidDate,
-    "Check the next action date.": c.invalidDate
+    "Check the next action date.": c.invalidDate,
+    "Use the squad profile to promote this player.": c.useSquadPromotion,
+    "This player's status changed. Reopen the profile before saving.": c.statusChangedElsewhere
   };
   return <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{validationMessages[state.error] ?? (locale === "de" ? c.saveFailed : state.error)}</p>;
 }
@@ -102,7 +104,7 @@ export function ScoutingPlayerForm({ action, initial, locale, proposedStatus }: 
       <h2 className="mb-3 text-lg font-bold text-board-navy">{c.status}</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field name="status" text={c.status}><select id="status" name="status" value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} className={input}>
-          {scoutingStatuses.filter((value) => value !== "added_to_squad" || initial?.linked_squad_player_id).map((value) => <option key={value} value={value}>{c[value]}</option>)}
+          {scoutingStatuses.filter((value) => value !== "added_to_squad" || initial?.status === "added_to_squad").map((value) => <option key={value} value={value}>{c[value]}</option>)}
         </select></Field>
         <Field name="priority" text={c.priority}><select id="priority" name="priority" defaultValue={initial?.priority ?? "medium"} className={input}>
           {scoutingPriorities.map((value) => <option key={value} value={value}>{c[value]}</option>)}
