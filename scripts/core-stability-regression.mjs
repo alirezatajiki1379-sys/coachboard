@@ -205,7 +205,7 @@ test("check-in details preserve overall, exact note text, privacy and optional s
 test("check-in clears every rating on absence, keeps plans, and does not regress workflow", async () => {
   const db = attendanceDb("present", "rating_open");
   const actions = loadModule("lib/squad/attendance-actions.ts", actionMocks(db));
-  for (const reason of ["unexcused", "excused", "sick", "injured", "school", "work", "holiday", "private", "other"]) {
+  for (const reason of ["unexcused", "excused", "sick", "injured", "school", "work", "holiday", "private", "other", "club", "not_nominated"]) {
     const result = await actions.updateFinalAttendanceInline(ratingForm({ finalStatus: "absent", actualAbsenceReason: reason }));
     assert.equal(result.ok, true);
     const row = db.tables.squad_attendance_records[0];
@@ -220,6 +220,21 @@ test("check-in clears every rating on absence, keeps plans, and does not regress
   assert.equal((await actions.updateAttendanceRating(ratingForm())).ok, true);
   assert.equal(db.tables.squad_training_events[0].status, "completed");
   assert.equal(db.tables.squad_training_events[0].completed_at, "2026-09-18");
+});
+
+test("planning accepts selection reasons and actual attendance inherits them without a rating", async () => {
+  for (const reason of ["club", "not_nominated", "other"]) {
+    const db = attendanceDb(null);
+    const actions = loadModule("lib/squad/attendance-actions.ts", actionMocks(db));
+    const result = await actions.updatePlannedAttendanceInline(ratingForm({ plannedStatus: "unavailable", plannedReason: reason, plannedReasonNote: "Optional explanation" }));
+    assert.equal(result.ok, true);
+    assert.equal(db.tables.squad_attendance_records[0].planned_reason, reason);
+    assert.equal(db.tables.squad_attendance_records[0].planned_reason_note, "Optional explanation");
+    const actual = await actions.updateFinalAttendanceInline(ratingForm({ finalStatus: "absent" }));
+    assert.equal(actual.ok, true);
+    assert.equal(actual.actualAbsenceReason, reason);
+    assert.equal(db.tables.squad_attendance_records[0].overall_rating, null);
+  }
 });
 
 test("rating write guards attendance again at update time", async () => {

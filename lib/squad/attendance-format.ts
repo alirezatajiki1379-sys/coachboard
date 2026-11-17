@@ -63,6 +63,8 @@ export function actualAbsenceReasonLabel(reason?: SquadAttendanceEntry["actualAb
     work: "Work",
     holiday: "Holiday",
     private: "Private",
+    club: "Club activity",
+    not_nominated: "Not nominated",
     other: "Other"
   };
   return reason ? systemText(locale, labels[reason]) : "";

@@ -431,6 +431,8 @@ export const workflowCopyDe: Record<string, string> = {
   "Needs decision": "Entscheidung offen",
   "Private reason": "Privat",
   "Late cancellation": "Verspätet abgesagt",
+  "Club activity": "Verein / Vereinsmaßnahme",
+  "Not nominated": "Nicht nominiert",
   "Team Attendance": "Mannschaftsanwesenheit",
   "Development Goals": "Entwicklungsziele",
   "Development Goal": "Entwicklungsziel",

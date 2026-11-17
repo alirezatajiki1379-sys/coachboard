@@ -62,7 +62,7 @@ export function PlayerActions({ playerId, playerType = "roster", archived, initi
         <input type="hidden" name="playerId" value={playerId} />
         <Button type="submit" variant="secondary" className="h-9 px-3">
           <RotateCcw className="h-4 w-4" />
-          {messages.squad.actions.restore}
+          {messages.squad.actions.reactivate}
         </Button>
       </form>
     );

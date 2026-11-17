@@ -42,9 +42,9 @@ export type TrainingEventActionState = {
 };
 
 const plannedStatuses = ["expected", "unavailable", "unclear"] as const;
-const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U", "injured", "sick", "school", "work", "holiday", "private", "other"] as const;
+const plannedReasons = ["V", "K", "E", "P", "S", "Z", "U", "injured", "sick", "school", "work", "holiday", "private", "other", "club", "not_nominated"] as const;
 const finalStatuses = ["present", "absent", "left_early", "Z", "V", "K", "E", "P", "S", "U"] as const;
-const actualAbsenceReasons = ["unexcused", "late_cancellation", "excused", "sick", "injured", "school", "work", "holiday", "private", "other"] as const;
+const actualAbsenceReasons = ["unexcused", "late_cancellation", "excused", "sick", "injured", "school", "work", "holiday", "private", "other", "club", "not_nominated"] as const;
 
 export type AttendanceMutationResult =
   | {

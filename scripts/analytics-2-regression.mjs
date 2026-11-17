@@ -52,6 +52,24 @@ test("actual outcome uses recorded attendance as its denominator", () => {
   assert.equal(analytics.leftEarlyRate, 1 / 85);
 });
 
+test("not nominated preserves coverage but is not an absence or an attendance opportunity", () => {
+  const analytics = teamAnalytics([
+    record(0, "expected", "present"),
+    { ...record(1, "expected", "absent"), actualAbsenceReason: "school" },
+    { ...record(2, "expected", "absent"), actualAbsenceReason: "not_nominated" },
+    { ...record(3, "unavailable", "absent"), plannedReason: "not_nominated" }
+  ]);
+  assert.equal(analytics.attendanceRecordCount, 4);
+  assert.equal(analytics.dataCoverageRate, 1);
+  assert.equal(analytics.absent, 1);
+  assert.equal(analytics.expectedRecordedCount, 2);
+  assert.equal(analytics.teamAttendanceRate, 0.5);
+  assert.equal(analytics.teamParticipationRate, 0.5);
+  assert.equal(analytics.teamAttendanceWhenExpectedRate, 0.5);
+  assert.equal(analytics.actualParticipationRate, 0.5);
+  assert.equal(analytics.actualAbsenceRate, 0.5);
+});
+
 test("team averages use the selected event count and canonical participation statuses", () => {
   const events = Array.from({ length: 5 }, (_, index) => ({ ...event, id: `event-${index + 1}`, date: `2026-10-${String(index + 8).padStart(2, "0")}` }));
   const records = [

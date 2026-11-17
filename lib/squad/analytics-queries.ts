@@ -4,6 +4,8 @@ import { mapAttendanceRow, mapTrainingEventRow, type SquadAttendanceRow, type Sq
 import {
   calculateAverageRating,
   calculateAttendanceMetric,
+  calculateParticipationRate,
+  hasAttendanceRateOutcome,
   calculateRatingCoverage,
   berlinDateKey,
   createPlayerAnalyticsSummary,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/squad/analytics";
 import { mapSquadPlayerRow, type SquadPlayerRow } from "@/lib/squad/mappers";
 import { ensureActiveSquad } from "@/lib/squad/squads";
+import { isNotNominatedAttendance } from "@/lib/squad/attendance-utils";
 import type { Database } from "@/types/database";
 import type {
   PlayerCoachAssessment,
@@ -472,7 +475,7 @@ export function createTeamAnalytics(
     attendedWhenExpectedCount: attendance.attendedWhenExpected,
     absentWhenExpectedCount: attendance.absentWhenExpected,
     absenceWhenExpectedRate: attendance.absenceWhenExpectedRate,
-    actualParticipationRate: attendance.recorded ? attendance.attended / attendance.recorded : null,
+    actualParticipationRate: attendance.attended + attendance.absent ? attendance.attended / (attendance.attended + attendance.absent) : null,
     actualAbsenceRate: attendance.actualAbsenceRate,
     lateRate: attendance.lateRate,
     leftEarlyRate: attendance.leftEarlyRate,
@@ -544,15 +547,15 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
     if (record.finalStatus === "present") present += 1;
     else if (record.finalStatus === "Z") late += 1;
     else if (record.finalStatus === "left_early") leftEarly += 1;
-    else absent += 1;
+    else if (!isNotNominatedAttendance(record)) absent += 1;
   }
 
   const attended = present + late + leftEarly;
-  const recorded = attended + absent;
-  const expected = records.filter((record) => !record.plannedStatus || record.plannedStatus === "expected").length;
-  const rateRecords = records.filter((record) => (!record.plannedStatus || record.plannedStatus === "expected") && Boolean(record.finalStatus));
+  const recorded = records.filter((record) => Boolean(record.finalStatus)).length;
+  const expected = records.filter((record) => (!record.plannedStatus || record.plannedStatus === "expected") && !isNotNominatedAttendance(record)).length;
+  const rateRecords = records.filter(hasAttendanceRateOutcome);
   const rateAttended = rateRecords.filter(hasParticipated).length;
-  const participationRate = records.length ? attended / records.length : null;
+  const participationRate = calculateParticipationRate(records);
   const attendanceWhenExpectedRate = rateRecords.length ? rateAttended / rateRecords.length : null;
   const attendanceMetric = calculateAttendanceMetric(records);
   const ratingCoverage = calculateRatingCoverage(records);
@@ -577,7 +580,7 @@ function summarizeAttendance(records: PlayerAnalyticsRecord[]): TeamAnalyticsEve
     dataCoverageRate: records.length ? recorded / records.length : null,
     plannedUnavailableRate: records.length ? notExpected / records.length : null,
     absenceWhenExpectedRate: rateRecords.length ? (rateRecords.length - rateAttended) / rateRecords.length : null,
-    actualAbsenceRate: recorded ? absent / recorded : null,
+    actualAbsenceRate: attended + absent ? absent / (attended + absent) : null,
     lateRate: attended ? late / attended : null,
     leftEarlyRate: attended ? leftEarly / attended : null,
     ratingEligibleCount: ratingCoverage.eligible,

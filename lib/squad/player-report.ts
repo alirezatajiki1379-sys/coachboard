@@ -1,10 +1,11 @@
 import { effectiveActualAbsenceReason } from "@/lib/squad/attendance-format";
+import { isNotNominatedAttendance } from "@/lib/squad/attendance-utils";
 import type { Locale } from "@/lib/i18n";
 import type { PlayerAnalyticsRecord } from "@/lib/squad/analytics";
 import type { PlayerAvailabilityPeriod, PlayerMedicalPeriod, PlayerNote } from "@/types/domain";
 
 export type PlayerReportRange = { from?: string; to?: string };
-export type ReportAbsenceReason = "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | "excused" | "unexcused" | "late_cancellation" | "not_recorded";
+export type ReportAbsenceReason = "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | "excused" | "unexcused" | "late_cancellation" | "not_recorded" | "club" | "not_nominated";
 
 export function reportRangeFromRecords(records: PlayerAnalyticsRecord[], customFrom?: string, customTo?: string): PlayerReportRange {
   if (customFrom || customTo) return { from: customFrom, to: customTo };
@@ -41,6 +42,7 @@ export function selectedConversationNotes(notes: PlayerNote[], selectedIds: stri
 }
 
 export function isMissedTraining(record: PlayerAnalyticsRecord) {
+  if (isNotNominatedAttendance(record)) return false;
   return record.finalStatus === "absent" || record.finalStatus === "V" || record.finalStatus === "K" || record.finalStatus === "E" || record.finalStatus === "P" || record.finalStatus === "S" || record.finalStatus === "U";
 }
 
@@ -65,6 +67,8 @@ export function absenceReasonLabel(reason: ReportAbsenceReason, locale: Locale) 
       work: "Work",
       holiday: "Holiday",
       private: "Private",
+      club: "Club activity",
+      not_nominated: "Not nominated",
       other: "Other",
       excused: "Excused",
       unexcused: "Unexcused",
@@ -78,6 +82,8 @@ export function absenceReasonLabel(reason: ReportAbsenceReason, locale: Locale) 
       work: "Arbeit",
       holiday: "Urlaub",
       private: "Privat",
+      club: "Verein / Vereinsmaßnahme",
+      not_nominated: "Nicht nominiert",
       other: "Sonstiges",
       excused: "Entschuldigt",
       unexcused: "Unentschuldigt",

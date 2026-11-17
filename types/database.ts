@@ -1193,11 +1193,11 @@ export type Database = {
           event_id: string;
           player_id: string;
           planned_status: "expected" | "unavailable" | "unclear" | null;
-          planned_reason: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | null;
+          planned_reason: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | "club" | "not_nominated" | null;
           planned_reason_note: string | null;
           planned_status_source: "default" | "manual" | "medical" | "availability" | null;
           final_status: "present" | "absent" | "left_early" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
-          actual_absence_reason: "unexcused" | "excused" | "late_cancellation" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other" | null;
+          actual_absence_reason: "unexcused" | "excused" | "late_cancellation" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other" | "club" | "not_nominated" | null;
           actual_attendance_note: string | null;
           late_minutes: number | null;
           left_early_minute: number | null;
@@ -1219,11 +1219,11 @@ export type Database = {
           event_id: string;
           player_id: string;
           planned_status?: "expected" | "unavailable" | "unclear" | null;
-          planned_reason?: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | null;
+          planned_reason?: "V" | "K" | "E" | "P" | "S" | "Z" | "U" | "injured" | "sick" | "school" | "work" | "holiday" | "private" | "other" | "club" | "not_nominated" | null;
           planned_reason_note?: string | null;
           planned_status_source?: "default" | "manual" | "medical" | "availability" | null;
           final_status?: "present" | "absent" | "left_early" | "Z" | "V" | "K" | "E" | "P" | "S" | "U" | null;
-          actual_absence_reason?: "unexcused" | "excused" | "late_cancellation" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other" | null;
+          actual_absence_reason?: "unexcused" | "excused" | "late_cancellation" | "sick" | "injured" | "school" | "work" | "holiday" | "private" | "other" | "club" | "not_nominated" | null;
           actual_attendance_note?: string | null;
           late_minutes?: number | null;
           left_early_minute?: number | null;

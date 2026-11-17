@@ -188,7 +188,7 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-board-navy">{view.label}</h2>
+              <h2 className="text-lg font-bold text-board-navy">{data.state.players === "archived" ? messages.squad.filters.archivedPlayers : view.label}</h2>
               <p className="text-sm text-slate-600">{data.periodLabel} · {data.periodRangeLabel}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -231,9 +231,9 @@ export function CoachWorkspace({ data, locale }: { data: WorkspaceData; locale?:
                     </>
                   ) : (
                     <>
-                      <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => runBulkAction("archive")} disabled={!selectedIds.length || isBulkPending}>
+                      <Button type="button" variant="secondary" className="h-9 px-3" onClick={() => runBulkAction(data.state.players === "archived" ? "restore" : "archive")} disabled={!selectedIds.length || isBulkPending}>
                         <Archive className="h-4 w-4" />
-                        {messages.squad.actions.archive}
+                        {data.state.players === "archived" ? messages.squad.actions.reactivate : messages.squad.actions.archive}
                       </Button>
                       <Button type="button" variant="danger" className="h-9 px-3" onClick={() => runBulkAction("trash")} disabled={!selectedIds.length || isBulkPending}>
                         <Trash2 className="h-4 w-4" />
@@ -435,6 +435,14 @@ function WorkspaceFilters({ data, messages }: { data: WorkspaceData; messages: M
   ].filter(Boolean).length;
   return (
     <div className="mt-3 border-t border-board-line pt-3">
+      <nav aria-label={messages.squad.filters.players} className="mb-3 flex flex-wrap gap-2">
+        <ButtonLink href="/squad?players=active" variant={state.players !== "archived" && state.players !== "trash" ? "primary" : "secondary"} aria-current={state.players !== "archived" && state.players !== "trash" ? "page" : undefined}>
+          {messages.squad.filters.allActivePlayers}
+        </ButtonLink>
+        <ButtonLink href="/squad?players=archived" variant={state.players === "archived" ? "primary" : "secondary"} aria-current={state.players === "archived" ? "page" : undefined}>
+          {messages.squad.filters.archivedPlayers} ({data.counts.archived})
+        </ButtonLink>
+      </nav>
       <form action="/squad" className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto_auto] lg:items-end">
         <input type="hidden" name="view" value={state.view} />
         <Field label={messages.squad.filters.search}>
@@ -568,7 +576,7 @@ function WorkspaceFilters({ data, messages }: { data: WorkspaceData; messages: M
           <div className="flex flex-wrap gap-2 lg:col-span-5">
             {state.search ? <Chip label={formatMessage(messages.squad.filters.searchChip, { query: state.search })} /> : null}
             {state.position ? <Chip label={state.position} /> : null}
-            {state.players !== "active" ? <Chip label={state.players} /> : null}
+            {state.players !== "active" ? <Chip label={state.players === "archived" ? messages.squad.filters.archivedPlayers : state.players} /> : null}
             {state.availability !== "all" ? <Chip label={state.availability} /> : null}
             {state.period !== "season" ? <Chip label={state.period} /> : null}
           </div>
@@ -1279,7 +1287,7 @@ function WorkspaceMobileCard({
       ) : null}
       <div className="mt-4 grid grid-cols-2 gap-3">
         {priority.map((item) => (
-          <div key={item.label} className="rounded-md bg-slate-50 p-3">
+          <div key={item.label} className="min-w-0 break-words rounded-md bg-slate-50 p-3">
             <p className="text-xs font-bold uppercase text-slate-500">{item.label}</p>
             <p className="mt-1 text-base font-bold text-board-navy">{item.value}</p>
             {item.detail ? <p className="mt-1 text-xs text-slate-500">{item.detail}</p> : null}

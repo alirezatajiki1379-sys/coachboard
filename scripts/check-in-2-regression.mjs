@@ -152,6 +152,15 @@ try {
       await page.setViewportSize({ width, height: 1000 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${locale}/${width}: horizontal overflow`);
     }
+    const row = page.locator("article").filter({ hasText: "Anna Example" });
+    await row.getByRole("button", { name: locale === "de" ? "Abwesend" : "Absent", exact: true }).click();
+    const reason = row.getByLabel(locale === "de" ? /Grund/ : /Reason/);
+    assert.equal(await reason.locator('option[value="not_nominated"]').textContent(), locale === "de" ? "Nicht nominiert" : "Not nominated");
+    assert.equal(await reason.locator('option[value="club"]').textContent(), locale === "de" ? "Verein / Vereinsmaßnahme" : "Club activity");
+    await reason.selectOption("not_nominated");
+    await row.getByRole("button", { name: locale === "de" ? "Anwesenheitsdetails speichern" : "Save attendance details" }).click();
+    await page.waitForFunction(() => window.qaRows[0].actualAbsenceReason === "not_nominated");
+    assert.equal(await page.evaluate(() => window.qaRows[0].overallRating), null);
   }
 
   await page.evaluate(() => window.qa.render("de", "failure"));

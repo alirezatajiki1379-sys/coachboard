@@ -60,6 +60,8 @@ const actualAbsenceOptions: Array<{ reason: SquadActualAbsenceReason; label: str
   { reason: "work", label: "Work" },
   { reason: "holiday", label: "Holiday" },
   { reason: "private", label: "Private" },
+  { reason: "club", label: "Club activity" },
+  { reason: "not_nominated", label: "Not nominated" },
   { reason: "other", label: "Other" }
 ];
 

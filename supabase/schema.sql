@@ -1552,6 +1552,8 @@ create table if not exists public.squad_attendance_records (
         'work',
         'holiday',
         'private',
+        'club',
+        'not_nominated',
         'other'
       )
     ),
@@ -1598,6 +1600,8 @@ create table if not exists public.squad_attendance_records (
         'work',
         'holiday',
         'private',
+        'club',
+        'not_nominated',
         'other'
       )
     ),
@@ -1707,7 +1711,7 @@ alter table public.squad_attendance_records
 add constraint squad_attendance_records_planned_reason_check
 check (
   planned_reason is null
-  or planned_reason in ('V', 'K', 'E', 'P', 'S', 'Z', 'U', 'injured', 'sick', 'school', 'work', 'holiday', 'private', 'other')
+  or planned_reason in ('V', 'K', 'E', 'P', 'S', 'Z', 'U', 'injured', 'sick', 'school', 'work', 'holiday', 'private', 'other', 'club', 'not_nominated')
 );
 
 alter table public.squad_attendance_records
@@ -1728,7 +1732,7 @@ alter table public.squad_attendance_records
 add constraint squad_attendance_records_actual_absence_reason_check
 check (
   actual_absence_reason is null
-  or actual_absence_reason in ('unexcused', 'excused', 'late_cancellation', 'sick', 'injured', 'school', 'work', 'holiday', 'private', 'other')
+  or actual_absence_reason in ('unexcused', 'excused', 'late_cancellation', 'sick', 'injured', 'school', 'work', 'holiday', 'private', 'other', 'club', 'not_nominated')
 );
 
 alter table public.squad_attendance_records

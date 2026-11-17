@@ -28,6 +28,8 @@ export const attendanceReasonLabels: Record<SquadAttendanceReason, string> = {
   work: "Work",
   holiday: "Holiday",
   private: "Private",
+  club: "Club activity",
+  not_nominated: "Not nominated",
   other: "Other"
 };
 
@@ -38,6 +40,8 @@ export const plannedAttendanceReasonOptions: readonly SquadAttendanceReason[] = 
   "work",
   "holiday",
   "private",
+  "club",
+  "not_nominated",
   "other",
   "E",
   "S",
@@ -77,6 +81,15 @@ export function isAbsentAttendanceStatus(status?: SquadFinalAttendanceStatus | n
   return status === "absent" || status === "V" || status === "K" || status === "E" || status === "P" || status === "S" || status === "U";
 }
 
+export function isNotNominatedAttendance(entry: Pick<SquadAttendanceEntry, "finalStatus"> & Partial<Pick<SquadAttendanceEntry, "actualAbsenceReason" | "plannedReason" | "plannedStatus">>) {
+  if (isParticipatingAttendanceStatus(entry.finalStatus)) return false;
+  // Recorded outcomes override planning. Only a generic/unknown outcome can
+  // inherit a non-nomination decision from the preparation stage.
+  if (entry.actualAbsenceReason) return entry.actualAbsenceReason === "not_nominated";
+  if (entry.finalStatus && entry.finalStatus !== "absent") return false;
+  return entry.plannedStatus === "unavailable" && entry.plannedReason === "not_nominated";
+}
+
 export function overallRatingInitialValue(entry: Pick<SquadAttendanceEntry, "plannedStatus" | "finalStatus" | "overallRating">) {
   if (!isRateableAttendance(entry)) return undefined;
   if (typeof entry.overallRating === "number" && Number.isInteger(entry.overallRating) && entry.overallRating >= 1 && entry.overallRating <= 5) return entry.overallRating;
@@ -108,7 +121,7 @@ export function plannedReasonToActualAbsenceReason(reason?: SquadAttendanceReaso
   if (normalized === "S") return "late_cancellation";
   if (normalized === "private") return "private";
   if (normalized === "U") return "unexcused";
-  if (normalized === "school" || normalized === "work" || normalized === "holiday" || normalized === "other") return normalized;
+  if (normalized === "school" || normalized === "work" || normalized === "holiday" || normalized === "other" || normalized === "club" || normalized === "not_nominated") return normalized;
   return null;
 }
 
@@ -178,7 +191,7 @@ export function getFinalAttendanceSummary(entries: SquadAttendanceEntry[]) {
     present: entries.filter((entry) => entry.finalStatus === "present").length,
     late: entries.filter((entry) => entry.finalStatus === "Z").length,
     leftEarly: entries.filter((entry) => entry.finalStatus === "left_early").length,
-    absent: entries.filter((entry) => isAbsentAttendanceStatus(entry.finalStatus)).length,
+    absent: entries.filter((entry) => isAbsentAttendanceStatus(entry.finalStatus) && !isNotNominatedAttendance(entry)).length,
     unresolved: entries.filter((entry) => !entry.finalStatus).length,
     fieldPlayersPresent: composition.fieldPlayers,
     goalkeepersPresent: composition.goalkeepers,

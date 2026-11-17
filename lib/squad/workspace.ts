@@ -354,7 +354,7 @@ export function parseWorkspaceState(searchParams: Record<string, string | string
     savedView: one(searchParams.savedView) || undefined,
     customize: one(searchParams.customize) === "true",
     hasExplicitState: Object.keys(searchParams).some((key) => searchParams[key] !== undefined),
-    players: playersFilter(one(searchParams.players), view),
+    players: playersFilter(one(searchParams.players) ?? (one(searchParams.view) === "archived" ? "archived" : undefined), view),
     position: one(searchParams.position) || undefined,
     availability: availabilityFilter(one(searchParams.availability), view),
     period,

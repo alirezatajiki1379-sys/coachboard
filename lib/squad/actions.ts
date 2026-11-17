@@ -184,30 +184,38 @@ export async function archiveSquadPlayer(formData: FormData) {
   const playerId = formString(formData, "playerId");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  await db
+  const { error } = await db
     .from("squad_players")
     .update({ archived_at: new Date().toISOString() })
     .eq("id", playerId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
   await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
   revalidatePath("/squad");
   revalidatePath(`/squad/players/${playerId}`);
-  redirect("/squad?view=archived");
+  redirect("/squad?players=archived");
 }
 
 export async function restoreSquadPlayer(formData: FormData) {
   const playerId = formString(formData, "playerId");
   const { supabase, user } = await requireUser();
   const db = supabase as unknown as SupabaseClient;
-  await db
+  const { error } = await db
     .from("squad_players")
-    .update({ archived_at: null, deleted_at: null })
+    .update({ archived_at: null })
     .eq("id", playerId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
   await syncFutureAutoSyncTrainingsForPlayer(db, user.id, playerId);
   revalidatePath("/squad");
   revalidatePath(`/squad/players/${playerId}`);
-  redirect("/squad");
+  redirect("/squad?players=active");
 }
 
 type SquadBulkActionResult = {
