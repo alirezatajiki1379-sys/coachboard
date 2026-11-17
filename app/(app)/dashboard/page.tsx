@@ -40,10 +40,12 @@ export default async function DashboardPage() {
     getUserLocale(supabase, user.id)
   ]);
   const messages = getMessages(locale);
+  // Share this request-local read with Coach Actions; never cache across users/teams.
+  const trainingEventsPromise = listTrainingEventDetails(supabase, user.id, { squadId: activeTeam.id });
   const [developmentSummary, attentionData, trainingEventsRaw] = await Promise.all([
     getDevelopmentDashboardSummary(supabase, user.id, activeTeam.id),
-    getDashboardAttentionData(supabase, user.id, locale),
-    listTrainingEventDetails(supabase, user.id, { squadId: activeTeam.id })
+    getDashboardAttentionData(supabase, user.id, locale, trainingEventsPromise),
+    trainingEventsPromise
   ]);
   const now = trainingNowParts();
   const ui = createSystemTranslator(locale);

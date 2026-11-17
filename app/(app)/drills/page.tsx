@@ -25,13 +25,14 @@ export default async function DrillLibraryPage({ searchParams }: DrillLibraryPag
 
   const resolvedSearchParams = await searchParams;
   const filters = parseDrillFilters(resolvedSearchParams);
-  const [drills, libraryTags, locale] = await Promise.all([
+  const [drills, libraryTags, locale, otherViewDraftCount] = await Promise.all([
     listUserDrills(supabase, user.id, filters),
     listUserDrillTags(supabase, user.id),
-    getUserLocale(supabase, user.id)
+    getUserLocale(supabase, user.id),
+    filters.view === "drafts" ? Promise.resolve(0) : countDraftDrills(supabase, user.id)
   ]);
   const copy = drillLibraryCopy[locale];
-  const draftCount = filters.view === "drafts" ? drills.length : await countDraftDrills(supabase, user.id);
+  const draftCount = filters.view === "drafts" ? drills.length : otherViewDraftCount;
   const viewLabels = {
     active: copy.views.active,
     published: copy.views.published,

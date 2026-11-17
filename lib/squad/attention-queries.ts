@@ -22,13 +22,12 @@ import { getCoachWorkspaceData, parseWorkspaceState } from "@/lib/squad/workspac
 import { listTrainingEventDetails } from "@/lib/squad/attendance-queries";
 import { listTrainingSessionReviewSummaries } from "@/lib/squad/session-review";
 import type { createClient } from "@/lib/supabase/server";
+import type { SquadTrainingEventDetail } from "@/types/domain";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
-export async function getAttentionCenterData(supabase: SupabaseServerClient, userId: string, state: AttentionCenterState, locale: Locale = "en"): Promise<AttentionCenterData> {
+export async function getAttentionCenterData(supabase: SupabaseServerClient, userId: string, state: AttentionCenterState, locale: Locale = "en", trainingEventsPromise?: Promise<SquadTrainingEventDetail[]>): Promise<AttentionCenterData> {
   const db = supabase as unknown as SupabaseClient;
-  const preferences = await getAttentionPreferences(db, userId);
-  const states = await listAttentionStates(db, userId);
   const workspaceState = parseWorkspaceState({
     view: "all",
     players: state.playerType === "all" ? "active" : state.playerType,
@@ -36,9 +35,11 @@ export async function getAttentionCenterData(supabase: SupabaseServerClient, use
     position: state.position,
     search: ""
   });
-  const [workspace, trainingEvents] = await Promise.all([
+  const [preferences, states, workspace, trainingEvents] = await Promise.all([
+    getAttentionPreferences(db, userId),
+    listAttentionStates(db, userId),
     getCoachWorkspaceData(supabase, userId, workspaceState, { includeAttention: false }),
-    listTrainingEventDetails(supabase, userId)
+    trainingEventsPromise ?? listTrainingEventDetails(supabase, userId)
   ]);
   const reviewSummaries = await listTrainingSessionReviewSummaries(supabase, userId, trainingEvents.map((event) => event.id));
   const today = new Date().toISOString().slice(0, 10);
@@ -81,8 +82,8 @@ export async function getDashboardAttentionSummary(supabase: SupabaseServerClien
   return data.summary;
 }
 
-export async function getDashboardAttentionData(supabase: SupabaseServerClient, userId: string, locale: Locale = "en") {
-  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({ status: "open", priority: "all" }), locale);
+export async function getDashboardAttentionData(supabase: SupabaseServerClient, userId: string, locale: Locale = "en", trainingEventsPromise?: Promise<SquadTrainingEventDetail[]>) {
+  const data = await getAttentionCenterData(supabase, userId, parseAttentionCenterState({ status: "open", priority: "all" }), locale, trainingEventsPromise);
   return {
     summary: data.summary,
     items: dashboardAttentionItems(data.allItems)

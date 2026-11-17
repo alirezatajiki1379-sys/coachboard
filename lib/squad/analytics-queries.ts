@@ -42,7 +42,7 @@ type AssessmentRow = Database["public"]["Tables"]["player_coach_assessments"]["R
 type GoalRow = Database["public"]["Tables"]["player_development_goals"]["Row"];
 type ProgressRow = Database["public"]["Tables"]["player_development_progress"]["Row"];
 type SessionReviewRow = Database["public"]["Tables"]["training_session_reviews"]["Row"];
-type DrillInstanceRow = Database["public"]["Tables"]["training_session_drill_instances"]["Row"];
+type DrillInstanceRow = Pick<Database["public"]["Tables"]["training_session_drill_instances"]["Row"], "id" | "event_id" | "source_drill_id" | "title">;
 type DrillReviewRow = Database["public"]["Tables"]["training_session_drill_reviews"]["Row"];
 
 export type AnalyticsFilters = {
@@ -149,13 +149,12 @@ export async function getSquadAnalyticsOverview(
     listSessionReviews(db, userId, Array.from(periodEventIds)),
     listDrillInstances(db, userId, Array.from(periodEventIds))
   ]);
-  const historicalPlayers = await listAnalyticsPlayersByIds(db, userId, periodRecords.map((record) => record.playerId));
+  const activePlayerIds = new Set(activePlayers.map((player) => player.id));
+  const [historicalPlayers, drillReviews] = await Promise.all([
+    listAnalyticsPlayersByIds(db, userId, periodRecords.map((record) => record.playerId).filter((id) => !activePlayerIds.has(id))),
+    listDrillReviews(db, userId, periodSessionReviews.map((review) => review.id))
+  ]);
   const players = uniqueById([...activePlayers, ...historicalPlayers]);
-  const drillReviews = await listDrillReviews(
-    db,
-    userId,
-    periodSessionReviews.map((review) => review.id)
-  );
 
   const assessmentByPlayer = new Map(assessments.map((assessment) => [assessment.playerId, assessment]));
   const positions = Array.from(new Set(players.map((player) => player.position).filter((position): position is string => Boolean(position)))).sort((a, b) => a.localeCompare(b));
@@ -340,7 +339,7 @@ async function listDrillInstances(db: SupabaseClient, userId: string, eventIds: 
     while (true) {
       const { data, error } = await db
         .from("training_session_drill_instances")
-        .select("*")
+        .select("id,event_id,source_drill_id,title")
         .eq("user_id", userId)
         .in("event_id", ids)
         .neq("status", "removed")
@@ -450,7 +449,8 @@ export function createTeamAnalytics(
   const activeGoals = goals.filter((goal) => goal.status === "identified" || goal.status === "in_progress");
   const dateRange = dateRangeForPeriod(filters, periodEvents, seasonSettings);
   const periodProgressUpdates = progressUpdates.filter((progress) => dateInRange(progress.recordedAt, dateRange));
-  const periodDrillReviewRows = drillReviews.filter((review) => drillInstances.some((instance) => instance.id === review.session_drill_instance_id));
+  const instanceIds = new Set(drillInstances.map((instance) => instance.id));
+  const periodDrillReviewRows = drillReviews.filter((review) => instanceIds.has(review.session_drill_instance_id));
   const drillUsage = createDrillUsage(drillInstances, periodDrillReviewRows, periodEvents);
   const trainingMinutes = totalTrainingMinutes(periodEvents);
   const plannedEvents = events.filter((event) => event.planDrillCount > 0).length;
@@ -631,6 +631,7 @@ function createDrillUsage(drillInstances: DrillInstanceRow[], drillReviews: Dril
   const eventById = new Map(events.map((event) => [event.id, event]));
   const reviewsByInstance = groupBy(drillReviews, (review) => review.session_drill_instance_id);
   const byDrill = new Map<string, DrillUsageItem>();
+  const ratingsByDrill = new Map<string, Array<number | null>>();
   for (const instance of drillInstances) {
     const key = instance.source_drill_id ?? instance.id;
     const existing = byDrill.get(key) ?? {
@@ -642,6 +643,9 @@ function createDrillUsage(drillInstances: DrillInstanceRow[], drillReviews: Dril
       averageEffectiveness: null
     };
     const instanceReviews = reviewsByInstance.get(instance.id) ?? [];
+    const ratings = ratingsByDrill.get(key) ?? [];
+    for (const review of instanceReviews) ratings.push(review.effectiveness_rating);
+    ratingsByDrill.set(key, ratings);
     existing.uses += 1;
     existing.reviewed += instanceReviews.length;
     const eventDate = eventById.get(instance.event_id)?.date;
@@ -650,12 +654,7 @@ function createDrillUsage(drillInstances: DrillInstanceRow[], drillReviews: Dril
   }
 
   return Array.from(byDrill.entries())
-    .map(([key, item]) => {
-      const reviews = drillInstances
-        .filter((instance) => (instance.source_drill_id ?? instance.id) === key)
-        .flatMap((instance) => reviewsByInstance.get(instance.id) ?? []);
-      return { ...item, averageEffectiveness: calculateAverageRating(reviews.map((review) => review.effectiveness_rating)) };
-    })
+    .map(([key, item]) => ({ ...item, averageEffectiveness: calculateAverageRating(ratingsByDrill.get(key) ?? []) }))
     .sort((a, b) => b.uses - a.uses || (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") || a.title.localeCompare(b.title));
 }
 
